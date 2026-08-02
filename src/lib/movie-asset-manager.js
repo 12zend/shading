@@ -1,16 +1,11 @@
 import EventEmitter from 'events';
 import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
 
+import {MOVIE_ASSET_BLOCKS, markMovieProject} from './project-format';
+
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
 const VIDEO_PROJECT_KEY = 'movieVideos';
-const CUSTOM_BLOCKS = [
-    'looks_changevideoframeby',
-    'looks_settextfont',
-    'looks_setvideoframeto',
-    'looks_switchvideoto'
-];
-
 const MIME_TYPES = {
     mp4: 'video/mp4',
     mov: 'video/quicktime',
@@ -115,7 +110,7 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_changevideoframeby = (args, util) => this.changeVideoFrame(util.target, args.FRAME);
         primitives.looks_settextfont = (args, util) => this.setText(util.target, args.FONT, args.TEXT);
 
-        for (const opcode of CUSTOM_BLOCKS) {
+        for (const opcode of MOVIE_ASSET_BLOCKS) {
             if (!compatBlocks.stacked.includes(opcode)) compatBlocks.stacked.push(opcode);
         }
     }
@@ -126,7 +121,7 @@ class MovieAssetManager extends EventEmitter {
             const json = JSON.parse(originalToJSON(targetId, serializationOptions));
             const videos = this.serializeJSON(targetId);
             if (videos.length) json[VIDEO_PROJECT_KEY] = videos;
-            return JSON.stringify(json);
+            return JSON.stringify(markMovieProject(json));
         };
 
         const originalSerializeAssets = this.vm.serializeAssets.bind(this.vm);

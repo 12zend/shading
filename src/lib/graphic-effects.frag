@@ -97,6 +97,13 @@ const float epsilon = 1e-3;
 const float pi = 3.14159265358979323846;
 const vec2 kCenter = vec2(0.5, 0.5);
 
+vec4 sampleSkin(vec2 coord) {
+    if (any(lessThan(coord, vec2(0.0))) || any(greaterThan(coord, vec2(1.0)))) {
+        return vec4(0.0);
+    }
+    return texture2D(u_skin, coord);
+}
+
 vec3 convertRGB2HSV(vec3 color) {
     vec4 k = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
     vec4 p = mix(vec4(color.bg, k.wz), vec4(color.gb, k.xy), step(color.b, color.g));
@@ -138,72 +145,66 @@ float fractalNoise(vec2 value, float complexity) {
 
 vec4 gaussianBlur(vec2 coord, float radius) {
     vec2 stepSize = vec2(radius) / max(u_skinSize, vec2(1.0));
-    vec4 color = texture2D(u_skin, coord) * 0.227027;
-    color += texture2D(u_skin, coord + vec2(stepSize.x * 0.3846, 0.0)) * 0.158108;
-    color += texture2D(u_skin, coord - vec2(stepSize.x * 0.3846, 0.0)) * 0.158108;
-    color += texture2D(u_skin, coord + vec2(0.0, stepSize.y * 0.3846)) * 0.158108;
-    color += texture2D(u_skin, coord - vec2(0.0, stepSize.y * 0.3846)) * 0.158108;
-    color += texture2D(u_skin, coord + stepSize * 0.7692) * 0.074385;
-    color += texture2D(u_skin, coord - stepSize * 0.7692) * 0.074385;
-    color += texture2D(u_skin, coord + vec2(stepSize.x, -stepSize.y) * 0.7692) * 0.074385;
-    color += texture2D(u_skin, coord + vec2(-stepSize.x, stepSize.y) * 0.7692) * 0.074385;
-    return color;
+    vec4 color = vec4(0.0);
+    float totalWeight = 0.0;
+    for (int sampleIndex = 0; sampleIndex < 25; sampleIndex++) {
+        float position = float(sampleIndex) / 24.0;
+        float distanceFromCenter = sqrt(position);
+        float angle = float(sampleIndex) * 2.39996323;
+        vec2 offset = vec2(cos(angle), sin(angle)) * distanceFromCenter * stepSize;
+        float weight = exp(-2.0 * position);
+        color += sampleSkin(coord + offset) * weight;
+        totalWeight += weight;
+    }
+    return color / totalWeight;
 }
 
 vec4 lensBlur(vec2 coord, float radius) {
     vec2 pixel = vec2(radius) / max(u_skinSize, vec2(1.0));
-    vec4 color = texture2D(u_skin, coord) * 2.0;
-    color += texture2D(u_skin, coord + pixel * vec2(1.0, 0.0));
-    color += texture2D(u_skin, coord + pixel * vec2(0.866, 0.5));
-    color += texture2D(u_skin, coord + pixel * vec2(0.5, 0.866));
-    color += texture2D(u_skin, coord + pixel * vec2(0.0, 1.0));
-    color += texture2D(u_skin, coord + pixel * vec2(-0.5, 0.866));
-    color += texture2D(u_skin, coord + pixel * vec2(-0.866, 0.5));
-    color += texture2D(u_skin, coord + pixel * vec2(-1.0, 0.0));
-    color += texture2D(u_skin, coord + pixel * vec2(-0.866, -0.5));
-    color += texture2D(u_skin, coord + pixel * vec2(-0.5, -0.866));
-    color += texture2D(u_skin, coord + pixel * vec2(0.0, -1.0));
-    color += texture2D(u_skin, coord + pixel * vec2(0.5, -0.866));
-    color += texture2D(u_skin, coord + pixel * vec2(0.866, -0.5));
-    return color / 14.0;
+    vec4 color = sampleSkin(coord);
+    for (int sampleIndex = 0; sampleIndex < 24; sampleIndex++) {
+        float position = (float(sampleIndex) + 0.5) / 24.0;
+        float distanceFromCenter = sqrt(position);
+        float angle = float(sampleIndex) * 2.39996323;
+        vec2 offset = vec2(cos(angle), sin(angle)) * distanceFromCenter * pixel;
+        color += sampleSkin(coord + offset);
+    }
+    return color / 25.0;
 }
 
 vec4 radialBlur(vec2 coord, float amount) {
     vec2 direction = kCenter - coord;
     vec4 color = vec4(0.0);
-    for (int sampleIndex = 0; sampleIndex < 10; sampleIndex++) {
-        float position = float(sampleIndex) / 9.0;
-        color += texture2D(u_skin, coord + direction * amount * position * 0.35);
+    for (int sampleIndex = 0; sampleIndex < 24; sampleIndex++) {
+        float position = float(sampleIndex) / 23.0;
+        color += sampleSkin(coord + direction * amount * position * 0.35);
     }
-    return color / 10.0;
+    return color / 24.0;
 }
 
 vec4 directionalBlur(vec2 coord, float radius) {
     vec2 offset = vec2(radius, 0.0) / max(u_skinSize, vec2(1.0));
     vec4 color = vec4(0.0);
-    color += texture2D(u_skin, coord - offset);
-    color += texture2D(u_skin, coord - offset * 0.6667);
-    color += texture2D(u_skin, coord - offset * 0.3333);
-    color += texture2D(u_skin, coord);
-    color += texture2D(u_skin, coord + offset * 0.3333);
-    color += texture2D(u_skin, coord + offset * 0.6667);
-    color += texture2D(u_skin, coord + offset);
-    return color / 7.0;
+    for (int sampleIndex = 0; sampleIndex < 21; sampleIndex++) {
+        float position = float(sampleIndex) / 20.0 * 2.0 - 1.0;
+        color += sampleSkin(coord + offset * position);
+    }
+    return color / 21.0;
 }
 
 vec4 edgeColor(vec2 coord, float strength) {
     vec2 pixel = vec2(1.0) / max(u_skinSize, vec2(1.0));
-    vec3 left = texture2D(u_skin, coord - vec2(pixel.x, 0.0)).rgb;
-    vec3 right = texture2D(u_skin, coord + vec2(pixel.x, 0.0)).rgb;
-    vec3 down = texture2D(u_skin, coord - vec2(0.0, pixel.y)).rgb;
-    vec3 up = texture2D(u_skin, coord + vec2(0.0, pixel.y)).rgb;
+    vec3 left = sampleSkin(coord - vec2(pixel.x, 0.0)).rgb;
+    vec3 right = sampleSkin(coord + vec2(pixel.x, 0.0)).rgb;
+    vec3 down = sampleSkin(coord - vec2(0.0, pixel.y)).rgb;
+    vec3 up = sampleSkin(coord + vec2(0.0, pixel.y)).rgb;
     vec3 edge = sqrt((right - left) * (right - left) + (up - down) * (up - down));
-    float alpha = texture2D(u_skin, coord).a;
+    float alpha = sampleSkin(coord).a;
     return vec4(clamp(edge * strength * 3.0, 0.0, 1.0) * alpha, alpha);
 }
 
 vec3 brightSample(vec2 coord, float threshold) {
-    vec4 sampleColor = texture2D(u_skin, coord);
+    vec4 sampleColor = sampleSkin(coord);
     vec3 straight = sampleColor.rgb / (sampleColor.a + epsilon);
     float brightness = max(max(straight.r, straight.g), straight.b);
     return straight * smoothstep(threshold, min(1.0, threshold + 0.1), brightness) * sampleColor.a;
@@ -211,23 +212,25 @@ vec3 brightSample(vec2 coord, float threshold) {
 
 vec3 bloomColor(vec2 coord, float threshold, float radius) {
     vec2 pixel = vec2(radius) / max(u_skinSize, vec2(1.0));
-    vec3 color = brightSample(coord, threshold) * 2.0;
-    color += brightSample(coord + vec2(pixel.x, 0.0), threshold);
-    color += brightSample(coord - vec2(pixel.x, 0.0), threshold);
-    color += brightSample(coord + vec2(0.0, pixel.y), threshold);
-    color += brightSample(coord - vec2(0.0, pixel.y), threshold);
-    color += brightSample(coord + pixel, threshold);
-    color += brightSample(coord - pixel, threshold);
-    color += brightSample(coord + vec2(pixel.x, -pixel.y), threshold);
-    color += brightSample(coord + vec2(-pixel.x, pixel.y), threshold);
-    return color / 10.0;
+    vec3 color = vec3(0.0);
+    float totalWeight = 0.0;
+    for (int sampleIndex = 0; sampleIndex < 25; sampleIndex++) {
+        float position = float(sampleIndex) / 24.0;
+        float distanceFromCenter = sqrt(position);
+        float angle = float(sampleIndex) * 2.39996323;
+        vec2 offset = vec2(cos(angle), sin(angle)) * distanceFromCenter * pixel;
+        float weight = exp(-2.0 * position);
+        color += brightSample(coord + offset, threshold) * weight;
+        totalWeight += weight;
+    }
+    return color / totalWeight;
 }
 
 void main() {
     #if !(defined(DRAW_MODE_line) || defined(DRAW_MODE_background))
     vec2 originalCoord = v_texCoord;
     vec2 texcoord0 = originalCoord;
-    vec4 unaffectedColor = texture2D(u_skin, originalCoord);
+    vec4 unaffectedColor = sampleSkin(originalCoord);
 
     #ifdef ENABLE_mosaic
     texcoord0 = fract(u_mosaic * texcoord0);
@@ -312,7 +315,7 @@ void main() {
     }
     #endif
 
-    vec4 effectColor = texture2D(u_skin, texcoord0);
+    vec4 effectColor = sampleSkin(texcoord0);
 
     #ifdef ENABLE_gaussianblur
     effectColor = mix(effectColor, gaussianBlur(texcoord0, u_gaussianBlur), clamp(u_gaussianBlur / 6.0, 0.0, 1.0));
@@ -338,8 +341,8 @@ void main() {
     {
         vec2 direction = vec2(cos(u_rgbShift.y), sin(u_rgbShift.y));
         vec2 shift = direction * u_rgbShift.x / max(u_skinSize, vec2(1.0));
-        vec4 positive = texture2D(u_skin, texcoord0 + shift);
-        vec4 negative = texture2D(u_skin, texcoord0 - shift);
+        vec4 positive = sampleSkin(texcoord0 + shift);
+        vec4 negative = sampleSkin(texcoord0 - shift);
         if (u_rgbShiftColor < 0.5) {
             effectColor.r = positive.r;
             effectColor.g = negative.g;
@@ -378,7 +381,11 @@ void main() {
     #endif
 
     #ifdef ENABLE_bloom
-    effectColor.rgb += bloomColor(texcoord0, u_bloom.x, u_bloom.y) * u_bloom.z;
+    {
+        vec3 bloom = bloomColor(texcoord0, u_bloom.x, u_bloom.y) * u_bloom.z;
+        effectColor.rgb += bloom;
+        effectColor.a = max(effectColor.a, clamp(max(max(bloom.r, bloom.g), bloom.b), 0.0, 1.0));
+    }
     #endif
 
     #ifdef ENABLE_ghost

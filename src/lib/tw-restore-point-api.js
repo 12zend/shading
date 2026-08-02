@@ -1,5 +1,7 @@
 import JSZip from '@turbowarp/jszip';
 import {base64ToArrayBuffer} from './tw-base64-utils';
+import {isMovieProject, MOVIE_PROJECT_EXTENSION, SCRATCH_PROJECT_EXTENSION} from './project-format';
+import {TextDecoder} from './tw-text-encoder';
 
 const TYPE_AUTOMATIC = 0;
 const TYPE_MANUAL = 1;
@@ -438,7 +440,7 @@ const deleteAllRestorePoints = () => openDB().then(db => new Promise((resolveTra
 
 /**
  * @param {number} id the restore point's ID
- * @returns {Promise<{title: string, blob: Blob}>} Resolves with compressed project data and title.
+ * @returns {Promise<{title: string, blob: Blob, extension: string}>} Compressed project data, title, and extension.
  */
 const exportRestorePoint = async id => {
     const db = await openDB();
@@ -526,6 +528,8 @@ const exportRestorePoint = async id => {
     const metadata = await getMetadata();
     const projectJSON = await getProjectJSON();
     const assets = await getAssets(Object.keys(metadata.assets));
+    const parsedProjectJSON = JSON.parse(new TextDecoder().decode(projectJSON));
+    const extension = isMovieProject(parsedProjectJSON) ? MOVIE_PROJECT_EXTENSION : SCRATCH_PROJECT_EXTENSION;
 
     const zip = new JSZip();
     zip.file('project.json', projectJSON);
@@ -540,7 +544,8 @@ const exportRestorePoint = async id => {
 
     return {
         title: metadata.title,
-        blob
+        blob,
+        extension
     };
 };
 

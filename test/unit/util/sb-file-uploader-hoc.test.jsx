@@ -66,6 +66,11 @@ describe('SBFileUploaderHOC', () => {
         expect(projectName).toBe('my project is great');
     });
 
+    test('correctly sets title with .mb3 filename', () => {
+        const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.mb3');
+        expect(projectName).toBe('my movie is great');
+    });
+
     test('correctly sets title with .sb2 filename', () => {
         const projectName = unwrappedInstance().getProjectTitleFromFilename('my project is great.sb2');
         expect(projectName).toBe('my project is great');

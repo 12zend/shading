@@ -1,22 +1,9 @@
 import * as twgl from 'twgl.js';
 import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
 
-import spriteVertexShader from '!raw-loader!scratch-render/src/shaders/sprite.vert';
+import spriteVertexShader from '!raw-loader!./graphic-effects.vert';
 import spriteFragmentShader from '!raw-loader!./graphic-effects.frag';
-
-const CUSTOM_BLOCKS = [
-    'looks_bloom',
-    'looks_circularripple',
-    'looks_displacementmap',
-    'looks_edgedetection',
-    'looks_effectweight',
-    'looks_pixelstretch',
-    'looks_posterize',
-    'looks_rgbshift',
-    'looks_setheightto',
-    'looks_setwidthto',
-    'looks_turbulentdisplace'
-];
+import {ADVANCED_GRAPHIC_BLOCKS} from './project-format';
 
 const EFFECT_NAMES = [
     'gaussianblur',
@@ -43,6 +30,12 @@ const radians = value => number(value) * Math.PI / 180;
 const vector = (value, length) => (
     Array.isArray(value) ? value.slice(0, length) : new Array(length).fill(0)
 );
+const PADDING_SAFETY = 2;
+
+const growPadding = (padding, x, y = x) => {
+    if (x > 0) padding[0] = Math.max(padding[0], Math.ceil(x) + PADDING_SAFETY);
+    if (y > 0) padding[1] = Math.max(padding[1], Math.ceil(y) + PADDING_SAFETY);
+};
 
 const EFFECT_INFO = {
     gaussianblur: {
@@ -125,6 +118,71 @@ const EFFECT_INFO = {
     }
 };
 
+const calculateEffectPadding = drawable => {
+    if (!drawable || !drawable.skin) return [0, 0];
+    const uniforms = drawable._uniforms;
+    const padding = [0, 0];
+    const enabled = effectName => (
+        (drawable.enabledEffects & EFFECT_INFO[effectName].mask) !== 0
+    );
+
+    if (enabled('gaussianblur')) growPadding(padding, uniforms.u_gaussianBlur);
+    if (enabled('lensblur')) growPadding(padding, uniforms.u_lensBlur);
+    if (enabled('directionalblur')) growPadding(padding, uniforms.u_directionalBlur, 0);
+    if (enabled('bloom')) growPadding(padding, Math.abs(uniforms.u_bloom[1]));
+
+    if (enabled('rgbshift')) {
+        const amount = Math.abs(uniforms.u_rgbShift[0]);
+        const angle = uniforms.u_rgbShift[1];
+        growPadding(padding, amount * Math.abs(Math.cos(angle)), amount * Math.abs(Math.sin(angle)));
+    }
+    if (enabled('turbulentdisplace')) {
+        growPadding(padding, Math.abs(uniforms.u_turbulentDisplace[0]) * 0.5);
+    }
+    if (enabled('circularripple')) {
+        growPadding(padding, Math.abs(uniforms.u_circularRipple[1]));
+    }
+    if (enabled('pixelstretch')) {
+        const amount = Math.abs(uniforms.u_pixelStretchA[0]);
+        const angle = uniforms.u_pixelStretchB[2];
+        growPadding(padding, amount * Math.abs(Math.cos(angle)), amount * Math.abs(Math.sin(angle)));
+    }
+    if (enabled('displacementmap')) {
+        const type = uniforms.u_displacement[0];
+        const amount = Math.abs(uniforms.u_displacement[1]) * 0.5;
+        if (type < 0.5) growPadding(padding, amount, 0);
+        else if (type < 1.5) growPadding(padding, 0, amount);
+        else growPadding(padding, amount);
+    }
+    if (enabled('radialblur')) {
+        const amount = uniforms.u_radialBlur;
+        growPadding(
+            padding,
+            drawable.skin.size[0] * amount * 0.3,
+            drawable.skin.size[1] * amount * 0.3
+        );
+    }
+    return padding;
+};
+
+const expandBoundsForEffectPadding = (drawable, bounds) => {
+    const padding = drawable._uniforms.u_effectPadding;
+    if (!padding || (padding[0] === 0 && padding[1] === 0) || !drawable.skin) return bounds;
+    const matrix = drawable._uniforms.u_modelMatrix;
+    const skinSize = drawable.skin.size;
+    const width = Math.max(skinSize[0], 1);
+    const height = Math.max(skinSize[1], 1);
+    const x = (Math.abs(matrix[0] * padding[0] / width)) +
+        (Math.abs(matrix[4] * padding[1] / height));
+    const y = (Math.abs(matrix[1] * padding[0] / width)) +
+        (Math.abs(matrix[5] * padding[1] / height));
+    bounds.left -= x;
+    bounds.right += x;
+    bounds.bottom -= y;
+    bounds.top += y;
+    return bounds;
+};
+
 /* eslint-disable no-invalid-this */
 const buildShader = function (drawMode, effectBits) {
     const defines = [`#define DRAW_MODE_${drawMode}`];
@@ -166,6 +224,16 @@ const initializeDrawable = drawable => {
     if (!Object.prototype.hasOwnProperty.call(drawable._uniforms, 'u_rgbShiftColor')) {
         drawable._uniforms.u_rgbShiftColor = 0;
         drawable._uniforms.u_pixelStretchB = [0, 0, 0, 0];
+    }
+    if (!Object.prototype.hasOwnProperty.call(drawable._uniforms, 'u_effectPadding')) {
+        drawable._uniforms.u_effectPadding = [0, 0];
+    }
+    if (!drawable.__movieEffectBoundsPatched) {
+        drawable.__movieEffectBoundsPatched = true;
+        const originalGetAABB = drawable.getAABB.bind(drawable);
+        const originalGetBounds = drawable.getBounds.bind(drawable);
+        drawable.getAABB = result => expandBoundsForEffectPadding(drawable, originalGetAABB(result));
+        drawable.getBounds = result => expandBoundsForEffectPadding(drawable, originalGetBounds(result));
     }
 };
 
@@ -224,7 +292,7 @@ class GraphicEffectsManager {
         primitives.looks_displacementmap = (args, util) => this.displacementMap(util.target, args);
         primitives.looks_effectweight = (args, util) => this.effectWeight(util.target, args.COSTUME);
 
-        for (const opcode of CUSTOM_BLOCKS) {
+        for (const opcode of ADVANCED_GRAPHIC_BLOCKS) {
             if (!compatBlocks.stacked.includes(opcode)) compatBlocks.stacked.push(opcode);
         }
     }
@@ -267,6 +335,20 @@ class GraphicEffectsManager {
             return result;
         };
 
+        const originalSetEffect = target.setEffect.bind(target);
+        target.setEffect = (effectName, value) => {
+            const result = originalSetEffect(effectName, value);
+            this.updateEffectPadding(target);
+            return result;
+        };
+
+        const originalClearEffects = target.clearEffects.bind(target);
+        target.clearEffects = () => {
+            const result = originalClearEffects();
+            this.updateEffectPadding(target);
+            return result;
+        };
+
         this.restoreExtraUniforms(target);
     }
 
@@ -280,6 +362,13 @@ class GraphicEffectsManager {
     updateExtraUniforms (target, uniforms) {
         const drawable = this.getDrawable(target);
         if (drawable) Object.assign(drawable._uniforms, uniforms);
+    }
+
+    updateEffectPadding (target) {
+        const drawable = this.getDrawable(target);
+        if (!drawable) return;
+        drawable._uniforms.u_effectPadding = calculateEffectPadding(drawable);
+        drawable.setConvexHullDirty();
     }
 
     resolveCostume (target, requestedCostume) {
@@ -314,6 +403,7 @@ class GraphicEffectsManager {
             uniforms.u_effectWeight = this.getCostumeTexture(target, state.effectWeightCostume);
         }
         this.updateExtraUniforms(target, uniforms);
+        this.updateEffectPadding(target);
     }
 
     setScale (target, axis, value) {
@@ -427,6 +517,7 @@ const installGraphicEffectsManager = vm => {
 export {
     EFFECT_INFO,
     GraphicEffectsManager,
+    calculateEffectPadding,
     installRendererEffects,
     installGraphicEffectsManager as default
 };
