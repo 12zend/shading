@@ -25,7 +25,7 @@ import {
     closeFileMenu
 } from '../reducers/menus';
 
-const PROJECT_FILE_EXTENSIONS = ['.sb', '.sb2', '.sb3', '.mb3'];
+const PROJECT_FILE_EXTENSIONS = ['.mb3', '.sb3', '.sb2', '.sb'];
 
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
@@ -78,24 +78,10 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             if (this.props.showOpenFilePicker) {
                 (async () => {
                     try {
-                        const [handle] = await this.props.showOpenFilePicker({
-                            multiple: false,
-                            types: [
-                                {
-                                    description: 'Scratch Project',
-                                    accept: {
-                                        // Chrome on Android tracks the MIME type of files that get downloaded and
-                                        // then actually enforces that the type must match in showOpenFilePicker()
-                                        // and does not allow the user to override the filter. As Scratch projects have
-                                        // no well-defined and well-adopted MIME types, we can't assume anything about
-                                        // what MIME type they are saved with, so we have to use the most broad MIME
-                                        // type here. Otherwise some users just won't be able to load files for no
-                                        // fault of their own.
-                                        '*/*': PROJECT_FILE_EXTENSIONS
-                                    }
-                                }
-                            ]
-                        });
+                        // Do not pass a type filter here. Chromium on macOS can grey out an unregistered custom
+                        // extension such as .mb3 even when it is included in the accepted extension list.
+                        // The fallback <input> below can still use an extension filter safely.
+                        const [handle] = await this.props.showOpenFilePicker({multiple: false});
                         const file = await handle.getFile();
                         this.handleChange({
                             target: {
