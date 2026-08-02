@@ -11,8 +11,10 @@ import VM from 'scratch-vm';
 
 import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
+import FontTab from '../../containers/font-tab.jsx';
 import TargetPane from '../../containers/target-pane.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
+import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
 import Loader from '../loader/loader.jsx';
 import Box from '../box/box.jsx';
@@ -49,6 +51,8 @@ import addExtensionIcon from './icon--extensions.svg';
 import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
 import costumesIcon from '!../../lib/tw-recolor/build!./icon--costumes.svg';
 import soundsIcon from '!../../lib/tw-recolor/build!./icon--sounds.svg';
+import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
+import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -100,6 +104,7 @@ const GUIComponent = props => {
         connectionModalVisible,
         costumeLibraryVisible,
         costumesTabVisible,
+        fontsTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -127,6 +132,8 @@ const GUIComponent = props => {
         onToggleLoginOpen,
         onActivateCostumesTab,
         onActivateSoundsTab,
+        onActivateVideosTab,
+        onActivateFontsTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -147,6 +154,7 @@ const GUIComponent = props => {
         showOpenFilePicker,
         showSaveFilePicker,
         soundsTabVisible,
+        videosTabVisible,
         stageSizeMode,
         targetIsStage,
         telemetryModalVisible,
@@ -384,6 +392,34 @@ const GUIComponent = props => {
                                             id="gui.gui.soundsTab"
                                         />
                                     </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivateVideosTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={videosIcon()}
+                                        />
+                                        <FormattedMessage
+                                            defaultMessage="Videos"
+                                            description="Button to get to the videos panel"
+                                            id="movie.gui.videosTab"
+                                        />
+                                    </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivateFontsTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={fontsIcon()}
+                                        />
+                                        <FormattedMessage
+                                            defaultMessage="Fonts"
+                                            description="Button to get to the fonts panel"
+                                            id="movie.gui.fontsTab"
+                                        />
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -425,6 +461,12 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {soundsTabVisible ? <SoundTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {videosTabVisible ? <VideoTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {fontsTabVisible ? <FontTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -481,6 +523,7 @@ GUIComponent.propTypes = {
     children: PropTypes.node,
     costumeLibraryVisible: PropTypes.bool,
     costumesTabVisible: PropTypes.bool,
+    fontsTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -499,6 +542,8 @@ GUIComponent.propTypes = {
     logo: PropTypes.string,
     onActivateCostumesTab: PropTypes.func,
     onActivateSoundsTab: PropTypes.func,
+    onActivateVideosTab: PropTypes.func,
+    onActivateFontsTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
@@ -529,6 +574,7 @@ GUIComponent.propTypes = {
     showOpenFilePicker: PropTypes.func,
     showSaveFilePicker: PropTypes.func,
     soundsTabVisible: PropTypes.bool,
+    videosTabVisible: PropTypes.bool,
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
     targetIsStage: PropTypes.bool,
     telemetryModalVisible: PropTypes.bool,

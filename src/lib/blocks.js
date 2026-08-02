@@ -95,6 +95,22 @@ export default function (vm) {
         return [['', '']];
     };
 
+    const videosMenu = function () {
+        const manager = vm.runtime.movieAssetManager;
+        const videos = manager && vm.editingTarget ? manager.getVideos(vm.editingTarget) : [];
+        return videos.length ? videos.map(video => [video.name, video.name]) : [['', '']];
+    };
+
+    const fontsMenu = function () {
+        const defaults = [
+            ['Sans Serif', 'sans-serif'],
+            ['Serif', 'serif'],
+            ['Monospace', 'monospace']
+        ];
+        const fonts = vm.runtime.fontManager.getFonts().map(font => [font.name, font.name]);
+        return defaults.concat(fonts);
+    };
+
     const backdropsMenu = function () {
         const next = ScratchBlocks.ScratchMsgs.translate('LOOKS_NEXTBACKDROP', 'next backdrop');
         const previous = ScratchBlocks.ScratchMsgs.translate('LOOKS_PREVIOUSBACKDROP', 'previous backdrop');
@@ -164,6 +180,67 @@ export default function (vm) {
     ScratchBlocks.Blocks.looks_costume.init = function () {
         const json = jsonForMenuBlock('COSTUME', costumesMenu, looksColors, []);
         this.jsonInit(json);
+    };
+
+    ScratchBlocks.Blocks.looks_video = {
+        init: function () {
+            const json = jsonForMenuBlock('VIDEO', videosMenu, looksColors, []);
+            this.jsonInit(json);
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_font = {
+        init: function () {
+            const json = jsonForMenuBlock('FONT', fontsMenu, looksColors, []);
+            this.jsonInit(json);
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_switchvideoto = {
+        init: function () {
+            this.jsonInit({
+                message0: 'switch video to %1',
+                args0: [{type: 'input_value', name: 'VIDEO'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setvideoframeto = {
+        init: function () {
+            this.jsonInit({
+                message0: 'set video frame to %1',
+                args0: [{type: 'input_value', name: 'FRAME'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_changevideoframeby = {
+        init: function () {
+            this.jsonInit({
+                message0: 'change video frame by %1',
+                args0: [{type: 'input_value', name: 'FRAME'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_settextfont = {
+        init: function () {
+            this.jsonInit({
+                message0: 'set text font: %1 text: %2',
+                args0: [
+                    {type: 'input_value', name: 'FONT'},
+                    {type: 'input_value', name: 'TEXT'}
+                ],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
     };
 
     ScratchBlocks.Blocks.looks_backdrops.init = function () {

@@ -1,0 +1,159 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.file-input {
+    display: none;
+}
+
+.tile-glyph {
+    font-size: 1.65rem;
+    line-height: 1;
+    color: $text-primary;
+}
+
+.editor {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: $ui-white;
+    color: $text-primary;
+}
+
+.toolbar {
+    min-height: 3.25rem;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-bottom: 1px solid $ui-black-transparent;
+    background: $ui-tertiary;
+}
+
+.preview-input-label,
+.size-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.preview-input-label {
+    min-width: 0;
+    flex: 1;
+}
+
+.preview-input {
+    min-width: 5rem;
+    flex: 1;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $input-background;
+    color: $text-primary;
+    font: inherit;
+}
+
+.preview-input:focus {
+    outline: 3px solid $looks-transparent;
+    border-color: $looks-secondary;
+}
+
+.size-control input {
+    width: 7rem;
+    accent-color: $looks-secondary;
+}
+
+.size-control output {
+    min-width: 2.8rem;
+    color: $text-primary-transparent;
+    font-variant-numeric: tabular-nums;
+}
+
+.preview-area {
+    min-height: 0;
+    flex: 1;
+    padding: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    text-align: center;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    background: $assets-background;
+}
+
+.details {
+    min-height: 2.75rem;
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-top: 1px solid $ui-black-transparent;
+    font-size: 0.72rem;
+}
+
+.details span {
+    color: $text-primary-transparent;
+}
+
+.error {
+    padding: 0.65rem 0.85rem;
+    color: $error-primary;
+    font-size: 0.75rem;
+}
+
+.empty-state {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    background: $assets-background;
+    color: $text-primary;
+}
+
+.empty-state h2 {
+    margin: 0.75rem 0 0.4rem;
+    font-size: 1.1rem;
+}
+
+.empty-state p {
+    max-width: 32rem;
+    margin: 0 0 1rem;
+    color: $text-primary-transparent;
+    line-height: 1.45;
+}
+
+.empty-state button {
+    padding: 0.6rem 1rem;
+    border: 0;
+    border-radius: $form-radius;
+    background: $looks-secondary;
+    color: #ffffff;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.empty-state button:hover {
+    background: $looks-secondary-dark;
+}
+
+.empty-icon {
+    width: 3.25rem;
+    height: 3.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: $looks-secondary;
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: bold;
+}

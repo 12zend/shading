@@ -15,7 +15,9 @@ import {
     activateTab,
     BLOCKS_TAB_INDEX,
     COSTUMES_TAB_INDEX,
-    SOUNDS_TAB_INDEX
+    SOUNDS_TAB_INDEX,
+    VIDEOS_TAB_INDEX,
+    FONTS_TAB_INDEX
 } from '../reducers/editor-tab';
 
 import {
@@ -35,6 +37,7 @@ import storage from '../lib/storage';
 import vmListenerHOC from '../lib/vm-listener-hoc.jsx';
 import vmManagerHOC from '../lib/vm-manager-hoc.jsx';
 import cloudManagerHOC from '../lib/cloud-manager-hoc.jsx';
+import installMovieAssetManager from '../lib/movie-asset-manager';
 
 import GUIComponent from '../components/gui/gui.jsx';
 import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
@@ -57,6 +60,7 @@ class GUI extends React.Component {
     componentDidMount () {
         setIsScratchDesktop(this.props.isScratchDesktop);
         this.props.onStorageInit(storage);
+        installMovieAssetManager(this.props.vm);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }
@@ -165,6 +169,8 @@ const mapStateToProps = state => {
         loadingStateVisible: state.scratchGui.modals.loadingProject,
         projectId: state.scratchGui.projectState.projectId,
         soundsTabVisible: state.scratchGui.editorTab.activeTabIndex === SOUNDS_TAB_INDEX,
+        videosTabVisible: state.scratchGui.editorTab.activeTabIndex === VIDEOS_TAB_INDEX,
+        fontsTabVisible: state.scratchGui.editorTab.activeTabIndex === FONTS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
             state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget
@@ -186,6 +192,8 @@ const mapDispatchToProps = dispatch => ({
     onActivateTab: tab => dispatch(activateTab(tab)),
     onActivateCostumesTab: () => dispatch(activateTab(COSTUMES_TAB_INDEX)),
     onActivateSoundsTab: () => dispatch(activateTab(SOUNDS_TAB_INDEX)),
+    onActivateVideosTab: () => dispatch(activateTab(VIDEOS_TAB_INDEX)),
+    onActivateFontsTab: () => dispatch(activateTab(FONTS_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())

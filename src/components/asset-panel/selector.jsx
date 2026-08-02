@@ -77,6 +77,7 @@ const Selector = props => {
                             name={item.name}
                             number={index + 1 /* 1-indexed */}
                             selected={index === selectedItemIndex}
+                            thumbnail={item.thumbnail}
                             onClick={onItemClick}
                             onDeleteButtonClick={onDeleteClick}
                             onDuplicateButtonClick={onDuplicateClick}
@@ -103,6 +104,7 @@ Selector.propTypes = {
     isRtl: PropTypes.bool,
     items: PropTypes.arrayOf(PropTypes.shape({
         url: PropTypes.string,
+        thumbnail: PropTypes.node,
         name: PropTypes.any // modified by folders addon
     })),
     onAddSortable: PropTypes.func,

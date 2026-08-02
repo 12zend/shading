@@ -257,6 +257,36 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             </block>
         `}
         ${blockSeparator}
+        <block id="${targetId}_switchvideoto" type="looks_switchvideoto">
+            <value name="VIDEO">
+                <shadow type="looks_video"></shadow>
+            </value>
+        </block>
+        <block type="looks_setvideoframeto">
+            <value name="FRAME">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="looks_changevideoframeby">
+            <value name="FRAME">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="looks_settextfont">
+            <value name="FONT">
+                <shadow type="looks_font"></shadow>
+            </value>
+            <value name="TEXT">
+                <shadow type="text">
+                    <field name="TEXT">${hello}</field>
+                </shadow>
+            </value>
+        </block>
+        ${blockSeparator}
         <block type="looks_changeeffectby">
             <value name="CHANGE">
                 <shadow type="math_number">
