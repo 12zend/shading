@@ -243,6 +243,163 @@ export default function (vm) {
         }
     };
 
+    const looksStatement = (message0, args0, inputsInline = true) => ({
+        message0,
+        args0,
+        inputsInline,
+        category: ScratchBlocks.Categories.looks,
+        extensions: ['colours_looks', 'shape_statement']
+    });
+
+    const effectName = (id, fallback) => ScratchBlocks.ScratchMsgs.translate(id, fallback);
+    const graphicEffectOptions = [
+        [effectName('LOOKS_EFFECT_COLOR', 'color'), 'COLOR'],
+        [effectName('LOOKS_EFFECT_FISHEYE', 'fisheye'), 'FISHEYE'],
+        ['gaussian blur', 'GAUSSIANBLUR'],
+        ['lens blur', 'LENSBLUR'],
+        ['radial blur', 'RADIALBLUR'],
+        ['directional blur', 'DIRECTIONALBLUR'],
+        [effectName('LOOKS_EFFECT_WHIRL', 'whirl'), 'WHIRL'],
+        [effectName('LOOKS_EFFECT_PIXELATE', 'pixelate'), 'PIXELATE'],
+        [effectName('LOOKS_EFFECT_MOSAIC', 'mosaic'), 'MOSAIC'],
+        [effectName('LOOKS_EFFECT_BRIGHTNESS', 'brightness'), 'BRIGHTNESS'],
+        [effectName('LOOKS_EFFECT_GHOST', 'ghost'), 'GHOST']
+    ];
+
+    ScratchBlocks.Blocks.looks_changeeffectby = {
+        init: function () {
+            this.jsonInit(looksStatement(ScratchBlocks.Msg.LOOKS_CHANGEEFFECTBY, [
+                {type: 'field_dropdown', name: 'EFFECT', options: graphicEffectOptions},
+                {type: 'input_value', name: 'CHANGE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_seteffectto = {
+        init: function () {
+            this.jsonInit(looksStatement(ScratchBlocks.Msg.LOOKS_SETEFFECTTO, [
+                {type: 'field_dropdown', name: 'EFFECT', options: graphicEffectOptions},
+                {type: 'input_value', name: 'VALUE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setwidthto = {
+        init: function () {
+            this.jsonInit(looksStatement('set width to %1 %', [
+                {type: 'input_value', name: 'WIDTH'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setheightto = {
+        init: function () {
+            this.jsonInit(looksStatement('set height to %1 %', [
+                {type: 'input_value', name: 'HEIGHT'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_turbulentdisplace = {
+        init: function () {
+            this.jsonInit(looksStatement(
+                'turbulent displace amount: %1 size: %2 complexity: %3 evolution: %4',
+                [
+                    {type: 'input_value', name: 'AMOUNT'},
+                    {type: 'input_value', name: 'SIZE'},
+                    {type: 'input_value', name: 'COMPLEXITY'},
+                    {type: 'input_value', name: 'EVOLUTION'}
+                ]
+            ));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_posterize = {
+        init: function () {
+            this.jsonInit(looksStatement('posterize value: %1', [
+                {type: 'input_value', name: 'VALUE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_rgbshift = {
+        init: function () {
+            this.jsonInit(looksStatement('rgb shift value: %1 dir: %2 color: %3', [
+                {type: 'input_value', name: 'VALUE'},
+                {type: 'input_value', name: 'DIR'},
+                {type: 'field_dropdown', name: 'COLOR', options: [['RG', 'RG'], ['GB', 'GB'], ['BR', 'BR']]}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_edgedetection = {
+        init: function () {
+            this.jsonInit(looksStatement('edge detection value: %1', [
+                {type: 'input_value', name: 'VALUE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_circularripple = {
+        init: function () {
+            this.jsonInit(looksStatement('circular ripple frequency: %1 value: %2 offset: %3', [
+                {type: 'input_value', name: 'FREQUENCY'},
+                {type: 'input_value', name: 'VALUE'},
+                {type: 'input_value', name: 'OFFSET'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_pixelstretch = {
+        init: function () {
+            this.jsonInit(looksStatement(
+                'pixel stretch offset: %1 smoothness: %2 falloff: %3 transform x: %4 % y: %5 % ' +
+                'radius: %6 angle: %7',
+                [
+                    {type: 'input_value', name: 'OFFSET'},
+                    {type: 'input_value', name: 'SMOOTHNESS'},
+                    {type: 'input_value', name: 'FALLOFF'},
+                    {type: 'input_value', name: 'X'},
+                    {type: 'input_value', name: 'Y'},
+                    {type: 'input_value', name: 'RADIUS'},
+                    {type: 'input_value', name: 'ANGLE'}
+                ]
+            ));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_bloom = {
+        init: function () {
+            this.jsonInit(looksStatement('bloom threshold: %1 blur: %2 value: %3', [
+                {type: 'input_value', name: 'THRESHOLD'},
+                {type: 'input_value', name: 'BLUR'},
+                {type: 'input_value', name: 'VALUE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_displacementmap = {
+        init: function () {
+            this.jsonInit(looksStatement('displacement map costume: %1 type: %2 value: %3', [
+                {type: 'input_value', name: 'COSTUME'},
+                {
+                    type: 'field_dropdown',
+                    name: 'TYPE',
+                    options: [['x', 'x'], ['y', 'y'], ['size', 'size'], ['dir', 'dir']]
+                },
+                {type: 'input_value', name: 'VALUE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_effectweight = {
+        init: function () {
+            this.jsonInit(looksStatement('effect weight costume: %1', [
+                {type: 'input_value', name: 'COSTUME'}
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_backdrops.init = function () {
         const json = jsonForMenuBlock('BACKDROP', backdropsMenu, looksColors, []);
         this.jsonInit(json);

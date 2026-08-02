@@ -255,6 +255,20 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                     </shadow>
                 </value>
             </block>
+            <block type="looks_setwidthto">
+                <value name="WIDTH">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="looks_setheightto">
+                <value name="HEIGHT">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+            </block>
         `}
         ${blockSeparator}
         <block id="${targetId}_switchvideoto" type="looks_switchvideoto">
@@ -302,6 +316,53 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             </value>
         </block>
         <block type="looks_cleargraphiceffects"/>
+        ${blockSeparator}
+        <block type="looks_turbulentdisplace">
+            <value name="AMOUNT"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
+            <value name="SIZE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+            <value name="COMPLEXITY"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
+            <value name="EVOLUTION"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="looks_posterize">
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">8</field></shadow></value>
+        </block>
+        <block type="looks_rgbshift">
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+            <value name="DIR"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
+        </block>
+        <block type="looks_edgedetection">
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+        </block>
+        <block type="looks_circularripple">
+            <value name="FREQUENCY"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+            <value name="OFFSET"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="looks_pixelstretch">
+            <value name="OFFSET"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
+            <value name="SMOOTHNESS"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
+            <value name="FALLOFF"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="RADIUS"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+            <value name="ANGLE"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
+        </block>
+        <block type="looks_bloom">
+            <value name="THRESHOLD"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+            <value name="BLUR"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+        </block>
+        <block type="looks_displacementmap">
+            <value name="COSTUME">
+                <shadow type="looks_costume"><field name="COSTUME">${costumeName}</field></shadow>
+            </value>
+            <value name="VALUE"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
+        </block>
+        <block type="looks_effectweight">
+            <value name="COSTUME">
+                <shadow type="looks_costume"><field name="COSTUME">${costumeName}</field></shadow>
+            </value>
+        </block>
         ${blockSeparator}
         ${isStage ? '' : `
             <block type="looks_show"/>
