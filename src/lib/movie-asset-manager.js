@@ -105,14 +105,29 @@ class MovieAssetManager extends EventEmitter {
 
     installPrimitives () {
         const primitives = this.runtime._primitives;
-        primitives.looks_switchvideoto = (args, util) => this.switchVideo(util.target, args.VIDEO);
-        primitives.looks_setvideoframeto = (args, util) => this.setVideoFrame(util.target, args.FRAME);
-        primitives.looks_changevideoframeby = (args, util) => this.changeVideoFrame(util.target, args.FRAME);
-        primitives.looks_settextfont = (args, util) => this.setText(util.target, args.FONT, args.TEXT);
+        // Media decoding is asynchronous, but Looks blocks must not pause the VM while a frame is decoded.
+        // Keep decoding in the background and coalesce rapid frame changes in queueVideoFrame().
+        primitives.looks_switchvideoto = (args, util) => {
+            this.runWithoutWaiting(this.switchVideo(util.target, args.VIDEO));
+        };
+        primitives.looks_setvideoframeto = (args, util) => {
+            this.runWithoutWaiting(this.setVideoFrame(util.target, args.FRAME));
+        };
+        primitives.looks_changevideoframeby = (args, util) => {
+            this.runWithoutWaiting(this.changeVideoFrame(util.target, args.FRAME));
+        };
+        primitives.looks_settextfont = (args, util) => {
+            this.setText(util.target, args.FONT, args.TEXT);
+        };
 
         for (const opcode of MOVIE_ASSET_BLOCKS) {
             if (!compatBlocks.stacked.includes(opcode)) compatBlocks.stacked.push(opcode);
         }
+    }
+
+    runWithoutWaiting (promise) {
+        if (!promise || typeof promise.catch !== 'function') return;
+        promise.catch(error => this.emit('renderError', error));
     }
 
     installSerializationHooks () {
@@ -318,10 +333,19 @@ class MovieAssetManager extends EventEmitter {
         if (!state) {
             state = {
                 currentFrame: 1,
+                displayedFrame: null,
+                displayedVideoAssetId: null,
                 mode: 'costume',
+                pendingText: null,
+                pendingVideoFrame: null,
+                renderVersion: 0,
+                renderedTextKey: null,
                 skinId: null,
+                textRenderPromise: null,
                 video: null,
-                videoAssetId: null
+                videoAssetId: null,
+                videoElementAssetId: null,
+                videoRenderPromise: null
             };
             this.targetStates.set(target.id, state);
         }
@@ -331,9 +355,7 @@ class MovieAssetManager extends EventEmitter {
     switchVideo (target, requestedVideo) {
         const video = this.getVideoByName(target, requestedVideo);
         if (!video) return;
-        const state = this.getTargetState(target);
-        state.currentFrame = 1;
-        return this.renderVideoFrame(target, video, 1);
+        return this.queueVideoFrame(target, video, 1);
     }
 
     setVideoFrame (target, requestedFrame) {
@@ -342,7 +364,7 @@ class MovieAssetManager extends EventEmitter {
         const video = videos.find(item => item.assetId === state.videoAssetId) || videos[0];
         if (!video) return;
         const frame = Number(requestedFrame);
-        return this.renderVideoFrame(target, video, Number.isFinite(frame) ? frame : 1);
+        return this.queueVideoFrame(target, video, Number.isFinite(frame) ? frame : 1);
     }
 
     changeVideoFrame (target, change) {
@@ -352,7 +374,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     async prepareVideoElement (state, video) {
-        if (state.video && state.videoAssetId === video.assetId) return state.video;
+        if (state.video && state.videoElementAssetId === video.assetId) return state.video;
         if (state.video) {
             state.video.removeAttribute('src');
             state.video.load();
@@ -370,16 +392,78 @@ class MovieAssetManager extends EventEmitter {
 
     commitVideoElement (state, element, assetId) {
         state.video = element;
-        state.videoAssetId = assetId;
+        state.videoElementAssetId = assetId;
     }
 
-    async renderVideoFrame (target, video, requestedFrame) {
+    queueVideoFrame (target, video, requestedFrame) {
         if (!target || !this.runtime.renderer) return;
         const state = this.getTargetState(target);
-        const element = await this.prepareVideoElement(state, video);
         const maximumFrame = video.duration > 0 ?
             Math.max(1, Math.floor(video.duration * video.frameRate) + 1) : Number.MAX_SAFE_INTEGER;
         const frame = Math.round(clamp(requestedFrame, 1, maximumFrame));
+
+        state.currentFrame = frame;
+        state.videoAssetId = video.assetId;
+
+        if (
+            state.mode === 'video' &&
+            state.displayedVideoAssetId === video.assetId &&
+            state.displayedFrame === frame &&
+            !state.pendingVideoFrame &&
+            !state.videoRenderPromise
+        ) {
+            return Promise.resolve();
+        }
+
+        state.renderVersion++;
+        state.pendingText = null;
+        state.pendingVideoFrame = {
+            frame,
+            renderVersion: state.renderVersion,
+            video
+        };
+        return this.startVideoRender(target, state);
+    }
+
+    startVideoRender (target, state) {
+        if (state.videoRenderPromise) return state.videoRenderPromise;
+        // Start after the VM's current execution burst so several frame changes collapse into one seek.
+        const renderPromise = Promise.resolve().then(() => this.renderPendingVideoFrames(target, state));
+        state.videoRenderPromise = renderPromise;
+        const finish = () => {
+            if (state.videoRenderPromise !== renderPromise) return;
+            state.videoRenderPromise = null;
+            if (state.pendingVideoFrame && this.targetStates.get(target.id) === state) {
+                this.runWithoutWaiting(this.startVideoRender(target, state));
+            }
+        };
+        renderPromise.then(finish, finish);
+        return renderPromise;
+    }
+
+    async renderPendingVideoFrames (target, state) {
+        while (state.pendingVideoFrame && this.targetStates.get(target.id) === state) {
+            const request = state.pendingVideoFrame;
+            state.pendingVideoFrame = null;
+            const element = await this.decodeVideoFrame(state, request.video, request.frame);
+
+            // Decoding can be slower than the VM. Skip stale frames instead of building up visible lag.
+            if (
+                this.targetStates.get(target.id) !== state ||
+                state.renderVersion !== request.renderVersion ||
+                state.pendingVideoFrame
+            ) {
+                continue;
+            }
+
+            this.applyBitmap(target, element, 'video');
+            state.displayedFrame = request.frame;
+            state.displayedVideoAssetId = request.video.assetId;
+        }
+    }
+
+    async decodeVideoFrame (state, video, frame) {
+        const element = await this.prepareVideoElement(state, video);
         const time = video.duration > 0 ?
             clamp((frame - 1) / video.frameRate, 0, Math.max(0, video.duration - 0.001)) : 0;
 
@@ -389,10 +473,7 @@ class MovieAssetManager extends EventEmitter {
             element.currentTime = time;
             await seeked;
         }
-
-        this.applyBitmap(target, element, 'video');
-        state.currentFrame = frame;
-        state.videoAssetId = video.assetId;
+        return element;
     }
 
     getFont (requestedFont) {
@@ -404,11 +485,71 @@ class MovieAssetManager extends EventEmitter {
         };
     }
 
-    async setText (target, requestedFont, requestedText) {
+    setText (target, requestedFont, requestedText) {
         if (!target || !this.runtime.renderer) return;
+        const state = this.getTargetState(target);
         const font = this.getFont(requestedFont);
-        await this.ensureFontLoaded(font.name);
         const text = String(requestedText);
+        const textKey = `${font.family}\u0000${text}`;
+        const renderVersion = ++state.renderVersion;
+        state.pendingVideoFrame = null;
+
+        if (
+            state.mode === 'text' &&
+            state.renderedTextKey === textKey &&
+            !state.pendingText &&
+            !state.textRenderPromise
+        ) {
+            return;
+        }
+
+        state.pendingText = {
+            font,
+            renderVersion,
+            text,
+            textKey
+        };
+        this.runWithoutWaiting(this.startTextRender(target, state));
+    }
+
+    startTextRender (target, state) {
+        if (state.textRenderPromise) return state.textRenderPromise;
+        // Canvas sizing and texture upload can be expensive. Move them out of primitive execution and keep only
+        // the latest text requested during the current VM burst.
+        const renderPromise = Promise.resolve().then(() => this.renderPendingText(target, state));
+        state.textRenderPromise = renderPromise;
+        const finish = () => {
+            if (state.textRenderPromise !== renderPromise) return;
+            state.textRenderPromise = null;
+            if (state.pendingText && this.targetStates.get(target.id) === state) {
+                this.runWithoutWaiting(this.startTextRender(target, state));
+            }
+        };
+        renderPromise.then(finish, finish);
+        return renderPromise;
+    }
+
+    async renderPendingText (target, state) {
+        while (state.pendingText && this.targetStates.get(target.id) === state) {
+            const request = state.pendingText;
+            state.pendingText = null;
+            const fontLoad = this.ensureFontLoaded(request.font.name);
+            if (fontLoad) await fontLoad;
+
+            if (
+                this.targetStates.get(target.id) !== state ||
+                state.renderVersion !== request.renderVersion ||
+                state.pendingText
+            ) {
+                continue;
+            }
+
+            this.renderText(target, request.font, request.text);
+            state.renderedTextKey = request.textKey;
+        }
+    }
+
+    renderText (target, font, text) {
         const lines = text.split(/\r?\n/);
         const fontSize = 96;
         const padding = 16;
@@ -444,6 +585,9 @@ class MovieAssetManager extends EventEmitter {
 
     showCostume (target, updateRenderer = true) {
         const state = this.getTargetState(target);
+        state.renderVersion++;
+        state.pendingText = null;
+        state.pendingVideoFrame = null;
         state.mode = 'costume';
         if (updateRenderer && this.runtime.renderer) {
             const costume = target.getCostumes()[target.currentCostume];
@@ -465,6 +609,9 @@ class MovieAssetManager extends EventEmitter {
     destroyTargetState (target) {
         const state = this.targetStates.get(target.id);
         if (!state) return;
+        state.renderVersion++;
+        state.pendingText = null;
+        state.pendingVideoFrame = null;
         if (state.video) {
             state.video.removeAttribute('src');
             state.video.load();
@@ -492,16 +639,21 @@ class MovieAssetManager extends EventEmitter {
             const data = font.data.buffer.slice(start, end);
             const face = new FontFace(font.name, data);
             document.fonts.add(face);
-            face.load().catch(() => {});
-            this.fontFaces.set(font.name.toLowerCase(), {face});
+            const loadPromise = face.load().catch(() => {});
+            this.fontFaces.set(font.name.toLowerCase(), {face, loadPromise});
         }
     }
 
     ensureFontLoaded (fontName) {
         const record = this.fontFaces.get(fontName.toLowerCase());
-        if (record) return record.face.load().catch(() => {});
-        if (document.fonts && document.fonts.load) return document.fonts.load(`96px "${fontName}"`);
-        return Promise.resolve();
+        if (record) {
+            if (record.face.status === 'loaded' || record.face.status === 'error') return null;
+            return record.loadPromise;
+        }
+        if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return null;
+        const descriptor = `96px "${fontName}"`;
+        if (document.fonts.check && document.fonts.check(descriptor)) return null;
+        return document.fonts.load(descriptor).catch(() => {});
     }
 
     serializeJSON (targetId) {
