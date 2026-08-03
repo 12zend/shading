@@ -336,11 +336,11 @@ class MovieAssetManager extends EventEmitter {
                 displayedFrame: null,
                 displayedVideoAssetId: null,
                 mode: 'costume',
-                pendingText: null,
                 pendingVideoFrame: null,
                 renderVersion: 0,
-                renderedTextKey: null,
+                requestedMode: 'costume',
                 skinId: null,
+                textQueue: [],
                 textRenderPromise: null,
                 video: null,
                 videoAssetId: null,
@@ -415,8 +415,9 @@ class MovieAssetManager extends EventEmitter {
             return Promise.resolve();
         }
 
-        state.renderVersion++;
-        state.pendingText = null;
+        if (state.requestedMode !== 'video') state.renderVersion++;
+        state.requestedMode = 'video';
+        state.textQueue.length = 0;
         state.pendingVideoFrame = {
             frame,
             renderVersion: state.renderVersion,
@@ -490,38 +491,36 @@ class MovieAssetManager extends EventEmitter {
         const state = this.getTargetState(target);
         const font = this.getFont(requestedFont);
         const text = String(requestedText);
-        const textKey = `${font.family}\u0000${text}`;
-        const renderVersion = ++state.renderVersion;
+        if (state.requestedMode !== 'text') state.renderVersion++;
+        state.requestedMode = 'text';
         state.pendingVideoFrame = null;
 
-        if (
-            state.mode === 'text' &&
-            state.renderedTextKey === textKey &&
-            !state.pendingText &&
-            !state.textRenderPromise
-        ) {
+        const fontLoad = this.ensureFontLoaded(font.name);
+        if (!fontLoad && !state.textRenderPromise && state.textQueue.length === 0) {
+            // Keep loaded-font rendering synchronous. Warp-mode scripts may stamp or otherwise consume each
+            // intermediate appearance before the next block changes it.
+            this.renderText(target, font, text);
             return;
         }
 
-        state.pendingText = {
+        state.textQueue.push({
             font,
-            renderVersion,
-            text,
-            textKey
-        };
+            fontLoad,
+            renderVersion: state.renderVersion,
+            text
+        });
         this.runWithoutWaiting(this.startTextRender(target, state));
     }
 
     startTextRender (target, state) {
         if (state.textRenderPromise) return state.textRenderPromise;
-        // Canvas sizing and texture upload can be expensive. Move them out of primitive execution and keep only
-        // the latest text requested during the current VM burst.
+        // Font loading is asynchronous. Preserve every queued text appearance instead of collapsing the queue.
         const renderPromise = Promise.resolve().then(() => this.renderPendingText(target, state));
         state.textRenderPromise = renderPromise;
         const finish = () => {
             if (state.textRenderPromise !== renderPromise) return;
             state.textRenderPromise = null;
-            if (state.pendingText && this.targetStates.get(target.id) === state) {
+            if (state.textQueue.length > 0 && this.targetStates.get(target.id) === state) {
                 this.runWithoutWaiting(this.startTextRender(target, state));
             }
         };
@@ -530,22 +529,19 @@ class MovieAssetManager extends EventEmitter {
     }
 
     async renderPendingText (target, state) {
-        while (state.pendingText && this.targetStates.get(target.id) === state) {
-            const request = state.pendingText;
-            state.pendingText = null;
-            const fontLoad = this.ensureFontLoaded(request.font.name);
-            if (fontLoad) await fontLoad;
+        while (state.textQueue.length > 0 && this.targetStates.get(target.id) === state) {
+            const request = state.textQueue.shift();
+            if (request.fontLoad) await request.fontLoad;
 
             if (
                 this.targetStates.get(target.id) !== state ||
                 state.renderVersion !== request.renderVersion ||
-                state.pendingText
+                state.requestedMode !== 'text'
             ) {
                 continue;
             }
 
             this.renderText(target, request.font, request.text);
-            state.renderedTextKey = request.textKey;
         }
     }
 
@@ -586,7 +582,8 @@ class MovieAssetManager extends EventEmitter {
     showCostume (target, updateRenderer = true) {
         const state = this.getTargetState(target);
         state.renderVersion++;
-        state.pendingText = null;
+        state.requestedMode = 'costume';
+        state.textQueue.length = 0;
         state.pendingVideoFrame = null;
         state.mode = 'costume';
         if (updateRenderer && this.runtime.renderer) {
@@ -610,7 +607,8 @@ class MovieAssetManager extends EventEmitter {
         const state = this.targetStates.get(target.id);
         if (!state) return;
         state.renderVersion++;
-        state.pendingText = null;
+        state.requestedMode = 'costume';
+        state.textQueue.length = 0;
         state.pendingVideoFrame = null;
         if (state.video) {
             state.video.removeAttribute('src');

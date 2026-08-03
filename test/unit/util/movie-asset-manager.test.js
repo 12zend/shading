@@ -88,7 +88,7 @@ describe('MovieAssetManager rendering performance', () => {
         });
     });
 
-    test('renders only the latest text requested in a VM burst', async () => {
+    test('renders every loaded-font text request synchronously and in order', () => {
         const manager = makeManager();
         const target = makeTarget();
         manager.ensureFontLoaded = jest.fn(() => null);
@@ -96,13 +96,24 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(manager.setText(target, 'sans-serif', 'first')).toBeUndefined();
         expect(manager.setText(target, 'sans-serif', 'latest')).toBeUndefined();
-        await manager.getTargetState(target).textRenderPromise;
 
-        expect(manager.renderText).toHaveBeenCalledTimes(1);
-        expect(manager.renderText).toHaveBeenCalledWith(
-            target,
-            {family: 'sans-serif', name: 'sans-serif'},
-            'latest'
-        );
+        expect(manager.renderText.mock.calls.map(call => call[2])).toEqual(['first', 'latest']);
+        expect(manager.getTargetState(target).textRenderPromise).toBeNull();
+    });
+
+    test('does not discard text requests while a font is loading', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const fontLoad = deferred();
+        manager.ensureFontLoaded = jest.fn(() => fontLoad.promise);
+        manager.renderText = jest.fn();
+
+        manager.setText(target, 'custom', 'first');
+        manager.setText(target, 'custom', 'latest');
+        const renderPromise = manager.getTargetState(target).textRenderPromise;
+        fontLoad.resolve();
+        await renderPromise;
+
+        expect(manager.renderText.mock.calls.map(call => call[2])).toEqual(['first', 'latest']);
     });
 });
