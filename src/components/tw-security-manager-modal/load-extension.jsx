@@ -5,7 +5,6 @@ import styles from './load-extension.css';
 import URL from './url.jsx';
 import DataURL from './data-url.jsx';
 import FancyCheckbox from '../tw-fancy-checkbox/checkbox.jsx';
-import {APP_NAME} from '../../lib/brand';
 
 const LoadExtensionModal = props => (
     <div>
@@ -43,19 +42,6 @@ const LoadExtensionModal = props => (
                         id="tw.loadExtension.unsandboxed"
                     />
                 </label>
-                {props.unsandboxed && (
-                    <div className={styles.unsandboxedWarning}>
-                        <FormattedMessage
-                            // eslint-disable-next-line max-len
-                            defaultMessage="Loading extensions without the sandbox is dangerous. It will be able to corrupt your project, delete your settings, phish for passwords, and other bad things. The {APP_NAME} developers are not responsible for any resulting issues."
-                            description="Part of modal asking for permission to automatically load custom extension"
-                            id="tw.loadExtension.unsandboxedWarning"
-                            values={{
-                                APP_NAME
-                            }}
-                        />
-                    </div>
-                )}
             </React.Fragment>
         )}
         {!props.unsandboxed && (

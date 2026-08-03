@@ -6,7 +6,6 @@ import Modal from '../../containers/modal.jsx';
 import FileInput from './file-input.jsx';
 import styles from './custom-extension-modal.css';
 import FancyCheckbox from '../tw-fancy-checkbox/checkbox.jsx';
-import {APP_NAME} from '../../lib/brand';
 
 const messages = defineMessages({
     title: {
@@ -139,25 +138,6 @@ const CustomExtensionModal = props => (
                             id="tw.customExtensionModal.unsandboxed"
                         />
                     </label>
-                    {props.unsandboxed && (
-                        <p className={styles.unsandboxedWarning}>
-                            <FormattedMessage
-                                // eslint-disable-next-line max-len
-                                defaultMessage="Loading extensions without the sandbox is dangerous and should not be enabled if you don't know what you're doing."
-                                description="Warning that appears when disabling extension security sandbox"
-                                id="tw.customExtensionModal.unsandboxedWarning1"
-                            />
-                            <FormattedMessage
-                                // eslint-disable-next-line max-len
-                                defaultMessage="Unsandboxed extensions can corrupt your project, delete your settings, phish for passwords, and other bad things. The {APP_NAME} developers are not responsible for any resulting issues."
-                                description="Warning that appears when disabling extension security sandbox"
-                                id="tw.customExtensionModal.unsandboxedWarning2"
-                                values={{
-                                    APP_NAME
-                                }}
-                            />
-                        </p>
-                    )}
                 </React.Fragment>
             ) : (
                 props.unsandboxed ? (
