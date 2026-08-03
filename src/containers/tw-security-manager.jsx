@@ -424,19 +424,11 @@ class TWSecurityManagerComponent extends React.Component {
 
     /**
      * @param {string} url URL to download
-     * @param {string} name Name to download as
-     * @returns {Promise<boolean>} True if allowed
+     * @returns {Promise<boolean>} True if the URL is valid and uses an allowed protocol
      */
-    async canDownload (url, name) {
+    canDownload (url) {
         const parsed = parseURL(url, FETCHABLE_PROTOCOLS);
-        if (!parsed) {
-            return false;
-        }
-        const {showModal} = await this.acquireModalLock();
-        return showModal(SecurityModals.Download, {
-            url,
-            name
-        });
+        return Promise.resolve(Boolean(parsed));
     }
 
     render () {

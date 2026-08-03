@@ -14,7 +14,6 @@ import ReadClipboard from './read-clipboard.jsx';
 import Notify from './notify.jsx';
 import Geolocate from './geolocate.jsx';
 import Embed from './embed.jsx';
-import Download from './download.jsx';
 import DelayedMountPropertyHOC from './delayed-mount-property-hoc.jsx';
 import styles from './security-manager-modal.css';
 
@@ -57,8 +56,6 @@ const SecurityManagerModalComponent = props => (
                 <Geolocate {...props.data} />
             ) : props.type === SecurityModals.Embed ? (
                 <Embed {...props.data} />
-            ) : props.type === SecurityModals.Download ? (
-                <Download {...props.data} />
             ) : null}
 
             <Box className={styles.buttons}>

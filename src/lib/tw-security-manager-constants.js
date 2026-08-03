@@ -8,8 +8,7 @@ const SecurityModals = {
     ReadClipboard: 'ReadClipboard',
     Notify: 'Notify',
     Geolocate: 'Geolocate',
-    Embed: 'Embed',
-    Download: 'Download'
+    Embed: 'Embed'
 };
 
 export default SecurityModals;
