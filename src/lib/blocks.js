@@ -192,11 +192,48 @@ export default function (vm) {
         extensions: ['colours_motion', 'output_number']
     });
 
+    const operatorReporter = (message0, args0) => ({
+        message0,
+        args0,
+        inputsInline: true,
+        category: ScratchBlocks.Categories.operators,
+        extensions: ['colours_operators', 'output_number']
+    });
+
     const numberInput = name => ({type: 'input_value', name});
     const rotationOrderOptions = [
         ['XYZ', 'XYZ'], ['XZY', 'XZY'], ['YXZ', 'YXZ'],
         ['YZX', 'YZX'], ['ZXY', 'ZXY'], ['ZYX', 'ZYX']
     ];
+
+    const easingTypeOptions = [
+        'PowerIn',
+        'PowerOut',
+        'PowerInOut',
+        'CircIn',
+        'CircOut',
+        'CircInOut',
+        'ExpoIn',
+        'ExpoOut',
+        'ExpoInOut'
+    ].map(type => [type, type]);
+
+    ScratchBlocks.Blocks.operator_easing = {
+        init: function () {
+            this.jsonInit(operatorReporter(
+                'easing type: %1 value: %2 ~ %3 time: %4 ~ %5 power: %6 speed: %7',
+                [
+                    {type: 'field_dropdown', name: 'TYPE', options: easingTypeOptions},
+                    numberInput('V0'),
+                    numberInput('V1'),
+                    numberInput('T0'),
+                    numberInput('T1'),
+                    numberInput('POWER'),
+                    numberInput('SPEED')
+                ]
+            ));
+        }
+    };
 
     ScratchBlocks.Blocks.motion_gotoxyz = {
         init: function () {

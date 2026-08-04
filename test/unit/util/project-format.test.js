@@ -35,6 +35,15 @@ describe('Movie project format', () => {
         expect(isMovieProject(json)).toBe(true);
     });
 
+    test('marks the easing operator as a Movie block', () => {
+        const json = project({easing: block('operator_easing')});
+
+        expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
+        expect(getProjectExtension({
+            targets: [{blocks: {_blocks: json.targets[0].blocks}}]
+        })).toBe('mb3');
+    });
+
     test('round-trips custom opcodes and inputs through project.json block serialization', () => {
         const blocks = {
             command: {
