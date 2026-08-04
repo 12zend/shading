@@ -177,12 +177,12 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_settextfont = (args, util) => {
             this.setText(util.target, args.FONT, args.TEXT);
         };
-        // Clear scene returns its promise so a following pen stamp cannot run before the 3D frame is ready.
-        primitives.looks_clearscene = (args, util) => this.clearModelScene(util.target);
-        // Model rendering can take longer than a VM step. Keep the current frame visible while it is prepared.
-        primitives.looks_rendermodel = (args, util) => {
-            this.runWithoutWaiting(this.renderModelToScene(util.target, args.MODEL));
+        // Queue the empty scene without displaying it before a following render model block.
+        primitives.looks_clearscene = (args, util) => {
+            this.runWithoutWaiting(this.clearModelScene(util.target));
         };
+        // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
+        primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
 
@@ -276,6 +276,7 @@ class MovieAssetManager extends EventEmitter {
             const result = await originalDeserializeProject(projectJSON, zip);
             this.replaceVideos(await videoPromise);
             this.replaceModels(await modelPromise);
+            await this.preloadModels();
             this.restoreCamera(cameraDescriptor);
             this.runtime.targets.forEach(target => this.patchTarget(target));
             this.restoreTransforms(transformDescriptors);
@@ -495,6 +496,11 @@ class MovieAssetManager extends EventEmitter {
         return record.promise;
     }
 
+    preloadModels () {
+        const models = Array.from(this.models.values()).reduce((all, items) => all.concat(items), []);
+        return Promise.all(models.map(model => this.getModelObject(model)));
+    }
+
     getModelTransform (target, state = this.getTargetState(target)) {
         return {
             rotation: {...state.rotation},
@@ -543,7 +549,7 @@ class MovieAssetManager extends EventEmitter {
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelSceneRender(target);
+        return this.queueModelSceneRender(target) || Promise.resolve();
     }
 
     // Internal compatibility alias used by project restoration and older UI integrations.
@@ -554,6 +560,33 @@ class MovieAssetManager extends EventEmitter {
     queueModelSceneRender (target) {
         const state = this.getTargetState(target);
         state.modelRenderVersion++;
+
+        const cachedItems = state.modelScene.map(item => {
+            const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
+            const record = model && this.modelObjects.get(model.assetId);
+            if (!record || !record.object) return null;
+            return {
+                sourceObject: record.object,
+                transform: {
+                    ...item.transform,
+                    rotation: {...item.transform.rotation}
+                }
+            };
+        });
+        if (cachedItems.length && cachedItems.every(Boolean) && state.requestedMode === 'model') {
+            if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
+            const canvas = this.modelRenderer.renderWorldScene(
+                cachedItems,
+                this.camera,
+                this.getStageSize(),
+                BITMAP_RESOLUTION
+            );
+            this.applyBitmap(target, canvas, 'model');
+            this.applyProjection(target);
+            // The scene is already installed. Do not wait for an older queued clear/render request here, or
+            // consecutive render-model blocks would expose an empty pen frame between them.
+            return;
+        }
         if (state.modelRenderPromise) return state.modelRenderPromise;
 
         const renderPromise = Promise.resolve().then(async () => {
@@ -604,7 +637,7 @@ class MovieAssetManager extends EventEmitter {
             transform: this.getModelTransform(target, state)
         }];
         state.requestedMode = 'model';
-        return this.queueModelSceneRender(target);
+        return this.queueModelSceneRender(target) || Promise.resolve();
     }
 
     renderModel (target, model) {

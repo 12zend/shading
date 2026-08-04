@@ -72,7 +72,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).mode).toBe('model');
     });
 
-    test('does not pause the VM while rendering a model scene', () => {
+    test('waits for a model scene before following blocks run', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
@@ -81,8 +81,21 @@ describe('MovieAssetManager rendering performance', () => {
 
         const renderResult = manager.runtime._primitives.looks_rendermodel({MODEL: 'Cube'}, {target});
 
-        expect(renderResult).toBeUndefined();
+        expect(renderResult).toBe(modelRender.promise);
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
+    });
+
+    test('does not display an empty scene before a following model render', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const clearRender = deferred();
+        manager.clearModelScene = jest.fn(() => clearRender.promise);
+        manager.installPrimitives();
+
+        const clearResult = manager.runtime._primitives.looks_clearscene({}, {target});
+
+        expect(clearResult).toBeUndefined();
+        expect(manager.clearModelScene).toHaveBeenCalledWith(target);
     });
 
     test('accumulates model snapshots in one sprite scene until clear scene', () => {
@@ -150,6 +163,30 @@ describe('MovieAssetManager rendering performance', () => {
         await manager.clearModelScene(target);
 
         expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
+    });
+
+    test('renders cached models synchronously after project loading', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const canvas = {name: 'scene canvas'};
+        const modelObject = {name: 'cube object'};
+        manager.camera = {name: 'camera'};
+        manager.models.set(target.id, [{assetId: 'cube', name: 'Cube'}]);
+        manager.modelObjects.set('cube', {object: modelObject});
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        manager.modelRenderer = {
+            renderWorldScene: jest.fn(() => canvas)
+        };
+        manager.applyBitmap = jest.fn();
+        manager.applyProjection = jest.fn();
+
+        const renderPromise = manager.renderModelToScene(target, 'Cube');
+
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+            expect.objectContaining({sourceObject: modelObject})
+        ], manager.camera, [480, 360], 2);
+        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model');
+        return renderPromise;
     });
 
     test('coalesces scene renders while a model is loading', async () => {
