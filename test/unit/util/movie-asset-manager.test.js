@@ -20,6 +20,8 @@ const makeManager = () => {
     };
     manager.targetStates = new Map();
     manager.videos = new Map();
+    manager.models = new Map();
+    manager.modelObjects = new Map();
     manager.fontFaces = new Map();
     return manager;
 };
@@ -70,17 +72,88 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).mode).toBe('model');
     });
 
-    test('does not pause the VM while preparing a model sprite skin', () => {
+    test('waits for scene rendering so a following stamp sees the completed frame', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
-        manager.switchModel = jest.fn(() => modelRender.promise);
+        manager.renderModelToScene = jest.fn(() => modelRender.promise);
+        manager.clearModelScene = jest.fn(() => modelRender.promise);
         manager.installPrimitives();
 
-        const blockResult = manager.runtime._primitives.looks_switchmodelto({MODEL: 'Cube'}, {target});
+        const renderResult = manager.runtime._primitives.looks_rendermodel({MODEL: 'Cube'}, {target});
+        const clearResult = manager.runtime._primitives.looks_clearscene({}, {target});
 
-        expect(blockResult).toBeUndefined();
-        expect(manager.switchModel).toHaveBeenCalledWith(target, 'Cube');
+        expect(renderResult).toBe(modelRender.promise);
+        expect(clearResult).toBe(modelRender.promise);
+        expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
+        expect(manager.clearModelScene).toHaveBeenCalledWith(target);
+    });
+
+    test('accumulates model snapshots in one sprite scene until clear scene', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.models.set(target.id, [
+            {assetId: 'cube', name: 'Cube'},
+            {assetId: 'sphere', name: 'Sphere'}
+        ]);
+        manager.queueModelSceneRender = jest.fn(() => Promise.resolve());
+
+        manager.setTargetPosition(target, -60, 0, 480);
+        manager.renderModelToScene(target, 'Cube');
+        manager.setTargetPosition(target, 80, 20, 600);
+        manager.renderModelToScene(target, 'Sphere');
+
+        expect(manager.getTargetState(target).modelScene).toEqual([
+            expect.objectContaining({
+                assetId: 'cube',
+                transform: expect.objectContaining({worldX: -60, worldY: 0, worldZ: 480})
+            }),
+            expect.objectContaining({
+                assetId: 'sphere',
+                transform: expect.objectContaining({worldX: 80, worldY: 20, worldZ: 600})
+            })
+        ]);
+
+        manager.clearModelScene(target);
+
+        expect(manager.getTargetState(target).modelScene).toEqual([]);
+        expect(manager.getTargetState(target).modelAssetId).toBeNull();
+    });
+
+    test('renders every accumulated model through one shared 3D scene', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const cubeObject = {name: 'cube object'};
+        const sphereObject = {name: 'sphere object'};
+        const canvas = {name: 'scene canvas'};
+        manager.camera = {name: 'camera'};
+        manager.models.set(target.id, [
+            {assetId: 'cube', name: 'Cube'},
+            {assetId: 'sphere', name: 'Sphere'}
+        ]);
+        manager.getModelObject = jest.fn(model => Promise.resolve(
+            model.assetId === 'cube' ? cubeObject : sphereObject
+        ));
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        manager.modelRenderer = {
+            renderWorldScene: jest.fn(() => canvas)
+        };
+        manager.applyBitmap = jest.fn();
+        manager.applyProjection = jest.fn();
+
+        manager.renderModelToScene(target, 'Cube');
+        const completedScene = manager.renderModelToScene(target, 'Sphere');
+        await completedScene;
+
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+            expect.objectContaining({sourceObject: cubeObject}),
+            expect.objectContaining({sourceObject: sphereObject})
+        ], manager.camera, [480, 360], 2);
+        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model');
+
+        await manager.clearModelScene(target);
+
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
     });
 
     test('rerenders model geometry when its world z position changes', () => {

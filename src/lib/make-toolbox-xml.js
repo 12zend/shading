@@ -267,7 +267,8 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             </block>
         `}
         ${blockSeparator}
-        <block id="${targetId}_switchmodelto" type="looks_switchmodelto">
+        <block type="looks_clearscene"/>
+        <block id="${targetId}_rendermodel" type="looks_rendermodel">
             <value name="MODEL">
                 <shadow type="looks_model"></shadow>
             </value>

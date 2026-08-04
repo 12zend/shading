@@ -177,11 +177,11 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_settextfont = (args, util) => {
             this.setText(util.target, args.FONT, args.TEXT);
         };
-        // Model rendering can take longer than a VM step. Keep the currently displayed sprite skin visible while
-        // its replacement is prepared instead of pausing scripts between animation frames.
-        primitives.looks_switchmodelto = (args, util) => {
-            this.runWithoutWaiting(this.switchModel(util.target, args.MODEL));
-        };
+        // Scene blocks return their promises so a following pen stamp cannot run before the 3D frame is ready.
+        primitives.looks_clearscene = (args, util) => this.clearModelScene(util.target);
+        primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
+        // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
+        primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
 
         const goToXYZ = (args, util) => this.setTargetPosition(
             util.target,
@@ -329,9 +329,16 @@ class MovieAssetManager extends EventEmitter {
                 state.rotation = {...sourceState.rotation};
                 state.rotationOrder = sourceState.rotationOrder;
                 state.modelAssetId = sourceState.modelAssetId;
-                if (sourceState.mode === 'model' && state.modelAssetId) {
-                    const model = this.getModels(target).find(item => item.assetId === state.modelAssetId);
-                    if (model) this.runWithoutWaiting(this.renderModel(target, model));
+                state.modelScene = sourceState.modelScene.map(item => ({
+                    assetId: item.assetId,
+                    transform: {
+                        ...item.transform,
+                        rotation: {...item.transform.rotation}
+                    }
+                }));
+                if (sourceState.mode === 'model') {
+                    state.requestedMode = 'model';
+                    this.runWithoutWaiting(this.queueModelSceneRender(target));
                 }
             }
         }
@@ -420,9 +427,13 @@ class MovieAssetManager extends EventEmitter {
         for (const target of this.runtime.targets) {
             const original = getOriginalTarget(target);
             const state = this.targetStates.get(target.id);
-            if (original && original.id === targetId && state && state.modelAssetId === removed.assetId) {
-                this.showCostume(target);
-                state.modelAssetId = null;
+            if (original && original.id === targetId && state) {
+                const nextScene = state.modelScene.filter(item => item.assetId !== removed.assetId);
+                if (nextScene.length !== state.modelScene.length) {
+                    state.modelScene = nextScene;
+                    state.modelAssetId = nextScene.length ? nextScene[nextScene.length - 1].assetId : null;
+                    if (state.mode === 'model') this.runWithoutWaiting(this.queueModelSceneRender(target));
+                }
             }
         }
         this.changedModels(targetId);
@@ -481,38 +492,110 @@ class MovieAssetManager extends EventEmitter {
         return record.promise;
     }
 
-    switchModel (target, requestedModel) {
+    getModelTransform (target, state = this.getTargetState(target)) {
+        return {
+            rotation: {...state.rotation},
+            rotationOrder: state.rotationOrder,
+            size: target.size,
+            worldX: state.worldX,
+            worldY: state.worldY,
+            worldZ: state.worldZ
+        };
+    }
+
+    clearModelScene (target) {
+        const state = this.getTargetState(target);
+        state.modelAssetId = null;
+        state.modelScene = [];
+        state.requestedMode = 'model';
+        state.pendingVideoFrame = null;
+        state.textQueue.length = 0;
+        return this.queueModelSceneRender(target);
+    }
+
+    renderModelToScene (target, requestedModel) {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return Promise.resolve();
         const state = this.getTargetState(target);
         state.modelAssetId = model.assetId;
+        state.modelScene.push({
+            assetId: model.assetId,
+            transform: this.getModelTransform(target, state)
+        });
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelRender(target, model);
+        return this.queueModelSceneRender(target);
     }
 
-    queueModelRender (target, model) {
+    replaceModelScene (target, requestedModel) {
+        const model = this.getModelByName(target, requestedModel);
+        if (!model) return Promise.resolve();
+        const state = this.getTargetState(target);
+        state.modelAssetId = model.assetId;
+        state.modelScene = [{
+            assetId: model.assetId,
+            transform: this.getModelTransform(target, state)
+        }];
+        state.requestedMode = 'model';
+        state.pendingVideoFrame = null;
+        state.textQueue.length = 0;
+        return this.queueModelSceneRender(target);
+    }
+
+    // Internal compatibility alias used by project restoration and older UI integrations.
+    switchModel (target, requestedModel) {
+        return this.replaceModelScene(target, requestedModel);
+    }
+
+    queueModelSceneRender (target) {
         const state = this.getTargetState(target);
         state.modelRenderVersion++;
         const version = state.modelRenderVersion;
+        const sceneItems = state.modelScene.map(item => ({
+            assetId: item.assetId,
+            transform: {
+                ...item.transform,
+                rotation: {...item.transform.rotation}
+            }
+        }));
         const renderPromise = Promise.resolve().then(async () => {
-            const object = await this.getModelObject(model);
+            const loadedItems = await Promise.all(sceneItems.map(async item => {
+                const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
+                if (!model) return null;
+                return {
+                    sourceObject: await this.getModelObject(model),
+                    transform: item.transform
+                };
+            }));
             if (
                 this.targetStates.get(target.id) !== state ||
                 state.modelRenderVersion !== version ||
                 state.requestedMode !== 'model'
             ) return;
             if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-            const canvas = this.modelRenderer.renderWorld(object, {
-                ...state,
-                size: target.size
-            }, this.camera, this.getStageSize(), BITMAP_RESOLUTION);
+            const canvas = this.modelRenderer.renderWorldScene(
+                loadedItems.filter(Boolean),
+                this.camera,
+                this.getStageSize(),
+                BITMAP_RESOLUTION
+            );
             this.applyBitmap(target, canvas, 'model');
             this.applyProjection(target);
         });
         state.modelRenderPromise = renderPromise;
         return renderPromise;
+    }
+
+    queueModelRender (target, model) {
+        const state = this.getTargetState(target);
+        state.modelAssetId = model.assetId;
+        state.modelScene = [{
+            assetId: model.assetId,
+            transform: this.getModelTransform(target, state)
+        }];
+        state.requestedMode = 'model';
+        return this.queueModelSceneRender(target);
     }
 
     renderModel (target, model) {
@@ -673,6 +756,7 @@ class MovieAssetManager extends EventEmitter {
                 displayedVideoAssetId: null,
                 mode: 'costume',
                 modelAssetId: null,
+                modelScene: [],
                 modelRenderPromise: null,
                 modelRenderVersion: 0,
                 pendingVideoFrame: null,
@@ -779,9 +863,9 @@ class MovieAssetManager extends EventEmitter {
 
     rerenderTargetModel (target) {
         const state = this.getTargetState(target);
-        if (state.requestedMode !== 'model' || !state.modelAssetId) return;
-        const model = this.getModels(target).find(item => item.assetId === state.modelAssetId);
-        if (model) this.runWithoutWaiting(this.queueModelRender(target, model));
+        if (state.requestedMode !== 'model' || !state.modelScene.length) return;
+        // A render-model block captures the transform at that point in the script. Do not move models which have
+        // already been added to the temporary scene when the sprite transform changes later.
     }
 
     getStageSize () {
@@ -872,9 +956,8 @@ class MovieAssetManager extends EventEmitter {
             this.applyProjection(target);
             if (rerenderModels) {
                 const state = this.getTargetState(target);
-                if (state.mode === 'model' && state.modelAssetId) {
-                    const model = this.getModels(target).find(item => item.assetId === state.modelAssetId);
-                    if (model) this.runWithoutWaiting(this.queueModelRender(target, model));
+                if (state.mode === 'model') {
+                    this.runWithoutWaiting(this.queueModelSceneRender(target));
                 }
             }
         }
@@ -1159,6 +1242,8 @@ class MovieAssetManager extends EventEmitter {
         state.textQueue.length = 0;
         state.pendingVideoFrame = null;
         state.modelRenderVersion++;
+        state.modelScene = [];
+        state.modelAssetId = null;
         state.mode = 'costume';
         if (updateRenderer && this.runtime.renderer) {
             const costume = target.getCostumes()[target.currentCostume];
@@ -1357,18 +1442,29 @@ class MovieAssetManager extends EventEmitter {
             if (target.isStage) return;
             const state = this.targetStates.get(target.id);
             if (!state) return;
-            const selectedModel = state.mode === 'model' && state.modelAssetId ?
-                this.getModels(target).find(item => item.assetId === state.modelAssetId) : null;
+            const modelScene = state.mode === 'model' ? state.modelScene.map(item => {
+                const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
+                if (!model) return null;
+                return {
+                    model: model.name,
+                    transform: {
+                        ...item.transform,
+                        rotation: {...item.transform.rotation}
+                    }
+                };
+            }).filter(Boolean) : [];
+            const selectedModel = modelScene.length === 1 ? modelScene[0].model : null;
             const isDefault = state.worldZ === DEFAULT_DEPTH && state.rotation.x === 0 && state.rotation.y === 0 &&
-                state.rotationOrder === 'XYZ' && !selectedModel;
+                state.rotationOrder === 'XYZ' && !modelScene.length;
             if (isDefault) return;
             const serializedTarget = serializedTargets[index];
             if (!serializedTarget) return;
             serializedTarget[TRANSFORM_PROJECT_KEY] = {
                 rotation: {...state.rotation},
                 rotationOrder: state.rotationOrder,
+                scene: modelScene,
                 z: state.worldZ,
-                model: selectedModel ? selectedModel.name : null
+                model: selectedModel
             };
         });
     }
@@ -1405,7 +1501,35 @@ class MovieAssetManager extends EventEmitter {
             state.rotationOrder = normalizeRotationOrder(transform.rotationOrder);
             target.direction = 90 - state.rotation.z;
             this.applyProjection(target);
-            if (transform.model) this.runWithoutWaiting(this.switchModel(target, transform.model));
+            if (Array.isArray(transform.scene)) {
+                state.modelScene = transform.scene.map(item => {
+                    const model = this.getModelByName(target, item && item.model);
+                    if (!model) return null;
+                    const savedTransform = item.transform || {};
+                    return {
+                        assetId: model.assetId,
+                        transform: {
+                            rotation: {
+                                x: toNumber(savedTransform.rotation && savedTransform.rotation.x),
+                                y: toNumber(savedTransform.rotation && savedTransform.rotation.y),
+                                z: toNumber(savedTransform.rotation && savedTransform.rotation.z)
+                            },
+                            rotationOrder: normalizeRotationOrder(savedTransform.rotationOrder),
+                            size: Math.max(0, toNumber(savedTransform.size, 100)),
+                            worldX: toNumber(savedTransform.worldX),
+                            worldY: toNumber(savedTransform.worldY),
+                            worldZ: toNumber(savedTransform.worldZ, DEFAULT_DEPTH)
+                        }
+                    };
+                }).filter(Boolean);
+                if (state.modelScene.length) {
+                    state.modelAssetId = state.modelScene[state.modelScene.length - 1].assetId;
+                    state.requestedMode = 'model';
+                    this.runWithoutWaiting(this.queueModelSceneRender(target));
+                }
+            } else if (transform.model) {
+                this.runWithoutWaiting(this.switchModel(target, transform.model));
+            }
         }
     }
 

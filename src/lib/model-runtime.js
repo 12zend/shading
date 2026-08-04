@@ -289,10 +289,21 @@ class ModelRenderer {
     }
 
     setObject (sourceObject) {
-        if (this.currentObject) this.scene.remove(this.currentObject);
+        this.clearObjects();
         this.currentObject = sourceObject.clone(true);
+        this.currentObjects = [this.currentObject];
         this.scene.add(this.currentObject);
         return this.currentObject;
+    }
+
+    clearObjects () {
+        if (this.currentObjects) {
+            this.currentObjects.forEach(object => this.scene.remove(object));
+        } else if (this.currentObject) {
+            this.scene.remove(this.currentObject);
+        }
+        this.currentObject = null;
+        this.currentObjects = [];
     }
 
     render (sourceObject, transform, cameraTransform) {
@@ -318,22 +329,35 @@ class ModelRenderer {
     }
 
     renderWorld (sourceObject, transform, cameraTransform, stageSize, bitmapResolution = 2) {
+        return this.renderWorldScene([{
+            sourceObject,
+            transform
+        }], cameraTransform, stageSize, bitmapResolution);
+    }
+
+    renderWorldScene (sceneItems, cameraTransform, stageSize, bitmapResolution = 2) {
         const width = Math.max(1, stageSize[0]);
         const height = Math.max(1, stageSize[1]);
         this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
-        this.setObject(sourceObject);
-
-        this.currentObject.position.copy(moviePositionToThree({
-            x: transform.worldX,
-            y: transform.worldY,
-            z: transform.worldZ
-        }));
-        this.currentObject.quaternion.copy(movieRotationToThreeQuaternion(
-            transform.rotation,
-            transform.rotationOrder
-        ));
-        const scale = Math.max(0, Number(transform.size) || 0) / 100;
-        this.currentObject.scale.setScalar(scale);
+        this.clearObjects();
+        this.currentObjects = sceneItems.map(item => {
+            const object = item.sourceObject.clone(true);
+            const transform = item.transform;
+            object.position.copy(moviePositionToThree({
+                x: transform.worldX,
+                y: transform.worldY,
+                z: transform.worldZ
+            }));
+            object.quaternion.copy(movieRotationToThreeQuaternion(
+                transform.rotation,
+                transform.rotationOrder
+            ));
+            const scale = Math.max(0, Number(transform.size) || 0) / 100;
+            object.scale.setScalar(scale);
+            this.scene.add(object);
+            return object;
+        });
+        this.currentObject = this.currentObjects.length === 1 ? this.currentObjects[0] : null;
 
         this.camera.fov = verticalFOVFromFocalLength(cameraTransform.focalLength, height);
         this.camera.aspect = width / height;
@@ -352,7 +376,7 @@ class ModelRenderer {
     }
 
     dispose () {
-        if (this.currentObject) this.scene.remove(this.currentObject);
+        this.clearObjects();
         this.renderer.dispose();
     }
 }

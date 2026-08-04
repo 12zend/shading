@@ -419,16 +419,29 @@ export default function (vm) {
         }
     };
 
-    ScratchBlocks.Blocks.looks_switchmodelto = {
+    ScratchBlocks.Blocks.looks_clearscene = {
         init: function () {
             this.jsonInit({
-                message0: 'switch model to %1',
+                message0: 'clear scene',
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_rendermodel = {
+        init: function () {
+            this.jsonInit({
+                message0: 'render model %1',
                 args0: [{type: 'input_value', name: 'MODEL'}],
                 category: ScratchBlocks.Categories.looks,
                 extensions: ['colours_looks', 'shape_statement']
             });
         }
     };
+
+    // Legacy projects keep their old opcode, but show the current wording.
+    ScratchBlocks.Blocks.looks_switchmodelto = ScratchBlocks.Blocks.looks_rendermodel;
 
     ScratchBlocks.Blocks.looks_setvideoframeto = {
         init: function () {

@@ -90,7 +90,7 @@ class ModelTab extends React.Component {
         const model = this.getModels()[index];
         this.setState({selectedModelIndex: index, error: null});
         if (model && this.props.vm.editingTarget) {
-            this.manager.switchModel(this.props.vm.editingTarget, model.name).catch(this.handlePreviewError);
+            this.manager.replaceModelScene(this.props.vm.editingTarget, model.name).catch(this.handlePreviewError);
         }
     }
 
@@ -134,7 +134,7 @@ class ModelTab extends React.Component {
             const selectedModelIndex = Math.max(0, models.length - 1);
             this.setState({selectedModelIndex});
             if (models[selectedModelIndex]) {
-                await this.manager.switchModel(this.props.vm.editingTarget, models[selectedModelIndex].name);
+                await this.manager.replaceModelScene(this.props.vm.editingTarget, models[selectedModelIndex].name);
             }
         } catch (error) {
             this.setState({error: error.message});
@@ -212,7 +212,8 @@ class ModelTab extends React.Component {
                             />
                         </div>
                         <div className={styles.hint}>
-                            {'Models are normalized on import and stored as GLB. Use “switch model to” in Looks.'}
+                            {'Models are normalized on import and stored as GLB. ' +
+                                'Use “clear scene”, then one or more “render model” blocks in Looks.'}
                         </div>
                         {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
                     </div>

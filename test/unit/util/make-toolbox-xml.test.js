@@ -12,4 +12,15 @@ describe('Movie toolbox categories', () => {
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
+
+    test('offers clear scene before the accumulating render model block', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="looks_clearscene"');
+        expect(toolbox).toContain('type="looks_rendermodel"');
+        expect(toolbox.indexOf('type="looks_clearscene"')).toBeLessThan(
+            toolbox.indexOf('type="looks_rendermodel"')
+        );
+        expect(toolbox).not.toContain('type="looks_switchmodelto"');
+    });
 });

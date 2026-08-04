@@ -108,7 +108,8 @@ describe('Movie project format', () => {
         const json = project({
             camera: block('motion_setcamerarotation'),
             fov: block('motion_setfov'),
-            model: block('looks_switchmodelto')
+            clear: block('looks_clearscene'),
+            model: block('looks_rendermodel')
         });
         json.movieModels = [{name: 'cube', md5ext: 'asset.glb'}];
 

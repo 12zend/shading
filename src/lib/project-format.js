@@ -5,6 +5,8 @@ const MOVIE_PROJECT_FORMAT_VERSION = 1;
 
 const MOVIE_ASSET_BLOCKS = [
     'looks_changevideoframeby',
+    'looks_clearscene',
+    'looks_rendermodel',
     'looks_settextfont',
     'looks_setvideoframeto',
     'looks_switchmodelto',
