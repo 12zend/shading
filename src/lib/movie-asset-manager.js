@@ -177,9 +177,12 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_settextfont = (args, util) => {
             this.setText(util.target, args.FONT, args.TEXT);
         };
-        // Scene blocks return their promises so a following pen stamp cannot run before the 3D frame is ready.
+        // Clear scene returns its promise so a following pen stamp cannot run before the 3D frame is ready.
         primitives.looks_clearscene = (args, util) => this.clearModelScene(util.target);
-        primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
+        // Model rendering can take longer than a VM step. Keep the current frame visible while it is prepared.
+        primitives.looks_rendermodel = (args, util) => {
+            this.runWithoutWaiting(this.renderModelToScene(util.target, args.MODEL));
+        };
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
 

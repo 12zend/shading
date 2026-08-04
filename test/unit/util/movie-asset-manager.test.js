@@ -72,21 +72,17 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).mode).toBe('model');
     });
 
-    test('waits for scene rendering so a following stamp sees the completed frame', () => {
+    test('does not pause the VM while rendering a model scene', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
         manager.renderModelToScene = jest.fn(() => modelRender.promise);
-        manager.clearModelScene = jest.fn(() => modelRender.promise);
         manager.installPrimitives();
 
         const renderResult = manager.runtime._primitives.looks_rendermodel({MODEL: 'Cube'}, {target});
-        const clearResult = manager.runtime._primitives.looks_clearscene({}, {target});
 
-        expect(renderResult).toBe(modelRender.promise);
-        expect(clearResult).toBe(modelRender.promise);
+        expect(renderResult).toBeUndefined();
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
-        expect(manager.clearModelScene).toHaveBeenCalledWith(target);
     });
 
     test('accumulates model snapshots in one sprite scene until clear scene', () => {
