@@ -70,7 +70,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).mode).toBe('model');
     });
 
-    test('waits for the model skin before the next block can stamp the sprite', async () => {
+    test('does not pause the VM while preparing a model sprite skin', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
@@ -79,11 +79,8 @@ describe('MovieAssetManager rendering performance', () => {
 
         const blockResult = manager.runtime._primitives.looks_switchmodelto({MODEL: 'Cube'}, {target});
 
-        expect(blockResult).toBe(modelRender.promise);
+        expect(blockResult).toBeUndefined();
         expect(manager.switchModel).toHaveBeenCalledWith(target, 'Cube');
-
-        modelRender.resolve();
-        await blockResult;
     });
 
     test('rerenders model geometry when its world z position changes', () => {
