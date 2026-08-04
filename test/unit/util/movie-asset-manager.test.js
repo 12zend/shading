@@ -57,6 +57,35 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenCalledWith(1, true);
     });
 
+    test('uses the sprite drawable for a model skin and obeys sprite visibility', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const bitmap = {};
+
+        manager.applyBitmap(target, bitmap, 'model');
+
+        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(bitmap, 2);
+        expect(manager.runtime.renderer.updateDrawableSkinId).toHaveBeenCalledWith(target.drawableID, 1);
+        expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenCalledWith(target.drawableID, false);
+        expect(manager.getTargetState(target).mode).toBe('model');
+    });
+
+    test('waits for the model skin before the next block can stamp the sprite', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const modelRender = deferred();
+        manager.switchModel = jest.fn(() => modelRender.promise);
+        manager.installPrimitives();
+
+        const blockResult = manager.runtime._primitives.looks_switchmodelto({MODEL: 'Cube'}, {target});
+
+        expect(blockResult).toBe(modelRender.promise);
+        expect(manager.switchModel).toHaveBeenCalledWith(target, 'Cube');
+
+        modelRender.resolve();
+        await blockResult;
+    });
+
     test('rerenders model geometry when its world z position changes', () => {
         const manager = makeManager();
         const target = makeTarget();

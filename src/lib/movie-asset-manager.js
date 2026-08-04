@@ -177,9 +177,9 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_settextfont = (args, util) => {
             this.setText(util.target, args.FONT, args.TEXT);
         };
-        primitives.looks_switchmodelto = (args, util) => {
-            this.runWithoutWaiting(this.switchModel(util.target, args.MODEL));
-        };
+        // A model replaces the sprite's skin. Wait until that skin is installed so the next block (for example,
+        // Pen's stamp block) observes the selected model instead of the previous costume.
+        primitives.looks_switchmodelto = (args, util) => this.switchModel(util.target, args.MODEL);
 
         const goToXYZ = (args, util) => this.setTargetPosition(
             util.target,
