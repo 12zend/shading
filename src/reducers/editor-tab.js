@@ -6,6 +6,7 @@ const COSTUMES_TAB_INDEX = 1;
 const SOUNDS_TAB_INDEX = 2;
 const VIDEOS_TAB_INDEX = 3;
 const FONTS_TAB_INDEX = 4;
+const MODELS_TAB_INDEX = 5;
 
 const initialState = {
     activeTabIndex: BLOCKS_TAB_INDEX
@@ -38,5 +39,6 @@ export {
     COSTUMES_TAB_INDEX,
     SOUNDS_TAB_INDEX,
     VIDEOS_TAB_INDEX,
-    FONTS_TAB_INDEX
+    FONTS_TAB_INDEX,
+    MODELS_TAB_INDEX
 };

@@ -37,6 +37,38 @@ const deferred = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('set FOV automatically assigns focal length for a 480 by 360 stage', () => {
+        const manager = makeManager();
+        manager.camera = {};
+        manager.cameraChanged = jest.fn();
+
+        manager.setFOV(60);
+
+        expect(manager.camera.fov).toBe(60);
+        expect(manager.camera.focalLength).toBeCloseTo(240 / Math.tan(Math.PI / 6));
+        expect(manager.cameraChanged).toHaveBeenCalledTimes(1);
+    });
+
+    test('registers 3D motion primitives with every coordinate argument', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setCameraPosition = jest.fn();
+        manager.setFOV = jest.fn();
+        manager.installPrimitives();
+
+        manager.runtime._primitives.motion_gotoxyz({X: 12, Y: -8, Z: 720}, {target});
+        manager.runtime._primitives.motion_setrotation({X: 10, Y: 20, Z: 30}, {target});
+        manager.runtime._primitives.motion_setcamerato({X: 1, Y: 2, Z: 3});
+        manager.runtime._primitives.motion_setfov({FOV: 60});
+
+        expect(manager.setTargetPosition).toHaveBeenCalledWith(target, 12, -8, 720);
+        expect(manager.setTargetRotation).toHaveBeenCalledWith(target, 10, 20, 30);
+        expect(manager.setCameraPosition).toHaveBeenCalledWith(1, 2, 3);
+        expect(manager.setFOV).toHaveBeenCalledWith(60);
+    });
+
     test('media primitives never put the VM into promise-wait mode', () => {
         const manager = makeManager();
         const pending = new Promise(() => {});

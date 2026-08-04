@@ -128,6 +128,9 @@
 .tab:nth-of-type(5) {
     z-index: 1;
 }
+.tab:nth-of-type(6) {
+    z-index: 0;
+}
 
 .tab:hover {
   background-color: $ui-primary;

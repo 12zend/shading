@@ -1,0 +1,165 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.file-input {
+    display: none;
+}
+
+.tile-model {
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $form-radius;
+    background: $motion-primary;
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: bold;
+}
+
+.editor {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: $ui-white;
+    color: $text-primary;
+}
+
+.toolbar {
+    min-height: 3.25rem;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-bottom: 1px solid $ui-black-transparent;
+    background: $ui-tertiary;
+}
+
+.name-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.name-input {
+    width: 12rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $input-background;
+    color: $text-primary;
+    font: inherit;
+}
+
+.name-input:focus {
+    border-color: $motion-primary;
+    outline: 3px solid $motion-tertiary;
+}
+
+.metadata {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    font-size: 0.7rem;
+    color: $text-primary-transparent;
+}
+
+.preview-area {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: $assets-background;
+}
+
+.preview-canvas {
+    width: min(100%, 32rem);
+    height: min(100%, 32rem);
+    aspect-ratio: 1;
+    display: block;
+}
+
+.hint,
+.error {
+    padding: 0.65rem 0.85rem;
+    border-top: 1px solid $ui-black-transparent;
+    font-size: 0.72rem;
+}
+
+.hint {
+    color: $text-primary-transparent;
+}
+
+.error {
+    color: $error-primary;
+}
+
+.empty-state {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    background: $assets-background;
+    color: $text-primary;
+}
+
+.empty-state h2 {
+    margin: 0.75rem 0 0.4rem;
+    font-size: 1.1rem;
+}
+
+.empty-state p {
+    max-width: 34rem;
+    margin: 0 0 1rem;
+    color: $text-primary-transparent;
+    line-height: 1.45;
+}
+
+.empty-state button {
+    padding: 0.6rem 1rem;
+    border: 0;
+    border-radius: $form-radius;
+    background: $motion-primary;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: bold;
+}
+
+.empty-state button:hover {
+    background: $motion-tertiary;
+}
+
+.empty-state button:focus-visible {
+    outline: 3px solid $motion-tertiary;
+    outline-offset: 2px;
+}
+
+.empty-state button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.empty-icon {
+    width: 3.25rem;
+    height: 3.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: $motion-primary;
+    color: #ffffff;
+    font-size: 1.35rem;
+}

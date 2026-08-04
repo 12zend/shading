@@ -7,7 +7,46 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_changevideoframeby',
     'looks_settextfont',
     'looks_setvideoframeto',
+    'looks_switchmodelto',
     'looks_switchvideoto'
+];
+
+const MOVIE_3D_BLOCKS = [
+    'motion_changecamerarotationby',
+    'motion_changecameraxby',
+    'motion_changecamerayby',
+    'motion_changecamerazby',
+    'motion_changerotationby',
+    'motion_changezby',
+    'motion_gotoxyz',
+    'motion_lookat',
+    'motion_setcamerarotation',
+    'motion_setcamerarotationorder',
+    'motion_setcamerato',
+    'motion_setcamerax',
+    'motion_setcameray',
+    'motion_setcameraz',
+    'motion_setfov',
+    'motion_setrotation',
+    'motion_setrotationorder',
+    'motion_setz'
+];
+
+const MOVIE_3D_REPORTER_BLOCKS = [
+    'motion_camerarotationorder',
+    'motion_camerarotationx',
+    'motion_camerarotationy',
+    'motion_camerarotationz',
+    'motion_camerax',
+    'motion_cameray',
+    'motion_cameraz',
+    'motion_fov',
+    'motion_focallength',
+    'motion_rotationorder',
+    'motion_rotationx',
+    'motion_rotationy',
+    'motion_rotationz',
+    'motion_zposition'
 ];
 
 const ADVANCED_GRAPHIC_BLOCKS = [
@@ -26,6 +65,7 @@ const ADVANCED_GRAPHIC_BLOCKS = [
 
 const MOVIE_MENU_BLOCKS = [
     'looks_font',
+    'looks_model',
     'looks_video'
 ];
 
@@ -36,7 +76,11 @@ const ADVANCED_GRAPHIC_EFFECTS = [
     'directionalblur'
 ];
 
-const MOVIE_BLOCK_SET = new Set(MOVIE_ASSET_BLOCKS.concat(MOVIE_MENU_BLOCKS));
+const MOVIE_BLOCK_SET = new Set(MOVIE_ASSET_BLOCKS.concat(
+    MOVIE_3D_BLOCKS,
+    MOVIE_3D_REPORTER_BLOCKS,
+    MOVIE_MENU_BLOCKS
+));
 const ADVANCED_GRAPHIC_BLOCK_SET = new Set(ADVANCED_GRAPHIC_BLOCKS);
 const ADVANCED_GRAPHIC_EFFECT_SET = new Set(ADVANCED_GRAPHIC_EFFECTS);
 
@@ -49,6 +93,9 @@ const getFieldValue = field => {
 const addBlockFeatures = (features, block) => {
     if (!block || typeof block !== 'object' || Array.isArray(block)) return;
     if (MOVIE_BLOCK_SET.has(block.opcode)) features.add('movie-blocks');
+    if (MOVIE_3D_BLOCKS.includes(block.opcode) || MOVIE_3D_REPORTER_BLOCKS.includes(block.opcode)) {
+        features.add('3d-engine');
+    }
     if (ADVANCED_GRAPHIC_BLOCK_SET.has(block.opcode)) features.add('graphic-effects');
 
     if (block.opcode === 'looks_changeeffectby' || block.opcode === 'looks_seteffectto') {
@@ -66,9 +113,15 @@ const getMovieProjectFeatures = projectJSON => {
     if (Array.isArray(projectJSON.movieVideos) && projectJSON.movieVideos.length > 0) {
         features.add('video-assets');
     }
+    if (Array.isArray(projectJSON.movieModels) && projectJSON.movieModels.length > 0) {
+        features.add('model-assets');
+        features.add('3d-engine');
+    }
+    if (projectJSON.movieCamera && typeof projectJSON.movieCamera === 'object') features.add('3d-engine');
 
     const targets = Array.isArray(projectJSON.targets) ? projectJSON.targets : [projectJSON];
     for (const target of targets) {
+        if (target && target.movie3D) features.add('3d-engine');
         const blocks = target && target.blocks;
         if (!blocks || typeof blocks !== 'object') continue;
         for (const block of Object.values(blocks)) addBlockFeatures(features, block);
@@ -85,6 +138,28 @@ const getRuntimeMovieProjectFeatures = runtime => {
         for (const videos of movieAssetManager.videos.values()) {
             if (videos.length > 0) {
                 features.add('video-assets');
+                break;
+            }
+        }
+    }
+    if (movieAssetManager && movieAssetManager.models instanceof Map) {
+        for (const models of movieAssetManager.models.values()) {
+            if (models.length > 0) {
+                features.add('model-assets');
+                features.add('3d-engine');
+                break;
+            }
+        }
+    }
+    if (movieAssetManager && typeof movieAssetManager.isDefaultCamera === 'function' &&
+        !movieAssetManager.isDefaultCamera()) {
+        features.add('3d-engine');
+    }
+    if (movieAssetManager && movieAssetManager.targetStates instanceof Map) {
+        for (const state of movieAssetManager.targetStates.values()) {
+            if (state.worldZ !== 480 || state.rotation.x !== 0 || state.rotation.y !== 0 ||
+                state.rotationOrder !== 'XYZ') {
+                features.add('3d-engine');
                 break;
             }
         }
@@ -129,6 +204,8 @@ const getProjectExtension = runtime => (
 export {
     ADVANCED_GRAPHIC_BLOCKS,
     ADVANCED_GRAPHIC_EFFECTS,
+    MOVIE_3D_BLOCKS,
+    MOVIE_3D_REPORTER_BLOCKS,
     MOVIE_ASSET_BLOCKS,
     MOVIE_PROJECT_EXTENSION,
     MOVIE_PROJECT_FORMAT_KEY,

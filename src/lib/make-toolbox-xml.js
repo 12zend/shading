@@ -14,126 +14,61 @@ const translate = (id, english) => {
 
 /* eslint-disable no-unused-vars */
 const motion = function (isInitialSetup, isStage, targetId, colors) {
-    const stageSelected = translate(
-        'MOTION_STAGE_SELECTED',
-        'Stage selected: no motion blocks'
-    );
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_MOTION}" id="motion" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        ${isStage ? `
-        <label text="${stageSelected}"></label>
-        ` : `
+        ${isStage ? '' : `
         <block type="motion_movesteps">
-            <value name="STEPS">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="motion_turnright">
-            <value name="DEGREES">
-                <shadow type="math_number">
-                    <field name="NUM">15</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="motion_turnleft">
-            <value name="DEGREES">
-                <shadow type="math_number">
-                    <field name="NUM">15</field>
-                </shadow>
-            </value>
+            <value name="STEPS"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
         </block>
         ${blockSeparator}
         <block type="motion_goto">
-            <value name="TO">
-                <shadow type="motion_goto_menu">
-                </shadow>
-            </value>
+            <value name="TO"><shadow type="motion_goto_menu"></shadow></value>
         </block>
-        <block type="motion_gotoxy">
-            <value name="X">
-                <shadow id="movex" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-            <value name="Y">
-                <shadow id="movey" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
+        <block type="motion_gotoxyz">
+            <value name="X"><shadow id="movex" type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow id="movey" type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow id="movez" type="math_number"><field name="NUM">480</field></shadow></value>
         </block>
         <block type="motion_glideto" id="motion_glideto">
-            <value name="SECS">
-                <shadow type="math_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-            <value name="TO">
-                <shadow type="motion_glideto_menu">
-                </shadow>
-            </value>
+            <value name="SECS"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="TO"><shadow type="motion_glideto_menu"></shadow></value>
         </block>
         <block type="motion_glidesecstoxy">
-            <value name="SECS">
-                <shadow type="math_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-            <value name="X">
-                <shadow id="glidex" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-            <value name="Y">
-                <shadow id="glidey" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
+            <value name="SECS"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="X"><shadow id="glidex" type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow id="glidey" type="math_number"><field name="NUM">0</field></shadow></value>
         </block>
         ${blockSeparator}
-        <block type="motion_pointindirection">
-            <value name="DIRECTION">
-                <shadow type="math_angle">
-                    <field name="NUM">90</field>
-                </shadow>
-            </value>
+        <block type="motion_setrotation">
+            <value name="X"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
         </block>
-        <block type="motion_pointtowards">
-            <value name="TOWARDS">
-                <shadow type="motion_pointtowards_menu">
-                </shadow>
-            </value>
+        <block type="motion_changerotationby">
+            <value name="X"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
         </block>
+        <block type="motion_setrotationorder"/>
         ${blockSeparator}
         <block type="motion_changexby">
-            <value name="DX">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
+            <value name="DX"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
         </block>
         <block type="motion_setx">
-            <value name="X">
-                <shadow id="setx" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
+            <value name="X"><shadow id="setx" type="math_number"><field name="NUM">0</field></shadow></value>
         </block>
         <block type="motion_changeyby">
-            <value name="DY">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
+            <value name="DY"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
         </block>
         <block type="motion_sety">
-            <value name="Y">
-                <shadow id="sety" type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
+            <value name="Y"><shadow id="sety" type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_changezby">
+            <value name="DZ"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+        </block>
+        <block type="motion_setz">
+            <value name="Z"><shadow id="setz" type="math_number"><field name="NUM">480</field></shadow></value>
         </block>
         ${blockSeparator}
         <block type="motion_ifonedgebounce"/>
@@ -142,7 +77,68 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
         ${blockSeparator}
         <block id="${targetId}_xposition" type="motion_xposition"/>
         <block id="${targetId}_yposition" type="motion_yposition"/>
-        <block id="${targetId}_direction" type="motion_direction"/>`}
+        <block id="${targetId}_zposition" type="motion_zposition"/>
+        <block id="${targetId}_rotationx" type="motion_rotationx"/>
+        <block id="${targetId}_rotationy" type="motion_rotationy"/>
+        <block id="${targetId}_rotationz" type="motion_rotationz"/>
+        <block id="${targetId}_rotationorder" type="motion_rotationorder"/>
+        ${blockSeparator}`}
+        <block type="motion_setcamerato">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_setcamerax">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_changecameraxby">
+            <value name="X"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+        </block>
+        <block type="motion_setcameray">
+            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_changecamerayby">
+            <value name="Y"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+        </block>
+        <block type="motion_setcameraz">
+            <value name="Z"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_changecamerazby">
+            <value name="Z"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
+        </block>
+        ${blockSeparator}
+        <block type="motion_setcamerarotation">
+            <value name="X"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
+        </block>
+        <block type="motion_changecamerarotationby">
+            <value name="X"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
+        </block>
+        <block type="motion_setcamerarotationorder"/>
+        <block type="motion_setfov">
+            <value name="FOV"><shadow type="math_number"><field name="NUM">53.13</field></shadow></value>
+        </block>
+        <block type="motion_lookat">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">480</field></shadow></value>
+            <value name="CAMERAX"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="CAMERAY"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="CAMERAZ"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+        </block>
+        ${blockSeparator}
+        <block type="motion_camerax"/>
+        <block type="motion_cameray"/>
+        <block type="motion_cameraz"/>
+        <block type="motion_camerarotationx"/>
+        <block type="motion_camerarotationy"/>
+        <block type="motion_camerarotationz"/>
+        <block type="motion_camerarotationorder"/>
+        <block type="motion_fov"/>
+        <block type="motion_focallength"/>
         ${categorySeparator}
     </category>
     `;
@@ -271,6 +267,11 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             </block>
         `}
         ${blockSeparator}
+        <block id="${targetId}_switchmodelto" type="looks_switchmodelto">
+            <value name="MODEL">
+                <shadow type="looks_model"></shadow>
+            </value>
+        </block>
         <block id="${targetId}_switchvideoto" type="looks_switchvideoto">
             <value name="VIDEO">
                 <shadow type="looks_video"></shadow>

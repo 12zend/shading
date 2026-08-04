@@ -12,6 +12,7 @@ import VM from 'scratch-vm';
 import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
+import ModelTab from '../../containers/model-tab.jsx';
 import TargetPane from '../../containers/target-pane.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import VideoTab from '../../containers/video-tab.jsx';
@@ -53,6 +54,7 @@ import costumesIcon from '!../../lib/tw-recolor/build!./icon--costumes.svg';
 import soundsIcon from '!../../lib/tw-recolor/build!./icon--sounds.svg';
 import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
 import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
+import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -105,6 +107,7 @@ const GUIComponent = props => {
         costumeLibraryVisible,
         costumesTabVisible,
         fontsTabVisible,
+        modelsTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -134,6 +137,7 @@ const GUIComponent = props => {
         onActivateSoundsTab,
         onActivateVideosTab,
         onActivateFontsTab,
+        onActivateModelsTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -420,6 +424,20 @@ const GUIComponent = props => {
                                             id="movie.gui.fontsTab"
                                         />
                                     </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivateModelsTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={modelsIcon()}
+                                        />
+                                        <FormattedMessage
+                                            defaultMessage="Models"
+                                            description="Button to get to the 3D models panel"
+                                            id="movie.gui.modelsTab"
+                                        />
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -467,6 +485,9 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {fontsTabVisible ? <FontTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {modelsTabVisible ? <ModelTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -524,6 +545,7 @@ GUIComponent.propTypes = {
     costumeLibraryVisible: PropTypes.bool,
     costumesTabVisible: PropTypes.bool,
     fontsTabVisible: PropTypes.bool,
+    modelsTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -544,6 +566,7 @@ GUIComponent.propTypes = {
     onActivateSoundsTab: PropTypes.func,
     onActivateVideosTab: PropTypes.func,
     onActivateFontsTab: PropTypes.func,
+    onActivateModelsTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,

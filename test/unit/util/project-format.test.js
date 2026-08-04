@@ -86,6 +86,33 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['video-assets']);
     });
 
+    test('marks model assets and 3D motion blocks as Movie 3D project data', () => {
+        const json = project({
+            camera: block('motion_setcamerarotation'),
+            fov: block('motion_setfov'),
+            model: block('looks_switchmodelto')
+        });
+        json.movieModels = [{name: 'cube', md5ext: 'asset.glb'}];
+
+        expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'model-assets', 'movie-blocks']);
+        markMovieProject(json);
+        expect(json.mb3.features).toEqual(['3d-engine', 'model-assets', 'movie-blocks']);
+    });
+
+    test('marks saved camera and target transforms without requiring a model', () => {
+        const json = project({});
+        json.movieCamera = {
+            position: {x: 0, y: 0, z: -100}
+        };
+        json.targets[0].movie3D = {
+            z: 720,
+            rotation: {x: 15, y: 0, z: 0},
+            rotationOrder: 'YXZ'
+        };
+
+        expect(getMovieProjectFeatures(json)).toEqual(['3d-engine']);
+    });
+
     test('keeps plain Scratch projects as sb3', () => {
         const runtime = {
             targets: [{blocks: {_blocks: {move: block('motion_movesteps')}}}]

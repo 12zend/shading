@@ -101,6 +101,12 @@ export default function (vm) {
         return videos.length ? videos.map(video => [video.name, video.name]) : [['', '']];
     };
 
+    const modelsMenu = function () {
+        const manager = vm.runtime.movieAssetManager;
+        const models = manager && vm.editingTarget ? manager.getModels(vm.editingTarget) : [];
+        return models.length ? models.map(model => [model.name, model.name]) : [['', '']];
+    };
+
     const fontsMenu = function () {
         const defaults = [
             ['Sans Serif', 'sans-serif'],
@@ -172,6 +178,168 @@ export default function (vm) {
 
     const eventColors = ScratchBlocks.Colours.event;
 
+    const motionStatement = (message0, args0, inputsInline = true) => ({
+        message0,
+        args0,
+        inputsInline,
+        category: ScratchBlocks.Categories.motion,
+        extensions: ['colours_motion', 'shape_statement']
+    });
+
+    const motionReporter = message0 => ({
+        message0,
+        category: ScratchBlocks.Categories.motion,
+        extensions: ['colours_motion', 'output_number']
+    });
+
+    const numberInput = name => ({type: 'input_value', name});
+    const rotationOrderOptions = [
+        ['XYZ', 'XYZ'], ['XZY', 'XZY'], ['YXZ', 'YXZ'],
+        ['YZX', 'YZX'], ['ZXY', 'ZXY'], ['ZYX', 'ZYX']
+    ];
+
+    ScratchBlocks.Blocks.motion_gotoxyz = {
+        init: function () {
+            this.jsonInit(motionStatement('go to x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setrotation = {
+        init: function () {
+            this.jsonInit(motionStatement('set rotation x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_changerotationby = {
+        init: function () {
+            this.jsonInit(motionStatement('change rotation by x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setrotationorder = {
+        init: function () {
+            this.jsonInit(motionStatement('set rotation order to %1', [{
+                type: 'field_dropdown', name: 'ORDER', options: rotationOrderOptions
+            }]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_changezby = {
+        init: function () {
+            this.jsonInit(motionStatement('change z by %1', [numberInput('DZ')]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setz = {
+        init: function () {
+            this.jsonInit(motionStatement('set z to %1', [numberInput('Z')]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setcamerato = {
+        init: function () {
+            this.jsonInit(motionStatement('set camera to x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    const defineCameraAxisBlocks = axis => {
+        const upper = axis.toUpperCase();
+        ScratchBlocks.Blocks[`motion_setcamera${axis}`] = {
+            init: function () {
+                this.jsonInit(motionStatement(`set camera ${axis} to %1`, [numberInput(upper)]));
+            }
+        };
+        ScratchBlocks.Blocks[`motion_changecamera${axis}by`] = {
+            init: function () {
+                this.jsonInit(motionStatement(`change camera ${axis} by %1`, [numberInput(upper)]));
+            }
+        };
+    };
+    ['x', 'y', 'z'].forEach(defineCameraAxisBlocks);
+
+    ScratchBlocks.Blocks.motion_setcamerarotation = {
+        init: function () {
+            this.jsonInit(motionStatement('set camera rotation to x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_changecamerarotationby = {
+        init: function () {
+            this.jsonInit(motionStatement('change camera rotation by x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setcamerarotationorder = {
+        init: function () {
+            this.jsonInit(motionStatement('set camera rotation order to %1', [{
+                type: 'field_dropdown', name: 'ORDER', options: rotationOrderOptions
+            }]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_setfov = {
+        init: function () {
+            this.jsonInit(motionStatement('set FOV to %1', [numberInput('FOV')]));
+        }
+    };
+
+    ScratchBlocks.Blocks.motion_lookat = {
+        init: function () {
+            this.jsonInit(motionStatement(
+                'look at x: %1 y: %2 z: %3 from camera x: %4 y: %5 z: %6',
+                [
+                    numberInput('X'), numberInput('Y'), numberInput('Z'),
+                    numberInput('CAMERAX'), numberInput('CAMERAY'), numberInput('CAMERAZ')
+                ]
+            ));
+        }
+    };
+
+    const reporterBlocks = {
+        motion_zposition: 'z position',
+        motion_rotationx: 'rotation x',
+        motion_rotationy: 'rotation y',
+        motion_rotationz: 'rotation z',
+        motion_camerax: 'camera x',
+        motion_cameray: 'camera y',
+        motion_cameraz: 'camera z',
+        motion_camerarotationx: 'camera rotation x',
+        motion_camerarotationy: 'camera rotation y',
+        motion_camerarotationz: 'camera rotation z',
+        motion_fov: 'FOV',
+        motion_focallength: 'focal length'
+    };
+    Object.keys(reporterBlocks).forEach(opcode => {
+        ScratchBlocks.Blocks[opcode] = {
+            init: function () {
+                this.jsonInit(motionReporter(reporterBlocks[opcode]));
+            }
+        };
+    });
+    ['motion_rotationorder', 'motion_camerarotationorder'].forEach(opcode => {
+        ScratchBlocks.Blocks[opcode] = {
+            init: function () {
+                this.jsonInit({
+                    message0: opcode === 'motion_rotationorder' ? 'rotation order' : 'camera rotation order',
+                    category: ScratchBlocks.Categories.motion,
+                    extensions: ['colours_motion', 'output_string']
+                });
+            }
+        };
+    });
+
     ScratchBlocks.Blocks.sound_sounds_menu.init = function () {
         const json = jsonForMenuBlock('SOUND_MENU', soundsMenu, soundColors, []);
         this.jsonInit(json);
@@ -189,6 +357,13 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_model = {
+        init: function () {
+            const json = jsonForMenuBlock('MODEL', modelsMenu, looksColors, []);
+            this.jsonInit(json);
+        }
+    };
+
     ScratchBlocks.Blocks.looks_font = {
         init: function () {
             const json = jsonForMenuBlock('FONT', fontsMenu, looksColors, []);
@@ -201,6 +376,17 @@ export default function (vm) {
             this.jsonInit({
                 message0: 'switch video to %1',
                 args0: [{type: 'input_value', name: 'VIDEO'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_switchmodelto = {
+        init: function () {
+            this.jsonInit({
+                message0: 'switch model to %1',
+                args0: [{type: 'input_value', name: 'MODEL'}],
                 category: ScratchBlocks.Categories.looks,
                 extensions: ['colours_looks', 'shape_statement']
             });
