@@ -152,6 +152,36 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
     });
 
+    test('coalesces scene renders while a model is loading', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const modelObject = {name: 'cube object'};
+        const modelLoad = deferred();
+        const canvas = {name: 'scene canvas'};
+        manager.camera = {name: 'camera'};
+        manager.models.set(target.id, [{assetId: 'cube', name: 'Cube'}]);
+        manager.getModelObject = jest.fn(() => modelLoad.promise);
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        manager.modelRenderer = {
+            renderWorldScene: jest.fn(() => canvas)
+        };
+        manager.applyBitmap = jest.fn();
+        manager.applyProjection = jest.fn();
+
+        const firstRender = manager.renderModelToScene(target, 'Cube');
+        await Promise.resolve();
+        const secondRender = manager.renderModelToScene(target, 'Cube');
+
+        expect(secondRender).toBe(firstRender);
+        modelLoad.resolve(modelObject);
+        await firstRender;
+
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+            expect.objectContaining({sourceObject: modelObject}),
+            expect.objectContaining({sourceObject: modelObject})
+        ], manager.camera, [480, 360], 2);
+    });
+
     test('rerenders model geometry when its world z position changes', () => {
         const manager = makeManager();
         const target = makeTarget();

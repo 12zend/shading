@@ -554,39 +554,45 @@ class MovieAssetManager extends EventEmitter {
     queueModelSceneRender (target) {
         const state = this.getTargetState(target);
         state.modelRenderVersion++;
-        const version = state.modelRenderVersion;
-        const sceneItems = state.modelScene.map(item => ({
-            assetId: item.assetId,
-            transform: {
-                ...item.transform,
-                rotation: {...item.transform.rotation}
-            }
-        }));
+        if (state.modelRenderPromise) return state.modelRenderPromise;
+
         const renderPromise = Promise.resolve().then(async () => {
-            const loadedItems = await Promise.all(sceneItems.map(async item => {
-                const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
-                if (!model) return null;
-                return {
-                    sourceObject: await this.getModelObject(model),
-                    transform: item.transform
-                };
-            }));
-            if (
-                this.targetStates.get(target.id) !== state ||
-                state.modelRenderVersion !== version ||
-                state.requestedMode !== 'model'
-            ) return;
-            if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-            const canvas = this.modelRenderer.renderWorldScene(
-                loadedItems.filter(Boolean),
-                this.camera,
-                this.getStageSize(),
-                BITMAP_RESOLUTION
-            );
-            this.applyBitmap(target, canvas, 'model');
-            this.applyProjection(target);
+            while (this.targetStates.get(target.id) === state) {
+                const version = state.modelRenderVersion;
+                const sceneItems = state.modelScene.map(item => ({
+                    assetId: item.assetId,
+                    transform: {
+                        ...item.transform,
+                        rotation: {...item.transform.rotation}
+                    }
+                }));
+                const loadedItems = await Promise.all(sceneItems.map(async item => {
+                    const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
+                    if (!model) return null;
+                    return {
+                        sourceObject: await this.getModelObject(model),
+                        transform: item.transform
+                    };
+                }));
+                if (this.targetStates.get(target.id) !== state || state.requestedMode !== 'model') return;
+                if (state.modelRenderVersion !== version) continue;
+                if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
+                const canvas = this.modelRenderer.renderWorldScene(
+                    loadedItems.filter(Boolean),
+                    this.camera,
+                    this.getStageSize(),
+                    BITMAP_RESOLUTION
+                );
+                this.applyBitmap(target, canvas, 'model');
+                this.applyProjection(target);
+                return;
+            }
         });
         state.modelRenderPromise = renderPromise;
+        const finish = () => {
+            if (state.modelRenderPromise === renderPromise) state.modelRenderPromise = null;
+        };
+        renderPromise.then(finish, finish);
         return renderPromise;
     }
 
