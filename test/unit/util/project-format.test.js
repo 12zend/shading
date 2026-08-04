@@ -44,6 +44,15 @@ describe('Movie project format', () => {
         })).toBe('mb3');
     });
 
+    test('marks built-in Pen FX blocks as Movie project data', () => {
+        const json = project({contrast: block('penfx_contrast')});
+
+        expect(getMovieProjectFeatures(json)).toEqual(['pen-fx']);
+        expect(getProjectExtension({
+            targets: [{blocks: {_blocks: json.targets[0].blocks}}]
+        })).toBe('mb3');
+    });
+
     test('round-trips custom opcodes and inputs through project.json block serialization', () => {
         const blocks = {
             command: {

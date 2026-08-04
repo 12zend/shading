@@ -98,6 +98,7 @@ const getFieldValue = field => {
 const addBlockFeatures = (features, block) => {
     if (!block || typeof block !== 'object' || Array.isArray(block)) return;
     if (MOVIE_BLOCK_SET.has(block.opcode)) features.add('movie-blocks');
+    if (typeof block.opcode === 'string' && block.opcode.startsWith('penfx_')) features.add('pen-fx');
     if (MOVIE_3D_BLOCKS.includes(block.opcode) || MOVIE_3D_REPORTER_BLOCKS.includes(block.opcode)) {
         features.add('3d-engine');
     }

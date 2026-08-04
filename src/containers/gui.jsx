@@ -41,6 +41,7 @@ import cloudManagerHOC from '../lib/cloud-manager-hoc.jsx';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 import installGraphicEffectsManager from '../lib/graphic-effects-manager';
 import installMovieEasing from '../lib/movie-easing';
+import installPenFX from '../lib/pen-fx';
 
 import GUIComponent from '../components/gui/gui.jsx';
 import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
@@ -66,6 +67,7 @@ class GUI extends React.Component {
         installGraphicEffectsManager(this.props.vm);
         installMovieEasing(this.props.vm);
         installMovieAssetManager(this.props.vm);
+        installPenFX(this.props.vm);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }
