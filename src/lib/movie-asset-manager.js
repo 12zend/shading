@@ -13,7 +13,6 @@ import {
     DEFAULT_FOCAL_LENGTH,
     DEFAULT_STAGE_HEIGHT,
     DEFAULT_STAGE_WIDTH,
-    MODEL_RENDER_SIZE,
     ROTATION_ORDERS,
     ModelRenderer,
     cameraLookAt,
@@ -297,6 +296,7 @@ class MovieAssetManager extends EventEmitter {
         target.setSize = size => {
             const result = originalSetSize(size);
             this.applyProjection(target);
+            this.rerenderTargetModel(target);
             return result;
         };
         target.setVisible = visible => {
@@ -502,13 +502,11 @@ class MovieAssetManager extends EventEmitter {
                 state.requestedMode !== 'model'
             ) return;
             if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-            const canvas = this.modelRenderer.render(object, state, this.camera);
-            this.applyBitmap(
-                target,
-                canvas,
-                'model',
-                [MODEL_RENDER_SIZE / 4, MODEL_RENDER_SIZE / 4]
-            );
+            const canvas = this.modelRenderer.renderWorld(object, {
+                ...state,
+                size: target.size
+            }, this.camera, this.getStageSize(), BITMAP_RESOLUTION);
+            this.applyBitmap(target, canvas, 'model');
             this.applyProjection(target);
         });
         state.modelRenderPromise = renderPromise;
@@ -706,6 +704,7 @@ class MovieAssetManager extends EventEmitter {
         target.x = state.worldX;
         target.y = state.worldY;
         this.applyProjection(target);
+        this.rerenderTargetModel(target);
         if (target.onTargetMoved) target.onTargetMoved(target, oldX, oldY, force);
         this.runtime.requestTargetsUpdate(target);
     }
@@ -772,12 +771,15 @@ class MovieAssetManager extends EventEmitter {
     }
 
     refreshTargetRotation (target) {
-        const state = this.getTargetState(target);
-        if (state.mode === 'model' && state.modelAssetId) {
-            const model = this.getModels(target).find(item => item.assetId === state.modelAssetId);
-            if (model) this.runWithoutWaiting(this.queueModelRender(target, model));
-        }
+        this.rerenderTargetModel(target);
         this.applyProjection(target);
+    }
+
+    rerenderTargetModel (target) {
+        const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model' || !state.modelAssetId) return;
+        const model = this.getModels(target).find(item => item.assetId === state.modelAssetId);
+        if (model) this.runWithoutWaiting(this.queueModelRender(target, model));
     }
 
     getStageSize () {
@@ -856,7 +858,7 @@ class MovieAssetManager extends EventEmitter {
         this.cameraChanged(true);
     }
 
-    cameraChanged (rerenderModels = false) {
+    cameraChanged (rerenderModels = true) {
         this.runtime.emitProjectChanged();
         this.applyCamera(rerenderModels);
         this.emit('cameraChanged', cloneCamera(this.camera));
@@ -885,6 +887,16 @@ class MovieAssetManager extends EventEmitter {
             typeof this.runtime.renderer.updateDrawableVisible !== 'function'
         ) return;
         const state = this.getTargetState(target);
+        if (state.mode === 'model') {
+            this.runtime.renderer.updateDrawablePosition(target.drawableID, [0, 0]);
+            this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
+            this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible);
+            if (target.visible) {
+                target.emitVisualChange();
+                this.runtime.requestRedraw();
+            }
+            return;
+        }
         const projection = projectPosition({
             x: state.worldX,
             y: state.worldY,

@@ -1,9 +1,14 @@
+import * as THREE from 'three';
+
 import {
     DEFAULT_FOCAL_LENGTH,
     cameraLookAt,
     focalLengthFromFOV,
     fovFromFocalLength,
-    projectPosition
+    moviePositionToThree,
+    movieRotationToThreeQuaternion,
+    projectPosition,
+    verticalFOVFromFocalLength
 } from '../../../src/lib/model-runtime';
 
 const camera = {
@@ -18,6 +23,43 @@ describe('Movie 3D projection', () => {
         expect(focalLengthFromFOV(60, 480, 360)).toBeCloseTo(240 / Math.tan(Math.PI / 6));
         expect(focalLengthFromFOV(60, 360, 640)).toBeCloseTo(320 / Math.tan(Math.PI / 6));
         expect(fovFromFocalLength(focalLengthFromFOV(72, 480, 360), 480, 360)).toBeCloseTo(72);
+    });
+
+    test('converts the Movie positive-z camera into Three.js negative-z view space', () => {
+        const zeroRotation = movieRotationToThreeQuaternion({x: 0, y: 0, z: 0}, 'XYZ');
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(zeroRotation);
+        expect(forward.toArray()).toEqual([0, 0, -1]);
+
+        const yaw = movieRotationToThreeQuaternion({x: 0, y: 90, z: 0}, 'XYZ');
+        const turnedForward = new THREE.Vector3(0, 0, -1).applyQuaternion(yaw);
+        expect(turnedForward.x).toBeCloseTo(1);
+        expect(turnedForward.y).toBeCloseTo(0);
+        expect(turnedForward.z).toBeCloseTo(0);
+    });
+
+    test('uses focal length to derive the vertical FOV for a stage-sized render', () => {
+        expect(verticalFOVFromFocalLength(480, 360)).toBeCloseTo(
+            2 * Math.atan(180 / 480) * (180 / Math.PI)
+        );
+    });
+
+    test('keeps camera position in world space when camera rotation changes', () => {
+        const threeCamera = new THREE.PerspectiveCamera();
+        threeCamera.position.copy(moviePositionToThree({x: 100, y: 0, z: 0}));
+        threeCamera.quaternion.copy(movieRotationToThreeQuaternion({
+            x: 0,
+            y: -Math.atan2(100, 480) * (180 / Math.PI),
+            z: 0
+        }, 'XYZ'));
+        threeCamera.updateMatrixWorld(true);
+
+        const cameraSpaceTarget = moviePositionToThree({x: 0, y: 0, z: 480})
+            .applyMatrix4(threeCamera.matrixWorldInverse);
+        expect(threeCamera.position.x).toBeCloseTo(100);
+        expect(threeCamera.position.y).toBeCloseTo(0);
+        expect(threeCamera.position.z).toBeCloseTo(0);
+        expect(cameraSpaceTarget.x).toBeCloseTo(0);
+        expect(cameraSpaceTarget.z).toBeLessThan(0);
     });
 
     test('uses focalLength*x/z and focalLength*y/z for 2.5D sprites', () => {

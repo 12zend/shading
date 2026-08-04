@@ -174,6 +174,21 @@ const degreesToEuler = (rotation, order) => new THREE.Euler(
     ROTATION_ORDERS.includes(order) ? order : 'XYZ'
 );
 
+const movieRotationToThreeQuaternion = (rotation, order) => {
+    const movieRotation = new THREE.Matrix4().makeRotationFromEuler(degreesToEuler(rotation, order));
+    const invertZ = new THREE.Matrix4().makeScale(1, 1, -1);
+    const threeRotation = invertZ.clone()
+        .multiply(movieRotation)
+        .multiply(invertZ);
+    return new THREE.Quaternion().setFromRotationMatrix(threeRotation);
+};
+
+const moviePositionToThree = position => new THREE.Vector3(position.x, position.y, -position.z);
+
+const verticalFOVFromFocalLength = (focalLength, height) => (
+    2 * Math.atan((Math.max(1, height) / 2) / Math.max(0.001, focalLength)) * (180 / Math.PI)
+);
+
 const worldToCamera = (position, camera) => {
     const result = new THREE.Vector3(
         position.x - camera.position.x,
@@ -267,9 +282,24 @@ class ModelRenderer {
         this.scene.add(fillLight);
     }
 
-    render (sourceObject, transform, cameraTransform) {
+    setOutputSize (width, height) {
+        if (this.canvas.width === width && this.canvas.height === height) return;
+        this.renderer.setSize(width, height, false);
+        this.canvas.reusable = false;
+    }
+
+    setObject (sourceObject) {
         if (this.currentObject) this.scene.remove(this.currentObject);
         this.currentObject = sourceObject.clone(true);
+        this.scene.add(this.currentObject);
+        return this.currentObject;
+    }
+
+    render (sourceObject, transform, cameraTransform) {
+        this.setOutputSize(MODEL_RENDER_SIZE, MODEL_RENDER_SIZE);
+        this.setObject(sourceObject);
+        this.currentObject.position.set(0, 0, 0);
+        this.currentObject.scale.set(1, 1, 1);
         const objectQuaternion = new THREE.Quaternion().setFromEuler(
             degreesToEuler(transform.rotation, transform.rotationOrder)
         );
@@ -277,7 +307,46 @@ class ModelRenderer {
             degreesToEuler(cameraTransform.rotation, cameraTransform.rotationOrder)
         );
         this.currentObject.quaternion.copy(cameraQuaternion.invert().multiply(objectQuaternion));
-        this.scene.add(this.currentObject);
+        this.camera.fov = 38;
+        this.camera.aspect = 1;
+        this.camera.position.set(0, 0, 310);
+        this.camera.up.set(0, 1, 0);
+        this.camera.lookAt(0, 0, 0);
+        this.camera.updateProjectionMatrix();
+        this.renderer.render(this.scene, this.camera);
+        return this.canvas;
+    }
+
+    renderWorld (sourceObject, transform, cameraTransform, stageSize, bitmapResolution = 2) {
+        const width = Math.max(1, stageSize[0]);
+        const height = Math.max(1, stageSize[1]);
+        this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
+        this.setObject(sourceObject);
+
+        this.currentObject.position.copy(moviePositionToThree({
+            x: transform.worldX,
+            y: transform.worldY,
+            z: transform.worldZ
+        }));
+        this.currentObject.quaternion.copy(movieRotationToThreeQuaternion(
+            transform.rotation,
+            transform.rotationOrder
+        ));
+        const scale = Math.max(0, Number(transform.size) || 0) / 100;
+        this.currentObject.scale.setScalar(scale);
+
+        this.camera.fov = verticalFOVFromFocalLength(cameraTransform.focalLength, height);
+        this.camera.aspect = width / height;
+        this.camera.near = 0.1;
+        this.camera.far = 10000000;
+        this.camera.position.copy(moviePositionToThree(cameraTransform.position));
+        this.camera.quaternion.copy(movieRotationToThreeQuaternion(
+            cameraTransform.rotation,
+            cameraTransform.rotationOrder
+        ));
+        this.camera.updateProjectionMatrix();
+        this.camera.updateMatrixWorld(true);
+
         this.renderer.render(this.scene, this.camera);
         return this.canvas;
     }
@@ -303,6 +372,9 @@ export {
     focalLengthFromFOV,
     fovFromFocalLength,
     loadGLBObject,
+    moviePositionToThree,
+    movieRotationToThreeQuaternion,
     normalizeFOV,
-    projectPosition
+    projectPosition,
+    verticalFOVFromFocalLength
 };

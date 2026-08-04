@@ -10,9 +10,13 @@ const makeManager = () => {
         renderer: {
             createBitmapSkin: jest.fn(() => 1),
             updateBitmapSkin: jest.fn(),
-            updateDrawableSkinId: jest.fn()
+            updateDrawableDirectionScale: jest.fn(),
+            updateDrawablePosition: jest.fn(),
+            updateDrawableSkinId: jest.fn(),
+            updateDrawableVisible: jest.fn()
         },
-        requestRedraw: jest.fn()
+        requestRedraw: jest.fn(),
+        requestTargetsUpdate: jest.fn()
     };
     manager.targetStates = new Map();
     manager.videos = new Map();
@@ -21,10 +25,12 @@ const makeManager = () => {
 };
 
 const makeTarget = () => ({
+    direction: 90,
     drawableID: 1,
     emitVisualChange: jest.fn(),
     id: 'target',
     isOriginal: true,
+    size: 100,
     visible: false
 });
 
@@ -37,6 +43,31 @@ const deferred = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('keeps a world-rendered model fixed to the stage instead of projecting a flat sprite', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.visible = true;
+        const state = manager.getTargetState(target);
+        state.mode = 'model';
+
+        manager.applyProjection(target);
+
+        expect(manager.runtime.renderer.updateDrawablePosition).toHaveBeenCalledWith(1, [0, 0]);
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenCalledWith(1, 90, [100, 100]);
+        expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenCalledWith(1, true);
+    });
+
+    test('rerenders model geometry when its world z position changes', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.rerenderTargetModel = jest.fn();
+
+        manager.setTargetPosition(target, 12, -8, 240);
+
+        expect(manager.getTargetState(target)).toMatchObject({worldX: 12, worldY: -8, worldZ: 240});
+        expect(manager.rerenderTargetModel).toHaveBeenCalledWith(target);
+    });
+
     test('set FOV automatically assigns focal length for a 480 by 360 stage', () => {
         const manager = makeManager();
         manager.camera = {};
