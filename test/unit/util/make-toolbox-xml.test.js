@@ -23,4 +23,14 @@ describe('Movie toolbox categories', () => {
         );
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
+
+    test('offers the rendering frame controls and MP4 export block', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
+
+        expect(toolbox).toContain('type="looks_addrenderingframe"');
+        expect(toolbox).toContain('type="looks_clearrenderingframe"');
+        expect(toolbox).toContain('type="looks_exportrenderingmp4"');
+        expect(toolbox).toContain('<field name="SOUND">Music</field>');
+        expect(toolbox).toContain('<field name="NUM">30</field>');
+    });
 });

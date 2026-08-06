@@ -118,6 +118,15 @@ describe('Movie project format', () => {
         expect(json.mb3.features).toEqual(['3d-engine', 'model-assets', 'movie-blocks']);
     });
 
+    test('marks rendering export blocks as Movie project data', () => {
+        const json = project({export: block('looks_exportrenderingmp4')});
+
+        expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
+        expect(getProjectExtension({
+            targets: [{blocks: {_blocks: json.targets[0].blocks}}]
+        })).toBe('mb3');
+    });
+
     test('marks saved camera and target transforms without requiring a model', () => {
         const json = project({});
         json.movieCamera = {

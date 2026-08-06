@@ -88,6 +88,13 @@ export default function (vm) {
         return menu;
     };
 
+    const renderingSoundsMenu = function () {
+        if (vm.editingTarget && vm.editingTarget.sprite.sounds.length > 0) {
+            return vm.editingTarget.sprite.sounds.map(sound => [sound.name, sound.name]);
+        }
+        return [['', '']];
+    };
+
     const costumesMenu = function () {
         if (vm.editingTarget && vm.editingTarget.getCostumes().length > 0) {
             return vm.editingTarget.getCostumes().map(costume => [costume.name, costume.name]);
@@ -434,6 +441,40 @@ export default function (vm) {
             this.jsonInit({
                 message0: 'render model %1',
                 args0: [{type: 'input_value', name: 'MODEL'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_addrenderingframe = {
+        init: function () {
+            this.jsonInit({
+                message0: 'add rendering frame',
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_clearrenderingframe = {
+        init: function () {
+            this.jsonInit({
+                message0: 'clear rendering frame',
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_exportrenderingmp4 = {
+        init: function () {
+            this.jsonInit({
+                message0: 'export rendering mp4 %1 framerate: %2',
+                args0: [
+                    {type: 'field_dropdown', name: 'SOUND', options: renderingSoundsMenu},
+                    {type: 'input_value', name: 'FRAMERATE'}
+                ],
                 category: ScratchBlocks.Categories.looks,
                 extensions: ['colours_looks', 'shape_statement']
             });

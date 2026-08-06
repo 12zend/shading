@@ -85,6 +85,20 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
     });
 
+    test('registers rendering frame primitives and clears the accumulated frames', () => {
+        const manager = makeManager();
+        manager.renderingFrames = [{}];
+        manager.emit = jest.fn();
+        manager.installPrimitives();
+
+        expect(typeof manager.runtime._primitives.looks_addrenderingframe).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_exportrenderingmp4).toBe('function');
+        manager.runtime._primitives.looks_clearrenderingframe();
+
+        expect(manager.renderingFrames).toEqual([]);
+        expect(manager.emit).toHaveBeenCalledWith('renderingFramesChanged', 0);
+    });
+
     test('does not display an empty scene before a following model render', () => {
         const manager = makeManager();
         const target = makeTarget();

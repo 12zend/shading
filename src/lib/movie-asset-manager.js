@@ -24,9 +24,13 @@ import {
     normalizeFOV,
     projectPosition
 } from './model-runtime';
+import downloadBlob from './download-blob';
 
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
+const RENDERING_DEFAULT_FRAME_RATE = 30;
+const RENDERING_MAX_FRAME_RATE = 120;
+const RENDERING_FILE_NAME = 'rendering.mp4';
 const VIDEO_PROJECT_KEY = 'movieVideos';
 const MODEL_PROJECT_KEY = 'movieModels';
 const CAMERA_PROJECT_KEY = 'movieCamera';
@@ -36,6 +40,33 @@ const MIME_TYPES = {
     mov: 'video/quicktime',
     ogv: 'video/ogg',
     webm: 'video/webm'
+};
+
+const MP4_VIDEO_MIME_TYPES = [
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1.4D401E',
+    'video/mp4'
+];
+
+const MP4_AUDIO_MIME_TYPES = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1.4D401E,mp4a.40.2',
+    'video/mp4'
+];
+
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+const now = () => (
+    typeof performance !== 'undefined' && typeof performance.now === 'function' ?
+        performance.now() : Date.now()
+);
+
+const copyArrayBuffer = data => {
+    if (data instanceof ArrayBuffer) return data.slice(0);
+    if (ArrayBuffer.isView(data)) {
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    }
+    return data;
 };
 
 const readFile = file => new Promise((resolve, reject) => {
@@ -133,6 +164,7 @@ class MovieAssetManager extends EventEmitter {
         this.targetStates = new Map();
         this.fontFaces = new Map();
         this.modelObjects = new Map();
+        this.renderingFrames = [];
         this.modelRenderer = null;
         const [stageWidth, stageHeight] = this.getStageSize();
         this.camera = {
@@ -185,6 +217,13 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
+        primitives.looks_addrenderingframe = () => this.addRenderingFrame();
+        primitives.looks_clearrenderingframe = () => this.clearRenderingFrames();
+        primitives.looks_exportrenderingmp4 = (args, util) => this.exportRenderingMp4(
+            util && util.target,
+            args && args.SOUND,
+            args && args.FRAMERATE
+        );
 
         const goToXYZ = (args, util) => this.setTargetPosition(
             util.target,
@@ -269,6 +308,7 @@ class MovieAssetManager extends EventEmitter {
 
         const originalDeserializeProject = this.vm.deserializeProject.bind(this.vm);
         this.vm.deserializeProject = async (projectJSON, zip) => {
+            this.clearRenderingFrames();
             const videoPromise = this.deserializeVideos(projectJSON[VIDEO_PROJECT_KEY], zip);
             const modelPromise = this.deserializeModels(projectJSON[MODEL_PROJECT_KEY], zip);
             const transformDescriptors = this.readTransformDescriptors(projectJSON);
@@ -499,6 +539,256 @@ class MovieAssetManager extends EventEmitter {
     preloadModels () {
         const models = Array.from(this.models.values()).reduce((all, items) => all.concat(items), []);
         return Promise.all(models.map(model => this.getModelObject(model)));
+    }
+
+    captureRenderingFrame () {
+        if (typeof document === 'undefined') {
+            throw new Error('Rendering frames are only available in a browser.');
+        }
+        const renderer = this.runtime.renderer;
+        if (!renderer || !renderer.canvas) {
+            throw new Error('The stage renderer is not ready.');
+        }
+        if (typeof renderer.draw === 'function') renderer.draw();
+
+        const [stageWidth, stageHeight] = this.getStageSize();
+        const width = Math.max(1, Number(renderer.canvas.width) || stageWidth);
+        const height = Math.max(1, Number(renderer.canvas.height) || stageHeight);
+        const frame = document.createElement('canvas');
+        frame.width = width;
+        frame.height = height;
+        const context = frame.getContext('2d');
+        if (!context) throw new Error('Could not create a rendering frame.');
+        context.drawImage(renderer.canvas, 0, 0, width, height);
+        frame.reusable = false;
+        return frame;
+    }
+
+    addRenderingFrame () {
+        if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
+        const frame = this.captureRenderingFrame();
+        this.renderingFrames.push(frame);
+        this.emit('renderingFramesChanged', this.renderingFrames.length);
+        return frame;
+    }
+
+    clearRenderingFrames () {
+        if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
+        this.renderingFrames.length = 0;
+        this.emit('renderingFramesChanged', 0);
+    }
+
+    getRenderingSound (target, requestedSound) {
+        const name = String(requestedSound || '');
+        if (!name) return null;
+        const sounds = target && target.sprite && target.sprite.sounds;
+        return Array.isArray(sounds) ? sounds.find(sound => sound && sound.name === name) || null : null;
+    }
+
+    async decodeRenderingSound (sound) {
+        const data = sound && sound.asset && sound.asset.data;
+        if (!data) return null;
+
+        const audioEngine = this.runtime.audioEngine;
+        if (audioEngine && typeof audioEngine.decodeSoundPlayer === 'function') {
+            const player = await audioEngine.decodeSoundPlayer({data: data});
+            if (player && player.buffer) {
+                return {
+                    buffer: player.buffer,
+                    context: audioEngine.audioContext,
+                    ownsContext: false
+                };
+            }
+        }
+
+        let context = audioEngine && audioEngine.audioContext;
+        let ownsContext = false;
+        if (!context && typeof window !== 'undefined') {
+            const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextConstructor) {
+                context = new AudioContextConstructor();
+                ownsContext = true;
+            }
+        }
+        if (!context || typeof context.decodeAudioData !== 'function') {
+            throw new Error('Audio export is not supported in this browser.');
+        }
+        const buffer = await context.decodeAudioData(copyArrayBuffer(data));
+        return {buffer, context, ownsContext};
+    }
+
+    normalizeRenderingFramerate (value) {
+        const framerate = Number(value);
+        if (!Number.isFinite(framerate) || framerate <= 0) return RENDERING_DEFAULT_FRAME_RATE;
+        return Math.min(RENDERING_MAX_FRAME_RATE, Math.max(1, framerate));
+    }
+
+    getRenderingMp4MimeType (includeAudio) {
+        if (typeof MediaRecorder === 'undefined') {
+            throw new Error('This browser does not support MP4 rendering.');
+        }
+        const candidates = includeAudio ? MP4_AUDIO_MIME_TYPES : MP4_VIDEO_MIME_TYPES;
+        if (typeof MediaRecorder.isTypeSupported !== 'function') return candidates[candidates.length - 1];
+        for (const candidate of candidates) {
+            try {
+                if (MediaRecorder.isTypeSupported(candidate)) return candidate;
+            } catch (error) {
+                // Some browsers throw when they see a codec they do not recognize.
+            }
+        }
+        throw new Error('This browser cannot encode MP4 with MediaRecorder.');
+    }
+
+    async encodeRenderingFrames (frames, framerate, audio) {
+        if (typeof document === 'undefined' || typeof MediaStream === 'undefined') {
+            throw new Error('Rendering export is only available in a browser.');
+        }
+        const firstFrame = frames[0];
+        const [stageWidth, stageHeight] = this.getStageSize();
+        const width = Math.max(1, Number(firstFrame.width) || stageWidth);
+        const height = Math.max(1, Number(firstFrame.height) || stageHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Could not create the rendering export canvas.');
+
+        const drawFrame = frame => {
+            context.clearRect(0, 0, width, height);
+            context.drawImage(frame, 0, 0, width, height);
+        };
+        drawFrame(firstFrame);
+        if (typeof canvas.captureStream !== 'function') {
+            throw new Error('This browser cannot capture rendering frames.');
+        }
+
+        const videoStream = canvas.captureStream(framerate);
+        const videoTrack = videoStream.getVideoTracks()[0];
+        if (!videoTrack) throw new Error('Could not create a video stream for the rendering.');
+        const recordingStream = new MediaStream();
+        recordingStream.addTrack(videoTrack);
+
+        let audioSource = null;
+        let audioDestination = null;
+        if (audio) {
+            if (!audio.context || typeof audio.context.createMediaStreamDestination !== 'function') {
+                throw new Error('This browser cannot add audio to the rendering.');
+            }
+            audioDestination = audio.context.createMediaStreamDestination();
+            audioSource = audio.context.createBufferSource();
+            audioSource.buffer = audio.buffer;
+            audioSource.connect(audioDestination);
+            const audioTrack = audioDestination.stream.getAudioTracks()[0];
+            if (!audioTrack) throw new Error('Could not create an audio stream for the rendering.');
+            recordingStream.addTrack(audioTrack);
+        }
+
+        const mimeType = this.getRenderingMp4MimeType(Boolean(audio));
+        const recorder = new MediaRecorder(recordingStream, {mimeType});
+        const chunks = [];
+        let recordingError = null;
+        let finished = false;
+
+        const cleanup = () => {
+            if (finished) return;
+            finished = true;
+            if (audioSource) {
+                try {
+                    audioSource.stop();
+                } catch (error) {
+                    // The source may not have started if recording setup failed.
+                }
+                if (typeof audioSource.disconnect === 'function') audioSource.disconnect();
+            }
+            if (audioDestination && typeof audioDestination.disconnect === 'function') {
+                audioDestination.disconnect();
+            }
+            recordingStream.getTracks().forEach(track => track.stop());
+            if (audio && audio.ownsContext && audio.context && typeof audio.context.close === 'function') {
+                const closePromise = audio.context.close();
+                if (closePromise && typeof closePromise.catch === 'function') closePromise.catch(() => {});
+            }
+        };
+
+        let resolveRecording;
+        let rejectRecording;
+        const recordingPromise = new Promise((resolve, reject) => {
+            resolveRecording = resolve;
+            rejectRecording = reject;
+        });
+        const finishRecording = error => {
+            if (finished) return;
+            cleanup();
+            if (error) {
+                rejectRecording(error);
+            } else {
+                resolveRecording(new Blob(chunks, {type: mimeType}));
+            }
+        };
+        const failRecording = error => {
+            recordingError = error instanceof Error ? error : new Error(String(error));
+            if (recorder.state === 'inactive') {
+                finishRecording(recordingError);
+                return;
+            }
+            try {
+                recorder.stop();
+            } catch (stopError) {
+                finishRecording(recordingError);
+            }
+        };
+
+        recorder.ondataavailable = event => {
+            if (event.data && event.data.size !== 0) chunks.push(event.data);
+        };
+        recorder.onerror = event => failRecording(
+            (event && event.error) || new Error('The MP4 renderer encountered an error.')
+        );
+        recorder.onstop = () => finishRecording(recordingError);
+
+        try {
+            if (audio && audio.context && typeof audio.context.resume === 'function') {
+                await audio.context.resume();
+            }
+            recorder.start();
+            if (audioSource) audioSource.start();
+
+            const frameDuration = 1000 / framerate;
+            const startTime = now();
+            for (let index = 1; index < frames.length; index++) {
+                await wait(Math.max(0, startTime + (index * frameDuration) - now()));
+                drawFrame(frames[index]);
+            }
+            await wait(Math.max(0, startTime + (frames.length * frameDuration) - now()));
+            if (recorder.state !== 'inactive') recorder.stop();
+        } catch (error) {
+            failRecording(error);
+        }
+
+        return recordingPromise;
+    }
+
+    async exportRenderingMp4 (target, requestedSound, requestedFramerate) {
+        const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames.slice() : [];
+        if (frames.length === 0) {
+            throw new Error('Add at least one rendering frame before exporting.');
+        }
+
+        const sound = this.getRenderingSound(target, requestedSound);
+        if (requestedSound && !sound) {
+            throw new Error('The selected rendering sound could not be found.');
+        }
+        const audio = sound ? await this.decodeRenderingSound(sound) : null;
+        const framerate = this.normalizeRenderingFramerate(requestedFramerate);
+        const blob = await this.encodeRenderingFrames(frames, framerate, audio);
+        downloadBlob(RENDERING_FILE_NAME, blob);
+        this.emit('renderingExported', {
+            blob,
+            framerate,
+            frameCount: frames.length,
+            sound: sound ? sound.name : ''
+        });
+        return blob;
     }
 
     getModelTransform (target, state = this.getTargetState(target)) {

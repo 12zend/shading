@@ -4,8 +4,11 @@ const MOVIE_PROJECT_FORMAT_KEY = 'mb3';
 const MOVIE_PROJECT_FORMAT_VERSION = 1;
 
 const MOVIE_ASSET_BLOCKS = [
+    'looks_addrenderingframe',
     'looks_changevideoframeby',
     'looks_clearscene',
+    'looks_clearrenderingframe',
+    'looks_exportrenderingmp4',
     'looks_rendermodel',
     'looks_settextfont',
     'looks_setvideoframeto',
