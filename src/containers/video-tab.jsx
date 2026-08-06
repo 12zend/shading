@@ -57,8 +57,11 @@ class VideoTab extends React.Component {
     }
 
     componentDidMount () {
-        this.manager = this.props.vm.__movieAssetManager;
-        this.manager.on('videosChanged', this.handleManagerChange);
+        this.manager = this.getManager();
+        if (this.manager) {
+            this.manager.on('videosChanged', this.handleManagerChange);
+            this.handleManagerChange();
+        }
     }
 
     componentDidUpdate (previousProps) {
@@ -69,11 +72,16 @@ class VideoTab extends React.Component {
     }
 
     componentWillUnmount () {
-        this.manager.off('videosChanged', this.handleManagerChange);
+        if (this.manager) this.manager.off('videosChanged', this.handleManagerChange);
+    }
+
+    getManager () {
+        return this.manager || this.props.vm.__movieAssetManager;
     }
 
     getVideos () {
-        return this.manager ? this.manager.getVideos(this.props.editingTarget) : [];
+        const manager = this.getManager();
+        return manager ? manager.getVideos(this.props.editingTarget) : [];
     }
 
     handleManagerChange (targetId) {

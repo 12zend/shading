@@ -108,6 +108,7 @@ describe('Movie project format', () => {
         const json = project({
             camera: block('motion_setcamerarotation'),
             fov: block('motion_setfov'),
+            noCamera: block('motion_gotoxyz_nocamera'),
             clear: block('looks_clearscene'),
             model: block('looks_rendermodel')
         });

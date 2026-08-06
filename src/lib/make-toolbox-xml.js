@@ -30,6 +30,11 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
             <value name="Y"><shadow id="movey" type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="Z"><shadow id="movez" type="math_number"><field name="NUM">480</field></shadow></value>
         </block>
+        <block type="motion_gotoxyz_nocamera">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">480</field></shadow></value>
+        </block>
         <block type="motion_glideto" id="motion_glideto">
             <value name="SECS"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
             <value name="TO"><shadow type="motion_glideto_menu"></shadow></value>

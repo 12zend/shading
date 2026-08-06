@@ -24,6 +24,13 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
 
+    test('offers both camera-aware and camera-independent 3D go-to blocks', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="motion_gotoxyz"');
+        expect(toolbox).toContain('type="motion_gotoxyz_nocamera"');
+    });
+
     test('offers the rendering frame controls and MP4 export block', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 

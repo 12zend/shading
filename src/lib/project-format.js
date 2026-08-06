@@ -28,6 +28,7 @@ const MOVIE_3D_BLOCKS = [
     'motion_changerotationby',
     'motion_changezby',
     'motion_gotoxyz',
+    'motion_gotoxyz_nocamera',
     'motion_lookat',
     'motion_setcamerarotation',
     'motion_setcamerarotationorder',

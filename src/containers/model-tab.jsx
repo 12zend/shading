@@ -59,8 +59,11 @@ class ModelTab extends React.Component {
     }
 
     componentDidMount () {
-        this.manager = this.props.vm.__movieAssetManager;
-        this.manager.on('modelsChanged', this.handleManagerChange);
+        this.manager = this.getManager();
+        if (this.manager) {
+            this.manager.on('modelsChanged', this.handleManagerChange);
+            this.handleManagerChange();
+        }
     }
 
     componentDidUpdate (previousProps) {
@@ -71,11 +74,16 @@ class ModelTab extends React.Component {
     }
 
     componentWillUnmount () {
-        this.manager.off('modelsChanged', this.handleManagerChange);
+        if (this.manager) this.manager.off('modelsChanged', this.handleManagerChange);
+    }
+
+    getManager () {
+        return this.manager || this.props.vm.__movieAssetManager;
     }
 
     getModels () {
-        return this.manager ? this.manager.getModels(this.props.editingTarget) : [];
+        const manager = this.getManager();
+        return manager ? manager.getModels(this.props.editingTarget) : [];
     }
 
     handleManagerChange (targetId) {
@@ -206,7 +214,7 @@ class ModelTab extends React.Component {
                         </div>
                         <div className={styles.previewArea}>
                             <ModelPreview
-                                manager={this.manager}
+                                manager={this.getManager()}
                                 model={selectedModel}
                                 onError={this.handlePreviewError}
                             />

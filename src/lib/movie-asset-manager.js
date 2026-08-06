@@ -233,6 +233,12 @@ class MovieAssetManager extends EventEmitter {
         );
         primitives.motion_gotoxy = goToXYZ;
         primitives.motion_gotoxyz = goToXYZ;
+        primitives.motion_gotoxyz_nocamera = (args, util) => this.setTargetPositionWithoutCamera(
+            util.target,
+            args.X,
+            args.Y,
+            typeof args.Z === 'undefined' ? this.getTargetState(util.target).worldZ : args.Z
+        );
         primitives.motion_changexby = (args, util) => this.changeTargetPosition(util.target, 'x', args.DX);
         primitives.motion_setx = (args, util) => this.setTargetAxis(util.target, 'x', args.X);
         primitives.motion_changeyby = (args, util) => this.changeTargetPosition(util.target, 'y', args.DY);
@@ -372,6 +378,7 @@ class MovieAssetManager extends EventEmitter {
                 state.worldZ = sourceState.worldZ;
                 state.rotation = {...sourceState.rotation};
                 state.rotationOrder = sourceState.rotationOrder;
+                state.ignoreCamera = sourceState.ignoreCamera;
                 state.modelAssetId = sourceState.modelAssetId;
                 state.modelScene = sourceState.modelScene.map(item => ({
                     assetId: item.assetId,
@@ -504,9 +511,9 @@ class MovieAssetManager extends EventEmitter {
     }
 
     changedModels (targetId) {
+        this.emit('modelsChanged', targetId);
         this.runtime.emitProjectChanged();
         this.vm.refreshWorkspace();
-        this.emit('modelsChanged', targetId);
     }
 
     getModelByName (target, requestedModel) {
@@ -1064,9 +1071,9 @@ class MovieAssetManager extends EventEmitter {
     }
 
     changed (targetId) {
+        this.emit('videosChanged', targetId);
         this.runtime.emitProjectChanged();
         this.vm.refreshWorkspace();
-        this.emit('videosChanged', targetId);
     }
 
     getVideoByName (target, requestedVideo) {
@@ -1086,6 +1093,7 @@ class MovieAssetManager extends EventEmitter {
                 currentFrame: 1,
                 displayedFrame: null,
                 displayedVideoAssetId: null,
+                ignoreCamera: false,
                 mode: 'costume',
                 modelAssetId: null,
                 modelScene: [],
@@ -1117,6 +1125,7 @@ class MovieAssetManager extends EventEmitter {
         const state = this.getTargetState(target);
         const oldX = target.x;
         const oldY = target.y;
+        state.ignoreCamera = false;
         state.worldX = toNumber(x, state.worldX);
         state.worldY = toNumber(y, state.worldY);
         target.x = state.worldX;
@@ -1130,8 +1139,26 @@ class MovieAssetManager extends EventEmitter {
     setTargetPosition (target, x, y, z) {
         if (!target || target.isStage) return;
         const state = this.getTargetState(target);
+        state.ignoreCamera = false;
         state.worldZ = toNumber(z, state.worldZ);
         this.setTargetXY(target, x, y);
+    }
+
+    setTargetPositionWithoutCamera (target, x, y, z) {
+        if (!target || target.isStage) return;
+        const state = this.getTargetState(target);
+        const oldX = target.x;
+        const oldY = target.y;
+        state.ignoreCamera = true;
+        state.worldX = toNumber(x, state.worldX);
+        state.worldY = toNumber(y, state.worldY);
+        state.worldZ = toNumber(z, state.worldZ);
+        target.x = state.worldX;
+        target.y = state.worldY;
+        this.applyProjection(target);
+        this.rerenderTargetModel(target);
+        if (target.onTargetMoved) target.onTargetMoved(target, oldX, oldY);
+        this.runtime.requestTargetsUpdate(target);
     }
 
     setTargetAxis (target, axis, value) {
@@ -1314,7 +1341,12 @@ class MovieAssetManager extends EventEmitter {
             }
             return;
         }
-        const projection = projectPosition({
+        const projection = state.ignoreCamera ? {
+            inFront: true,
+            perspective: 1,
+            x: state.worldX,
+            y: state.worldY
+        } : projectPosition({
             x: state.worldX,
             y: state.worldY,
             z: state.worldZ
@@ -1787,7 +1819,7 @@ class MovieAssetManager extends EventEmitter {
             }).filter(Boolean) : [];
             const selectedModel = modelScene.length === 1 ? modelScene[0].model : null;
             const isDefault = state.worldZ === DEFAULT_DEPTH && state.rotation.x === 0 && state.rotation.y === 0 &&
-                state.rotationOrder === 'XYZ' && !modelScene.length;
+                state.rotationOrder === 'XYZ' && !state.ignoreCamera && !modelScene.length;
             if (isDefault) return;
             const serializedTarget = serializedTargets[index];
             if (!serializedTarget) return;
@@ -1795,6 +1827,7 @@ class MovieAssetManager extends EventEmitter {
                 rotation: {...state.rotation},
                 rotationOrder: state.rotationOrder,
                 scene: modelScene,
+                ignoreCamera: state.ignoreCamera,
                 z: state.worldZ,
                 model: selectedModel
             };
@@ -1822,6 +1855,7 @@ class MovieAssetManager extends EventEmitter {
             if (!target || target.isStage) continue;
             const state = this.getTargetState(target);
             const transform = descriptor.transform;
+            state.ignoreCamera = transform.ignoreCamera === true;
             state.worldX = target.x;
             state.worldY = target.y;
             state.worldZ = toNumber(transform.z, DEFAULT_DEPTH);

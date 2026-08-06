@@ -250,6 +250,14 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.motion_gotoxyz_nocamera = {
+        init: function () {
+            this.jsonInit(motionStatement('go to (not camera) x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.motion_setrotation = {
         init: function () {
             this.jsonInit(motionStatement('set rotation x: %1 y: %2 z: %3', [
