@@ -1014,7 +1014,6 @@ const createPenFXClass = vm => {
       this.blendOpacity = 1;
       this.uniformCache = new WeakMap();
       this.positionCache = new WeakMap();
-      this.costumeTextures = new Map();
       this.pixelSortSource = null;
       this.pixelSortOutput = null;
       this.pixelSortKeys = null;
@@ -1735,7 +1734,8 @@ const createPenFXClass = vm => {
       const stride = type === 'y' ? this.width : 1;
       const lineCount = type === 'y' ? this.width : this.height;
       const lineLength = type === 'y' ? this.height : this.width;
-      const maxSpan = Math.min(256, Math.max(1, Math.floor(Math.abs(spanLimit))));
+      const requestedSpan = Math.floor(Math.abs(spanLimit));
+      const maxSpan = requestedSpan >= lineLength ? lineLength : Math.min(256, Math.max(1, requestedSpan));
       const indices = this.pixelSortIndices;
       const compare = reverse ?
         (a, b) => keys[b] - keys[a] || a - b :
@@ -1785,9 +1785,9 @@ const createPenFXClass = vm => {
       else this._finish(skin, this.textures[1], blendMode);
     }
 
-    async displacement(costume, value, type, channel, invert, center, mixValue, target, blendMode) {
+    displacement(costume, value, type, channel, invert, center, mixValue, target, blendMode) {
       if (this.blendOpacity <= 0 || this._isNoOp(mixValue, blendMode)) return;
-      const mapTexture = await this._costumeTexture(costume, target);
+      const mapTexture = this._costumeTexture(costume, target);
       if (!mapTexture) return;
       const skin = this._prepare();
       if (!skin) return;
@@ -1803,57 +1803,18 @@ const createPenFXClass = vm => {
       }, ['u_type', 'u_channel', 'u_invert'], blendMode);
     }
 
-    async _costumeTexture(costumeName, target) {
-      if (!target || !target.sprite || !Array.isArray(target.sprite.costumes)) return null;
-      const costumes = target.sprite.costumes;
+    _costumeTexture(costumeName, target) {
+      if (!target || typeof target.getCostumes !== 'function' || !renderer._allSkins) return null;
+      const costumes = target.getCostumes();
       let costume = costumes.find(item => item.name === String(costumeName));
       if (!costume) {
         const numericIndex = Math.floor(Number(costumeName)) - 1;
         if (Number.isFinite(numericIndex)) costume = costumes[numericIndex];
       }
-      if (!costume || !costume.asset) return null;
-      const key = `${costume.asset.assetId || costume.assetId || costume.name}.${costume.dataFormat || ''}`;
-      if (this.costumeTextures.has(key)) return this.costumeTextures.get(key);
-      const promise = new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => {
-          const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
-          const previousFlipY = gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL);
-          const previousPremultiplyAlpha = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL);
-          let texture = null;
-          try {
-            texture = gl.createTexture();
-            if (!texture) throw new Error(`Could not create texture for costume: ${costume.name}`);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-            resolve(texture);
-          } catch (error) {
-            if (texture) gl.deleteTexture(texture);
-            reject(error);
-          } finally {
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, previousFlipY);
-            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, previousPremultiplyAlpha);
-            gl.bindTexture(gl.TEXTURE_2D, previousTexture);
-          }
-        };
-        image.onerror = () => reject(new Error(`Could not load costume: ${costume.name}`));
-        image.src = costume.asset.encodeDataURI();
-      });
-      this.costumeTextures.set(key, promise);
-      try {
-        const texture = await promise;
-        this.costumeTextures.set(key, texture);
-        return texture;
-      } catch (error) {
-        this.costumeTextures.delete(key);
-        throw error;
-      }
+      if (!costume) return null;
+      const skin = renderer._allSkins[costume.skinId];
+      // Reuse the renderer texture so this block never waits for an Image load.
+      return skin && typeof skin.getTexture === 'function' ? skin.getTexture([100, 100]) : null;
     }
   }
 
@@ -1979,16 +1940,6 @@ const createPenFXClass = vm => {
         const engine = this._getEngine();
         engine.blendOpacity = this.blendOpacity;
         callback(engine);
-      } catch (error) {
-        console.error('[Pen FX]', error);
-      }
-    }
-
-    async _safeAsync(callback) {
-      try {
-        const engine = this._getEngine();
-        engine.blendOpacity = this.blendOpacity;
-        await callback(engine);
       } catch (error) {
         console.error('[Pen FX]', error);
       }
@@ -2208,7 +2159,7 @@ const createPenFXClass = vm => {
     displacementMap(args, util) {
       const type = ['x', 'y', 'size', 'dir'].includes(String(args.TYPE)) ? String(args.TYPE) : 'x';
       const channel = ['luminance', 'r', 'g', 'b', 'a'].includes(String(args.CHANNEL)) ? String(args.CHANNEL) : 'luminance';
-      return this._safeAsync(engine => engine.displacement(args.COSTUME, number(args.VALUE), type, channel,
+      this._safe(engine => engine.displacement(args.COSTUME, number(args.VALUE), type, channel,
         boolean(args.INVERT), numberOr(args.CENTER, 0.5), mixAmount(args.MIX), util.target, this.blendMode));
     }
 
