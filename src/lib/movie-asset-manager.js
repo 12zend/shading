@@ -146,6 +146,14 @@ const normalizeRotationOrder = value => {
     return ROTATION_ORDERS.includes(order) ? order : 'XYZ';
 };
 
+const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
+
+const cloneScale = scale => ({
+    x: normalizeScale(scale && scale.x),
+    y: normalizeScale(scale && scale.y),
+    z: normalizeScale(scale && scale.z)
+});
+
 const cloneCamera = camera => ({
     fov: camera.fov,
     focalLength: camera.focalLength,
@@ -246,6 +254,9 @@ class MovieAssetManager extends EventEmitter {
         primitives.motion_changezby = (args, util) => this.changeTargetPosition(util.target, 'z', args.DZ);
         primitives.motion_setz = (args, util) => this.setTargetAxis(util.target, 'z', args.Z);
         primitives.motion_setrotation = (args, util) => this.setTargetRotation(
+            util.target, args.X, args.Y, args.Z
+        );
+        primitives.motion_setscale = (args, util) => this.setTargetScale(
             util.target, args.X, args.Y, args.Z
         );
         primitives.motion_changerotationby = (args, util) => this.changeTargetRotation(
@@ -377,6 +388,7 @@ class MovieAssetManager extends EventEmitter {
                 state.worldY = sourceState.worldY;
                 state.worldZ = sourceState.worldZ;
                 state.rotation = {...sourceState.rotation};
+                state.scale = cloneScale(sourceState.scale);
                 state.rotationOrder = sourceState.rotationOrder;
                 state.ignoreCamera = sourceState.ignoreCamera;
                 state.modelAssetId = sourceState.modelAssetId;
@@ -384,7 +396,8 @@ class MovieAssetManager extends EventEmitter {
                     assetId: item.assetId,
                     transform: {
                         ...item.transform,
-                        rotation: {...item.transform.rotation}
+                        rotation: {...item.transform.rotation},
+                        scale: cloneScale(item.transform.scale)
                     }
                 }));
                 if (sourceState.mode === 'model') {
@@ -802,6 +815,7 @@ class MovieAssetManager extends EventEmitter {
         return {
             rotation: {...state.rotation},
             rotationOrder: state.rotationOrder,
+            scale: cloneScale(state.scale),
             size: target.size,
             worldX: state.worldX,
             worldY: state.worldY,
@@ -866,7 +880,8 @@ class MovieAssetManager extends EventEmitter {
                 sourceObject: record.object,
                 transform: {
                     ...item.transform,
-                    rotation: {...item.transform.rotation}
+                    rotation: {...item.transform.rotation},
+                    scale: cloneScale(item.transform.scale)
                 }
             };
         });
@@ -893,7 +908,8 @@ class MovieAssetManager extends EventEmitter {
                     assetId: item.assetId,
                     transform: {
                         ...item.transform,
-                        rotation: {...item.transform.rotation}
+                        rotation: {...item.transform.rotation},
+                        scale: cloneScale(item.transform.scale)
                     }
                 }));
                 const loadedItems = await Promise.all(sceneItems.map(async item => {
@@ -1103,6 +1119,7 @@ class MovieAssetManager extends EventEmitter {
                 renderVersion: 0,
                 rotation: {x: 0, y: 0, z: 90 - (target.direction || 90)},
                 rotationOrder: 'XYZ',
+                scale: {x: 1, y: 1, z: 1},
                 requestedMode: 'costume',
                 skinId: null,
                 textQueue: [],
@@ -1196,6 +1213,18 @@ class MovieAssetManager extends EventEmitter {
         state.rotation.z = toNumber(z, state.rotation.z);
         target.direction = 90 - state.rotation.z;
         this.refreshTargetRotation(target);
+        this.runtime.requestTargetsUpdate(target);
+    }
+
+    setTargetScale (target, x, y, z) {
+        if (!target || target.isStage) return;
+        const state = this.getTargetState(target);
+        state.scale = {
+            x: normalizeScale(x, state.scale.x),
+            y: normalizeScale(y, state.scale.y),
+            z: normalizeScale(z, state.scale.z)
+        };
+        this.rerenderTargetModel(target);
         this.runtime.requestTargetsUpdate(target);
     }
 
@@ -1813,19 +1842,24 @@ class MovieAssetManager extends EventEmitter {
                     model: model.name,
                     transform: {
                         ...item.transform,
-                        rotation: {...item.transform.rotation}
+                        rotation: {...item.transform.rotation},
+                        scale: cloneScale(item.transform.scale)
                     }
                 };
             }).filter(Boolean) : [];
             const selectedModel = modelScene.length === 1 ? modelScene[0].model : null;
             const isDefault = state.worldZ === DEFAULT_DEPTH && state.rotation.x === 0 && state.rotation.y === 0 &&
-                state.rotationOrder === 'XYZ' && !state.ignoreCamera && !modelScene.length;
+                state.rotationOrder === 'XYZ' && !state.ignoreCamera &&
+                normalizeScale(state.scale && state.scale.x) === 1 &&
+                normalizeScale(state.scale && state.scale.y) === 1 &&
+                normalizeScale(state.scale && state.scale.z) === 1 && !modelScene.length;
             if (isDefault) return;
             const serializedTarget = serializedTargets[index];
             if (!serializedTarget) return;
             serializedTarget[TRANSFORM_PROJECT_KEY] = {
                 rotation: {...state.rotation},
                 rotationOrder: state.rotationOrder,
+                scale: cloneScale(state.scale),
                 scene: modelScene,
                 ignoreCamera: state.ignoreCamera,
                 z: state.worldZ,
@@ -1864,6 +1898,7 @@ class MovieAssetManager extends EventEmitter {
                 y: toNumber(transform.rotation && transform.rotation.y),
                 z: toNumber(transform.rotation && transform.rotation.z, 90 - target.direction)
             };
+            state.scale = cloneScale(transform.scale);
             state.rotationOrder = normalizeRotationOrder(transform.rotationOrder);
             target.direction = 90 - state.rotation.z;
             this.applyProjection(target);
@@ -1881,6 +1916,7 @@ class MovieAssetManager extends EventEmitter {
                                 z: toNumber(savedTransform.rotation && savedTransform.rotation.z)
                             },
                             rotationOrder: normalizeRotationOrder(savedTransform.rotationOrder),
+                            scale: cloneScale(savedTransform.scale),
                             size: Math.max(0, toNumber(savedTransform.size, 100)),
                             worldX: toNumber(savedTransform.worldX),
                             worldY: toNumber(savedTransform.worldY),

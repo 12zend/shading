@@ -31,6 +31,13 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="motion_gotoxyz_nocamera"');
     });
 
+    test('offers per-axis model scale controls', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="motion_setscale"');
+        expect(toolbox).toContain('<field name="NUM">1</field>');
+    });
+
     test('offers the rendering frame controls and MP4 export block', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 

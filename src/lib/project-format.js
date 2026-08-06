@@ -39,6 +39,7 @@ const MOVIE_3D_BLOCKS = [
     'motion_setfov',
     'motion_setrotation',
     'motion_setrotationorder',
+    'motion_setscale',
     'motion_setz'
 ];
 
@@ -170,7 +171,8 @@ const getRuntimeMovieProjectFeatures = runtime => {
     if (movieAssetManager && movieAssetManager.targetStates instanceof Map) {
         for (const state of movieAssetManager.targetStates.values()) {
             if (state.worldZ !== 480 || state.rotation.x !== 0 || state.rotation.y !== 0 ||
-                state.rotationOrder !== 'XYZ') {
+                state.rotationOrder !== 'XYZ' ||
+                (state.scale && (state.scale.x !== 1 || state.scale.y !== 1 || state.scale.z !== 1))) {
                 features.add('3d-engine');
                 break;
             }

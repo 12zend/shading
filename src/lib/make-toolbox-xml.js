@@ -50,6 +50,11 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
             <value name="Y"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
             <value name="Z"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
         </block>
+        <block type="motion_setscale">
+            <value name="X"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+        </block>
         <block type="motion_changerotationby">
             <value name="X"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
             <value name="Y"><shadow type="math_number"><field name="NUM">15</field></shadow></value>

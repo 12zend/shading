@@ -266,6 +266,14 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.motion_setscale = {
+        init: function () {
+            this.jsonInit(motionStatement('set scale to x: %1 y: %2 z: %3', [
+                numberInput('X'), numberInput('Y'), numberInput('Z')
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.motion_changerotationby = {
         init: function () {
             this.jsonInit(motionStatement('change rotation by x: %1 y: %2 z: %3', [

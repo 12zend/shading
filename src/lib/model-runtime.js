@@ -189,6 +189,11 @@ const verticalFOVFromFocalLength = (focalLength, height) => (
     2 * Math.atan((Math.max(1, height) / 2) / Math.max(0.001, focalLength)) * (180 / Math.PI)
 );
 
+const modelScale = value => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, number) : 1;
+};
+
 const worldToCamera = (position, camera) => {
     const result = new THREE.Vector3(
         position.x - camera.position.x,
@@ -353,7 +358,12 @@ class ModelRenderer {
                 transform.rotationOrder
             ));
             const scale = Math.max(0, Number(transform.size) || 0) / 100;
-            object.scale.setScalar(scale);
+            const transformScale = transform.scale || {};
+            object.scale.set(
+                scale * modelScale(transformScale.x),
+                scale * modelScale(transformScale.y),
+                scale * modelScale(transformScale.z)
+            );
             this.scene.add(object);
             return object;
         });

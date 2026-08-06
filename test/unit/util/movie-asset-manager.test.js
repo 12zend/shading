@@ -262,6 +262,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.setTargetPosition = jest.fn();
         manager.setTargetPositionWithoutCamera = jest.fn();
         manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
         manager.setCameraPosition = jest.fn();
         manager.setFOV = jest.fn();
         manager.installPrimitives();
@@ -269,14 +270,71 @@ describe('MovieAssetManager rendering performance', () => {
         manager.runtime._primitives.motion_gotoxyz({X: 12, Y: -8, Z: 720}, {target});
         manager.runtime._primitives.motion_gotoxyz_nocamera({X: 20, Y: -10, Z: 300}, {target});
         manager.runtime._primitives.motion_setrotation({X: 10, Y: 20, Z: 30}, {target});
+        manager.runtime._primitives.motion_setscale({X: 2, Y: 0.5, Z: 3}, {target});
         manager.runtime._primitives.motion_setcamerato({X: 1, Y: 2, Z: 3});
         manager.runtime._primitives.motion_setfov({FOV: 60});
 
         expect(manager.setTargetPosition).toHaveBeenCalledWith(target, 12, -8, 720);
         expect(manager.setTargetPositionWithoutCamera).toHaveBeenCalledWith(target, 20, -10, 300);
         expect(manager.setTargetRotation).toHaveBeenCalledWith(target, 10, 20, 30);
+        expect(manager.setTargetScale).toHaveBeenCalledWith(target, 2, 0.5, 3);
         expect(manager.setCameraPosition).toHaveBeenCalledWith(1, 2, 3);
         expect(manager.setFOV).toHaveBeenCalledWith(60);
+    });
+
+    test('captures per-axis scale in a model scene snapshot', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.models.set(target.id, [{assetId: 'cube', name: 'Cube'}]);
+        manager.queueModelSceneRender = jest.fn(() => Promise.resolve());
+
+        manager.setTargetScale(target, 2, 0.5, 3);
+        manager.renderModelToScene(target, 'Cube');
+
+        expect(manager.getTargetState(target)).toMatchObject({
+            scale: {x: 2, y: 0.5, z: 3}
+        });
+        expect(manager.getTargetState(target).modelScene[0].transform.scale).toEqual({
+            x: 2,
+            y: 0.5,
+            z: 3
+        });
+    });
+
+    test('serializes and restores the current per-axis scale', () => {
+        const manager = makeManager();
+        const target = {
+            ...makeTarget(),
+            getName: () => 'Sprite',
+            isStage: false,
+            x: 0,
+            y: 0
+        };
+        manager.runtime.targets = [target];
+        manager.setTargetScale(target, 2, 0.5, 3);
+
+        const json = {targets: [{}]};
+        manager.serializeTransforms(json);
+        expect(json.targets[0].movie3D.scale).toEqual({x: 2, y: 0.5, z: 3});
+
+        const restoredManager = makeManager();
+        const restoredTarget = {
+            ...target,
+            emitVisualChange: jest.fn()
+        };
+        restoredManager.runtime.targets = [restoredTarget];
+        restoredManager.restoreTransforms([{
+            isStage: false,
+            targetIndex: 0,
+            targetName: 'Sprite',
+            transform: json.targets[0].movie3D
+        }]);
+
+        expect(restoredManager.getTargetState(restoredTarget).scale).toEqual({
+            x: 2,
+            y: 0.5,
+            z: 3
+        });
     });
 
     test('keeps a no-camera position independent from camera projection', () => {
