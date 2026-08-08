@@ -1,9 +1,13 @@
 export default class MockAudioBufferPlayer {
-    constructor (samples, sampleRate) {
-        this.samples = samples;
+    constructor (channelData, sampleRate) {
+        const channels = channelData instanceof Float32Array ? [channelData] : channelData;
+        this.samples = channels[0];
+        this.channelData = channels;
         this.sampleRate = sampleRate;
         this.buffer = {
-            getChannelData: jest.fn(() => samples),
+            numberOfChannels: channels.length,
+            length: channels[0].length,
+            getChannelData: jest.fn(channel => channels[channel]),
             sampleRate: sampleRate
         };
         this.play = jest.fn((trimStart, trimEnd, onUpdate) => {

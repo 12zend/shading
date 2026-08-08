@@ -62,32 +62,37 @@ class AudioEffects {
         this.adjustedTrimEnd = this.adjustedTrimEndSeconds / durationSeconds;
 
         if (window.OfflineAudioContext) {
-            this.audioContext = new window.OfflineAudioContext(1, sampleCount, buffer.sampleRate);
+            this.audioContext = new window.OfflineAudioContext(
+                buffer.numberOfChannels, sampleCount, buffer.sampleRate);
         } else {
             // Need to use webkitOfflineAudioContext, which doesn't support all sample rates.
             // Resample by adjusting sample count to make room and set offline context to desired sample rate.
             const sampleScale = 44100 / buffer.sampleRate;
-            this.audioContext = new window.webkitOfflineAudioContext(1, sampleScale * sampleCount, 44100);
+            this.audioContext = new window.webkitOfflineAudioContext(
+                buffer.numberOfChannels, sampleScale * sampleCount, 44100);
         }
 
         // For the reverse effect we need to manually reverse the data into a new audio buffer
         // to prevent overwriting the original, so that the undo stack works correctly.
         // Doing buffer.reverse() would mutate the original data.
         if (name === effectTypes.REVERSE) {
-            const originalBufferData = buffer.getChannelData(0);
-            const newBuffer = this.audioContext.createBuffer(1, buffer.length, buffer.sampleRate);
-            const newBufferData = newBuffer.getChannelData(0);
+            const newBuffer = this.audioContext.createBuffer(
+                buffer.numberOfChannels, buffer.length, buffer.sampleRate);
             const bufferLength = buffer.length;
 
             const startSamples = Math.floor(this.trimStartSeconds * buffer.sampleRate);
             const endSamples = Math.floor(this.trimEndSeconds * buffer.sampleRate);
-            let counter = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                if (i >= startSamples && i < endSamples) {
-                    newBufferData[i] = originalBufferData[endSamples - counter - 1];
-                    counter++;
-                } else {
-                    newBufferData[i] = originalBufferData[i];
+            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+                const originalBufferData = buffer.getChannelData(channel);
+                const newBufferData = newBuffer.getChannelData(channel);
+                let counter = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    if (i >= startSamples && i < endSamples) {
+                        newBufferData[i] = originalBufferData[endSamples - counter - 1];
+                        counter++;
+                    } else {
+                        newBufferData[i] = originalBufferData[i];
+                    }
                 }
             }
             this.buffer = newBuffer;

@@ -387,15 +387,6 @@ const SoundEditor = props => (
                 />
             </div>
         )}
-        {props.isStereo && (
-            <div className={classNames(styles.alert, styles.stereo)}>
-                <FormattedMessage
-                    defaultMessage="Editing this stereo sound will irreversibly convert it to mono."
-                    description="Message that appears when editing a stereo sound."
-                    id="tw.stereoAlert"
-                />
-            </div>
-        )}
     </div>
 );
 

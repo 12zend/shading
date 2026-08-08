@@ -271,11 +271,6 @@ $border-radius: 0.25rem;
     border-style: solid;
 }
 
-.stereo {
-    background-color: rgba(145, 145, 255, 0.3);
-    border-color: rgb(145, 145, 255)
-}
-
 .too-large {
     background-color: rgba(255, 119, 0, 0.3);
     border-color: rgb(255, 119, 0);

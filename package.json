@@ -32,6 +32,7 @@
     }
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@microbit/microbit-universal-hex": "0.2.2",
     "@turbowarp/jszip": "^3.11.1",
     "@turbowarp/nanolog": "^1.0.1",

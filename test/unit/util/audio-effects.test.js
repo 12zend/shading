@@ -66,6 +66,18 @@ describe('Audio Effects manager', () => {
         const selectionReversed = [1, 2, 6, 5, 4, 3, 7, 8];
         expect(Array.from(reverseSelection.buffer.getChannelData(0))).toEqual(selectionReversed);
     });
+
+    test('reverse effect preserves and reverses every stereo channel', () => {
+        const stereoBuffer = audioContext.createBuffer(2, 4, 44100);
+        stereoBuffer.getChannelData(0).set([1, 2, 3, 4]);
+        stereoBuffer.getChannelData(1).set([5, 6, 7, 8]);
+
+        const reverse = new AudioEffects(stereoBuffer, 'reverse', 0, 1);
+
+        expect(reverse.buffer.numberOfChannels).toEqual(2);
+        expect(Array.from(reverse.buffer.getChannelData(0))).toEqual([4, 3, 2, 1]);
+        expect(Array.from(reverse.buffer.getChannelData(1))).toEqual([8, 7, 6, 5]);
+    });
 });
 
 describe('Effects', () => {

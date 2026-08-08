@@ -10,6 +10,9 @@ import SoundEditorComponent from '../../../src/components/sound-editor/sound-edi
 jest.mock('react-ga');
 jest.mock('../../../src/lib/audio/audio-buffer-player', () => mockAudioBufferPlayer);
 jest.mock('../../../src/lib/audio/audio-effects', () => mockAudioEffects);
+jest.mock('../../../src/lib/audio/audio-encoder', () => ({
+    encodeAudio: jest.fn(channelData => Promise.resolve(new Uint8Array(channelData.length)))
+}));
 
 describe('Sound Editor Container', () => {
     const mockStore = configureStore();
@@ -23,8 +26,9 @@ describe('Sound Editor Container', () => {
         soundIndex = 0;
         soundBuffer = {
             numberOfChannels: 1,
+            length: samples.length,
             sampleRate: 0,
-            getChannelData: jest.fn(() => samples)
+            getChannelData: jest.fn(channel => [samples][channel])
         };
         vm = {
             getSoundBuffer: jest.fn(() => soundBuffer),
@@ -32,7 +36,7 @@ describe('Sound Editor Container', () => {
             updateSoundBuffer: jest.fn(),
             editingTarget: {
                 sprite: {
-                    sounds: [{name: 'first name', id: 'first id'}]
+                    sounds: [{name: 'first name', id: 'first id', dataFormat: 'wav'}]
                 }
             }
         };
@@ -51,6 +55,7 @@ describe('Sound Editor Container', () => {
         expect(componentProps.name).toEqual('first name');
         expect(componentProps.chunkLevels).toEqual([0]);
         expect(mockAudioBufferPlayer.instance.samples).toEqual(samples);
+        expect(mockAudioBufferPlayer.instance.channelData).toEqual([samples]);
         // Initial data
         expect(componentProps.playhead).toEqual(null);
         expect(componentProps.trimStart).toEqual(null);
@@ -293,7 +298,9 @@ describe('Sound Editor Container', () => {
     });
 
     test('isStereo numberOfChannels=2', () => {
+        const rightSamples = new Float32Array([1, 2, 3]);
         soundBuffer.numberOfChannels = 2;
+        soundBuffer.getChannelData = jest.fn(channel => [samples, rightSamples][channel]);
         const wrapper = mountWithIntl(
             <SoundEditor
                 soundIndex={soundIndex}
@@ -302,5 +309,51 @@ describe('Sound Editor Container', () => {
         );
         const component = wrapper.find(SoundEditorComponent);
         expect(component.props().isStereo).toEqual(true);
+        expect(mockAudioBufferPlayer.instance.channelData).toEqual([samples, rightSamples]);
+    });
+
+    test('editing a stereo sound preserves both channels', async () => {
+        const rightSamples = new Float32Array([1, 2, 3]);
+        soundBuffer.numberOfChannels = 2;
+        soundBuffer.getChannelData = jest.fn(channel => [samples, rightSamples][channel]);
+        const wrapper = mountWithIntl(
+            <SoundEditor
+                soundIndex={soundIndex}
+                store={store}
+            />
+        );
+        const component = wrapper.find(SoundEditorComponent);
+        component.props().onReverse();
+        await mockAudioEffects.instance._finishProcessing(soundBuffer);
+
+        expect(mockAudioBufferPlayer.instance.channelData).toEqual([samples, rightSamples]);
+        expect(vm.updateSoundBuffer.mock.calls[0][1].numberOfChannels).toEqual(2);
+    });
+
+    test('editing an MP3 sound stores the result as MP3', async () => {
+        const sound = vm.editingTarget.sprite.sounds[0];
+        sound.dataFormat = 'mp3';
+        const asset = {assetId: 'edited-mp3'};
+        vm.runtime = {
+            storage: {
+                AssetType: {Sound: 'sound'},
+                DataFormat: {MP3: 'mp3', WAV: 'wav'},
+                createAsset: jest.fn(() => asset)
+            }
+        };
+        vm.emitTargetsUpdate = jest.fn();
+        const wrapper = mountWithIntl(
+            <SoundEditor
+                soundIndex={soundIndex}
+                store={store}
+            />
+        );
+        const component = wrapper.find(SoundEditorComponent);
+        component.props().onReverse();
+        await mockAudioEffects.instance._finishProcessing(soundBuffer);
+
+        expect(vm.runtime.storage.createAsset.mock.calls[0][1]).toEqual('mp3');
+        expect(sound.dataFormat).toEqual('mp3');
+        expect(sound.md5).toEqual('edited-mp3.mp3');
     });
 });

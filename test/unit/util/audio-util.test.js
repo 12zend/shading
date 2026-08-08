@@ -2,7 +2,8 @@ import {
     computeRMS,
     computeChunkedRMS,
     downsampleIfNeeded,
-    dropEveryOtherSample
+    dropEveryOtherSample,
+    updateSoundBuffer
 } from '../../../src/lib/audio/audio-util';
 
 describe('computeRMS', () => {
@@ -98,5 +99,43 @@ describe('dropEveryOtherSample', () => {
     test('result sampleRate is given sampleRate / 2', () => {
         const {sampleRate} = dropEveryOtherSample(buffer);
         expect(sampleRate).toEqual(buffer.sampleRate / 2);
+    });
+    test('preserves all channels of a multichannel buffer', () => {
+        const {channelData} = dropEveryOtherSample({
+            channelData: [[1, 0, 2, 0], [3, 0, 4, 0]],
+            sampleRate: 2
+        });
+        expect(channelData).toEqual([
+            new Float32Array([1, 2]),
+            new Float32Array([3, 4])
+        ]);
+    });
+});
+
+describe('updateSoundBuffer', () => {
+    test('stores edited MP3 data as an MP3 asset', () => {
+        const sound = {};
+        const asset = {assetId: 'new-asset'};
+        const storage = {
+            AssetType: {Sound: 'sound'},
+            DataFormat: {MP3: 'mp3', WAV: 'wav'},
+            createAsset: jest.fn(() => asset)
+        };
+        const vm = {
+            editingTarget: {sprite: {sounds: [sound]}},
+            runtime: {storage},
+            updateSoundBuffer: jest.fn(),
+            emitTargetsUpdate: jest.fn()
+        };
+        const audioBuffer = {length: 10, sampleRate: 44100};
+        const encoded = new Uint8Array([1, 2, 3]);
+
+        updateSoundBuffer(vm, 0, audioBuffer, encoded, 'mp3');
+
+        expect(vm.updateSoundBuffer).toHaveBeenCalledWith(0, audioBuffer, null);
+        expect(storage.createAsset).toHaveBeenCalledWith('sound', 'mp3', encoded, null, true);
+        expect(sound.dataFormat).toEqual('mp3');
+        expect(sound.md5).toEqual('new-asset.mp3');
+        expect(vm.emitTargetsUpdate).toHaveBeenCalled();
     });
 });
