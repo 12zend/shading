@@ -1354,7 +1354,6 @@ class MovieAssetManager extends EventEmitter {
                 BITMAP_RESOLUTION
             );
             this.applyBitmap(target, canvas, 'model');
-            this.applyProjection(target);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
             return;
@@ -1392,7 +1391,6 @@ class MovieAssetManager extends EventEmitter {
                     BITMAP_RESOLUTION
                 );
                 this.applyBitmap(target, canvas, 'model');
-                this.applyProjection(target);
                 return;
             }
         });

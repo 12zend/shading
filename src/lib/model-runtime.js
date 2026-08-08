@@ -565,6 +565,14 @@ class ModelRenderer {
         const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
         fillLight.position.set(-4, 1, 2);
         this.scene.add(fillLight);
+
+        // Keep cloned scene objects and their animation mixers alive between frames. A PMX model can have
+        // hundreds of bones, so cloning its hierarchy and rebuilding the mixer for every frame is substantially
+        // more expensive than updating the pose of an existing clone.
+        this.currentObjects = [];
+        this.currentSources = [];
+        this.currentAnimationNames = [];
+        this.animationStates = new WeakMap();
     }
 
     setOutputSize (width, height) {
@@ -574,11 +582,8 @@ class ModelRenderer {
     }
 
     setObject (sourceObject, animationName, frame) {
-        this.clearObjects();
-        this.currentObject = cloneModelObject(sourceObject);
-        this.currentObjects = [this.currentObject];
-        this.scene.add(this.currentObject);
-        this.applyAnimation(this.currentObject, animationName, frame);
+        this.syncObjects([{animationName, frame, sourceObject}]);
+        this.currentObject = this.currentObjects[0];
         return this.currentObject;
     }
 
@@ -588,44 +593,78 @@ class ModelRenderer {
         if (!clip) return;
         const requestedTime = (Math.max(1, Number(frame) || 1) - 1) / MMD_FRAME_RATE;
         const animationTime = Math.min(requestedTime, Math.max(0, clip.duration));
-        const mmdMesh = findSkinnedMesh(object);
-        if (MMDAnimationHelperClass && mmdMesh && mmdMesh.geometry.userData.MMD) {
-            try {
-                const helper = new MMDAnimationHelperClass({pmxAnimation: true, sync: false});
-                helper.add(mmdMesh, {animation: clip, physics: false});
-                const mixer = helper.objects.get(mmdMesh).mixer;
+        let state = this.animationStates.get(object);
+        if (!state) {
+            const mmdMesh = findSkinnedMesh(object);
+            if (MMDAnimationHelperClass && mmdMesh && mmdMesh.geometry.userData.MMD) {
+                try {
+                    const helper = new MMDAnimationHelperClass({pmxAnimation: true, sync: false});
+                    helper.add(mmdMesh, {animation: clip, physics: false});
+                    const mixer = helper.objects.get(mmdMesh).mixer;
+                    const action = mixer.clipAction(clip);
+                    action.setLoop(THREE.LoopOnce, 1);
+                    action.clampWhenFinished = true;
+                    state = {helper, mixer, mmdMesh};
+                } catch (error) {
+                    // Fall through to ordinary skeletal animation if optional MMD metadata is incomplete.
+                }
+            }
+            if (!state) {
+                const mixer = new THREE.AnimationMixer(object);
                 const action = mixer.clipAction(clip);
                 action.setLoop(THREE.LoopOnce, 1);
                 action.clampWhenFinished = true;
-                mixer.setTime(animationTime);
-                helper._animateMesh(mmdMesh, 0);
-                object.updateMatrixWorld(true);
-                this.currentMixers.push(mixer);
-                return;
-            } catch (error) {
-                // Fall through to ordinary skeletal animation if optional MMD metadata is incomplete.
+                action.play();
+                state = {mixer};
             }
+            this.animationStates.set(object, state);
         }
-        const mixer = new THREE.AnimationMixer(object);
-        const action = mixer.clipAction(clip);
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = true;
-        action.play();
-        mixer.setTime(animationTime);
+        state.mixer.setTime(animationTime);
+        if (state.helper) state.helper._animateMesh(state.mmdMesh, 0);
         object.updateMatrixWorld(true);
-        this.currentMixers.push(mixer);
+    }
+
+    removeObject (object) {
+        const animationState = this.animationStates.get(object);
+        if (animationState) {
+            animationState.mixer.stopAllAction();
+            if (animationState.helper) animationState.helper.remove(animationState.mmdMesh);
+            this.animationStates.delete(object);
+        }
+        this.scene.remove(object);
+    }
+
+    syncObjects (sceneItems) {
+        for (let index = 0; index < sceneItems.length; index++) {
+            const item = sceneItems[index];
+            const canReuse = this.currentSources[index] === item.sourceObject &&
+                this.currentAnimationNames[index] === item.animationName;
+            if (!canReuse) {
+                if (this.currentObjects[index]) this.removeObject(this.currentObjects[index]);
+                const object = cloneModelObject(item.sourceObject);
+                this.currentObjects[index] = object;
+                this.currentSources[index] = item.sourceObject;
+                this.currentAnimationNames[index] = item.animationName;
+                this.scene.add(object);
+            }
+            this.applyAnimation(this.currentObjects[index], item.animationName, item.frame);
+        }
+        for (let index = sceneItems.length; index < this.currentObjects.length; index++) {
+            this.removeObject(this.currentObjects[index]);
+        }
+        this.currentObjects.length = sceneItems.length;
+        this.currentSources.length = sceneItems.length;
+        this.currentAnimationNames.length = sceneItems.length;
+        this.currentObject = this.currentObjects.length === 1 ? this.currentObjects[0] : null;
+        return this.currentObjects;
     }
 
     clearObjects () {
-        if (this.currentMixers) this.currentMixers.forEach(mixer => mixer.stopAllAction());
-        this.currentMixers = [];
-        if (this.currentObjects) {
-            this.currentObjects.forEach(object => this.scene.remove(object));
-        } else if (this.currentObject) {
-            this.scene.remove(this.currentObject);
-        }
+        if (this.currentObjects) this.currentObjects.forEach(object => this.removeObject(object));
         this.currentObject = null;
         this.currentObjects = [];
+        this.currentSources = [];
+        this.currentAnimationNames = [];
     }
 
     render (sourceObject, transform, cameraTransform, animationName, frame) {
@@ -661,11 +700,10 @@ class ModelRenderer {
         const width = Math.max(1, stageSize[0]);
         const height = Math.max(1, stageSize[1]);
         this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
-        this.clearObjects();
-        this.currentObjects = sceneItems.map(item => {
-            const object = cloneModelObject(item.sourceObject);
+        this.syncObjects(sceneItems);
+        this.currentObjects.forEach((object, index) => {
+            const item = sceneItems[index];
             const transform = item.transform;
-            this.applyAnimation(object, item.animationName, item.frame);
             object.position.copy(moviePositionToThree({
                 x: transform.worldX,
                 y: transform.worldY,
@@ -682,10 +720,7 @@ class ModelRenderer {
                 scale * modelScale(transformScale.y),
                 scale * modelScale(transformScale.z)
             );
-            this.scene.add(object);
-            return object;
         });
-        this.currentObject = this.currentObjects.length === 1 ? this.currentObjects[0] : null;
 
         this.camera.fov = verticalFOVFromFocalLength(cameraTransform.focalLength, height);
         this.camera.aspect = width / height;

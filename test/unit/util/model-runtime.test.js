@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import {
     DEFAULT_FOCAL_LENGTH,
+    ModelRenderer,
     bindAnimationToMesh,
     cameraLookAt,
     disableFullyTransparentMaterials,
@@ -23,6 +24,56 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('reuses a cloned model hierarchy while only its transform changes', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.canvas = {height: 0, reusable: true, width: 0};
+        renderer.renderer = {
+            render: jest.fn(),
+            setSize: jest.fn((width, height) => {
+                renderer.canvas.width = width;
+                renderer.canvas.height = height;
+            })
+        };
+        renderer.scene = new THREE.Scene();
+        renderer.camera = new THREE.PerspectiveCamera();
+        renderer.currentObjects = [];
+        renderer.currentSources = [];
+        renderer.currentAnimationNames = [];
+        renderer.animationStates = new WeakMap();
+
+        const sourceObject = new THREE.Group();
+        const clone = jest.spyOn(sourceObject, 'clone');
+        const cameraTransform = {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        const makeItem = worldX => ({
+            animationName: '',
+            frame: 1,
+            sourceObject,
+            transform: {
+                rotation: {x: 0, y: 0, z: 0},
+                rotationOrder: 'XYZ',
+                scale: {x: 1, y: 1, z: 1},
+                size: 100,
+                worldX,
+                worldY: 0,
+                worldZ: 480
+            }
+        });
+
+        renderer.renderWorldScene([makeItem(0)], cameraTransform, [480, 360], 2);
+        const firstClone = renderer.currentObjects[0];
+        renderer.renderWorldScene([makeItem(80)], cameraTransform, [480, 360], 2);
+
+        expect(clone).toHaveBeenCalledTimes(1);
+        expect(renderer.currentObjects[0]).toBe(firstClone);
+        expect(renderer.currentObjects[0].position.x).toBe(80);
+        expect(renderer.renderer.render).toHaveBeenCalledTimes(2);
+    });
+
     test('does not render geometry assigned to fully transparent materials', () => {
         const root = new THREE.Group();
         const hiddenMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: true});
