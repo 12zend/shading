@@ -333,6 +333,11 @@ class Tab extends EventTargetShim {
                 from: () => [q("[class^='stop-all_stop-all']")],
                 until: () => []
             },
+            timelineHeader: {
+                element: () => q('[data-movie-timeline-addons]'),
+                from: () => [],
+                until: () => []
+            },
             afterSoundTab: {
                 element: () => q("[class^='react-tabs_react-tabs__tab-list']"),
                 from: () => [q("[class^='react-tabs_react-tabs__tab-list']").children[2]],

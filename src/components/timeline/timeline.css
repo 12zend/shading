@@ -53,6 +53,16 @@
     gap: 0.375rem;
 }
 
+.addon-controls {
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+}
+
+.addon-controls:empty {
+    display: none;
+}
+
 .timecode {
     font-variant-numeric: tabular-nums;
     font-size: 0.75rem;

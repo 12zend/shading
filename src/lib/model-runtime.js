@@ -114,6 +114,19 @@ const countGeometry = object => {
     };
 };
 
+const disableFullyTransparentMaterials = object => {
+    object.traverse(child => {
+        if (!child.material) return;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach(material => {
+            // Three.js still submits transparent materials with zero opacity to the GPU.
+            // They cannot contribute a pixel, so omit their geometry groups from rendering.
+            if (material && material.transparent && material.opacity <= 0) material.visible = false;
+        });
+    });
+    return object;
+};
+
 const exportGLB = async (object, animations) => {
     const {GLTFExporter} = await loadLoaderModules();
     const exporter = new GLTFExporter();
@@ -353,6 +366,7 @@ const loadGLBObject = async data => {
     const gltf = await parseWithCallback(new GLTFLoader(), toArrayBuffer(data));
     gltf.scene.animations = gltf.animations || [];
     restoreMMDBoneHierarchy(gltf.scene);
+    disableFullyTransparentMaterials(gltf.scene);
     return gltf.scene;
 };
 
@@ -708,6 +722,7 @@ export {
     bindAnimationToMesh,
     cameraLookAt,
     convertModelToGLB,
+    disableFullyTransparentMaterials,
     disposeObject,
     focalLengthFromFOV,
     fovFromFocalLength,

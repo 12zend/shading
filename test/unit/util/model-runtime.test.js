@@ -4,6 +4,7 @@ import {
     DEFAULT_FOCAL_LENGTH,
     bindAnimationToMesh,
     cameraLookAt,
+    disableFullyTransparentMaterials,
     focalLengthFromFOV,
     fovFromFocalLength,
     moviePositionToThree,
@@ -22,6 +23,32 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('does not render geometry assigned to fully transparent materials', () => {
+        const root = new THREE.Group();
+        const hiddenMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: true});
+        const visibleMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: false});
+        root.add(
+            new THREE.Mesh(new THREE.BufferGeometry(), hiddenMaterial),
+            new THREE.Mesh(new THREE.BufferGeometry(), visibleMaterial)
+        );
+
+        expect(disableFullyTransparentMaterials(root)).toBe(root);
+
+        expect(hiddenMaterial.visible).toBe(false);
+        expect(visibleMaterial.visible).toBe(true);
+    });
+
+    test('disables only invisible entries in a multi-material mesh', () => {
+        const hiddenMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: true});
+        const visibleMaterial = new THREE.MeshBasicMaterial({opacity: 0.5, transparent: true});
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), [hiddenMaterial, visibleMaterial]);
+
+        disableFullyTransparentMaterials(mesh);
+
+        expect(hiddenMaterial.visible).toBe(false);
+        expect(visibleMaterial.visible).toBe(true);
+    });
+
     test('binds MMD bone tracks to the skinned mesh before GLB export', () => {
         const root = new THREE.Group();
         const mesh = new THREE.SkinnedMesh();

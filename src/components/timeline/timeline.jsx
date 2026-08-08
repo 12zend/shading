@@ -88,7 +88,7 @@ class Timeline extends React.Component {
         const isTimelineTarget = Boolean(
             this.timelineElement && target && this.timelineElement.contains(target)
         );
-        const isTimelineScrubber = isTimelineTarget && tagName === 'input' && target.type === 'range';
+        const isTimelineScrubber = isTimelineTarget && target === this.scrubberElement;
         const isFormControl = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
         const isEditingText = (isFormControl && !isTimelineScrubber) || (target && target.isContentEditable);
 
@@ -323,6 +323,10 @@ class Timeline extends React.Component {
                         <span>{timeline.framerate}{' FPS · frame '}{frame}</span>
                     </div>
                     <div className={styles.headerActions}>
+                        <div
+                            className={styles.addonControls}
+                            data-movie-timeline-addons
+                        />
                         <output
                             aria-live="off"
                             className={styles.timecode}
@@ -352,6 +356,9 @@ class Timeline extends React.Component {
                         type="range"
                         value={timeline.currentTime}
                         onChange={this.handleSeek}
+                        ref={element => {
+                            this.scrubberElement = element;
+                        }}
                     />
                     <div
                         aria-hidden="true"

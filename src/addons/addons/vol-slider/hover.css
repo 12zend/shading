@@ -19,21 +19,45 @@
   right: 0.25rem;
 }
 
-.sa-vol-slider-inner:not(:hover) > .sa-vol-slider-input {
+.sa-vol-slider-inner:not(:hover):not(:focus-within) > .sa-vol-slider-input {
   opacity: 0;
   width: 0;
 }
 
-[dir="ltr"] .sa-vol-slider-inner:not(:hover) > .sa-vol-slider-input {
+[dir="ltr"] .sa-vol-slider-inner:not(:hover):not(:focus-within) > .sa-vol-slider-input {
   margin-left: -3px;
 }
 
-[dir="rtl"] .sa-vol-slider-inner:not(:hover) > .sa-vol-slider-input {
+[dir="rtl"] .sa-vol-slider-inner:not(:hover):not(:focus-within) > .sa-vol-slider-input {
   margin-right: -3px;
 }
 
 .sa-vol-slider-inner:hover {
   z-index: 1;
+}
+
+.sa-vol-slider-inner:focus-within {
+  z-index: 1;
+}
+
+.sa-vol-slider--timeline,
+.sa-vol-slider--timeline .sa-vol-slider-inner {
+  transition: width 0.25s ease;
+}
+
+.sa-vol-slider--timeline:hover,
+.sa-vol-slider--timeline:focus-within {
+  width: 73px;
+}
+
+.sa-vol-slider--timeline .sa-vol-slider-inner {
+  position: static;
+}
+
+[dir="ltr"] .sa-vol-slider--timeline .sa-vol-slider-inner,
+[dir="rtl"] .sa-vol-slider--timeline .sa-vol-slider-inner {
+  right: auto;
+  left: auto;
 }
 
 .pos-container-container,

@@ -52,12 +52,17 @@ describe('Timeline keyboard controls', () => {
     test('space toggles playback while the timeline scrubber is focused', () => {
         const scrubber = {tagName: 'INPUT', type: 'range'};
         instance.timelineElement = {contains: target => target === scrubber};
+        instance.scrubberElement = scrubber;
         const event = makeEvent({key: ' ', code: 'Space', target: scrubber});
 
         instance.handleKeyDown(event);
 
         expect(event.preventDefault).toHaveBeenCalled();
         expect(manager.playTimeline).toHaveBeenCalled();
+    });
+
+    test('provides a timeline header space for add-on controls', () => {
+        expect(component.find('[data-movie-timeline-addons]')).toHaveLength(1);
     });
 
     test('space does not toggle playback while editing text', () => {
@@ -85,6 +90,7 @@ describe('Timeline keyboard controls', () => {
     test('left arrow moves back one frame when the timeline is focused', () => {
         const timelineControl = {tagName: 'INPUT', type: 'range'};
         instance.timelineElement = {contains: target => target === timelineControl};
+        instance.scrubberElement = timelineControl;
         component.setState({
             timeline: Object.assign({}, instance.state.timeline, {currentTime: 1})
         });
@@ -111,6 +117,18 @@ describe('Timeline keyboard controls', () => {
         instance.handleKeyDown(textEvent);
         instance.handleKeyDown(otherButtonEvent);
 
+        expect(manager.seekTimeline).not.toHaveBeenCalled();
+    });
+
+    test('volume slider keeps its native keyboard controls inside the timeline', () => {
+        const volumeSlider = {tagName: 'INPUT', type: 'range'};
+        instance.timelineElement = {contains: target => target === volumeSlider};
+        instance.scrubberElement = {tagName: 'INPUT', type: 'range'};
+        const event = makeEvent({key: 'ArrowRight', keyCode: 39, target: volumeSlider});
+
+        instance.handleKeyDown(event);
+
+        expect(event.preventDefault).not.toHaveBeenCalled();
         expect(manager.seekTimeline).not.toHaveBeenCalled();
     });
 });
