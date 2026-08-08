@@ -39,6 +39,7 @@ class Timeline extends React.Component {
         this.handleRenderingFramesChanged = this.handleRenderingFramesChanged.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handlePlayPause = this.handlePlayPause.bind(this);
+        this.handleStepFrame = this.handleStepFrame.bind(this);
         this.handleStop = this.handleStop.bind(this);
         this.handleSeek = this.handleSeek.bind(this);
         this.handleToggleSettings = this.handleToggleSettings.bind(this);
@@ -75,14 +76,34 @@ class Timeline extends React.Component {
     }
 
     handleKeyDown (event) {
-        if ((event.key !== ' ' && event.code !== 'Space') || event.repeat ||
-            event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+        const isSpace = event.key === ' ' || event.code === 'Space';
+        const isArrowLeft = event.key === 'ArrowLeft' || event.keyCode === 37;
+        const isArrowRight = event.key === 'ArrowRight' || event.keyCode === 39;
+        if (!isSpace && !isArrowLeft && !isArrowRight) return;
+
         const target = event.target;
         const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
-        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' ||
-            (target && target.isContentEditable)) return;
+        const isTimelineTarget = Boolean(
+            this.timelineElement && target && this.timelineElement.contains(target)
+        );
+        const isTimelineScrubber = isTimelineTarget && tagName === 'input' && target.type === 'range';
+        const isFormControl = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+        const isEditingText = (isFormControl && !isTimelineScrubber) || (target && target.isContentEditable);
+
+        if (isSpace) {
+            if (event.repeat || isEditingText) return;
+            event.preventDefault();
+            this.handlePlayPause();
+            return;
+        }
+
+        const hasNoFocusedControl = !target || target === document || target === document.body;
+        if (this.state.timeline.recording || isEditingText ||
+            (!hasNoFocusedControl && !isTimelineTarget)) return;
         event.preventDefault();
-        this.handlePlayPause();
+        this.handleStepFrame(isArrowLeft ? -1 : 1);
     }
 
     handlePlayPause () {
@@ -91,6 +112,14 @@ class Timeline extends React.Component {
         } else {
             this.manager.playTimeline();
         }
+    }
+
+    handleStepFrame (direction) {
+        const timeline = this.state.timeline;
+        const framerate = Math.max(1, Number(timeline.framerate) || 1);
+        const currentFrame = Math.round(timeline.currentTime * framerate);
+        const nextTime = (currentFrame + direction) / framerate;
+        this.manager.seekTimeline(Math.max(0, Math.min(timeline.duration, nextTime)));
     }
 
     handleStop () {
@@ -283,6 +312,9 @@ class Timeline extends React.Component {
             <section
                 aria-label="Timeline"
                 className={styles.timeline}
+                ref={element => {
+                    this.timelineElement = element;
+                }}
             >
                 {this.renderSettings()}
                 <div className={styles.header}>
@@ -365,4 +397,5 @@ Timeline.propTypes = {
     vm: PropTypes.instanceOf(VM).isRequired
 };
 
+export {Timeline};
 export default Timeline;
