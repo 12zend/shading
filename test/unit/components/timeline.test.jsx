@@ -42,9 +42,12 @@ describe('Timeline keyboard controls', () => {
         );
         instance = component.instance();
         manager = {
+            getTimelineSounds: jest.fn(() => []),
             pauseTimeline: jest.fn(),
             playTimeline: jest.fn(),
-            seekTimeline: jest.fn()
+            renderAndExportTimeline: jest.fn(() => Promise.resolve()),
+            seekTimeline: jest.fn(),
+            updateTimelineSettings: jest.fn()
         };
         instance.manager = manager;
     });
@@ -130,5 +133,44 @@ describe('Timeline keyboard controls', () => {
 
         expect(event.preventDefault).not.toHaveBeenCalled();
         expect(manager.seekTimeline).not.toHaveBeenCalled();
+    });
+
+    test('Export MP4 applies settings and renders fresh frames before exporting', async () => {
+        component.setState({
+            draft: {
+                duration: '12',
+                framerate: '24',
+                height: '1080',
+                sound: 'Music',
+                width: '1920'
+            },
+            settingsOpen: true
+        });
+
+        await instance.handleExport();
+
+        expect(manager.updateTimelineSettings).toHaveBeenCalledWith({
+            duration: 12,
+            framerate: 24,
+            height: 1080,
+            sound: 'Music',
+            width: 1920
+        });
+        expect(manager.renderAndExportTimeline).toHaveBeenCalledTimes(1);
+        expect(instance.state.exporting).toBe(false);
+    });
+
+    test('Export MP4 is available without pre-rendered frames', () => {
+        component.setState({
+            draft: Object.assign({}, instance.state.timeline),
+            settingsOpen: true
+        });
+
+        const exportButton = component.find('button').filterWhere(button =>
+            button.text() === 'Export MP4'
+        );
+
+        expect(exportButton).toHaveLength(1);
+        expect(exportButton.prop('disabled')).toBe(false);
     });
 });

@@ -203,6 +203,36 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(9900);
     });
 
+    test('renders fresh frames before exporting the timeline', async () => {
+        const manager = makeTimelineManager();
+        delete manager.emit;
+        manager.renderingFrames = [{old: true}];
+        manager.exportTimeline = jest.fn(() => Promise.resolve('exported'));
+
+        const exportPromise = manager.renderAndExportTimeline();
+
+        expect(manager.renderingFrames).toEqual([]);
+        expect(manager.timeline.recording).toBe(true);
+        expect(manager.exportTimeline).not.toHaveBeenCalled();
+
+        manager.emit('timelineRenderComplete');
+
+        await expect(exportPromise).resolves.toBe('exported');
+        expect(manager.exportTimeline).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not export when timeline rendering is stopped', async () => {
+        const manager = makeTimelineManager();
+        delete manager.emit;
+        manager.exportTimeline = jest.fn(() => Promise.resolve());
+
+        const exportPromise = manager.renderAndExportTimeline();
+        manager.stopTimeline();
+
+        await expect(exportPromise).rejects.toThrow('Rendering was stopped');
+        expect(manager.exportTimeline).not.toHaveBeenCalled();
+    });
+
     test('keeps a world-rendered model fixed to the stage instead of projecting a flat sprite', () => {
         const manager = makeManager();
         const target = makeTarget();

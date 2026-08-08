@@ -495,6 +495,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     stopTimeline () {
+        const cancelledRendering = this.timeline.recording;
         this.timeline.playing = false;
         this.timeline.recording = false;
         this.stopTimelineSounds();
@@ -502,6 +503,7 @@ class MovieAssetManager extends EventEmitter {
         this.setTimelineClock(0, true);
         this.timeline.pendingFrame = true;
         this.emitTimelineChanged();
+        if (cancelledRendering) this.emit('timelineRenderCancelled');
     }
 
     seekTimeline (seconds) {
@@ -543,6 +545,52 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.renderFrameIndex = 0;
         this.setTimelineClock(0, false);
         this.emitTimelineChanged();
+    }
+
+    renderAndExportTimeline () {
+        let cancelled = false;
+        let renderErrorEmitted = false;
+        const rendering = new Promise((resolve, reject) => {
+            const cleanup = () => {
+                // eslint-disable-next-line no-use-before-define
+                this.removeListener('timelineRenderComplete', handleComplete);
+                // eslint-disable-next-line no-use-before-define
+                this.removeListener('timelineRenderCancelled', handleCancelled);
+                // eslint-disable-next-line no-use-before-define
+                this.removeListener('renderError', handleRenderError);
+            };
+            const handleComplete = () => {
+                cleanup();
+                resolve();
+            };
+            const handleCancelled = () => {
+                cancelled = true;
+                cleanup();
+                reject(new Error('Rendering was stopped before the MP4 export completed.'));
+            };
+            const handleRenderError = error => {
+                renderErrorEmitted = true;
+                cleanup();
+                reject(error);
+            };
+
+            this.once('timelineRenderComplete', handleComplete);
+            this.once('timelineRenderCancelled', handleCancelled);
+            this.once('renderError', handleRenderError);
+            try {
+                this.renderTimeline();
+            } catch (error) {
+                cleanup();
+                reject(error);
+            }
+        });
+
+        return rendering
+            .then(() => this.exportTimeline())
+            .catch(error => {
+                if (!cancelled && !renderErrorEmitted) this.emit('renderError', error);
+                throw error;
+            });
     }
 
     getRenderFrameSounds () {

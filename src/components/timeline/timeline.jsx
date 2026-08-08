@@ -51,6 +51,7 @@ class Timeline extends React.Component {
     }
 
     componentDidMount () {
+        this.unmounted = false;
         this.manager = installMovieAssetManager(this.props.vm);
         this.manager.on('timelineChanged', this.handleTimelineChanged);
         this.manager.on('renderingFramesChanged', this.handleRenderingFramesChanged);
@@ -59,6 +60,7 @@ class Timeline extends React.Component {
     }
 
     componentWillUnmount () {
+        this.unmounted = true;
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
@@ -181,10 +183,19 @@ class Timeline extends React.Component {
     }
 
     handleExport () {
+        const settings = this.state.draft || this.state.timeline;
+        this.manager.updateTimelineSettings({
+            duration: Number(settings.duration),
+            framerate: Number(settings.framerate),
+            height: Number(settings.height),
+            sound: settings.sound,
+            width: Number(settings.width)
+        });
         this.setState({exporting: true});
-        this.manager.exportTimeline()
-            .catch(error => this.manager.emit('renderError', error))
-            .then(() => this.setState({exporting: false}));
+        const finish = () => {
+            if (!this.unmounted) this.setState({exporting: false});
+        };
+        return this.manager.renderAndExportTimeline().then(finish, finish);
     }
 
     renderSettings () {
@@ -273,29 +284,33 @@ class Timeline extends React.Component {
                 <div className={styles.settingsActions}>
                     <button
                         className={styles.secondaryButton}
-                        disabled={this.state.timeline.recording || this.state.timeline.frameCount === 0}
+                        disabled={
+                            this.state.timeline.recording ||
+                            this.state.exporting ||
+                            this.state.timeline.frameCount === 0
+                        }
                         type="button"
                         onClick={this.handleClearFrames}
                     >{'Clear frames'}</button>
                     <button
                         className={styles.secondaryButton}
-                        disabled={this.state.timeline.recording}
+                        disabled={this.state.timeline.recording || this.state.exporting}
                         type="button"
                         onClick={this.handleRenderFrames}
                     >{this.state.timeline.recording ? 'Rendering…' : 'Render frames'}</button>
                     <button
                         className={styles.secondaryButton}
                         disabled={
-                            this.state.timeline.frameCount === 0 ||
                             this.state.timeline.recording ||
                             this.state.exporting
                         }
                         type="button"
                         onClick={this.handleExport}
-                    >{this.state.exporting ? 'Exporting…' : 'Export MP4'}</button>
+                    >{this.state.timeline.recording && this.state.exporting ? 'Rendering…' :
+                            (this.state.exporting ? 'Exporting…' : 'Export MP4')}</button>
                     <button
                         className={styles.primaryButton}
-                        disabled={this.state.timeline.recording}
+                        disabled={this.state.timeline.recording || this.state.exporting}
                         type="button"
                         onClick={this.handleSaveSettings}
                     >{'Apply'}</button>
