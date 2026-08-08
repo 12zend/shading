@@ -9,6 +9,8 @@ import {
     moviePositionToThree,
     movieRotationToThreeQuaternion,
     projectPosition,
+    resampleAnimationClip,
+    restoreMMDBoneHierarchy,
     verticalFOVFromFocalLength
 } from '../../../src/lib/model-runtime';
 
@@ -40,6 +42,45 @@ describe('Movie 3D projection', () => {
         const trackMesh = THREE.PropertyBinding.findNode(root, binding.nodeName);
         expect(trackMesh).toBe(mesh);
         expect(trackMesh.skeleton.getBoneByName(binding.objectIndex)).toBe(bone);
+    });
+
+    test('restores MMD root bones beneath the skinned mesh for IK matrix updates', () => {
+        const root = new THREE.Group();
+        const mesh = new THREE.SkinnedMesh();
+        const bone = new THREE.Bone();
+        bone.position.set(1, 2, 3);
+        mesh.geometry.userData.MMD = {bones: []};
+        mesh.bind(new THREE.Skeleton([bone]));
+        root.add(mesh, bone);
+        root.position.set(4, 5, 6);
+        root.updateMatrixWorld(true);
+        const worldPosition = bone.getWorldPosition(new THREE.Vector3());
+
+        expect(restoreMMDBoneHierarchy(root)).toBe(mesh);
+
+        expect(bone.parent).toBe(mesh);
+        expect(bone.getWorldPosition(new THREE.Vector3()).distanceTo(worldPosition)).toBeCloseTo(0);
+    });
+
+    test('samples MMD interpolation at every rendered frame before GLB export', () => {
+        const track = new THREE.VectorKeyframeTrack(
+            '.bones[センター].position',
+            [0, 2 / 30],
+            [0, 0, 0, 1, 0, 0]
+        );
+        track.createInterpolant = () => ({
+            evaluate: time => new Float32Array([time * time, 0, 0])
+        });
+        const clip = new THREE.AnimationClip('motion', 2 / 30, [track]);
+
+        const sampled = resampleAnimationClip(clip);
+
+        expect(sampled.duration).toBeCloseTo(2 / 30);
+        expect(sampled.tracks[0].times[0]).toBeCloseTo(0);
+        expect(sampled.tracks[0].times[1]).toBeCloseTo(1 / 30);
+        expect(sampled.tracks[0].times[2]).toBeCloseTo(2 / 30);
+        expect(sampled.tracks[0].values[3]).toBeCloseTo(1 / 900);
+        expect(sampled.tracks[0].getInterpolation()).toBe(THREE.InterpolateLinear);
     });
 
     test('derives focal length from FOV using half of the stage long side', () => {

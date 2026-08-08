@@ -303,19 +303,40 @@ const convertModelToGLB = async (format, data, mtlData, textures) => {
     }
 };
 
-const loadGLBObject = async data => {
-    const {GLTFLoader} = await loadLoaderModules();
-    const gltf = await parseWithCallback(new GLTFLoader(), toArrayBuffer(data));
-    gltf.scene.animations = gltf.animations || [];
-    return gltf.scene;
-};
-
 const findSkinnedMesh = object => {
     let result = null;
     object.traverse(child => {
         if (!result && child.isSkinnedMesh && child.skeleton) result = child;
     });
     return result;
+};
+
+const restoreMMDBoneHierarchy = object => {
+    const mesh = findSkinnedMesh(object);
+    if (!mesh || !mesh.geometry.userData.MMD) return mesh;
+    const bones = new Set(mesh.skeleton.bones);
+    const rootBones = mesh.skeleton.bones.filter(bone => !bones.has(bone.parent));
+    object.updateMatrixWorld(true);
+    rootBones.forEach(rootBone => {
+        let ancestor = mesh;
+        while (ancestor && ancestor !== rootBone) ancestor = ancestor.parent;
+        if (ancestor !== rootBone && rootBone.parent !== mesh) mesh.attach(rootBone);
+    });
+    object.updateMatrixWorld(true);
+    return mesh;
+};
+
+const resampleAnimationClip = (clip, frameRate = MMD_FRAME_RATE) => {
+    const lastFrame = Math.max(0, Math.round(clip.duration * frameRate));
+    const times = [];
+    for (let frame = 0; frame <= lastFrame; frame++) times.push(frame / frameRate);
+    const tracks = clip.tracks.map(track => {
+        const values = [];
+        const interpolant = track.createInterpolant();
+        times.forEach(time => values.push(...interpolant.evaluate(time)));
+        return new track.constructor(track.name, times, values, THREE.InterpolateLinear);
+    });
+    return new THREE.AnimationClip(clip.name, lastFrame / frameRate, tracks);
 };
 
 const bindAnimationToMesh = (clip, mesh) => {
@@ -325,6 +346,14 @@ const bindAnimationToMesh = (clip, mesh) => {
         if (track.name.startsWith('.')) track.name = `${targetName}${track.name}`;
     });
     return clip;
+};
+
+const loadGLBObject = async data => {
+    const {GLTFLoader} = await loadLoaderModules();
+    const gltf = await parseWithCallback(new GLTFLoader(), toArrayBuffer(data));
+    gltf.scene.animations = gltf.animations || [];
+    restoreMMDBoneHierarchy(gltf.scene);
+    return gltf.scene;
 };
 
 const decodeVPD = (data, mesh, loader) => {
@@ -369,14 +398,14 @@ const makeVPDClip = (data, mesh, loader) => {
 const attachMotionToGLB = async (modelData, motionData, format, requestedName) => {
     const modules = await loadLoaderModules();
     const gltf = await parseWithCallback(new modules.GLTFLoader(), toArrayBuffer(modelData));
-    const mesh = findSkinnedMesh(gltf.scene);
+    const mesh = restoreMMDBoneHierarchy(gltf.scene) || findSkinnedMesh(gltf.scene);
     if (!mesh) throw new Error('VMD/VPD files require a rigged model with bones.');
     const {dispose, loader} = makeMMDLoader(modules);
     try {
         let clip;
         if (format === 'vmd') {
             const vmd = loader._getParser().parseVmd(toArrayBuffer(motionData), true);
-            clip = loader.animationBuilder.build(vmd, mesh);
+            clip = resampleAnimationClip(loader.animationBuilder.build(vmd, mesh));
         } else if (format === 'vpd') {
             clip = makeVPDClip(motionData, mesh, loader);
         } else {
@@ -687,5 +716,7 @@ export {
     movieRotationToThreeQuaternion,
     normalizeFOV,
     projectPosition,
+    resampleAnimationClip,
+    restoreMMDBoneHierarchy,
     verticalFOVFromFocalLength
 };
