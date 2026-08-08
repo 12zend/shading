@@ -31,7 +31,6 @@ class Timeline extends React.Component {
                 height: props.customStageSize.height,
                 playing: false,
                 recording: false,
-                sound: '',
                 width: props.customStageSize.width
             }
         };
@@ -160,7 +159,6 @@ class Timeline extends React.Component {
             duration: Number(draft.duration),
             framerate: Number(draft.framerate),
             height: Number(draft.height),
-            sound: draft.sound,
             width: Number(draft.width)
         });
         this.setState({settingsOpen: false});
@@ -175,7 +173,6 @@ class Timeline extends React.Component {
             duration: Number(this.state.draft.duration),
             framerate: Number(this.state.draft.framerate),
             height: Number(this.state.draft.height),
-            sound: this.state.draft.sound,
             width: Number(this.state.draft.width)
         });
         this.manager.renderTimeline();
@@ -188,7 +185,6 @@ class Timeline extends React.Component {
             duration: Number(settings.duration),
             framerate: Number(settings.framerate),
             height: Number(settings.height),
-            sound: settings.sound,
             width: Number(settings.width)
         });
         this.setState({exporting: true});
@@ -200,7 +196,6 @@ class Timeline extends React.Component {
 
     renderSettings () {
         if (!this.state.settingsOpen || !this.state.draft) return null;
-        const sounds = this.manager.getTimelineSounds();
         return (
             <div className={styles.settingsPanel}>
                 <div className={styles.settingsHeading}>
@@ -261,24 +256,6 @@ class Timeline extends React.Component {
                             value={this.state.draft.duration}
                             onChange={this.handleDraftChange}
                         />
-                    </label>
-                    <label className={styles.soundField}>
-                        <span>{'Audio'}</span>
-                        <select
-                            name="sound"
-                            value={this.state.draft.sound}
-                            onChange={this.handleDraftChange}
-                        >
-                            <option value="">{'No audio'}</option>
-                            {sounds.map(sound => (
-                                <option
-                                    key={sound}
-                                    value={sound}
-                                >
-                                    {sound}
-                                </option>
-                            ))}
-                        </select>
                     </label>
                 </div>
                 <div className={styles.settingsActions}>

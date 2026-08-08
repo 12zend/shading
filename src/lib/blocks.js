@@ -88,6 +88,7 @@ export default function (vm) {
         return menu;
     };
 
+    // Kept for the hidden legacy MP4 export block so older projects remain editable.
     const renderingSoundsMenu = function () {
         if (vm.editingTarget && vm.editingTarget.sprite.sounds.length > 0) {
             return vm.editingTarget.sprite.sounds.map(sound => [sound.name, sound.name]);
@@ -188,12 +189,24 @@ export default function (vm) {
     ScratchBlocks.Blocks.event_renderframe = {
         init: function () {
             this.jsonInit({
-                message0: 'render frame %1',
-                args0: [
-                    {type: 'field_dropdown', name: 'SOUND_MENU', options: renderingSoundsMenu}
-                ],
+                message0: 'render frame',
                 category: ScratchBlocks.Categories.event,
                 extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
+
+    ScratchBlocks.Blocks.sound_playatframe = {
+        init: function () {
+            this.jsonInit({
+                message0: 'play sound at %1 frame: %2',
+                args0: [
+                    {type: 'input_value', name: 'SOUND_MENU'},
+                    {type: 'input_value', name: 'FRAME'}
+                ],
+                inputsInline: true,
+                category: ScratchBlocks.Categories.sound,
+                extensions: ['colours_sounds', 'shape_statement']
             });
         }
     };

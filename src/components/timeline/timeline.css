@@ -114,7 +114,6 @@
 .primary-button:focus,
 .secondary-button:focus,
 .settings-grid input:focus,
-.settings-grid select:focus,
 .scrubber input:focus {
     outline: 2px solid $looks-secondary;
     outline-offset: 2px;
@@ -259,8 +258,7 @@
     font-weight: 600;
 }
 
-.settings-grid input,
-.settings-grid select {
+.settings-grid input {
     width: 100%;
     height: 2rem;
     border: 1px solid $ui-black-transparent;
@@ -270,10 +268,6 @@
     color: $text-primary;
     font: inherit;
     font-size: 0.75rem;
-}
-
-.sound-field {
-    grid-column: 1 / -1;
 }
 
 .settings-actions {

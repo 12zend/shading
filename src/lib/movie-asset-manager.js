@@ -191,6 +191,8 @@ class MovieAssetManager extends EventEmitter {
         this.fontFaces = new Map();
         this.modelObjects = new Map();
         this.renderingFrames = [];
+        this.renderingSoundEvents = [];
+        this.playedTimelineSoundBlocks = new Set();
         this.timelineSoundSources = new Set();
         this.modelRenderer = null;
         const [stageWidth, stageHeight] = this.getStageSize();
@@ -289,6 +291,7 @@ class MovieAssetManager extends EventEmitter {
             args && args.SOUND,
             args && args.FRAMERATE
         );
+        primitives.sound_playatframe = (args, util) => this.playSoundAtFrame(args, util);
 
         const goToXYZ = (args, util) => this.setTargetPosition(
             util.target,
@@ -473,6 +476,7 @@ class MovieAssetManager extends EventEmitter {
 
     playTimeline () {
         if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
+        this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(this.timeline.currentTime, false);
@@ -496,6 +500,7 @@ class MovieAssetManager extends EventEmitter {
 
     stopTimeline () {
         const cancelledRendering = this.timeline.recording;
+        this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
         this.timeline.recording = false;
         this.stopTimelineSounds();
@@ -508,6 +513,7 @@ class MovieAssetManager extends EventEmitter {
 
     seekTimeline (seconds) {
         const wasPlaying = this.timeline.playing;
+        this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(seconds, !wasPlaying);
@@ -521,7 +527,9 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
         this.timeline.framerate = this.normalizeRenderingFramerate(settings.framerate);
         this.timeline.height = Math.max(1, Math.min(4096, Math.round(toNumber(settings.height, this.timeline.height))));
-        this.timeline.sound = String(settings.sound || '');
+        if (Object.prototype.hasOwnProperty.call(settings, 'sound')) {
+            this.timeline.sound = String(settings.sound || '');
+        }
         this.timeline.width = Math.max(1, Math.min(4096, Math.round(toNumber(settings.width, this.timeline.width))));
         this.vm.setFramerate(this.timeline.framerate);
         this.vm.setStageSize(this.timeline.width, this.timeline.height);
@@ -535,6 +543,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     renderTimeline () {
+        this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.clearRenderingFrames();
@@ -614,6 +623,39 @@ class MovieAssetManager extends EventEmitter {
             }
         }
         return selections;
+    }
+
+    playSoundAtFrame (args, util) {
+        if (!this.timeline.playing || !util || !util.target) return;
+        if (!(this.playedTimelineSoundBlocks instanceof Set)) this.playedTimelineSoundBlocks = new Set();
+        if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
+        const requestedFrame = Math.max(0, Math.round(toNumber(args && args.FRAME)));
+        const currentFrame = this.timeline.recording ?
+            this.timeline.renderFrameIndex :
+            Math.round(this.timeline.currentTime * this.timeline.framerate);
+        if (currentFrame !== requestedFrame) return;
+
+        const sound = this.getRenderingSound(util.target, args && args.SOUND_MENU);
+        if (!sound) return;
+        const blockId = util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : `${sound.name}:${requestedFrame}`;
+        const key = `${util.target.id}:${blockId}:${requestedFrame}`;
+        if (this.playedTimelineSoundBlocks.has(key)) return;
+        this.playedTimelineSoundBlocks.add(key);
+
+        if (this.timeline.recording) {
+            this.renderingSoundEvents.push({
+                frame: requestedFrame,
+                pan: toNumber(util.target.soundEffects && util.target.soundEffects.pan),
+                pitch: toNumber(util.target.soundEffects && util.target.soundEffects.pitch),
+                sound,
+                target: util.target,
+                volume: clamp(toNumber(util.target.volume, 100), 0, 100)
+            });
+            return;
+        }
+        const playSound = this.runtime._primitives.sound_play;
+        if (typeof playSound === 'function') playSound({SOUND_MENU: sound.name}, util);
     }
 
     playTimelineSounds (seconds) {
@@ -1093,6 +1135,8 @@ class MovieAssetManager extends EventEmitter {
     clearRenderingFrames () {
         if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
         this.renderingFrames.length = 0;
+        if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
+        this.renderingSoundEvents.length = 0;
         this.emit('renderingFramesChanged', 0);
     }
 
@@ -1103,7 +1147,7 @@ class MovieAssetManager extends EventEmitter {
         return Array.isArray(sounds) ? sounds.find(sound => sound && sound.name === name) || null : null;
     }
 
-    async decodeRenderingSound (sound) {
+    async decodeRenderingSound (sound, preferredAudio) {
         const data = sound && sound.asset && sound.asset.data;
         if (!data) return null;
 
@@ -1119,7 +1163,8 @@ class MovieAssetManager extends EventEmitter {
             }
         }
 
-        let context = audioEngine && audioEngine.audioContext;
+        let context = preferredAudio && preferredAudio.context;
+        if (!context) context = audioEngine && audioEngine.audioContext;
         let ownsContext = false;
         if (!context && typeof window !== 'undefined') {
             const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
@@ -1133,6 +1178,46 @@ class MovieAssetManager extends EventEmitter {
         }
         const buffer = await context.decodeAudioData(copyArrayBuffer(data));
         return {buffer, context, ownsContext};
+    }
+
+    async decodeRenderingAudio (target, requestedSound, framerate) {
+        const clips = [];
+        const legacySound = this.getRenderingSound(target, requestedSound);
+        if (requestedSound && !legacySound) {
+            throw new Error('The selected rendering sound could not be found.');
+        }
+        if (legacySound) {
+            clips.push({
+                frame: 0,
+                pan: 0,
+                pitch: 0,
+                sound: legacySound,
+                volume: 100
+            });
+        }
+        for (const event of this.renderingSoundEvents || []) clips.push(event);
+        if (!clips.length) return null;
+
+        let sharedAudio = null;
+        const decodedClips = [];
+        for (const clip of clips) {
+            const decoded = await this.decodeRenderingSound(clip.sound, sharedAudio);
+            if (!decoded || !decoded.buffer) continue;
+            if (!sharedAudio) sharedAudio = decoded;
+            decodedClips.push({
+                buffer: decoded.buffer,
+                pan: clamp(toNumber(clip.pan), -100, 100) / 100,
+                playbackRate: Math.pow(2, toNumber(clip.pitch) / 120),
+                startTime: Math.max(0, toNumber(clip.frame) / framerate),
+                volume: clamp(toNumber(clip.volume, 100), 0, 100) / 100
+            });
+        }
+        if (!sharedAudio || !decodedClips.length) return null;
+        return {
+            clips: decodedClips,
+            context: sharedAudio.context,
+            ownsContext: sharedAudio.ownsContext
+        };
     }
 
     normalizeRenderingFramerate (value) {
@@ -1186,16 +1271,36 @@ class MovieAssetManager extends EventEmitter {
         const recordingStream = new MediaStream();
         recordingStream.addTrack(videoTrack);
 
-        let audioSource = null;
+        const audioSources = [];
         let audioDestination = null;
         if (audio) {
             if (!audio.context || typeof audio.context.createMediaStreamDestination !== 'function') {
                 throw new Error('This browser cannot add audio to the rendering.');
             }
             audioDestination = audio.context.createMediaStreamDestination();
-            audioSource = audio.context.createBufferSource();
-            audioSource.buffer = audio.buffer;
-            audioSource.connect(audioDestination);
+            for (const clip of audio.clips) {
+                const source = audio.context.createBufferSource();
+                const nodes = [source];
+                source.buffer = clip.buffer;
+                source.playbackRate.value = clip.playbackRate;
+                let output = source;
+                if (typeof audio.context.createStereoPanner === 'function') {
+                    const panNode = audio.context.createStereoPanner();
+                    panNode.pan.value = clip.pan;
+                    output.connect(panNode);
+                    output = panNode;
+                    nodes.push(panNode);
+                }
+                if (typeof audio.context.createGain === 'function') {
+                    const gainNode = audio.context.createGain();
+                    gainNode.gain.value = clip.volume;
+                    output.connect(gainNode);
+                    output = gainNode;
+                    nodes.push(gainNode);
+                }
+                output.connect(audioDestination);
+                audioSources.push({nodes, source, startTime: clip.startTime});
+            }
             const audioTrack = audioDestination.stream.getAudioTracks()[0];
             if (!audioTrack) throw new Error('Could not create an audio stream for the rendering.');
             recordingStream.addTrack(audioTrack);
@@ -1210,13 +1315,15 @@ class MovieAssetManager extends EventEmitter {
         const cleanup = () => {
             if (finished) return;
             finished = true;
-            if (audioSource) {
+            for (const audioSource of audioSources) {
                 try {
-                    audioSource.stop();
+                    audioSource.source.stop();
                 } catch (error) {
                     // The source may not have started if recording setup failed.
                 }
-                if (typeof audioSource.disconnect === 'function') audioSource.disconnect();
+                audioSource.nodes.forEach(node => {
+                    if (typeof node.disconnect === 'function') node.disconnect();
+                });
             }
             if (audioDestination && typeof audioDestination.disconnect === 'function') {
                 audioDestination.disconnect();
@@ -1269,7 +1376,10 @@ class MovieAssetManager extends EventEmitter {
                 await audio.context.resume();
             }
             recorder.start();
-            if (audioSource) audioSource.start();
+            const audioStartTime = audio && audio.context ? audio.context.currentTime : 0;
+            for (const audioSource of audioSources) {
+                audioSource.source.start(audioStartTime + audioSource.startTime);
+            }
 
             const frameDuration = 1000 / framerate;
             const startTime = now();
@@ -1292,19 +1402,16 @@ class MovieAssetManager extends EventEmitter {
             throw new Error('Add at least one rendering frame before exporting.');
         }
 
-        const sound = this.getRenderingSound(target, requestedSound);
-        if (requestedSound && !sound) {
-            throw new Error('The selected rendering sound could not be found.');
-        }
-        const audio = sound ? await this.decodeRenderingSound(sound) : null;
         const framerate = this.normalizeRenderingFramerate(requestedFramerate);
+        const audio = await this.decodeRenderingAudio(target, requestedSound, framerate);
         const blob = await this.encodeRenderingFrames(frames, framerate, audio);
         downloadBlob(RENDERING_FILE_NAME, blob);
         this.emit('renderingExported', {
             blob,
             framerate,
             frameCount: frames.length,
-            sound: sound ? sound.name : ''
+            sound: requestedSound || '',
+            soundCount: audio ? audio.clips.length : 0
         });
         return blob;
     }

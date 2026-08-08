@@ -76,6 +76,8 @@ const makeTimelineManager = () => {
         width: 480
     };
     manager.timelineSoundSources = new Set();
+    manager.playedTimelineSoundBlocks = new Set();
+    manager.renderingSoundEvents = [];
     manager.renderingFrames = [];
     manager.emit = jest.fn();
     return manager;
@@ -93,6 +95,20 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.timeline.height).toBe(360);
         expect(manager.vm.setFramerate).not.toHaveBeenCalled();
         expect(manager.vm.setStageSize).not.toHaveBeenCalled();
+    });
+
+    test('keeps hidden legacy timeline audio when applying the new settings form', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.sound = 'Legacy music';
+
+        manager.updateTimelineSettings({
+            duration: 12,
+            framerate: 24,
+            height: 1080,
+            width: 1920
+        });
+
+        expect(manager.timeline.sound).toBe('Legacy music');
     });
 
     test('starts render frame hats from the selected timeline time', () => {
@@ -155,6 +171,90 @@ describe('MovieAssetManager rendering performance', () => {
         expect(source.start).toHaveBeenCalledWith(0, 2.5);
         expect(gain.gain.value).toBe(0.75);
         expect(gain.connect).toHaveBeenCalledWith(input);
+    });
+
+    test('plays the new sound block only at its selected frame', () => {
+        const manager = makeTimelineManager();
+        const playSound = jest.fn();
+        const sound = {name: 'Beat'};
+        const target = {
+            id: 'main',
+            soundEffects: {pan: 0, pitch: 0},
+            sprite: {sounds: [sound]},
+            volume: 100
+        };
+        const util = {
+            target,
+            thread: {peekStack: () => 'play-at-frame'}
+        };
+        manager.runtime._primitives.sound_play = playSound;
+        manager.timeline.playing = true;
+        manager.timeline.currentTime = 10 / 30;
+
+        manager.playSoundAtFrame({FRAME: 10, SOUND_MENU: 'Beat'}, util);
+        manager.playSoundAtFrame({FRAME: 10, SOUND_MENU: 'Beat'}, util);
+
+        expect(playSound).toHaveBeenCalledTimes(1);
+        expect(playSound).toHaveBeenCalledWith({SOUND_MENU: 'Beat'}, util);
+    });
+
+    test('records frame-based sounds for deterministic export without playing them', () => {
+        const manager = makeTimelineManager();
+        const playSound = jest.fn();
+        const sound = {name: 'Beat'};
+        const target = {
+            id: 'main',
+            soundEffects: {pan: -25, pitch: 120},
+            sprite: {sounds: [sound]},
+            volume: 75
+        };
+        manager.runtime._primitives.sound_play = playSound;
+        manager.timeline.playing = true;
+        manager.timeline.recording = true;
+        manager.timeline.renderFrameIndex = 12;
+
+        manager.playSoundAtFrame({FRAME: 12, SOUND_MENU: 'Beat'}, {
+            target,
+            thread: {peekStack: () => 'play-at-frame'}
+        });
+
+        expect(playSound).not.toHaveBeenCalled();
+        expect(manager.renderingSoundEvents).toEqual([{
+            frame: 12,
+            pan: -25,
+            pitch: 120,
+            sound,
+            target,
+            volume: 75
+        }]);
+    });
+
+    test('turns recorded sound frames into timed export clips', async () => {
+        const manager = makeTimelineManager();
+        const sound = {name: 'Beat'};
+        const buffer = {duration: 2};
+        manager.renderingSoundEvents = [{
+            frame: 12,
+            pan: -25,
+            pitch: 120,
+            sound,
+            volume: 75
+        }];
+        manager.decodeRenderingSound = jest.fn(() => Promise.resolve({
+            buffer,
+            context: {},
+            ownsContext: false
+        }));
+
+        const audio = await manager.decodeRenderingAudio(null, '', 24);
+
+        expect(audio.clips).toEqual([{
+            buffer,
+            pan: -0.25,
+            playbackRate: 2,
+            startTime: 0.5,
+            volume: 0.75
+        }]);
     });
 
     test('restarts and stops the selected sound when seeking and pausing', () => {

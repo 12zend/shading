@@ -15,7 +15,8 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_settextfont',
     'looks_setvideoframeto',
     'looks_switchmodelto',
-    'looks_switchvideoto'
+    'looks_switchvideoto',
+    'sound_playatframe'
 ];
 
 const MOVIE_OPERATOR_BLOCKS = [
@@ -97,6 +98,12 @@ const MOVIE_BLOCK_SET = new Set(MOVIE_ASSET_BLOCKS.concat(
 ));
 const ADVANCED_GRAPHIC_BLOCK_SET = new Set(ADVANCED_GRAPHIC_BLOCKS);
 const ADVANCED_GRAPHIC_EFFECT_SET = new Set(ADVANCED_GRAPHIC_EFFECTS);
+
+const isMovieBlockOpcode = opcode => (
+    MOVIE_BLOCK_SET.has(opcode) ||
+    ADVANCED_GRAPHIC_BLOCK_SET.has(opcode) ||
+    (typeof opcode === 'string' && opcode.startsWith('penfx_'))
+);
 
 const getFieldValue = field => {
     if (Array.isArray(field)) return field[0];
@@ -234,5 +241,6 @@ export {
     getProjectExtension,
     getRuntimeMovieProjectFeatures,
     isMovieProject,
+    isMovieBlockOpcode,
     markMovieProject
 };

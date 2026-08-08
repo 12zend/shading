@@ -42,14 +42,19 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<field name="NUM">1</field>');
     });
 
-    test('moves rendering controls out of Looks and offers the render frame event', () => {
+    test('moves rendering controls out of Looks and offers frame-based events and sound', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 
         expect(toolbox).not.toContain('type="looks_addrenderingframe"');
         expect(toolbox).not.toContain('type="looks_clearrenderingframe"');
         expect(toolbox).not.toContain('type="looks_exportrenderingmp4"');
         expect(toolbox).not.toContain('type="event_whenflagclicked"');
-        expect(toolbox).toContain('type="event_renderframe"');
+        expect(toolbox).toContain('<block type="event_renderframe"/>');
+        expect(toolbox).not.toContain('<block type="event_renderframe">');
+        expect(toolbox).toContain('type="sound_playatframe"');
         expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
+        expect(toolbox.indexOf('type="sound_play"')).toBeLessThan(
+            toolbox.indexOf('type="sound_playatframe"')
+        );
     });
 });

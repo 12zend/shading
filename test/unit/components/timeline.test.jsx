@@ -42,7 +42,6 @@ describe('Timeline keyboard controls', () => {
         );
         instance = component.instance();
         manager = {
-            getTimelineSounds: jest.fn(() => []),
             pauseTimeline: jest.fn(),
             playTimeline: jest.fn(),
             renderAndExportTimeline: jest.fn(() => Promise.resolve()),
@@ -141,7 +140,6 @@ describe('Timeline keyboard controls', () => {
                 duration: '12',
                 framerate: '24',
                 height: '1080',
-                sound: 'Music',
                 width: '1920'
             },
             settingsOpen: true
@@ -153,7 +151,6 @@ describe('Timeline keyboard controls', () => {
             duration: 12,
             framerate: 24,
             height: 1080,
-            sound: 'Music',
             width: 1920
         });
         expect(manager.renderAndExportTimeline).toHaveBeenCalledTimes(1);
@@ -172,5 +169,15 @@ describe('Timeline keyboard controls', () => {
 
         expect(exportButton).toHaveLength(1);
         expect(exportButton.prop('disabled')).toBe(false);
+    });
+
+    test('rendering settings do not show the legacy Audio selector', () => {
+        component.setState({
+            draft: Object.assign({}, instance.state.timeline),
+            settingsOpen: true
+        });
+
+        expect(component.text()).not.toContain('Audio');
+        expect(component.find('select')).toHaveLength(0);
     });
 });
