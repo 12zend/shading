@@ -10,6 +10,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const autoprefixer = require('autoprefixer');
 const postcssVars = require('postcss-simple-vars');
 const postcssImport = require('postcss-import');
+const penguinModPaintTheme = require('./scripts/penguinmod-paint-theme-loader').postcssPlugin;
 
 const STATIC_PATH = process.env.STATIC_PATH || '/static';
 const {APP_NAME} = require('./src/lib/brand');
@@ -67,6 +68,10 @@ const base = {
     },
     module: {
         rules: [{
+            test: /node_modules[\\/]scratch-paint[\\/]src[\\/].*\.(jsx?|svg)$/,
+            enforce: 'pre',
+            loader: path.resolve(__dirname, 'scripts/penguinmod-paint-theme-loader.js')
+        }, {
             test: /\.jsx?$/,
             loader: 'babel-loader',
             include: [
@@ -105,6 +110,7 @@ const base = {
                     plugins: function () {
                         return [
                             postcssImport,
+                            penguinModPaintTheme,
                             postcssVars,
                             autoprefixer
                         ];

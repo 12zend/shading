@@ -90,7 +90,7 @@
     "redux-throttle": "0.1.1",
     "scratch-audio": "github:TurboWarp/scratch-audio#develop",
     "scratch-blocks": "github:TurboWarp/scratch-blocks#develop-builds",
-    "scratch-paint": "github:TurboWarp/scratch-paint#develop",
+    "scratch-paint": "github:PenguinMod/PenguinMod-Paint#develop",
     "scratch-render": "github:TurboWarp/scratch-render#develop",
     "scratch-vm": "github:TurboWarp/scratch-vm#develop",
     "style-loader": "^0.23.0",

@@ -1,0 +1,16 @@
+.paint-theme {
+    display: contents;
+}
+
+/*
+ * PenguinMod Paint ships branded cyan SVGs as <img> elements. Hue rotation
+ * preserves neutral pixels while making the colored parts follow Movie's
+ * selected accent. Exclude the multicolor fill-state swatch.
+ */
+.paint-theme img[class*="fixed-tools_"],
+.paint-theme img[class*="mode-tools_"],
+.paint-theme img[class*="color-picker_"],
+.paint-theme img[class*="dropdown_"],
+.paint-theme img[class*="paint-editor_"] {
+    filter: var(--paint-accent-icon-filter, none) var(--paint-filter-icon-gray, none) !important;
+}

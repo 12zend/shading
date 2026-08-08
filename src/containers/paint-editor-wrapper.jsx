@@ -3,6 +3,7 @@ import React from 'react';
 import bindAll from 'lodash.bindall';
 import VM from 'scratch-vm';
 import PaintEditor from '../lib/tw-scratch-paint';
+import styles from './paint-editor-theme.css';
 import {inlineSvgFonts, sanitizeSvg} from '@turbowarp/scratch-svg-renderer';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import {openFontsModal} from '../reducers/modals';
@@ -73,17 +74,19 @@ class PaintEditorWrapper extends React.Component {
         } = this.props;
         const costume = vm.getCostume(selectedCostumeIndex);
         return (
-            <PaintEditor
-                {...componentProps}
-                image={this.props.imageFormat === 'svg' ? sanitizeSvg.sanitizeSvgText(costume) : costume}
-                onUpdateImage={this.handleUpdateImage}
-                onUpdateName={this.handleUpdateName}
-                fontInlineFn={this.fontInlineFn}
-                theme={this.props.theme.isDark() ? 'dark' : 'light'}
-                customFonts={this.state.fonts}
-                width={this.props.customStageSize.width}
-                height={this.props.customStageSize.height}
-            />
+            <div className={styles.paintTheme}>
+                <PaintEditor
+                    {...componentProps}
+                    image={this.props.imageFormat === 'svg' ? sanitizeSvg.sanitizeSvgText(costume) : costume}
+                    onUpdateImage={this.handleUpdateImage}
+                    onUpdateName={this.handleUpdateName}
+                    fontInlineFn={this.fontInlineFn}
+                    theme={this.props.theme.isDark() ? 'dark' : 'light'}
+                    customFonts={this.state.fonts}
+                    width={this.props.customStageSize.width}
+                    height={this.props.customStageSize.height}
+                />
+            </div>
         );
     }
 }
