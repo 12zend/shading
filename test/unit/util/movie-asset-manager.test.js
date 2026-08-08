@@ -109,6 +109,28 @@ describe('MovieAssetManager rendering performance', () => {
         });
 
         expect(manager.timeline.sound).toBe('Legacy music');
+        expect(manager.vm.setStageSize).not.toHaveBeenCalled();
+    });
+
+    test('uses output resolution for render pixels without changing the logical stage size', () => {
+        const manager = makeTimelineManager();
+        const canvas = {height: 360, width: 640};
+        manager.runtime.renderer.canvas = canvas;
+        manager.runtime.renderer.resize = jest.fn((width, height) => {
+            canvas.width = width;
+            canvas.height = height;
+        });
+        manager.timeline.height = 1080;
+        manager.timeline.width = 1920;
+
+        manager.renderTimeline();
+
+        expect(manager.runtime.renderer.resize).toHaveBeenCalledWith(1920, 1080);
+        expect(manager.vm.setStageSize).not.toHaveBeenCalled();
+
+        manager.stopTimeline();
+
+        expect(manager.runtime.renderer.resize).toHaveBeenLastCalledWith(640, 360);
     });
 
     test('starts render frame hats from the selected timeline time', () => {

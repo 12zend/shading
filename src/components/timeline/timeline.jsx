@@ -135,11 +135,7 @@ class Timeline extends React.Component {
         this.setState(state => {
             if (state.settingsOpen) return {settingsOpen: false};
             return {
-                draft: Object.assign({}, state.timeline, {
-                    framerate: this.props.framerate,
-                    height: this.props.customStageSize.height,
-                    width: this.props.customStageSize.width
-                }),
+                draft: Object.assign({}, state.timeline),
                 settingsOpen: true
             };
         });
@@ -201,7 +197,11 @@ class Timeline extends React.Component {
                 <div className={styles.settingsHeading}>
                     <div>
                         <strong>{'Rendering settings'}</strong>
-                        <span>{'Defaults follow Advanced Settings.'}</span>
+                        <span>
+                            {'The stage stays at '}
+                            {this.props.customStageSize.width}{'×'}{this.props.customStageSize.height}
+                            {'; output size only changes image detail.'}
+                        </span>
                     </div>
                     <button
                         aria-label="Close rendering settings"
@@ -212,7 +212,7 @@ class Timeline extends React.Component {
                 </div>
                 <div className={styles.settingsGrid}>
                     <label>
-                        <span>{'Width'}</span>
+                        <span>{'Output width'}</span>
                         <input
                             max="4096"
                             min="1"
@@ -223,7 +223,7 @@ class Timeline extends React.Component {
                         />
                     </label>
                     <label>
-                        <span>{'Height'}</span>
+                        <span>{'Output height'}</span>
                         <input
                             max="4096"
                             min="1"

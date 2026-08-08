@@ -194,6 +194,7 @@ class MovieAssetManager extends EventEmitter {
         this.renderingSoundEvents = [];
         this.playedTimelineSoundBlocks = new Set();
         this.timelineSoundSources = new Set();
+        this.previewRendererSize = null;
         this.modelRenderer = null;
         const [stageWidth, stageHeight] = this.getStageSize();
         this.timeline = {
@@ -442,7 +443,6 @@ class MovieAssetManager extends EventEmitter {
         this.setTimelineClock(0, true);
         if (hasSettings) {
             this.vm.setFramerate(this.timeline.framerate);
-            this.vm.setStageSize(this.timeline.width, this.timeline.height);
         }
         this.emitTimelineChanged();
     }
@@ -502,6 +502,7 @@ class MovieAssetManager extends EventEmitter {
         this.setTimelineClock(this.timeline.currentTime, true);
         this.stopTimelineSounds();
         this.runtime.stopAll();
+        this.restorePreviewRendererSize();
         this.emitTimelineChanged();
     }
 
@@ -512,6 +513,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.recording = false;
         this.stopTimelineSounds();
         this.runtime.stopAll();
+        this.restorePreviewRendererSize();
         this.setTimelineClock(0, true);
         this.timeline.pendingFrame = true;
         this.emitTimelineChanged();
@@ -539,7 +541,6 @@ class MovieAssetManager extends EventEmitter {
         }
         this.timeline.width = Math.max(1, Math.min(4096, Math.round(toNumber(settings.width, this.timeline.width))));
         this.vm.setFramerate(this.timeline.framerate);
-        this.vm.setStageSize(this.timeline.width, this.timeline.height);
         if (this.timeline.currentTime > this.timeline.duration || previousDuration !== this.timeline.duration) {
             this.seekTimeline(Math.min(this.timeline.currentTime, this.timeline.duration));
         } else {
@@ -554,6 +555,7 @@ class MovieAssetManager extends EventEmitter {
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.clearRenderingFrames();
+        this.resizeRendererForTimeline();
         this.timeline.currentTime = 0;
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
@@ -561,6 +563,33 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.renderFrameIndex = 0;
         this.setTimelineClock(0, false);
         this.emitTimelineChanged();
+    }
+
+    getRendererPixelRatio () {
+        return typeof window !== 'undefined' && Number(window.devicePixelRatio) > 0 ?
+            Number(window.devicePixelRatio) : 1;
+    }
+
+    resizeRendererForTimeline () {
+        const renderer = this.runtime.renderer;
+        if (!renderer || !renderer.canvas || typeof renderer.resize !== 'function') return;
+        if (!this.previewRendererSize) {
+            this.previewRendererSize = {
+                height: renderer.canvas.height,
+                width: renderer.canvas.width
+            };
+        }
+        const pixelRatio = this.getRendererPixelRatio();
+        renderer.resize(this.timeline.width / pixelRatio, this.timeline.height / pixelRatio);
+    }
+
+    restorePreviewRendererSize () {
+        const renderer = this.runtime.renderer;
+        const size = this.previewRendererSize;
+        this.previewRendererSize = null;
+        if (!size || !renderer || typeof renderer.resize !== 'function') return;
+        const pixelRatio = this.getRendererPixelRatio();
+        renderer.resize(size.width / pixelRatio, size.height / pixelRatio);
     }
 
     renderAndExportTimeline () {
@@ -596,6 +625,7 @@ class MovieAssetManager extends EventEmitter {
             try {
                 this.renderTimeline();
             } catch (error) {
+                this.restorePreviewRendererSize();
                 cleanup();
                 reject(error);
             }
@@ -863,6 +893,7 @@ class MovieAssetManager extends EventEmitter {
             } catch (error) {
                 this.timeline.recording = false;
                 this.timeline.playing = false;
+                this.restorePreviewRendererSize();
                 this.setTimelineClock(this.timeline.currentTime, true);
                 this.runtime.stopAll();
                 this.emit('renderError', error);
@@ -1204,6 +1235,7 @@ class MovieAssetManager extends EventEmitter {
         if (!renderer || !renderer.canvas) {
             throw new Error('The stage renderer is not ready.');
         }
+        if (this.timeline.recording) this.resizeRendererForTimeline();
         if (typeof renderer.draw === 'function') renderer.draw();
 
         const [stageWidth, stageHeight] = this.getStageSize();

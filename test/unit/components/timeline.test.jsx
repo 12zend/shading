@@ -180,4 +180,19 @@ describe('Timeline keyboard controls', () => {
         expect(component.text()).not.toContain('Audio');
         expect(component.find('select')).toHaveLength(0);
     });
+
+    test('rendering settings preserve output resolution independently from the stage size', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {
+                height: 1080,
+                width: 1920
+            })
+        });
+
+        instance.handleToggleSettings();
+
+        expect(instance.state.draft.height).toBe(1080);
+        expect(instance.state.draft.width).toBe(1920);
+        expect(component.text()).toContain('The stage stays at 480×360');
+    });
 });
