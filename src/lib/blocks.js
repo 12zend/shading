@@ -211,6 +211,21 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.sound_playattime = {
+        init: function () {
+            this.jsonInit({
+                message0: 'play sound at %1 time: %2',
+                args0: [
+                    {type: 'input_value', name: 'SOUND_MENU'},
+                    {type: 'input_value', name: 'TIME'}
+                ],
+                inputsInline: true,
+                category: ScratchBlocks.Categories.sound,
+                extensions: ['colours_sounds', 'shape_statement']
+            });
+        }
+    };
+
     const motionStatement = (message0, args0, inputsInline = true) => ({
         message0,
         args0,

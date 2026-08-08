@@ -291,7 +291,14 @@ class MovieAssetManager extends EventEmitter {
             args && args.SOUND,
             args && args.FRAMERATE
         );
+        const stopAllSounds = primitives.sound_stopallsounds;
+        primitives.sound_stopallsounds = (args, util) => {
+            this.stopTimelineSounds();
+            if (typeof stopAllSounds === 'function') return stopAllSounds(args, util);
+        };
+        // Keep the frame-based block loadable for projects created before the time-based block replaced it.
         primitives.sound_playatframe = (args, util) => this.playSoundAtFrame(args, util);
+        primitives.sound_playattime = (args, util) => this.playSoundAtTime(args, util);
 
         const goToXYZ = (args, util) => this.setTargetPosition(
             util.target,
@@ -656,6 +663,94 @@ class MovieAssetManager extends EventEmitter {
         }
         const playSound = this.runtime._primitives.sound_play;
         if (typeof playSound === 'function') playSound({SOUND_MENU: sound.name}, util);
+    }
+
+    playSoundAtTime (args, util) {
+        if (!util || !util.target) return;
+        if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
+        if (!(this.playedTimelineSoundBlocks instanceof Set)) this.playedTimelineSoundBlocks = new Set();
+
+        const thread = util.thread;
+        const blocks = thread && (thread.blockContainer || util.target.blocks);
+        const topBlock = blocks && typeof blocks.getBlock === 'function' ? blocks.getBlock(thread.topBlock) : null;
+        // Scrubbing a paused timeline evaluates render-frame scripts to refresh the stage. Keep that visual
+        // preview silent while still allowing this block to be clicked and auditioned directly.
+        if (!this.timeline.playing && topBlock && topBlock.opcode === 'event_renderframe') return;
+
+        const sound = this.getRenderingSound(util.target, args && args.SOUND_MENU);
+        if (!sound) return;
+        const requestedTime = Math.max(0, toNumber(args && args.TIME));
+        const blockId = util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : `${sound.name}:${requestedTime}`;
+
+        // A render-frame script runs again on every frame. During timeline playback, let each block start once
+        // so the sound can continue in real time instead of being restarted on every VM step.
+        if (this.timeline.playing) {
+            const key = `${util.target.id}:${blockId}`;
+            if (this.playedTimelineSoundBlocks.has(key)) return;
+            this.playedTimelineSoundBlocks.add(key);
+        }
+
+        if (this.timeline.recording) {
+            this.renderingSoundEvents.push({
+                frame: this.timeline.renderFrameIndex,
+                offset: requestedTime,
+                pan: toNumber(util.target.soundEffects && util.target.soundEffects.pan),
+                pitch: toNumber(util.target.soundEffects && util.target.soundEffects.pitch),
+                sound,
+                target: util.target,
+                volume: clamp(toNumber(util.target.volume, 100), 0, 100)
+            });
+            return;
+        }
+        this.startSoundAtTime(util.target, sound, requestedTime);
+    }
+
+    startSoundAtTime (target, sound, seconds) {
+        const audioEngine = this.runtime.audioEngine;
+        const context = audioEngine && audioEngine.audioContext;
+        const soundBank = target && target.sprite && target.sprite.soundBank;
+        const player = soundBank && typeof soundBank.getSoundPlayer === 'function' ?
+            soundBank.getSoundPlayer(sound.soundId) : null;
+        const buffer = player && player.buffer;
+        if (!context || typeof context.createBufferSource !== 'function' || !buffer) return;
+
+        const offset = Math.max(0, toNumber(seconds));
+        if (Number.isFinite(buffer.duration) && offset >= buffer.duration) return;
+        if (!(this.timelineSoundSources instanceof Set)) this.timelineSoundSources = new Set();
+
+        const source = context.createBufferSource();
+        const nodes = [source];
+        source.buffer = buffer;
+        source.playbackRate.value = Math.pow(2, toNumber(target.soundEffects && target.soundEffects.pitch) / 120);
+        let output = source;
+
+        if (typeof context.createStereoPanner === 'function') {
+            const panNode = context.createStereoPanner();
+            panNode.pan.value = clamp(toNumber(target.soundEffects && target.soundEffects.pan), -100, 100) / 100;
+            output.connect(panNode);
+            output = panNode;
+            nodes.push(panNode);
+        }
+        if (typeof context.createGain === 'function') {
+            const gainNode = context.createGain();
+            gainNode.gain.value = clamp(toNumber(target.volume, 100), 0, 100) / 100;
+            output.connect(gainNode);
+            output = gainNode;
+            nodes.push(gainNode);
+        }
+        output.connect(typeof audioEngine.getInputNode === 'function' ?
+            audioEngine.getInputNode() : audioEngine.inputNode);
+
+        const playback = {nodes, source};
+        source.onended = () => {
+            this.timelineSoundSources.delete(playback);
+            nodes.forEach(node => {
+                if (typeof node.disconnect === 'function') node.disconnect();
+            });
+        };
+        this.timelineSoundSources.add(playback);
+        source.start(0, offset);
     }
 
     playTimelineSounds (seconds) {
@@ -1206,6 +1301,7 @@ class MovieAssetManager extends EventEmitter {
             if (!sharedAudio) sharedAudio = decoded;
             decodedClips.push({
                 buffer: decoded.buffer,
+                offset: Math.max(0, toNumber(clip.offset)),
                 pan: clamp(toNumber(clip.pan), -100, 100) / 100,
                 playbackRate: Math.pow(2, toNumber(clip.pitch) / 120),
                 startTime: Math.max(0, toNumber(clip.frame) / framerate),
@@ -1299,7 +1395,7 @@ class MovieAssetManager extends EventEmitter {
                     nodes.push(gainNode);
                 }
                 output.connect(audioDestination);
-                audioSources.push({nodes, source, startTime: clip.startTime});
+                audioSources.push({nodes, offset: clip.offset, source, startTime: clip.startTime});
             }
             const audioTrack = audioDestination.stream.getAudioTracks()[0];
             if (!audioTrack) throw new Error('Could not create an audio stream for the rendering.');
@@ -1378,7 +1474,7 @@ class MovieAssetManager extends EventEmitter {
             recorder.start();
             const audioStartTime = audio && audio.context ? audio.context.currentTime : 0;
             for (const audioSource of audioSources) {
-                audioSource.source.start(audioStartTime + audioSource.startTime);
+                audioSource.source.start(audioStartTime + audioSource.startTime, audioSource.offset);
             }
 
             const frameDuration = 1000 / framerate;

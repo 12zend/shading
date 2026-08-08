@@ -16,7 +16,8 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_setvideoframeto',
     'looks_switchmodelto',
     'looks_switchvideoto',
-    'sound_playatframe'
+    'sound_playatframe',
+    'sound_playattime'
 ];
 
 const MOVIE_OPERATOR_BLOCKS = [

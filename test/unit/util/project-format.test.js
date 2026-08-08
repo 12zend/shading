@@ -132,7 +132,7 @@ describe('Movie project format', () => {
     test('marks the render frame hat and timeline settings as Movie project data', () => {
         const json = project({
             render: block('event_renderframe'),
-            sound: block('sound_playatframe')
+            sound: block('sound_playattime')
         });
         json.movieTimeline = {duration: 12, framerate: 24, width: 1920, height: 1080};
 

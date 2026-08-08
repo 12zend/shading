@@ -426,14 +426,14 @@ const sound = function (isInitialSetup, isStage, targetId, soundName, colors) {
                 </shadow>
             </value>
         </block>
-        <block id="${targetId}_sound_playatframe" type="sound_playatframe">
+        <block id="${targetId}_sound_playattime" type="sound_playattime">
             <value name="SOUND_MENU">
                 <shadow type="sound_sounds_menu">
                     <field name="SOUND_MENU">${soundName}</field>
                 </shadow>
             </value>
-            <value name="FRAME">
-                <shadow type="math_whole_number">
+            <value name="TIME">
+                <shadow type="math_number">
                     <field name="NUM">0</field>
                 </shadow>
             </value>

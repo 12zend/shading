@@ -173,7 +173,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(gain.connect).toHaveBeenCalledWith(input);
     });
 
-    test('plays the new sound block only at its selected frame', () => {
+    test('keeps the legacy sound block playing only at its selected frame', () => {
         const manager = makeTimelineManager();
         const playSound = jest.fn();
         const sound = {name: 'Beat'};
@@ -196,6 +196,118 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(playSound).toHaveBeenCalledTimes(1);
         expect(playSound).toHaveBeenCalledWith({SOUND_MENU: 'Beat'}, util);
+    });
+
+    test('plays the time-based sound immediately from the selected time', () => {
+        const manager = makeTimelineManager();
+        const source = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            playbackRate: {value: 1},
+            start: jest.fn(),
+            stop: jest.fn()
+        };
+        const gain = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            gain: {value: 1}
+        };
+        const input = {};
+        const sound = {name: 'Beat', soundId: 'beat'};
+        const target = {
+            id: 'main',
+            soundEffects: {pan: 0, pitch: 120},
+            sprite: {
+                soundBank: {getSoundPlayer: jest.fn(() => ({buffer: {duration: 8}}))},
+                sounds: [sound]
+            },
+            volume: 75
+        };
+        manager.runtime.audioEngine = {
+            audioContext: {
+                createBufferSource: jest.fn(() => source),
+                createGain: jest.fn(() => gain)
+            },
+            getInputNode: jest.fn(() => input)
+        };
+
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', TIME: 1.25}, {target});
+
+        expect(source.playbackRate.value).toBe(2);
+        expect(source.start).toHaveBeenCalledWith(0, 1.25);
+        expect(gain.gain.value).toBe(0.75);
+        expect(gain.connect).toHaveBeenCalledWith(input);
+    });
+
+    test('keeps paused timeline scrubbing silent', () => {
+        const manager = makeTimelineManager();
+        manager.startSoundAtTime = jest.fn();
+        const target = {
+            blocks: {
+                getBlock: jest.fn(() => ({opcode: 'event_renderframe'}))
+            },
+            id: 'main',
+            sprite: {sounds: [{name: 'Beat'}]}
+        };
+
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', TIME: 0.5}, {
+            target,
+            thread: {
+                peekStack: () => 'play-at-time',
+                topBlock: 'render-frame-script'
+            }
+        });
+
+        expect(manager.startSoundAtTime).not.toHaveBeenCalled();
+    });
+
+    test('does not restart a time-based sound on every render-frame step', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.playing = true;
+        manager.startSoundAtTime = jest.fn();
+        const target = {
+            id: 'main',
+            sprite: {sounds: [{name: 'Beat'}]}
+        };
+        const util = {
+            target,
+            thread: {peekStack: () => 'play-at-time'}
+        };
+
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', TIME: 0.5}, util);
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', TIME: 0.5}, util);
+
+        expect(manager.startSoundAtTime).toHaveBeenCalledTimes(1);
+        expect(manager.startSoundAtTime).toHaveBeenCalledWith(target, target.sprite.sounds[0], 0.5);
+    });
+
+    test('records the sound offset when rendering a time-based sound', () => {
+        const manager = makeTimelineManager();
+        const sound = {name: 'Beat'};
+        const target = {
+            id: 'main',
+            soundEffects: {pan: -25, pitch: 120},
+            sprite: {sounds: [sound]},
+            volume: 75
+        };
+        manager.timeline.playing = true;
+        manager.timeline.recording = true;
+        manager.timeline.renderFrameIndex = 12;
+
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', TIME: 0.25}, {
+            target,
+            thread: {peekStack: () => 'play-at-time'}
+        });
+
+        expect(manager.renderingSoundEvents).toEqual([{
+            frame: 12,
+            offset: 0.25,
+            pan: -25,
+            pitch: 120,
+            sound,
+            target,
+            volume: 75
+        }]);
     });
 
     test('records frame-based sounds for deterministic export without playing them', () => {
@@ -250,6 +362,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(audio.clips).toEqual([{
             buffer,
+            offset: 0,
             pan: -0.25,
             playbackRate: 2,
             startTime: 0.5,
