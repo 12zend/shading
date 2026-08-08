@@ -243,7 +243,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
     });
 
-    test('sets a one-based model animation frame and waits for the redraw', () => {
+    test('sets a one-based model animation frame without putting the VM into promise-wait mode', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
@@ -255,7 +255,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         const renderResult = manager.runtime._primitives.looks_setmodelframeto({FRAME: 18}, {target});
 
-        expect(renderResult).toBe(modelRender.promise);
+        expect(renderResult).toBeUndefined();
         expect(state.modelFrame).toBe(18);
         expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
     });

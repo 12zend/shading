@@ -275,7 +275,11 @@ class MovieAssetManager extends EventEmitter {
         };
         // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
         primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
-        primitives.looks_setmodelframeto = (args, util) => this.setModelFrame(util.target, args.FRAME);
+        // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
+        // is not restarted before it reaches a following render-model block.
+        primitives.looks_setmodelframeto = (args, util) => {
+            this.runWithoutWaiting(this.setModelFrame(util.target, args.FRAME));
+        };
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
         primitives.looks_addrenderingframe = () => this.addRenderingFrame();
