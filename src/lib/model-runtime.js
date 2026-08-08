@@ -13,6 +13,17 @@ const MMD_FRAME_RATE = 30;
 const TRANSPARENT_TEXTURE =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mP4z8AAAAMBAQDJ' +
     'Pv/AAAAAAElFTkSuQmCC';
+const TEXTURE_MIME_TYPES = {
+    bmp: 'image/bmp',
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    spa: 'image/bmp',
+    sph: 'image/bmp',
+    tga: 'image/x-tga',
+    webp: 'image/webp'
+};
 
 const normalizeFOV = value => {
     const number = Number(value);
@@ -127,20 +138,63 @@ const exportGLB = async (object, animations) => {
     });
 };
 
-const makeMMDLoader = modules => {
+const normalizeTexturePath = path => {
+    let normalized = String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '');
+    try {
+        normalized = decodeURIComponent(normalized);
+    } catch (error) {
+        // Keep the original path when it contains malformed percent escapes.
+    }
+    return normalized.toLowerCase();
+};
+
+const getTextureMimeType = texture => {
+    if (texture.type) return texture.type;
+    const path = normalizeTexturePath(texture.path);
+    const extension = path.includes('.') ? path.split('.').pop() : '';
+    return TEXTURE_MIME_TYPES[extension] || 'application/octet-stream';
+};
+
+const makeMMDLoader = (modules, textures = []) => {
     const loadingManager = new THREE.LoadingManager();
-    // PMX files only contain references to texture paths. Models remain importable when those optional files
-    // are unavailable; their material colours are retained below.
-    loadingManager.setURLModifier(url => (url.startsWith('data:') ? url : TRANSPARENT_TEXTURE));
-    return new modules.MMDLoader(loadingManager);
+    const textureURLs = [];
+    const texturesByPath = new Map();
+    const texturesByName = new Map();
+    textures.forEach(texture => {
+        const path = normalizeTexturePath(texture.path);
+        if (!path) return;
+        texturesByPath.set(path, texture);
+        const name = path.split('/').pop();
+        if (!texturesByName.has(name)) texturesByName.set(name, []);
+        texturesByName.get(name).push(texture);
+    });
+    loadingManager.setURLModifier(url => {
+        if (url.startsWith('data:')) return url;
+        const path = normalizeTexturePath(url);
+        const nameMatches = texturesByName.get(path.split('/').pop()) || [];
+        const texture = texturesByPath.get(path) || (nameMatches.length === 1 ? nameMatches[0] : null);
+        if (!texture) return TRANSPARENT_TEXTURE;
+        const textureURL = URL.createObjectURL(new Blob([texture.data], {type: getTextureMimeType(texture)}));
+        textureURLs.push(textureURL);
+        return textureURL;
+    });
+    return {
+        dispose: () => textureURLs.forEach(textureURL => URL.revokeObjectURL(textureURL)),
+        loader: new modules.MMDLoader(loadingManager),
+        loadingManager
+    };
 };
 
 const makeGLTFMaterial = material => {
     const color = material && (material.diffuse || material.color);
     const emissive = material && material.emissive;
     return new THREE.MeshStandardMaterial({
+        alphaMap: material && material.alphaMap ? material.alphaMap : null,
         color: color && color.isColor ? color.clone() : new THREE.Color(0xffffff),
         emissive: emissive && emissive.isColor ? emissive.clone() : new THREE.Color(0x000000),
+        map: material && material.map ? material.map : null,
         metalness: 0,
         opacity: material && Number.isFinite(material.opacity) ? material.opacity : 1,
         roughness: 0.8,
@@ -149,17 +203,28 @@ const makeGLTFMaterial = material => {
     });
 };
 
-const makePMXObject = (modules, data) => {
-    const loader = makeMMDLoader(modules);
-    const parsed = loader._getParser().parsePmx(toArrayBuffer(data), true);
-    const mesh = loader.meshBuilder.setResourcePath('').build(parsed, '', null, () => {});
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    mesh.material = Array.isArray(mesh.material) ? materials.map(makeGLTFMaterial) : makeGLTFMaterial(materials[0]);
-    materials.forEach(material => material.dispose());
-    return mesh;
+const makePMXObject = async (modules, data, textures) => {
+    const {dispose, loader, loadingManager} = makeMMDLoader(modules, textures);
+    try {
+        const textureLoading = new Promise((resolve, reject) => {
+            loadingManager.onLoad = resolve;
+            loadingManager.onError = url => reject(new Error(`Could not decode PMX texture: ${url}`));
+        });
+        const parsed = loader._getParser().parsePmx(toArrayBuffer(data), true);
+        const mesh = loader.meshBuilder.build(parsed, '', null, () => {});
+        await textureLoading;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mesh.material = Array.isArray(mesh.material) ?
+            materials.map(makeGLTFMaterial) : makeGLTFMaterial(materials[0]);
+        materials.forEach(material => material.dispose());
+        return {dispose, object: mesh};
+    } catch (error) {
+        dispose();
+        throw error;
+    }
 };
 
-const parseSourceModel = async (format, data, mtlData) => {
+const parseSourceModel = async (format, data, mtlData, textures) => {
     const modules = await loadLoaderModules();
     if (format === 'glb') {
         const gltf = await parseWithCallback(new modules.GLTFLoader(), toArrayBuffer(data));
@@ -188,9 +253,11 @@ const parseSourceModel = async (format, data, mtlData) => {
         };
     }
     if (format === 'pmx') {
+        const pmx = await makePMXObject(modules, data, textures);
         return {
             animations: [],
-            object: makePMXObject(modules, data)
+            dispose: pmx.dispose,
+            object: pmx.object
         };
     }
     throw new Error('Supported model formats are GLB, PMX, FBX, and OBJ/MTL.');
@@ -204,32 +271,36 @@ const unusedAnimationName = (requestedName, animations) => {
     return `${requestedName}${index}`;
 };
 
-const convertModelToGLB = async (format, data, mtlData) => {
-    const parsed = await parseSourceModel(format, data, mtlData);
-    const normalized = normalizeObject(parsed.object);
-    const geometry = countGeometry(normalized.object);
-    const animations = [];
-    parsed.animations.forEach((animation, index) => {
-        animation.name = unusedAnimationName(animation.name || `Animation ${index + 1}`, animations);
-        animations.push(animation);
-    });
-    const glb = await exportGLB(normalized.object, animations);
-    return {
-        activeMotion: animations.length ? animations[0].name : '',
-        animationCount: animations.length,
-        glb,
-        motions: animations.map(animation => ({
-            format,
-            frameCount: Math.max(1, Math.round(animation.duration * MMD_FRAME_RATE) + 1),
-            name: animation.name
-        })),
-        originalSize: {
-            x: normalized.originalSize.x,
-            y: normalized.originalSize.y,
-            z: normalized.originalSize.z
-        },
-        ...geometry
-    };
+const convertModelToGLB = async (format, data, mtlData, textures) => {
+    const parsed = await parseSourceModel(format, data, mtlData, textures);
+    try {
+        const normalized = normalizeObject(parsed.object);
+        const geometry = countGeometry(normalized.object);
+        const animations = [];
+        parsed.animations.forEach((animation, index) => {
+            animation.name = unusedAnimationName(animation.name || `Animation ${index + 1}`, animations);
+            animations.push(animation);
+        });
+        const glb = await exportGLB(normalized.object, animations);
+        return {
+            activeMotion: animations.length ? animations[0].name : '',
+            animationCount: animations.length,
+            glb,
+            motions: animations.map(animation => ({
+                format,
+                frameCount: Math.max(1, Math.round(animation.duration * MMD_FRAME_RATE) + 1),
+                name: animation.name
+            })),
+            originalSize: {
+                x: normalized.originalSize.x,
+                y: normalized.originalSize.y,
+                z: normalized.originalSize.z
+            },
+            ...geometry
+        };
+    } finally {
+        if (parsed.dispose) parsed.dispose();
+    }
 };
 
 const loadGLBObject = async data => {
@@ -291,32 +362,36 @@ const attachMotionToGLB = async (modelData, motionData, format, requestedName) =
     const gltf = await parseWithCallback(new modules.GLTFLoader(), toArrayBuffer(modelData));
     const mesh = findSkinnedMesh(gltf.scene);
     if (!mesh) throw new Error('VMD/VPD files require a rigged model with bones.');
-    const loader = makeMMDLoader(modules);
-    let clip;
-    if (format === 'vmd') {
-        const vmd = loader._getParser().parseVmd(toArrayBuffer(motionData), true);
-        clip = loader.animationBuilder.build(vmd, mesh);
-    } else if (format === 'vpd') {
-        clip = makeVPDClip(motionData, mesh, loader);
-    } else {
-        throw new Error('Supported model motion formats are VMD and VPD.');
-    }
-    if (!clip.tracks.length) throw new Error(`The ${format.toUpperCase()} file does not match this model.`);
-    const animations = gltf.animations || [];
-    clip.name = unusedAnimationName(requestedName || format.toUpperCase(), animations);
-    const nextAnimations = animations.concat(clip);
-    const glb = await exportGLB(gltf.scene, nextAnimations);
-    return {
-        activeMotion: clip.name,
-        animationCount: nextAnimations.length,
-        glb,
-        motion: {
-            format,
-            frameCount: format === 'vpd' ? 1 :
-                Math.max(1, Math.round(clip.duration * MMD_FRAME_RATE) + 1),
-            name: clip.name
+    const {dispose, loader} = makeMMDLoader(modules);
+    try {
+        let clip;
+        if (format === 'vmd') {
+            const vmd = loader._getParser().parseVmd(toArrayBuffer(motionData), true);
+            clip = loader.animationBuilder.build(vmd, mesh);
+        } else if (format === 'vpd') {
+            clip = makeVPDClip(motionData, mesh, loader);
+        } else {
+            throw new Error('Supported model motion formats are VMD and VPD.');
         }
-    };
+        if (!clip.tracks.length) throw new Error(`The ${format.toUpperCase()} file does not match this model.`);
+        const animations = gltf.animations || [];
+        clip.name = unusedAnimationName(requestedName || format.toUpperCase(), animations);
+        const nextAnimations = animations.concat(clip);
+        const glb = await exportGLB(gltf.scene, nextAnimations);
+        return {
+            activeMotion: clip.name,
+            animationCount: nextAnimations.length,
+            glb,
+            motion: {
+                format,
+                frameCount: format === 'vpd' ? 1 :
+                    Math.max(1, Math.round(clip.duration * MMD_FRAME_RATE) + 1),
+                name: clip.name
+            }
+        };
+    } finally {
+        dispose();
+    }
 };
 
 const degreesToEuler = (rotation, order) => new THREE.Euler(

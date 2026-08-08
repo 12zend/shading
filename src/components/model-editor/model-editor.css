@@ -193,6 +193,13 @@
     line-height: 1.45;
 }
 
+.empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
 .empty-state button {
     padding: 0.6rem 1rem;
     border: 0;

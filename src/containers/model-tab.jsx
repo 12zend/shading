@@ -19,13 +19,18 @@ const messages = defineMessages({
         description: 'Button to upload a 3D model asset',
         id: 'movie.model.upload'
     },
+    addModelFolder: {
+        defaultMessage: 'Upload Model Folder',
+        description: 'Button to upload a 3D model together with texture files in its folder',
+        id: 'movie.model.uploadFolder'
+    },
     emptyTitle: {
         defaultMessage: 'Add a 3D model to this sprite',
         description: 'Title shown when a sprite has no model assets',
         id: 'movie.model.emptyTitle'
     },
     emptyDescription: {
-        defaultMessage: 'Upload GLB, PMX, FBX, or OBJ/MTL files. ' +
+        defaultMessage: 'Upload GLB, PMX, FBX, or OBJ/MTL files. For a textured PMX, upload its model folder. ' +
             'Movie keeps each model type and stores a unified GLB asset.',
         description: 'Description shown when a sprite has no model assets',
         id: 'movie.model.emptyDescription'
@@ -68,6 +73,8 @@ class ModelTab extends React.Component {
             'handleSelect',
             'handleUpload',
             'handleUploadClick',
+            'handleUploadFolderClick',
+            'setFolderInput',
             'setFileInput',
             'setMotionFileInput'
         ]);
@@ -176,6 +183,10 @@ class ModelTab extends React.Component {
         this.fileInput.click();
     }
 
+    handleUploadFolderClick () {
+        this.folderInput.click();
+    }
+
     async handleMotionUpload (event) {
         const files = Array.from(event.target.files);
         event.target.value = null;
@@ -210,6 +221,10 @@ class ModelTab extends React.Component {
         this.fileInput = input;
     }
 
+    setFolderInput (input) {
+        this.folderInput = input;
+    }
+
     setMotionFileInput (input) {
         this.motionFileInput = input;
     }
@@ -230,6 +245,10 @@ class ModelTab extends React.Component {
                     title: this.props.intl.formatMessage(messages.addModel),
                     img: fileUploadIcon,
                     onClick: this.handleUploadClick
+                }, {
+                    title: this.props.intl.formatMessage(messages.addModelFolder),
+                    img: fileUploadIcon,
+                    onClick: this.handleUploadFolderClick
                 }]}
                 dragType={DragConstants.MODEL}
                 items={items}
@@ -240,11 +259,19 @@ class ModelTab extends React.Component {
                 onItemClick={this.handleSelect}
             >
                 <input
-                    accept=".glb,.pmx,.fbx,.obj,.mtl,model/gltf-binary"
+                    accept=".glb,.pmx,.fbx,.obj,.mtl,.bmp,.gif,.jpeg,.jpg,.png,.spa,.sph,.tga,.webp,model/gltf-binary"
                     className={styles.fileInput}
                     multiple
                     ref={this.setFileInput}
                     type="file"
+                    onChange={this.handleUpload}
+                />
+                <input
+                    className={styles.fileInput}
+                    multiple
+                    ref={this.setFolderInput}
+                    type="file"
+                    webkitdirectory=""
                     onChange={this.handleUpload}
                 />
                 <input
@@ -323,12 +350,20 @@ class ModelTab extends React.Component {
                         <div className={styles.emptyIcon}>{'◇'}</div>
                         <h2>{this.props.intl.formatMessage(messages.emptyTitle)}</h2>
                         <p>{this.props.intl.formatMessage(messages.emptyDescription)}</p>
-                        <button
-                            disabled={this.state.uploading}
-                            onClick={this.handleUploadClick}
-                        >
-                            {this.props.intl.formatMessage(messages.addModel)}
-                        </button>
+                        <div className={styles.emptyActions}>
+                            <button
+                                disabled={this.state.uploading}
+                                onClick={this.handleUploadClick}
+                            >
+                                {this.props.intl.formatMessage(messages.addModel)}
+                            </button>
+                            <button
+                                disabled={this.state.uploading}
+                                onClick={this.handleUploadFolderClick}
+                            >
+                                {this.props.intl.formatMessage(messages.addModelFolder)}
+                            </button>
+                        </div>
                         {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
                     </div>
                 )}

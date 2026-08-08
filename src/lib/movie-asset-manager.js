@@ -122,6 +122,20 @@ const getExtension = fileName => {
 
 const getName = fileName => fileName.replace(/\.[^.]+$/, '') || 'video';
 
+const MODEL_TEXTURE_FORMATS = ['bmp', 'gif', 'jpeg', 'jpg', 'png', 'spa', 'sph', 'tga', 'webp'];
+
+const getUploadPath = file => String(file.webkitRelativePath || file.name).replace(/\\/g, '/');
+
+const getModelResourcePath = (file, modelFile) => {
+    const path = getUploadPath(file);
+    const modelPath = getUploadPath(modelFile);
+    const separator = modelPath.lastIndexOf('/');
+    if (separator < 0) return path;
+    const modelDirectory = modelPath.slice(0, separator + 1);
+    return path.toLowerCase().startsWith(modelDirectory.toLowerCase()) ?
+        path.slice(modelDirectory.length) : path;
+};
+
 const unusedName = (requestedName, usedNames) => {
     const base = requestedName || 'video';
     const lowerNames = usedNames.map(name => name.toLowerCase());
@@ -780,6 +794,12 @@ class MovieAssetManager extends EventEmitter {
         const supportedFiles = files.filter(file => ['glb', 'pmx', 'fbx', 'obj', 'mtl'].includes(
             getExtension(file.name)
         ));
+        const textureFiles = files.filter(file => MODEL_TEXTURE_FORMATS.includes(getExtension(file.name)));
+        const textureData = new Map();
+        const readTexture = file => {
+            if (!textureData.has(file)) textureData.set(file, readFile(file));
+            return textureData.get(file);
+        };
         const materialFiles = supportedFiles.filter(file => getExtension(file.name) === 'mtl');
         const sourceFiles = supportedFiles.filter(file => getExtension(file.name) !== 'mtl');
         if (!sourceFiles.length) {
@@ -797,7 +817,12 @@ class MovieAssetManager extends EventEmitter {
                     (materialFiles.length === 1 ? materialFiles[0] : null);
                 if (materialFile) mtlData = await readFile(materialFile);
             }
-            const converted = await convertModelToGLB(sourceFormat, data, mtlData);
+            const textures = sourceFormat === 'pmx' ? await Promise.all(textureFiles.map(async textureFile => ({
+                data: await readTexture(textureFile),
+                path: getModelResourcePath(textureFile, file),
+                type: textureFile.type
+            }))) : [];
+            const converted = await convertModelToGLB(sourceFormat, data, mtlData, textures);
             const storage = this.runtime.storage;
             const asset = storage.createAsset(
                 storage.AssetType.Sound,
