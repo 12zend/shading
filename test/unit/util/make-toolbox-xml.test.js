@@ -50,5 +50,6 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_exportrenderingmp4"');
         expect(toolbox).not.toContain('type="event_whenflagclicked"');
         expect(toolbox).toContain('type="event_renderframe"');
+        expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
     });
 });

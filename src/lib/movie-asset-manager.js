@@ -177,6 +177,7 @@ class MovieAssetManager extends EventEmitter {
         this.fontFaces = new Map();
         this.modelObjects = new Map();
         this.renderingFrames = [];
+        this.timelineSoundSources = new Set();
         this.modelRenderer = null;
         const [stageWidth, stageHeight] = this.getStageSize();
         this.timeline = {
@@ -454,10 +455,12 @@ class MovieAssetManager extends EventEmitter {
 
     playTimeline () {
         if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
+        this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(this.timeline.currentTime, false);
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
+        this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
     }
 
@@ -468,6 +471,7 @@ class MovieAssetManager extends EventEmitter {
         }
         this.timeline.playing = false;
         this.setTimelineClock(this.timeline.currentTime, true);
+        this.stopTimelineSounds();
         this.runtime.stopAll();
         this.emitTimelineChanged();
     }
@@ -475,6 +479,7 @@ class MovieAssetManager extends EventEmitter {
     stopTimeline () {
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(0, true);
         this.timeline.pendingFrame = true;
@@ -483,9 +488,11 @@ class MovieAssetManager extends EventEmitter {
 
     seekTimeline (seconds) {
         const wasPlaying = this.timeline.playing;
+        this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(seconds, !wasPlaying);
         this.timeline.pendingFrame = true;
+        if (wasPlaying) this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
     }
 
@@ -508,6 +515,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     renderTimeline () {
+        this.stopTimelineSounds();
         this.runtime.stopAll();
         this.clearRenderingFrames();
         this.timeline.currentTime = 0;
@@ -517,6 +525,102 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.renderFrameIndex = 0;
         this.setTimelineClock(0, false);
         this.emitTimelineChanged();
+    }
+
+    getRenderFrameSounds () {
+        const selections = [];
+        const seen = new Set();
+        for (const target of this.runtime.targets) {
+            if (!target || !target.isOriginal || !target.blocks || !target.sprite) continue;
+            const scriptIds = typeof target.blocks.getScripts === 'function' ? target.blocks.getScripts() : [];
+            for (const scriptId of scriptIds) {
+                const block = typeof target.blocks.getBlock === 'function' ? target.blocks.getBlock(scriptId) : null;
+                if (!block || block.opcode !== 'event_renderframe') continue;
+                const field = block.fields && block.fields.SOUND_MENU;
+                const soundName = Array.isArray(field) ? field[0] :
+                    (field && typeof field === 'object' ? field.value : field);
+                const sound = this.getRenderingSound(target, soundName);
+                if (!sound || !sound.soundId) continue;
+                const key = `${target.id}:${sound.soundId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                selections.push({sound, target});
+            }
+        }
+        return selections;
+    }
+
+    playTimelineSounds (seconds) {
+        if (this.timeline.recording) return;
+        const audioEngine = this.runtime.audioEngine;
+        const context = audioEngine && audioEngine.audioContext;
+        if (!context || typeof context.createBufferSource !== 'function') return;
+        if (!(this.timelineSoundSources instanceof Set)) this.timelineSoundSources = new Set();
+
+        for (const {sound, target} of this.getRenderFrameSounds()) {
+            const soundBank = target.sprite.soundBank;
+            const player = soundBank && typeof soundBank.getSoundPlayer === 'function' ?
+                soundBank.getSoundPlayer(sound.soundId) : null;
+            const buffer = player && player.buffer;
+            if (!buffer) continue;
+
+            const pitch = toNumber(target.soundEffects && target.soundEffects.pitch);
+            const playbackRate = Math.pow(2, pitch / 120);
+            const offset = Math.max(0, toNumber(seconds) * playbackRate);
+            if (Number.isFinite(buffer.duration) && offset >= buffer.duration) continue;
+
+            const source = context.createBufferSource();
+            const nodes = [source];
+            source.buffer = buffer;
+            source.playbackRate.value = playbackRate;
+            let output = source;
+
+            if (typeof context.createStereoPanner === 'function') {
+                const panNode = context.createStereoPanner();
+                panNode.pan.value = clamp(toNumber(target.soundEffects && target.soundEffects.pan), -100, 100) / 100;
+                output.connect(panNode);
+                output = panNode;
+                nodes.push(panNode);
+            }
+            if (typeof context.createGain === 'function') {
+                const gainNode = context.createGain();
+                gainNode.gain.value = clamp(toNumber(target.volume, 100), 0, 100) / 100;
+                output.connect(gainNode);
+                output = gainNode;
+                nodes.push(gainNode);
+            }
+            output.connect(typeof audioEngine.getInputNode === 'function' ?
+                audioEngine.getInputNode() : audioEngine.inputNode);
+
+            const playback = {nodes, source};
+            source.onended = () => {
+                this.timelineSoundSources.delete(playback);
+                nodes.forEach(node => {
+                    if (typeof node.disconnect === 'function') node.disconnect();
+                });
+            };
+            this.timelineSoundSources.add(playback);
+            source.start(0, offset);
+        }
+    }
+
+    stopTimelineSounds () {
+        if (!(this.timelineSoundSources instanceof Set)) {
+            this.timelineSoundSources = new Set();
+            return;
+        }
+        for (const playback of this.timelineSoundSources) {
+            playback.source.onended = null;
+            try {
+                playback.source.stop(0);
+            } catch (error) {
+                // The source may already have ended between timeline ticks.
+            }
+            playback.nodes.forEach(node => {
+                if (typeof node.disconnect === 'function') node.disconnect();
+            });
+        }
+        this.timelineSoundSources.clear();
     }
 
     getTimelineSounds () {

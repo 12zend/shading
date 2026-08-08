@@ -188,7 +188,10 @@ export default function (vm) {
     ScratchBlocks.Blocks.event_renderframe = {
         init: function () {
             this.jsonInit({
-                message0: 'render frame',
+                message0: 'render frame %1',
+                args0: [
+                    {type: 'field_dropdown', name: 'SOUND_MENU', options: renderingSoundsMenu}
+                ],
                 category: ScratchBlocks.Categories.event,
                 extensions: ['colours_event', 'shape_hat']
             });

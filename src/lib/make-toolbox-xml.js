@@ -464,11 +464,13 @@ const sound = function (isInitialSetup, isStage, targetId, soundName, colors) {
     `;
 };
 
-const events = function (isInitialSetup, isStage, targetId, colors) {
+const events = function (isInitialSetup, isStage, targetId, soundName, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_EVENTS}" id="events" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        <block type="event_renderframe"/>
+        <block type="event_renderframe">
+            <field name="SOUND_MENU">${soundName}</field>
+        </block>
         <block type="event_whenkeypressed">
         </block>
         ${isStage ? `
@@ -915,7 +917,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
-    const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, colors.event);
+    const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
     const sensingXML = moveCategory('sensing') || sensing(isInitialSetup, isStage, targetId, colors.sensing);
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);

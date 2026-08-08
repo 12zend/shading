@@ -75,6 +75,7 @@ const makeTimelineManager = () => {
         sound: '',
         width: 480
     };
+    manager.timelineSoundSources = new Set();
     manager.renderingFrames = [];
     manager.emit = jest.fn();
     return manager;
@@ -103,6 +104,72 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(7500);
         expect(manager.runtime.ioDevices.clock._paused).toBe(false);
         expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
+    });
+
+    test('starts the render frame sound at the selected timeline time', () => {
+        const manager = makeTimelineManager();
+        const source = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            playbackRate: {value: 1},
+            start: jest.fn(),
+            stop: jest.fn()
+        };
+        const gain = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            gain: {value: 1}
+        };
+        const input = {};
+        const soundPlayer = {buffer: {duration: 8}};
+        const target = {
+            blocks: {
+                getBlock: jest.fn(() => ({
+                    fields: {SOUND_MENU: {value: 'Music'}},
+                    opcode: 'event_renderframe'
+                })),
+                getScripts: jest.fn(() => ['render'])
+            },
+            id: 'main',
+            isOriginal: true,
+            soundEffects: {pan: 0, pitch: 0},
+            sprite: {
+                soundBank: {getSoundPlayer: jest.fn(() => soundPlayer)},
+                sounds: [{name: 'Music', soundId: 'music'}]
+            },
+            volume: 75
+        };
+        manager.runtime.targets = [target];
+        manager.runtime.audioEngine = {
+            audioContext: {
+                createBufferSource: jest.fn(() => source),
+                createGain: jest.fn(() => gain)
+            },
+            getInputNode: jest.fn(() => input)
+        };
+
+        manager.seekTimeline(2.5);
+        manager.playTimeline();
+
+        expect(source.buffer).toBe(soundPlayer.buffer);
+        expect(source.start).toHaveBeenCalledWith(0, 2.5);
+        expect(gain.gain.value).toBe(0.75);
+        expect(gain.connect).toHaveBeenCalledWith(input);
+    });
+
+    test('restarts and stops the selected sound when seeking and pausing', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.playing = true;
+        manager.playTimelineSounds = jest.fn();
+        manager.stopTimelineSounds = jest.fn();
+
+        manager.seekTimeline(4);
+        expect(manager.stopTimelineSounds).toHaveBeenCalledTimes(1);
+        expect(manager.playTimelineSounds).toHaveBeenCalledWith(4);
+
+        manager.pauseTimeline();
+        expect(manager.stopTimelineSounds).toHaveBeenCalledTimes(2);
+        expect(manager.timeline.playing).toBe(false);
     });
 
     test('pauses the timeline timer without capturing preview playback', () => {
