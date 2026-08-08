@@ -10,7 +10,7 @@
 /* popover is used by gui and paint */
 /* some of these are duplicated over there too; !important makes sure these win */
 :global(.Popover) {
-    color-scheme: light !important;
+    color-scheme: var(--color-scheme) !important;
 }
 :global(.Popover-body) {
     color: $text-primary !important;

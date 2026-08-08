@@ -14,3 +14,26 @@
 .paint-theme img[class*="paint-editor_"] {
     filter: var(--paint-accent-icon-filter, none) var(--paint-filter-icon-gray, none) !important;
 }
+
+/*
+ * Color pickers are rendered into a body-level portal, outside .paint-theme
+ * and the paint editor's [theme] attribute. Use Movie's live theme tokens for
+ * the controls that PenguinMod Paint otherwise leaves at its light defaults.
+ */
+:global(.Popover-body) input[class*="input_input-form"] {
+    color: var(--paint-text-primary, #575e75);
+    background: var(--paint-input-background, #ffffff);
+    border-color: var(--paint-form-border, #e9eef2);
+}
+
+:global(.Popover-body) [class*="color-picker_row-header"] {
+    color: var(--paint-text-primary, #575e75);
+}
+
+:global(.Popover-body) [class*="color-picker_divider"] {
+    border-color: var(--paint-ui-pane-border, #d9d9d9);
+}
+
+:global(.Popover-body) [class*="color-picker_swatch"] {
+    border-color: var(--paint-form-border, #e9eef2);
+}
