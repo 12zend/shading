@@ -104,6 +104,12 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['video-assets']);
     });
 
+    test('marks the atomic video render block as Movie project data', () => {
+        const json = project({video: block('looks_rendervideo')});
+
+        expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
+    });
+
     test('marks model assets and 3D motion blocks as Movie 3D project data', () => {
         const json = project({
             camera: block('motion_setcamerarotation'),

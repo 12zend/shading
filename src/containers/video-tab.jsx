@@ -24,7 +24,7 @@ const messages = defineMessages({
         id: 'movie.video.emptyTitle'
     },
     emptyDescription: {
-        defaultMessage: 'Upload an MP4, WebM, OGV, or MOV file to select frames from Looks blocks.',
+        defaultMessage: 'Upload an MP4, WebM, OGV, or MOV file to render exact frames and stamp them in a scene.',
         description: 'Description shown when a sprite has no video assets',
         id: 'movie.video.emptyDescription'
     },
@@ -32,6 +32,13 @@ const messages = defineMessages({
         defaultMessage: 'Video name',
         description: 'Label for the video name input',
         id: 'movie.video.name'
+    },
+    stampHint: {
+        defaultMessage: 'Use “render video … at frame …”, then Pen’s “stamp”. The render block waits for the ' +
+            'exact frame, so it can be layered over an earlier 3D model stamp. Videos use a 30 fps timeline; ' +
+            'frame 1 is the first frame.',
+        description: 'Instructions for rendering a deterministic video frame as a stamp',
+        id: 'movie.video.stampHint'
     }
 });
 
@@ -225,7 +232,7 @@ class VideoTab extends React.Component {
                             />
                         </div>
                         <div className={styles.hint}>
-                            {'Frames use a 30 fps timeline in Looks blocks. Frame 1 is the first frame.'}
+                            {this.props.intl.formatMessage(messages.stampHint)}
                         </div>
                         {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
                     </div>

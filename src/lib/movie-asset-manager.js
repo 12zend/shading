@@ -190,6 +190,7 @@ class MovieAssetManager extends EventEmitter {
         this.targetStates = new Map();
         this.fontFaces = new Map();
         this.modelObjects = new Map();
+        this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
         this.renderingSoundEvents = [];
         this.playedTimelineSoundBlocks = new Set();
@@ -206,6 +207,7 @@ class MovieAssetManager extends EventEmitter {
             playing: false,
             recording: false,
             sound: '',
+            waitingForVideo: false,
             width: stageWidth
         };
         this.camera = {
@@ -258,8 +260,13 @@ class MovieAssetManager extends EventEmitter {
 
     installPrimitives () {
         const primitives = this.runtime._primitives;
-        // Media decoding is asynchronous, but Looks blocks must not pause the VM while a frame is decoded.
-        // Keep decoding in the background and coalesce rapid frame changes in queueVideoFrame().
+        // Render a named frame atomically. Waiting here guarantees that a following Pen stamp consumes the
+        // requested video frame instead of the sprite's previous costume, text, or model skin.
+        primitives.looks_rendervideo = (args, util) => this.trackBlockingVideoRender(
+            this.renderVideo(util.target, args.VIDEO, args.FRAME)
+        );
+        // Keep the original video controls loadable without changing their scheduling behavior. New projects use
+        // render-video-at-frame so selecting and decoding a stamp source cannot race the following block.
         primitives.looks_switchvideoto = (args, util) => {
             this.runWithoutWaiting(this.switchVideo(util.target, args.VIDEO));
         };
@@ -372,6 +379,22 @@ class MovieAssetManager extends EventEmitter {
         promise.catch(error => this.emit('renderError', error));
     }
 
+    trackBlockingVideoRender (promise) {
+        if (!promise || typeof promise.then !== 'function') return promise;
+        if (!(this.blockingVideoRenders instanceof Set)) this.blockingVideoRenders = new Set();
+        this.blockingVideoRenders.add(promise);
+        const finish = () => this.blockingVideoRenders.delete(promise);
+        promise.then(finish, error => {
+            finish();
+            this.emit('renderError', error);
+        });
+        return promise;
+    }
+
+    hasBlockingVideoRenders () {
+        return this.blockingVideoRenders instanceof Set && this.blockingVideoRenders.size > 0;
+    }
+
     installSerializationHooks () {
         const originalToJSON = this.vm.toJSON.bind(this.vm);
         this.vm.toJSON = (targetId, serializationOptions) => {
@@ -439,6 +462,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.playing = false;
         this.timeline.recording = false;
         this.timeline.sound = String(settings.sound || '');
+        this.timeline.waitingForVideo = false;
         this.timeline.width = Math.max(1, Math.round(toNumber(settings.width, stageWidth)));
         this.setTimelineClock(0, true);
         if (hasSettings) {
@@ -489,6 +513,7 @@ class MovieAssetManager extends EventEmitter {
         this.setTimelineClock(this.timeline.currentTime, false);
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
+        this.timeline.waitingForVideo = false;
         this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
     }
@@ -499,6 +524,7 @@ class MovieAssetManager extends EventEmitter {
             this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
         }
         this.timeline.playing = false;
+        this.timeline.waitingForVideo = false;
         this.setTimelineClock(this.timeline.currentTime, true);
         this.stopTimelineSounds();
         this.runtime.stopAll();
@@ -511,6 +537,7 @@ class MovieAssetManager extends EventEmitter {
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.waitingForVideo = false;
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.restorePreviewRendererSize();
@@ -527,6 +554,7 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.stopAll();
         this.setTimelineClock(seconds, !wasPlaying);
         this.timeline.pendingFrame = true;
+        this.timeline.waitingForVideo = false;
         if (wasPlaying) this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
     }
@@ -561,6 +589,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.playing = true;
         this.timeline.recording = true;
         this.timeline.renderFrameIndex = 0;
+        this.timeline.waitingForVideo = false;
         this.setTimelineClock(0, false);
         this.emitTimelineChanged();
     }
@@ -868,6 +897,14 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleTimelineBeforeExecute () {
+        if (this.timeline.waitingForVideo) {
+            if (this.hasBlockingVideoRenders()) return;
+            // The render-frame thread can now resume after the video block and run its following stamp. Do not
+            // restart the hat or advance the deterministic recording clock until that continuation is captured.
+            this.timeline.waitingForVideo = false;
+            this.timeline.renderedThisStep = true;
+            return;
+        }
         if (!this.timeline.playing && !this.timeline.pendingFrame) return;
         if (this.timeline.recording) {
             this.setTimelineClock(
@@ -887,6 +924,10 @@ class MovieAssetManager extends EventEmitter {
     handleTimelineAfterExecute () {
         if (!this.timeline.renderedThisStep) return;
         this.timeline.renderedThisStep = false;
+        if (this.hasBlockingVideoRenders()) {
+            this.timeline.waitingForVideo = true;
+            return;
+        }
         if (this.timeline.recording) {
             try {
                 this.addRenderingFrame();
@@ -2149,6 +2190,13 @@ class MovieAssetManager extends EventEmitter {
         const video = this.getVideoByName(target, requestedVideo);
         if (!video) return;
         return this.queueVideoFrame(target, video, 1);
+    }
+
+    renderVideo (target, requestedVideo, requestedFrame) {
+        const video = this.getVideoByName(target, requestedVideo);
+        if (!video) return Promise.resolve();
+        const frame = Number(requestedFrame);
+        return this.queueVideoFrame(target, video, Number.isFinite(frame) ? frame : 1) || Promise.resolve();
     }
 
     setVideoFrame (target, requestedFrame) {

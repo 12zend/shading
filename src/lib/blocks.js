@@ -483,6 +483,20 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_rendervideo = {
+        init: function () {
+            this.jsonInit({
+                message0: 'render video %1 at frame %2',
+                args0: [
+                    {type: 'input_value', name: 'VIDEO'},
+                    {type: 'input_value', name: 'FRAME'}
+                ],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
     ScratchBlocks.Blocks.looks_clearscene = {
         init: function () {
             this.jsonInit({

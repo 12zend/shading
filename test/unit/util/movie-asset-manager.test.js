@@ -77,6 +77,7 @@ const makeTimelineManager = () => {
     };
     manager.timelineSoundSources = new Set();
     manager.playedTimelineSoundBlocks = new Set();
+    manager.blockingVideoRenders = new Set();
     manager.renderingSoundEvents = [];
     manager.renderingFrames = [];
     manager.emit = jest.fn();
@@ -820,6 +821,60 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime._primitives.looks_changevideoframeby({FRAME: 1}, util)).toBeUndefined();
         expect(manager.runtime._primitives.looks_settextfont({FONT: 'sans-serif', TEXT: 'hello'}, util))
             .toBeUndefined();
+    });
+
+    test('waits for an exact video frame before a following stamp can run', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const videoRender = deferred();
+        manager.renderVideo = jest.fn(() => videoRender.promise);
+        manager.installPrimitives();
+
+        const renderResult = manager.runtime._primitives.looks_rendervideo({
+            FRAME: 18,
+            VIDEO: 'clip'
+        }, {target});
+
+        expect(renderResult).toBe(videoRender.promise);
+        expect(manager.renderVideo).toHaveBeenCalledWith(target, 'clip', 18);
+    });
+
+    test('captures a timeline frame only after video decoding and the following stamp resume', async () => {
+        const manager = makeTimelineManager();
+        const videoRender = deferred();
+        manager.addRenderingFrame = jest.fn();
+        manager.timeline.playing = true;
+        manager.timeline.recording = true;
+        manager.timeline.renderFrameIndex = 0;
+        manager.timeline.renderedThisStep = true;
+        manager.trackBlockingVideoRender(videoRender.promise);
+
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.timeline.waitingForVideo).toBe(true);
+        expect(manager.timeline.renderFrameIndex).toBe(0);
+
+        videoRender.resolve();
+        await Promise.resolve();
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.runtime.startHats).not.toHaveBeenCalled();
+        expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
+        expect(manager.timeline.renderFrameIndex).toBe(1);
+    });
+
+    test('renders the requested video and frame as one operation', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const video = {assetId: 'video', name: 'clip'};
+        const videoRender = Promise.resolve();
+        manager.videos.set(target.id, [video]);
+        manager.queueVideoFrame = jest.fn(() => videoRender);
+
+        expect(manager.renderVideo(target, 'clip', 24)).toBe(videoRender);
+        expect(manager.queueVideoFrame).toHaveBeenCalledWith(target, video, 24);
     });
 
     test('collapses queued video seeks to the latest requested frame', async () => {

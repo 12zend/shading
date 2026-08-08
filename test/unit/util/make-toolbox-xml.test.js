@@ -28,6 +28,17 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
 
+    test('offers one atomic video-frame render block for reliable stamping', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="looks_rendervideo"');
+        expect(toolbox).toContain('<value name="VIDEO">');
+        expect(toolbox).toContain('<value name="FRAME">');
+        expect(toolbox).not.toContain('type="looks_switchvideoto"');
+        expect(toolbox).not.toContain('type="looks_setvideoframeto"');
+        expect(toolbox).not.toContain('type="looks_changevideoframeby"');
+    });
+
     test('offers both camera-aware and camera-independent 3D go-to blocks', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
