@@ -318,6 +318,15 @@ const findSkinnedMesh = object => {
     return result;
 };
 
+const bindAnimationToMesh = (clip, mesh) => {
+    const targetName = THREE.PropertyBinding.sanitizeNodeName(mesh.name || mesh.uuid);
+    mesh.name = targetName;
+    clip.tracks.forEach(track => {
+        if (track.name.startsWith('.')) track.name = `${targetName}${track.name}`;
+    });
+    return clip;
+};
+
 const decodeVPD = (data, mesh, loader) => {
     const bytes = toArrayBuffer(data);
     const decodings = ['shift-jis', 'utf-8'];
@@ -373,6 +382,7 @@ const attachMotionToGLB = async (modelData, motionData, format, requestedName) =
         } else {
             throw new Error('Supported model motion formats are VMD and VPD.');
         }
+        bindAnimationToMesh(clip, mesh);
         if (!clip.tracks.length) throw new Error(`The ${format.toUpperCase()} file does not match this model.`);
         const animations = gltf.animations || [];
         clip.name = unusedAnimationName(requestedName || format.toUpperCase(), animations);
@@ -666,6 +676,7 @@ export {
     ROTATION_ORDERS,
     ModelRenderer,
     attachMotionToGLB,
+    bindAnimationToMesh,
     cameraLookAt,
     convertModelToGLB,
     disposeObject,

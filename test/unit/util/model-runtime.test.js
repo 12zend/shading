@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import {
     DEFAULT_FOCAL_LENGTH,
+    bindAnimationToMesh,
     cameraLookAt,
     focalLengthFromFOV,
     fovFromFocalLength,
@@ -19,6 +20,28 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('binds MMD bone tracks to the skinned mesh before GLB export', () => {
+        const root = new THREE.Group();
+        const mesh = new THREE.SkinnedMesh();
+        const bone = new THREE.Bone();
+        bone.name = 'センター';
+        mesh.name = 'mesh_0';
+        mesh.add(bone);
+        mesh.bind(new THREE.Skeleton([bone]));
+        root.add(mesh);
+        const clip = new THREE.AnimationClip('motion', 1, [
+            new THREE.VectorKeyframeTrack('.bones[センター].position', [0, 1], [0, 0, 0, 1, 0, 0])
+        ]);
+
+        bindAnimationToMesh(clip, mesh);
+
+        expect(clip.tracks[0].name).toBe('mesh_0.bones[センター].position');
+        const binding = THREE.PropertyBinding.parseTrackName(clip.tracks[0].name);
+        const trackMesh = THREE.PropertyBinding.findNode(root, binding.nodeName);
+        expect(trackMesh).toBe(mesh);
+        expect(trackMesh.skeleton.getBoneByName(binding.objectIndex)).toBe(bone);
+    });
+
     test('derives focal length from FOV using half of the stage long side', () => {
         expect(focalLengthFromFOV(60, 480, 360)).toBeCloseTo(240 / Math.tan(Math.PI / 6));
         expect(focalLengthFromFOV(60, 360, 640)).toBeCloseTo(320 / Math.tan(Math.PI / 6));
