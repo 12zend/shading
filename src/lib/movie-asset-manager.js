@@ -15,6 +15,7 @@ import {
     DEFAULT_STAGE_WIDTH,
     ROTATION_ORDERS,
     ModelRenderer,
+    attachMotionToGLB,
     cameraLookAt,
     convertModelToGLB,
     disposeObject,
@@ -259,6 +260,7 @@ class MovieAssetManager extends EventEmitter {
         };
         // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
         primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
+        primitives.looks_setmodelframeto = (args, util) => this.setModelFrame(util.target, args.FRAME);
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
         primitives.looks_addrenderingframe = () => this.addRenderingFrame();
@@ -627,6 +629,7 @@ class MovieAssetManager extends EventEmitter {
                 state.rotationOrder = sourceState.rotationOrder;
                 state.ignoreCamera = sourceState.ignoreCamera;
                 state.modelAssetId = sourceState.modelAssetId;
+                state.modelFrame = sourceState.modelFrame;
                 state.modelScene = sourceState.modelScene.map(item => ({
                     assetId: item.assetId,
                     transform: {
@@ -670,10 +673,14 @@ class MovieAssetManager extends EventEmitter {
     }
 
     async addModelsFromFiles (targetId, files) {
-        const supportedFiles = files.filter(file => ['glb', 'fbx', 'obj', 'mtl'].includes(getExtension(file.name)));
+        const supportedFiles = files.filter(file => ['glb', 'pmx', 'fbx', 'obj', 'mtl'].includes(
+            getExtension(file.name)
+        ));
         const materialFiles = supportedFiles.filter(file => getExtension(file.name) === 'mtl');
         const sourceFiles = supportedFiles.filter(file => getExtension(file.name) !== 'mtl');
-        if (!sourceFiles.length) throw new Error('Choose a GLB, FBX, or OBJ file. MTL files accompany OBJ files.');
+        if (!sourceFiles.length) {
+            throw new Error('Choose a GLB, PMX, FBX, or OBJ file. MTL files accompany OBJ files.');
+        }
 
         const added = [];
         for (const file of sourceFiles) {
@@ -697,10 +704,13 @@ class MovieAssetManager extends EventEmitter {
             );
             const models = this.getModels(targetId).slice();
             const model = {
+                activeMotion: converted.activeMotion,
                 animationCount: converted.animationCount,
                 asset,
                 assetId: asset.assetId,
                 dataFormat: 'glb',
+                modelFormat: sourceFormat,
+                motions: converted.motions,
                 name: unusedName(getName(file.name), models.map(item => item.name)),
                 originalSize: converted.originalSize,
                 sourceFormat,
@@ -713,6 +723,78 @@ class MovieAssetManager extends EventEmitter {
             added.push(model);
         }
         return added;
+    }
+
+    async addModelMotionsFromFiles (targetId, modelIndex, files) {
+        const models = this.getModels(targetId).slice();
+        let model = models[modelIndex];
+        if (!model) throw new Error('Select a model before importing a motion or pose.');
+        const motionFiles = files.filter(file => ['vmd', 'vpd'].includes(getExtension(file.name)));
+        if (!motionFiles.length) throw new Error('Choose a VMD motion or VPD pose file.');
+
+        for (const file of motionFiles) {
+            const format = getExtension(file.name);
+            const motionData = await readFile(file);
+            const converted = await attachMotionToGLB(model.asset.data, motionData, format, getName(file.name));
+            const oldAssetId = model.assetId;
+            const asset = this.runtime.storage.createAsset(
+                this.runtime.storage.AssetType.Sound,
+                'glb',
+                converted.glb,
+                null,
+                true
+            );
+            const cached = this.modelObjects.get(oldAssetId);
+            if (cached && cached.object) disposeObject(cached.object);
+            this.modelObjects.delete(oldAssetId);
+            model = {
+                ...model,
+                activeMotion: converted.activeMotion,
+                animationCount: converted.animationCount,
+                asset,
+                assetId: asset.assetId,
+                motions: (model.motions || []).concat(converted.motion)
+            };
+            for (const target of this.runtime.targets) {
+                const original = getOriginalTarget(target);
+                const state = this.targetStates.get(target.id);
+                if (!original || original.id !== targetId || !state) continue;
+                state.modelScene.forEach(item => {
+                    if (item.assetId === oldAssetId) item.assetId = asset.assetId;
+                });
+                if (state.modelAssetId === oldAssetId) state.modelAssetId = asset.assetId;
+            }
+            models[modelIndex] = model;
+        }
+        this.models.set(targetId, models);
+        this.changedModels(targetId);
+        this.rerenderModelTargets(targetId);
+        return model;
+    }
+
+    selectModelMotion (targetId, modelIndex, requestedMotion) {
+        const models = this.getModels(targetId).slice();
+        const model = models[modelIndex];
+        if (!model) return;
+        const motions = model.motions || [];
+        const motion = motions.find(item => item.name === requestedMotion);
+        models[modelIndex] = {
+            ...model,
+            activeMotion: motion ? motion.name : ''
+        };
+        this.models.set(targetId, models);
+        this.changedModels(targetId);
+        this.rerenderModelTargets(targetId);
+    }
+
+    rerenderModelTargets (targetId) {
+        for (const target of this.runtime.targets) {
+            const original = getOriginalTarget(target);
+            const state = this.targetStates.get(target.id);
+            if (original && original.id === targetId && state && state.mode === 'model') {
+                this.runWithoutWaiting(this.queueModelSceneRender(target));
+            }
+        }
     }
 
     deleteModel (targetId, index) {
@@ -1098,6 +1180,14 @@ class MovieAssetManager extends EventEmitter {
         return this.queueModelSceneRender(target) || Promise.resolve();
     }
 
+    setModelFrame (target, requestedFrame) {
+        const state = this.getTargetState(target);
+        const frame = Number(requestedFrame);
+        state.modelFrame = Number.isFinite(frame) ? Math.max(1, frame) : 1;
+        if (state.requestedMode !== 'model' || !state.modelScene.length) return Promise.resolve();
+        return this.queueModelSceneRender(target) || Promise.resolve();
+    }
+
     // Internal compatibility alias used by project restoration and older UI integrations.
     switchModel (target, requestedModel) {
         return this.replaceModelScene(target, requestedModel);
@@ -1112,6 +1202,8 @@ class MovieAssetManager extends EventEmitter {
             const record = model && this.modelObjects.get(model.assetId);
             if (!record || !record.object) return null;
             return {
+                animationName: model.activeMotion,
+                frame: state.modelFrame,
                 sourceObject: record.object,
                 transform: {
                     ...item.transform,
@@ -1151,6 +1243,8 @@ class MovieAssetManager extends EventEmitter {
                     const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
                     if (!model) return null;
                     return {
+                        animationName: model.activeMotion,
+                        frame: state.modelFrame,
                         sourceObject: await this.getModelObject(model),
                         transform: item.transform
                     };
@@ -1199,7 +1293,7 @@ class MovieAssetManager extends EventEmitter {
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
-        });
+        }, model.activeMotion, 1);
         return renderer;
     }
 
@@ -1347,6 +1441,7 @@ class MovieAssetManager extends EventEmitter {
                 ignoreCamera: false,
                 mode: 'costume',
                 modelAssetId: null,
+                modelFrame: 1,
                 modelScene: [],
                 modelRenderPromise: null,
                 modelRenderVersion: 0,
@@ -2210,9 +2305,12 @@ class MovieAssetManager extends EventEmitter {
             if (!target) continue;
             for (const model of models) {
                 result.push({
+                    activeMotion: model.activeMotion || '',
                     animationCount: model.animationCount,
                     isStage: target.isStage,
                     md5ext: `${model.assetId}.glb`,
+                    modelFormat: model.modelFormat || model.sourceFormat || 'glb',
+                    motions: (model.motions || []).map(motion => ({...motion})),
                     name: model.name,
                     originalSize: model.originalSize,
                     sourceFormat: model.sourceFormat,
@@ -2263,10 +2361,17 @@ class MovieAssetManager extends EventEmitter {
             results.push({
                 isStage: descriptor.isStage === true,
                 model: {
+                    activeMotion: String(descriptor.activeMotion || ''),
                     animationCount: toNumber(descriptor.animationCount),
                     asset,
                     assetId,
                     dataFormat: 'glb',
+                    modelFormat: String(descriptor.modelFormat || descriptor.sourceFormat || 'glb'),
+                    motions: Array.isArray(descriptor.motions) ? descriptor.motions.map(motion => ({
+                        format: String(motion.format || ''),
+                        frameCount: Math.max(1, toNumber(motion.frameCount, 1)),
+                        name: String(motion.name || '')
+                    })).filter(motion => motion.name) : [],
                     name: String(descriptor.name || 'model'),
                     originalSize: descriptor.originalSize || {x: 0, y: 0, z: 0},
                     sourceFormat: String(descriptor.sourceFormat || 'glb'),

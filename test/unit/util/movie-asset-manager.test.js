@@ -176,6 +176,23 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
     });
 
+    test('sets a one-based model animation frame and waits for the redraw', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const modelRender = deferred();
+        const state = manager.getTargetState(target);
+        state.requestedMode = 'model';
+        state.modelScene = [{assetId: 'cube'}];
+        manager.queueModelSceneRender = jest.fn(() => modelRender.promise);
+        manager.installPrimitives();
+
+        const renderResult = manager.runtime._primitives.looks_setmodelframeto({FRAME: 18}, {target});
+
+        expect(renderResult).toBe(modelRender.promise);
+        expect(state.modelFrame).toBe(18);
+        expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
+    });
+
     test('registers rendering frame primitives and clears the accumulated frames', () => {
         const manager = makeManager();
         manager.renderingFrames = [{}];
@@ -276,7 +293,7 @@ describe('MovieAssetManager rendering performance', () => {
         const canvas = {name: 'scene canvas'};
         const modelObject = {name: 'cube object'};
         manager.camera = {name: 'camera'};
-        manager.models.set(target.id, [{assetId: 'cube', name: 'Cube'}]);
+        manager.models.set(target.id, [{activeMotion: 'Walk', assetId: 'cube', name: 'Cube'}]);
         manager.modelObjects.set('cube', {object: modelObject});
         manager.getStageSize = jest.fn(() => [480, 360]);
         manager.modelRenderer = {
@@ -285,10 +302,15 @@ describe('MovieAssetManager rendering performance', () => {
         manager.applyBitmap = jest.fn();
         manager.applyProjection = jest.fn();
 
+        manager.setModelFrame(target, 18);
         const renderPromise = manager.renderModelToScene(target, 'Cube');
 
         expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
-            expect.objectContaining({sourceObject: modelObject})
+            expect.objectContaining({
+                animationName: 'Walk',
+                frame: 18,
+                sourceObject: modelObject
+            })
         ], manager.camera, [480, 360], 2);
         expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model');
         return renderPromise;

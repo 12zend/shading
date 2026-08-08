@@ -25,7 +25,8 @@ const messages = defineMessages({
         id: 'movie.model.emptyTitle'
     },
     emptyDescription: {
-        defaultMessage: 'Upload GLB, FBX, or OBJ/MTL files. Movie converts every import to a unified GLB asset.',
+        defaultMessage: 'Upload GLB, PMX, FBX, or OBJ/MTL files. ' +
+            'Movie keeps each model type and stores a unified GLB asset.',
         description: 'Description shown when a sprite has no model assets',
         id: 'movie.model.emptyDescription'
     },
@@ -33,6 +34,21 @@ const messages = defineMessages({
         defaultMessage: 'Model name',
         description: 'Label for the model name input',
         id: 'movie.model.name'
+    },
+    importMotion: {
+        defaultMessage: 'Import VMD / VPD',
+        description: 'Button to import a motion or pose for a 3D model',
+        id: 'movie.model.importMotion'
+    },
+    motion: {
+        defaultMessage: 'Motion or pose',
+        description: 'Label for a model motion selection',
+        id: 'movie.model.motion'
+    },
+    noMotion: {
+        defaultMessage: 'Original pose',
+        description: 'Option shown when no model motion is selected',
+        id: 'movie.model.noMotion'
     }
 });
 
@@ -44,15 +60,20 @@ class ModelTab extends React.Component {
             'handleDrop',
             'handleExport',
             'handleManagerChange',
+            'handleMotionChange',
+            'handleMotionUpload',
+            'handleMotionUploadClick',
             'handleNameChange',
             'handlePreviewError',
             'handleSelect',
             'handleUpload',
             'handleUploadClick',
-            'setFileInput'
+            'setFileInput',
+            'setMotionFileInput'
         ]);
         this.state = {
             error: null,
+            importingMotion: false,
             selectedModelIndex: 0,
             uploading: false
         };
@@ -155,8 +176,42 @@ class ModelTab extends React.Component {
         this.fileInput.click();
     }
 
+    async handleMotionUpload (event) {
+        const files = Array.from(event.target.files);
+        event.target.value = null;
+        if (!files.length) return;
+        this.setState({importingMotion: true, error: null});
+        try {
+            await this.manager.addModelMotionsFromFiles(
+                this.props.editingTarget,
+                this.state.selectedModelIndex,
+                files
+            );
+        } catch (error) {
+            this.setState({error: error.message});
+        } finally {
+            this.setState({importingMotion: false});
+        }
+    }
+
+    handleMotionUploadClick () {
+        this.motionFileInput.click();
+    }
+
+    handleMotionChange (event) {
+        this.manager.selectModelMotion(
+            this.props.editingTarget,
+            this.state.selectedModelIndex,
+            event.target.value
+        );
+    }
+
     setFileInput (input) {
         this.fileInput = input;
+    }
+
+    setMotionFileInput (input) {
+        this.motionFileInput = input;
     }
 
     render () {
@@ -164,7 +219,7 @@ class ModelTab extends React.Component {
         const models = this.getModels();
         const selectedModel = models[this.state.selectedModelIndex];
         const items = models.map(model => ({
-            details: `GLB · ${model.vertices} vertices`,
+            details: `${(model.modelFormat || model.sourceFormat).toUpperCase()} · ${model.vertices} vertices`,
             name: model.name,
             thumbnail: <span className={styles.tileModel}>{'◇'}</span>
         }));
@@ -185,12 +240,19 @@ class ModelTab extends React.Component {
                 onItemClick={this.handleSelect}
             >
                 <input
-                    accept=".glb,.fbx,.obj,.mtl,model/gltf-binary"
+                    accept=".glb,.pmx,.fbx,.obj,.mtl,model/gltf-binary"
                     className={styles.fileInput}
                     multiple
                     ref={this.setFileInput}
                     type="file"
                     onChange={this.handleUpload}
+                />
+                <input
+                    accept=".vmd,.vpd"
+                    className={styles.fileInput}
+                    ref={this.setMotionFileInput}
+                    type="file"
+                    onChange={this.handleMotionUpload}
                 />
                 {selectedModel ? (
                     <div className={styles.editor}>
@@ -205,7 +267,10 @@ class ModelTab extends React.Component {
                                 />
                             </label>
                             <div className={styles.metadata}>
-                                <span>{`${selectedModel.sourceFormat.toUpperCase()} → GLB`}</span>
+                                <span>{
+                                    `${(selectedModel.modelFormat || selectedModel.sourceFormat).toUpperCase()} model`
+                                }</span>
+                                <span>{'Stored as GLB'}</span>
                                 <span>{`${selectedModel.vertices} vertices`}</span>
                                 <span>{`${selectedModel.triangles} triangles`}</span>
                                 <span>{`${selectedModel.animationCount} animations`}</span>
@@ -219,9 +284,37 @@ class ModelTab extends React.Component {
                                 onError={this.handlePreviewError}
                             />
                         </div>
+                        <div className={styles.motionPanel}>
+                            <label className={styles.motionLabel}>
+                                <span>{this.props.intl.formatMessage(messages.motion)}</span>
+                                <select
+                                    className={styles.motionSelect}
+                                    value={selectedModel.activeMotion || ''}
+                                    onChange={this.handleMotionChange}
+                                >
+                                    <option value="">{this.props.intl.formatMessage(messages.noMotion)}</option>
+                                    {(selectedModel.motions || []).map(motion => (
+                                        <option
+                                            key={motion.name}
+                                            value={motion.name}
+                                        >
+                                            {`${motion.name} · ${motion.format.toUpperCase()} · ` +
+                                                `${motion.frameCount} frames`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <button
+                                className={styles.motionButton}
+                                disabled={this.state.importingMotion}
+                                onClick={this.handleMotionUploadClick}
+                            >
+                                {this.props.intl.formatMessage(messages.importMotion)}
+                            </button>
+                        </div>
                         <div className={styles.hint}>
-                            {'Models are normalized on import and stored as GLB. ' +
-                                'Use “clear scene”, then one or more “render model” blocks in Looks.'}
+                            {'Use “set model frame to”, then “render model”. VMD motions and VPD poses are ' +
+                                'evaluated by frame without exposing bones as blocks.'}
                         </div>
                         {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
                     </div>

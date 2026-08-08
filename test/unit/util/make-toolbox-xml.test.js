@@ -18,8 +18,12 @@ describe('Movie toolbox categories', () => {
 
         expect(toolbox).toContain('type="looks_clearscene"');
         expect(toolbox).toContain('type="looks_rendermodel"');
+        expect(toolbox).toContain('type="looks_setmodelframeto"');
         expect(toolbox.indexOf('type="looks_clearscene"')).toBeLessThan(
             toolbox.indexOf('type="looks_rendermodel"')
+        );
+        expect(toolbox.indexOf('type="looks_rendermodel"')).toBeLessThan(
+            toolbox.indexOf('type="looks_setmodelframeto"')
         );
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });

@@ -9,6 +9,10 @@ const DEFAULT_FOV = 2 * Math.atan((Math.max(DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_H
     DEFAULT_FOCAL_LENGTH) * (180 / Math.PI);
 const DEFAULT_DEPTH = 480;
 const ROTATION_ORDERS = ['XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX'];
+const MMD_FRAME_RATE = 30;
+const TRANSPARENT_TEXTURE =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mP4z8AAAAMBAQDJ' +
+    'Pv/AAAAAAElFTkSuQmCC';
 
 const normalizeFOV = value => {
     const number = Number(value);
@@ -28,6 +32,8 @@ const fovFromFocalLength = (focalLength, width = DEFAULT_STAGE_WIDTH, height = D
 };
 
 let loaderModulesPromise;
+let cloneModelObject = object => object.clone(true);
+let MMDAnimationHelperClass = null;
 
 const loadLoaderModules = () => {
     if (!loaderModulesPromise) {
@@ -36,14 +42,22 @@ const loadLoaderModules = () => {
             import('three/examples/jsm/loaders/FBXLoader.js'),
             import('three/examples/jsm/loaders/OBJLoader.js'),
             import('three/examples/jsm/loaders/MTLLoader.js'),
+            import('three/examples/jsm/loaders/MMDLoader.js'),
+            import('three/examples/jsm/animation/MMDAnimationHelper.js'),
+            import('three/examples/jsm/utils/SkeletonUtils.js'),
             import('three/examples/jsm/exporters/GLTFExporter.js')
-        ]).then(([gltf, fbx, obj, mtl, exporter]) => ({
-            FBXLoader: fbx.FBXLoader,
-            GLTFExporter: exporter.GLTFExporter,
-            GLTFLoader: gltf.GLTFLoader,
-            MTLLoader: mtl.MTLLoader,
-            OBJLoader: obj.OBJLoader
-        }));
+        ]).then(([gltf, fbx, obj, mtl, mmd, mmdAnimation, skeletonUtils, exporter]) => {
+            cloneModelObject = skeletonUtils.clone;
+            MMDAnimationHelperClass = mmdAnimation.MMDAnimationHelper;
+            return {
+                FBXLoader: fbx.FBXLoader,
+                GLTFExporter: exporter.GLTFExporter,
+                GLTFLoader: gltf.GLTFLoader,
+                MTLLoader: mtl.MTLLoader,
+                MMDLoader: mmd.MMDLoader,
+                OBJLoader: obj.OBJLoader
+            };
+        });
     }
     return loaderModulesPromise;
 };
@@ -113,6 +127,38 @@ const exportGLB = async (object, animations) => {
     });
 };
 
+const makeMMDLoader = modules => {
+    const loadingManager = new THREE.LoadingManager();
+    // PMX files only contain references to texture paths. Models remain importable when those optional files
+    // are unavailable; their material colours are retained below.
+    loadingManager.setURLModifier(url => (url.startsWith('data:') ? url : TRANSPARENT_TEXTURE));
+    return new modules.MMDLoader(loadingManager);
+};
+
+const makeGLTFMaterial = material => {
+    const color = material && (material.diffuse || material.color);
+    const emissive = material && material.emissive;
+    return new THREE.MeshStandardMaterial({
+        color: color && color.isColor ? color.clone() : new THREE.Color(0xffffff),
+        emissive: emissive && emissive.isColor ? emissive.clone() : new THREE.Color(0x000000),
+        metalness: 0,
+        opacity: material && Number.isFinite(material.opacity) ? material.opacity : 1,
+        roughness: 0.8,
+        side: material ? material.side : THREE.FrontSide,
+        transparent: Boolean(material && material.transparent)
+    });
+};
+
+const makePMXObject = (modules, data) => {
+    const loader = makeMMDLoader(modules);
+    const parsed = loader._getParser().parsePmx(toArrayBuffer(data), true);
+    const mesh = loader.meshBuilder.setResourcePath('').build(parsed, '', null, () => {});
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mesh.material = Array.isArray(mesh.material) ? materials.map(makeGLTFMaterial) : makeGLTFMaterial(materials[0]);
+    materials.forEach(material => material.dispose());
+    return mesh;
+};
+
 const parseSourceModel = async (format, data, mtlData) => {
     const modules = await loadLoaderModules();
     if (format === 'glb') {
@@ -141,17 +187,42 @@ const parseSourceModel = async (format, data, mtlData) => {
             object: loader.parse(new TextDecoder().decode(data))
         };
     }
-    throw new Error('Supported model formats are GLB, FBX, and OBJ/MTL.');
+    if (format === 'pmx') {
+        return {
+            animations: [],
+            object: makePMXObject(modules, data)
+        };
+    }
+    throw new Error('Supported model formats are GLB, PMX, FBX, and OBJ/MTL.');
+};
+
+const unusedAnimationName = (requestedName, animations) => {
+    const names = animations.map(animation => animation.name.toLowerCase());
+    if (!names.includes(requestedName.toLowerCase())) return requestedName;
+    let index = 2;
+    while (names.includes(`${requestedName}${index}`.toLowerCase())) index++;
+    return `${requestedName}${index}`;
 };
 
 const convertModelToGLB = async (format, data, mtlData) => {
     const parsed = await parseSourceModel(format, data, mtlData);
     const normalized = normalizeObject(parsed.object);
     const geometry = countGeometry(normalized.object);
-    const glb = await exportGLB(normalized.object, parsed.animations);
+    const animations = [];
+    parsed.animations.forEach((animation, index) => {
+        animation.name = unusedAnimationName(animation.name || `Animation ${index + 1}`, animations);
+        animations.push(animation);
+    });
+    const glb = await exportGLB(normalized.object, animations);
     return {
-        animationCount: parsed.animations.length,
+        activeMotion: animations.length ? animations[0].name : '',
+        animationCount: animations.length,
         glb,
+        motions: animations.map(animation => ({
+            format,
+            frameCount: Math.max(1, Math.round(animation.duration * MMD_FRAME_RATE) + 1),
+            name: animation.name
+        })),
         originalSize: {
             x: normalized.originalSize.x,
             y: normalized.originalSize.y,
@@ -164,7 +235,88 @@ const convertModelToGLB = async (format, data, mtlData) => {
 const loadGLBObject = async data => {
     const {GLTFLoader} = await loadLoaderModules();
     const gltf = await parseWithCallback(new GLTFLoader(), toArrayBuffer(data));
+    gltf.scene.animations = gltf.animations || [];
     return gltf.scene;
+};
+
+const findSkinnedMesh = object => {
+    let result = null;
+    object.traverse(child => {
+        if (!result && child.isSkinnedMesh && child.skeleton) result = child;
+    });
+    return result;
+};
+
+const decodeVPD = (data, mesh, loader) => {
+    const bytes = toArrayBuffer(data);
+    const decodings = ['shift-jis', 'utf-8'];
+    let best = null;
+    let bestMatches = -1;
+    const boneNames = new Set(mesh.skeleton.bones.map(bone => bone.name));
+    for (const encoding of decodings) {
+        try {
+            const parsed = loader._getParser().parseVpd(new TextDecoder(encoding).decode(bytes), true);
+            const matches = parsed.bones.reduce((count, bone) => count + (boneNames.has(bone.name) ? 1 : 0), 0);
+            if (matches > bestMatches) {
+                best = parsed;
+                bestMatches = matches;
+            }
+        } catch (e) { // Try the other common VPD encoding.
+            // Intentionally empty.
+        }
+    }
+    if (!best) throw new Error('The VPD pose could not be decoded.');
+    return best;
+};
+
+const makeVPDClip = (data, mesh, loader) => {
+    const vpd = decodeVPD(data, mesh, loader);
+    const bones = new Map(mesh.skeleton.bones.map(bone => [bone.name, bone]));
+    const tracks = [];
+    for (const pose of vpd.bones) {
+        const bone = bones.get(pose.name);
+        if (!bone) continue;
+        const position = bone.position.clone().add(new THREE.Vector3().fromArray(pose.translation));
+        const quaternion = bone.quaternion.clone().multiply(new THREE.Quaternion().fromArray(pose.quaternion));
+        const trackName = `.bones[${pose.name}]`;
+        tracks.push(new THREE.VectorKeyframeTrack(`${trackName}.position`, [0], position.toArray()));
+        tracks.push(new THREE.QuaternionKeyframeTrack(`${trackName}.quaternion`, [0], quaternion.toArray()));
+    }
+    if (!tracks.length) throw new Error('The VPD pose does not match any bones in this model.');
+    return new THREE.AnimationClip('', 1 / MMD_FRAME_RATE, tracks);
+};
+
+const attachMotionToGLB = async (modelData, motionData, format, requestedName) => {
+    const modules = await loadLoaderModules();
+    const gltf = await parseWithCallback(new modules.GLTFLoader(), toArrayBuffer(modelData));
+    const mesh = findSkinnedMesh(gltf.scene);
+    if (!mesh) throw new Error('VMD/VPD files require a rigged model with bones.');
+    const loader = makeMMDLoader(modules);
+    let clip;
+    if (format === 'vmd') {
+        const vmd = loader._getParser().parseVmd(toArrayBuffer(motionData), true);
+        clip = loader.animationBuilder.build(vmd, mesh);
+    } else if (format === 'vpd') {
+        clip = makeVPDClip(motionData, mesh, loader);
+    } else {
+        throw new Error('Supported model motion formats are VMD and VPD.');
+    }
+    if (!clip.tracks.length) throw new Error(`The ${format.toUpperCase()} file does not match this model.`);
+    const animations = gltf.animations || [];
+    clip.name = unusedAnimationName(requestedName || format.toUpperCase(), animations);
+    const nextAnimations = animations.concat(clip);
+    const glb = await exportGLB(gltf.scene, nextAnimations);
+    return {
+        activeMotion: clip.name,
+        animationCount: nextAnimations.length,
+        glb,
+        motion: {
+            format,
+            frameCount: format === 'vpd' ? 1 :
+                Math.max(1, Math.round(clip.duration * MMD_FRAME_RATE) + 1),
+            name: clip.name
+        }
+    };
 };
 
 const degreesToEuler = (rotation, order) => new THREE.Euler(
@@ -293,15 +445,52 @@ class ModelRenderer {
         this.canvas.reusable = false;
     }
 
-    setObject (sourceObject) {
+    setObject (sourceObject, animationName, frame) {
         this.clearObjects();
-        this.currentObject = sourceObject.clone(true);
+        this.currentObject = cloneModelObject(sourceObject);
         this.currentObjects = [this.currentObject];
         this.scene.add(this.currentObject);
+        this.applyAnimation(this.currentObject, animationName, frame);
         return this.currentObject;
     }
 
+    applyAnimation (object, animationName, frame) {
+        if (!animationName || !Array.isArray(object.animations)) return;
+        const clip = THREE.AnimationClip.findByName(object.animations, animationName);
+        if (!clip) return;
+        const requestedTime = (Math.max(1, Number(frame) || 1) - 1) / MMD_FRAME_RATE;
+        const animationTime = Math.min(requestedTime, Math.max(0, clip.duration));
+        const mmdMesh = findSkinnedMesh(object);
+        if (MMDAnimationHelperClass && mmdMesh && mmdMesh.geometry.userData.MMD) {
+            try {
+                const helper = new MMDAnimationHelperClass({pmxAnimation: true, sync: false});
+                helper.add(mmdMesh, {animation: clip, physics: false});
+                const mixer = helper.objects.get(mmdMesh).mixer;
+                const action = mixer.clipAction(clip);
+                action.setLoop(THREE.LoopOnce, 1);
+                action.clampWhenFinished = true;
+                mixer.setTime(animationTime);
+                helper._animateMesh(mmdMesh, 0);
+                object.updateMatrixWorld(true);
+                this.currentMixers.push(mixer);
+                return;
+            } catch (error) {
+                // Fall through to ordinary skeletal animation if optional MMD metadata is incomplete.
+            }
+        }
+        const mixer = new THREE.AnimationMixer(object);
+        const action = mixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        action.play();
+        mixer.setTime(animationTime);
+        object.updateMatrixWorld(true);
+        this.currentMixers.push(mixer);
+    }
+
     clearObjects () {
+        if (this.currentMixers) this.currentMixers.forEach(mixer => mixer.stopAllAction());
+        this.currentMixers = [];
         if (this.currentObjects) {
             this.currentObjects.forEach(object => this.scene.remove(object));
         } else if (this.currentObject) {
@@ -311,9 +500,9 @@ class ModelRenderer {
         this.currentObjects = [];
     }
 
-    render (sourceObject, transform, cameraTransform) {
+    render (sourceObject, transform, cameraTransform, animationName, frame) {
         this.setOutputSize(MODEL_RENDER_SIZE, MODEL_RENDER_SIZE);
-        this.setObject(sourceObject);
+        this.setObject(sourceObject, animationName, frame);
         this.currentObject.position.set(0, 0, 0);
         this.currentObject.scale.set(1, 1, 1);
         const objectQuaternion = new THREE.Quaternion().setFromEuler(
@@ -346,8 +535,9 @@ class ModelRenderer {
         this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
         this.clearObjects();
         this.currentObjects = sceneItems.map(item => {
-            const object = item.sourceObject.clone(true);
+            const object = cloneModelObject(item.sourceObject);
             const transform = item.transform;
+            this.applyAnimation(object, item.animationName, item.frame);
             object.position.copy(moviePositionToThree({
                 x: transform.worldX,
                 y: transform.worldY,
@@ -400,6 +590,7 @@ export {
     MODEL_RENDER_SIZE,
     ROTATION_ORDERS,
     ModelRenderer,
+    attachMotionToGLB,
     cameraLookAt,
     convertModelToGLB,
     disposeObject,

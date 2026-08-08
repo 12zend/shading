@@ -14,7 +14,10 @@ class ModelPreview extends React.Component {
     }
 
     componentDidUpdate (previousProps) {
-        if (previousProps.model.assetId !== this.props.model.assetId) this.renderModel();
+        if (previousProps.model.assetId !== this.props.model.assetId ||
+            previousProps.model.activeMotion !== this.props.model.activeMotion) {
+            this.renderModel();
+        }
     }
 
     componentWillUnmount () {
@@ -60,6 +63,7 @@ ModelPreview.propTypes = {
     }).isRequired,
     model: PropTypes.shape({
         assetId: PropTypes.string.isRequired,
+        activeMotion: PropTypes.string,
         name: PropTypes.string.isRequired
     }).isRequired,
     onError: PropTypes.func

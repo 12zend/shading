@@ -11,6 +11,7 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_clearrenderingframe',
     'looks_exportrenderingmp4',
     'looks_rendermodel',
+    'looks_setmodelframeto',
     'looks_settextfont',
     'looks_setvideoframeto',
     'looks_switchmodelto',

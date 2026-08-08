@@ -473,6 +473,17 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_setmodelframeto = {
+        init: function () {
+            this.jsonInit({
+                message0: 'set model frame to %1',
+                args0: [{type: 'input_value', name: 'FRAME'}],
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    };
+
     ScratchBlocks.Blocks.looks_addrenderingframe = {
         init: function () {
             this.jsonInit({

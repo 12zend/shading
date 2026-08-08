@@ -283,6 +283,13 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                 <shadow type="looks_model"></shadow>
             </value>
         </block>
+        <block type="looks_setmodelframeto">
+            <value name="FRAME">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
         <block id="${targetId}_switchvideoto" type="looks_switchvideoto">
             <value name="VIDEO">
                 <shadow type="looks_video"></shadow>
