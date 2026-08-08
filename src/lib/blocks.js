@@ -185,6 +185,16 @@ export default function (vm) {
 
     const eventColors = ScratchBlocks.Colours.event;
 
+    ScratchBlocks.Blocks.event_renderframe = {
+        init: function () {
+            this.jsonInit({
+                message0: 'render frame',
+                category: ScratchBlocks.Categories.event,
+                extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
+
     const motionStatement = (message0, args0, inputsInline = true) => ({
         message0,
         args0,

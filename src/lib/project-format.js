@@ -4,6 +4,7 @@ const MOVIE_PROJECT_FORMAT_KEY = 'mb3';
 const MOVIE_PROJECT_FORMAT_VERSION = 1;
 
 const MOVIE_ASSET_BLOCKS = [
+    'event_renderframe',
     'looks_addrenderingframe',
     'looks_changevideoframeby',
     'looks_clearscene',
@@ -131,6 +132,7 @@ const getMovieProjectFeatures = projectJSON => {
         features.add('3d-engine');
     }
     if (projectJSON.movieCamera && typeof projectJSON.movieCamera === 'object') features.add('3d-engine');
+    if (projectJSON.movieTimeline && typeof projectJSON.movieTimeline === 'object') features.add('timeline');
 
     const targets = Array.isArray(projectJSON.targets) ? projectJSON.targets : [projectJSON];
     for (const target of targets) {
@@ -147,6 +149,7 @@ const getRuntimeMovieProjectFeatures = runtime => {
     if (!runtime) return [];
 
     const movieAssetManager = runtime.movieAssetManager;
+    if (movieAssetManager && movieAssetManager.timeline) features.add('timeline');
     if (movieAssetManager && movieAssetManager.videos instanceof Map) {
         for (const videos of movieAssetManager.videos.values()) {
             if (videos.length > 0) {

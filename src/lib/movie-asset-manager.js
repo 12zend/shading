@@ -31,10 +31,13 @@ const BITMAP_RESOLUTION = 2;
 const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';
+const TIMELINE_DEFAULT_DURATION = 10;
+const TIMELINE_MAX_DURATION = 3600;
 const VIDEO_PROJECT_KEY = 'movieVideos';
 const MODEL_PROJECT_KEY = 'movieModels';
 const CAMERA_PROJECT_KEY = 'movieCamera';
 const TRANSFORM_PROJECT_KEY = 'movie3D';
+const TIMELINE_PROJECT_KEY = 'movieTimeline';
 const MIME_TYPES = {
     mp4: 'video/mp4',
     mov: 'video/quicktime',
@@ -175,6 +178,17 @@ class MovieAssetManager extends EventEmitter {
         this.renderingFrames = [];
         this.modelRenderer = null;
         const [stageWidth, stageHeight] = this.getStageSize();
+        this.timeline = {
+            currentTime: 0,
+            duration: TIMELINE_DEFAULT_DURATION,
+            framerate: RENDERING_DEFAULT_FRAME_RATE,
+            height: stageHeight,
+            pendingFrame: true,
+            playing: false,
+            recording: false,
+            sound: '',
+            width: stageWidth
+        };
         this.camera = {
             fov: DEFAULT_FOV,
             focalLength: focalLengthFromFOV(DEFAULT_FOV, stageWidth, stageHeight),
@@ -187,10 +201,16 @@ class MovieAssetManager extends EventEmitter {
         this.handleTargetRemoved = this.handleTargetRemoved.bind(this);
         this.handleFontsChanged = this.handleFontsChanged.bind(this);
         this.handleNativeSizeChanged = this.handleNativeSizeChanged.bind(this);
+        this.handleTimelineBeforeExecute = this.handleTimelineBeforeExecute.bind(this);
+        this.handleTimelineAfterExecute = this.handleTimelineAfterExecute.bind(this);
+        this.ensureMainTarget = this.ensureMainTarget.bind(this);
 
         this.runtime.on('targetWasCreated', this.handleTargetCreated);
         this.runtime.on('targetWasRemoved', this.handleTargetRemoved);
         this.runtime.fontManager.on('change', this.handleFontsChanged);
+        this.runtime.on('BEFORE_EXECUTE', this.handleTimelineBeforeExecute);
+        this.runtime.on('AFTER_EXECUTE', this.handleTimelineAfterExecute);
+        this.runtime.on('PROJECT_LOADED', this.ensureMainTarget);
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
             this.runtime.renderer.on('NativeSizeChanged', this.handleNativeSizeChanged);
         }
@@ -199,6 +219,22 @@ class MovieAssetManager extends EventEmitter {
         this.installPrimitives();
         this.installSerializationHooks();
         this.syncFontFaces();
+        this.installTimelineHat();
+        this.ensureMainTarget();
+    }
+
+    installTimelineHat () {
+        this.runtime._hats.event_renderframe = {
+            restartExistingThreads: true
+        };
+    }
+
+    ensureMainTarget () {
+        const sprites = this.runtime.targets.filter(target => target.isOriginal && !target.isStage);
+        if (!sprites.length) return;
+        const target = sprites.find(sprite => sprite.getName() === 'main') || sprites[0];
+        if (target.getName() !== 'main') this.vm.renameSprite(target.id, 'main');
+        if (!this.vm.editingTarget || this.vm.editingTarget.isStage) this.vm.setEditingTarget(target.id);
     }
 
     installPrimitives () {
@@ -313,6 +349,7 @@ class MovieAssetManager extends EventEmitter {
             const models = this.serializeModelsJSON(targetId);
             if (models.length) json[MODEL_PROJECT_KEY] = models;
             if (!this.isDefaultCamera()) json[CAMERA_PROJECT_KEY] = cloneCamera(this.camera);
+            json[TIMELINE_PROJECT_KEY] = this.serializeTimeline();
             this.serializeTransforms(json, targetId);
             return JSON.stringify(markMovieProject(json));
         };
@@ -330,16 +367,214 @@ class MovieAssetManager extends EventEmitter {
             const modelPromise = this.deserializeModels(projectJSON[MODEL_PROJECT_KEY], zip);
             const transformDescriptors = this.readTransformDescriptors(projectJSON);
             const cameraDescriptor = projectJSON[CAMERA_PROJECT_KEY];
+            const timelineDescriptor = projectJSON[TIMELINE_PROJECT_KEY];
             const result = await originalDeserializeProject(projectJSON, zip);
             this.replaceVideos(await videoPromise);
             this.replaceModels(await modelPromise);
             await this.preloadModels();
             this.restoreCamera(cameraDescriptor);
+            this.restoreTimeline(timelineDescriptor);
             this.runtime.targets.forEach(target => this.patchTarget(target));
             this.restoreTransforms(transformDescriptors);
             this.applyCamera();
+            this.ensureMainTarget();
             return result;
         };
+    }
+
+    serializeTimeline () {
+        return {
+            duration: this.timeline.duration,
+            framerate: this.timeline.framerate,
+            height: this.timeline.height,
+            sound: this.timeline.sound,
+            width: this.timeline.width
+        };
+    }
+
+    restoreTimeline (descriptor) {
+        const [stageWidth, stageHeight] = this.getStageSize();
+        const hasSettings = descriptor && typeof descriptor === 'object';
+        const settings = hasSettings ? descriptor : {};
+        const currentFramerate = this.runtime.frameLoop && this.runtime.frameLoop.framerate;
+        this.timeline.currentTime = 0;
+        this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
+        this.timeline.framerate = this.normalizeRenderingFramerate(
+            hasSettings ? settings.framerate : currentFramerate
+        );
+        this.timeline.height = Math.max(1, Math.round(toNumber(settings.height, stageHeight)));
+        this.timeline.pendingFrame = true;
+        this.timeline.playing = false;
+        this.timeline.recording = false;
+        this.timeline.sound = String(settings.sound || '');
+        this.timeline.width = Math.max(1, Math.round(toNumber(settings.width, stageWidth)));
+        this.setTimelineClock(0, true);
+        if (hasSettings) {
+            this.vm.setFramerate(this.timeline.framerate);
+            this.vm.setStageSize(this.timeline.width, this.timeline.height);
+        }
+        this.emitTimelineChanged();
+    }
+
+    normalizeTimelineDuration (value) {
+        const duration = Number(value);
+        if (!Number.isFinite(duration) || duration <= 0) return TIMELINE_DEFAULT_DURATION;
+        return Math.min(TIMELINE_MAX_DURATION, Math.max(0.1, duration));
+    }
+
+    getTimelineState () {
+        return {
+            currentTime: this.timeline.currentTime,
+            duration: this.timeline.duration,
+            frameCount: Array.isArray(this.renderingFrames) ? this.renderingFrames.length : 0,
+            framerate: this.timeline.framerate,
+            height: this.timeline.height,
+            playing: this.timeline.playing,
+            recording: this.timeline.recording,
+            sound: this.timeline.sound,
+            width: this.timeline.width
+        };
+    }
+
+    emitTimelineChanged () {
+        this.emit('timelineChanged', this.getTimelineState());
+    }
+
+    setTimelineClock (seconds, paused) {
+        const time = clamp(toNumber(seconds), 0, this.timeline.duration);
+        const clock = this.runtime.ioDevices.clock;
+        this.runtime.updateCurrentMSecs();
+        clock._projectTimer.startTime = this.runtime.currentMSecs - (time * 1000);
+        clock._pausedTime = time * 1000;
+        clock._paused = Boolean(paused);
+        this.timeline.currentTime = time;
+    }
+
+    playTimeline () {
+        if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
+        this.runtime.stopAll();
+        this.setTimelineClock(this.timeline.currentTime, false);
+        this.timeline.pendingFrame = true;
+        this.timeline.playing = true;
+        this.emitTimelineChanged();
+    }
+
+    pauseTimeline () {
+        const clock = this.runtime.ioDevices.clock;
+        if (this.timeline.playing) {
+            this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
+        }
+        this.timeline.playing = false;
+        this.setTimelineClock(this.timeline.currentTime, true);
+        this.runtime.stopAll();
+        this.emitTimelineChanged();
+    }
+
+    stopTimeline () {
+        this.timeline.playing = false;
+        this.timeline.recording = false;
+        this.runtime.stopAll();
+        this.setTimelineClock(0, true);
+        this.timeline.pendingFrame = true;
+        this.emitTimelineChanged();
+    }
+
+    seekTimeline (seconds) {
+        const wasPlaying = this.timeline.playing;
+        this.runtime.stopAll();
+        this.setTimelineClock(seconds, !wasPlaying);
+        this.timeline.pendingFrame = true;
+        this.emitTimelineChanged();
+    }
+
+    updateTimelineSettings (settings) {
+        const previousDuration = this.timeline.duration;
+        this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
+        this.timeline.framerate = this.normalizeRenderingFramerate(settings.framerate);
+        this.timeline.height = Math.max(1, Math.min(4096, Math.round(toNumber(settings.height, this.timeline.height))));
+        this.timeline.sound = String(settings.sound || '');
+        this.timeline.width = Math.max(1, Math.min(4096, Math.round(toNumber(settings.width, this.timeline.width))));
+        this.vm.setFramerate(this.timeline.framerate);
+        this.vm.setStageSize(this.timeline.width, this.timeline.height);
+        if (this.timeline.currentTime > this.timeline.duration || previousDuration !== this.timeline.duration) {
+            this.seekTimeline(Math.min(this.timeline.currentTime, this.timeline.duration));
+        } else {
+            this.timeline.pendingFrame = true;
+            this.emitTimelineChanged();
+        }
+        this.runtime.emitProjectChanged();
+    }
+
+    renderTimeline () {
+        this.runtime.stopAll();
+        this.clearRenderingFrames();
+        this.timeline.currentTime = 0;
+        this.timeline.pendingFrame = true;
+        this.timeline.playing = true;
+        this.timeline.recording = true;
+        this.timeline.renderFrameIndex = 0;
+        this.setTimelineClock(0, false);
+        this.emitTimelineChanged();
+    }
+
+    getTimelineSounds () {
+        const target = this.runtime.targets.find(item => item.isOriginal && !item.isStage);
+        return target && target.sprite && Array.isArray(target.sprite.sounds) ?
+            target.sprite.sounds.map(sound => sound.name) : [];
+    }
+
+    exportTimeline () {
+        const target = this.runtime.targets.find(item => item.isOriginal && !item.isStage);
+        return this.exportRenderingMp4(target, this.timeline.sound, this.timeline.framerate);
+    }
+
+    handleTimelineBeforeExecute () {
+        if (!this.timeline.playing && !this.timeline.pendingFrame) return;
+        if (this.timeline.recording) {
+            this.setTimelineClock(
+                Math.min(this.timeline.renderFrameIndex / this.timeline.framerate, this.timeline.duration),
+                false
+            );
+        } else if (this.timeline.playing) {
+            const time = this.runtime.ioDevices.clock.projectTimer();
+            this.timeline.currentTime = clamp(time, 0, this.timeline.duration);
+            if (time >= this.timeline.duration) this.setTimelineClock(this.timeline.duration, false);
+        }
+        this.timeline.pendingFrame = false;
+        this.timeline.renderedThisStep = true;
+        this.runtime.startHats('event_renderframe');
+    }
+
+    handleTimelineAfterExecute () {
+        if (!this.timeline.renderedThisStep) return;
+        this.timeline.renderedThisStep = false;
+        if (this.timeline.recording) {
+            try {
+                this.addRenderingFrame();
+            } catch (error) {
+                this.timeline.recording = false;
+                this.timeline.playing = false;
+                this.setTimelineClock(this.timeline.currentTime, true);
+                this.runtime.stopAll();
+                this.emit('renderError', error);
+            }
+            if (this.timeline.recording && this.timeline.currentTime < this.timeline.duration) {
+                this.timeline.renderFrameIndex++;
+            }
+        } else if (this.timeline.playing) {
+            this.timeline.currentTime = clamp(
+                this.runtime.ioDevices.clock.projectTimer(),
+                0,
+                this.timeline.duration
+            );
+        }
+        this.emitTimelineChanged();
+        if (this.timeline.playing && this.timeline.currentTime >= this.timeline.duration) {
+            const completedRendering = this.timeline.recording;
+            this.timeline.recording = false;
+            this.pauseTimeline();
+            if (completedRendering) this.emit('timelineRenderComplete', this.getTimelineState());
+        }
     }
 
     patchTarget (target) {
@@ -1275,6 +1510,11 @@ class MovieAssetManager extends EventEmitter {
 
     handleNativeSizeChanged (event) {
         const size = event && Array.isArray(event.newSize) ? event.newSize : this.getStageSize();
+        if (this.timeline) {
+            this.timeline.width = Math.max(1, Math.round(toNumber(size[0], this.timeline.width)));
+            this.timeline.height = Math.max(1, Math.round(toNumber(size[1], this.timeline.height)));
+            this.emitTimelineChanged();
+        }
         this.camera.focalLength = focalLengthFromFOV(this.camera.fov, size[0], size[1]);
         this.applyCamera();
         this.emit('cameraChanged', cloneCamera(this.camera));

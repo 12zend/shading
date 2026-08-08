@@ -44,7 +44,98 @@ const deferred = () => {
     return {promise, resolve};
 };
 
+const makeTimelineManager = () => {
+    const manager = makeManager();
+    manager.vm = {
+        setFramerate: jest.fn(),
+        setStageSize: jest.fn()
+    };
+    manager.runtime.currentMSecs = 10000;
+    manager.runtime.updateCurrentMSecs = jest.fn();
+    manager.runtime.stopAll = jest.fn();
+    manager.runtime.startHats = jest.fn();
+    manager.runtime.emitProjectChanged = jest.fn();
+    manager.runtime.targets = [];
+    manager.runtime.ioDevices = {
+        clock: {
+            _paused: true,
+            _pausedTime: 0,
+            _projectTimer: {startTime: 10000},
+            projectTimer: jest.fn(() => 2.5)
+        }
+    };
+    manager.timeline = {
+        currentTime: 0,
+        duration: 10,
+        framerate: 30,
+        height: 360,
+        pendingFrame: false,
+        playing: false,
+        recording: false,
+        sound: '',
+        width: 480
+    };
+    manager.renderingFrames = [];
+    manager.emit = jest.fn();
+    return manager;
+};
+
 describe('MovieAssetManager rendering performance', () => {
+    test('uses current advanced settings for a project without saved timeline settings', () => {
+        const manager = makeTimelineManager();
+        manager.runtime.frameLoop = {framerate: 60};
+
+        manager.restoreTimeline();
+
+        expect(manager.timeline.framerate).toBe(60);
+        expect(manager.timeline.width).toBe(480);
+        expect(manager.timeline.height).toBe(360);
+        expect(manager.vm.setFramerate).not.toHaveBeenCalled();
+        expect(manager.vm.setStageSize).not.toHaveBeenCalled();
+    });
+
+    test('starts render frame hats from the selected timeline time', () => {
+        const manager = makeTimelineManager();
+        manager.seekTimeline(2.5);
+        manager.playTimeline();
+        manager.handleTimelineBeforeExecute();
+
+        expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(7500);
+        expect(manager.runtime.ioDevices.clock._paused).toBe(false);
+        expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
+    });
+
+    test('pauses the timeline timer without capturing preview playback', () => {
+        const manager = makeTimelineManager();
+        manager.addRenderingFrame = jest.fn();
+        manager.timeline.playing = true;
+        manager.timeline.renderedThisStep = true;
+
+        manager.handleTimelineAfterExecute();
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.timeline.currentTime).toBe(2.5);
+
+        manager.pauseTimeline();
+        expect(manager.timeline.playing).toBe(false);
+        expect(manager.runtime.ioDevices.clock._paused).toBe(true);
+        expect(manager.runtime.stopAll).toHaveBeenCalled();
+    });
+
+    test('captures rendering frames at deterministic frame times', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.framerate = 10;
+        manager.addRenderingFrame = jest.fn();
+
+        manager.renderTimeline();
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+        manager.handleTimelineBeforeExecute();
+
+        expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
+        expect(manager.timeline.currentTime).toBe(0.1);
+        expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(9900);
+    });
+
     test('keeps a world-rendered model fixed to the stage instead of projecting a flat sprite', () => {
         const manager = makeManager();
         const target = makeTarget();

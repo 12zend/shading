@@ -129,6 +129,13 @@ describe('Movie project format', () => {
         })).toBe('mb3');
     });
 
+    test('marks the render frame hat and timeline settings as Movie project data', () => {
+        const json = project({render: block('event_renderframe')});
+        json.movieTimeline = {duration: 12, framerate: 24, width: 1920, height: 1080};
+
+        expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks', 'timeline']);
+    });
+
     test('marks saved camera and target transforms without requiring a model', () => {
         const json = project({});
         json.movieCamera = {

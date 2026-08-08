@@ -29,7 +29,7 @@
 .stage-menu-wrapper {
     display: flex;
     margin: auto;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-shrink: 0;
     align-items: center;
     height: $stage-menu-height;

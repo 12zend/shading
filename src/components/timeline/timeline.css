@@ -1,0 +1,308 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+@import "../../css/z-index.css";
+
+.timeline {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    align-self: stretch;
+    color: $text-primary;
+    background: $ui-white;
+    border-radius: $form-radius $form-radius 0 0;
+    box-shadow: 0 -1px 0 $ui-black-transparent;
+    padding: 0.75rem;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.header,
+.transport,
+.settings-heading,
+.settings-actions {
+    display: flex;
+    align-items: center;
+}
+
+.header {
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.title-group {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.title-group strong {
+    font-size: 0.875rem;
+}
+
+.title-group span,
+.settings-heading span,
+.status,
+.frame-count {
+    color: $text-primary-transparent;
+    font-size: 0.6875rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.timecode {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.timecode span {
+    color: $text-primary-transparent;
+    font-weight: 400;
+}
+
+.icon-button,
+.play-button,
+.stop-button,
+.close-button,
+.primary-button,
+.secondary-button {
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.icon-button,
+.play-button,
+.stop-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: $form-radius;
+    border: 1px solid $ui-black-transparent;
+    background: transparent;
+    color: $text-primary;
+}
+
+.icon-button:hover,
+.play-button:hover,
+.stop-button:hover,
+.secondary-button:hover {
+    background: $ui-secondary;
+}
+
+.icon-button:focus,
+.play-button:focus,
+.stop-button:focus,
+.close-button:focus,
+.primary-button:focus,
+.secondary-button:focus,
+.settings-grid input:focus,
+.settings-grid select:focus,
+.scrubber input:focus {
+    outline: 2px solid $looks-secondary;
+    outline-offset: 2px;
+}
+
+.icon-button.is-active,
+.play-button {
+    background: $looks-light-transparent;
+    color: $text-primary;
+}
+
+.play-button:active,
+.stop-button:active,
+.icon-button:active {
+    background: $looks-transparent;
+}
+
+.icon-button:disabled,
+.scrubber input:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.scrubber {
+    margin-top: 0.625rem;
+}
+
+.scrubber input {
+    display: block;
+    width: 100%;
+    height: 0.375rem;
+    margin: 0;
+    border-radius: 0.1875rem;
+    appearance: none;
+    background-color: $ui-tertiary;
+    background-image: linear-gradient($looks-secondary, $looks-secondary);
+    background-repeat: no-repeat;
+    cursor: pointer;
+}
+
+.scrubber input::-webkit-slider-thumb {
+    width: 0.875rem;
+    height: 0.875rem;
+    border: 2px solid $ui-white;
+    border-radius: 50%;
+    appearance: none;
+    background: $looks-secondary;
+    box-shadow: 0 0 0 1px $looks-secondary-dark;
+}
+
+.scrubber input::-moz-range-thumb {
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2px solid $ui-white;
+    border-radius: 50%;
+    background: $looks-secondary;
+}
+
+.ruler {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.375rem;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.transport {
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+.play-button {
+    font-size: 0.75rem;
+}
+
+.stop-button span {
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 0.0625rem;
+    background: currentColor;
+}
+
+.status {
+    margin-left: 0.25rem;
+}
+
+.frame-count {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.settings-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.5rem);
+    z-index: $z-index-stage-header;
+    width: min(25rem, 100%);
+    padding: 0.875rem;
+    border-radius: $form-radius;
+    background: $ui-white;
+    box-shadow: 0 2px 8px $shadow;
+}
+
+.settings-heading {
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.settings-heading > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.settings-heading strong {
+    font-size: 0.875rem;
+}
+
+.close-button {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: $form-radius;
+    background: transparent;
+    color: $text-primary;
+    font-size: 1.25rem;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.625rem;
+    margin-top: 0.875rem;
+}
+
+.settings-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: $text-primary-transparent;
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+
+.settings-grid input,
+.settings-grid select {
+    width: 100%;
+    height: 2rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    padding: 0 0.5rem;
+    background: $input-background;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.75rem;
+}
+
+.sound-field {
+    grid-column: 1 / -1;
+}
+
+.settings-actions {
+    justify-content: flex-end;
+    gap: 0.375rem;
+    margin-top: 0.875rem;
+}
+
+.primary-button,
+.secondary-button {
+    min-height: 2rem;
+    border-radius: $form-radius;
+    padding: 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.primary-button {
+    background: $looks-secondary;
+    color: $ui-white;
+}
+
+.secondary-button {
+    background: $ui-tertiary;
+    color: $text-primary;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .icon-button,
+    .play-button,
+    .stop-button,
+    .primary-button,
+    .secondary-button {
+        transition: none;
+    }
+}

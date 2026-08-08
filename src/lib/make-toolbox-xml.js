@@ -166,7 +166,7 @@ const xmlEscape = function (unsafe) {
     });
 };
 
-const looks = function (isInitialSetup, isStage, targetId, costumeName, backdropName, soundName, colors) {
+const looks = function (isInitialSetup, isStage, targetId, costumeName, backdropName, colors) {
     const hello = translate('LOOKS_HELLO', 'Hello!');
     const hmm = translate('LOOKS_HMM', 'Hmm...');
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
@@ -281,16 +281,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
         <block id="${targetId}_rendermodel" type="looks_rendermodel">
             <value name="MODEL">
                 <shadow type="looks_model"></shadow>
-            </value>
-        </block>
-        <block type="looks_addrenderingframe"/>
-        <block type="looks_clearrenderingframe"/>
-        <block type="looks_exportrenderingmp4">
-            <field name="SOUND">${soundName}</field>
-            <value name="FRAMERATE">
-                <shadow type="math_number">
-                    <field name="NUM">30</field>
-                </shadow>
             </value>
         </block>
         <block id="${targetId}_switchvideoto" type="looks_switchvideoto">
@@ -471,7 +461,7 @@ const events = function (isInitialSetup, isStage, targetId, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_EVENTS}" id="events" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        <block type="event_whenflagclicked"/>
+        <block type="event_renderframe"/>
         <block type="event_whenkeypressed">
         </block>
         ${isStage ? `
@@ -915,7 +905,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     };
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
     const looksXML = moveCategory('looks') ||
-        looks(isInitialSetup, isStage, targetId, costumeName, backdropName, soundName, colors.looks);
+        looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, colors.event);

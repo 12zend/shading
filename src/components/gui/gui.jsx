@@ -13,7 +13,6 @@ import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
 import ModelTab from '../../containers/model-tab.jsx';
-import TargetPane from '../../containers/target-pane.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
@@ -23,6 +22,7 @@ import MenuBar from '../menu-bar/menu-bar.jsx';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
 import Watermark from '../../containers/watermark.jsx';
+import Timeline from '../timeline/timeline.jsx';
 
 import Backpack from '../../containers/backpack.jsx';
 import BrowserModal from '../browser-modal/browser-modal.jsx';
@@ -107,6 +107,7 @@ const GUIComponent = props => {
         costumeLibraryVisible,
         costumesTabVisible,
         fontsTabVisible,
+        framerate,
         modelsTabVisible,
         customStageSize,
         enableCommunity,
@@ -503,9 +504,10 @@ const GUIComponent = props => {
                                 stageSize={stageSize}
                                 vm={vm}
                             />
-                            <Box className={styles.targetWrapper}>
-                                <TargetPane
-                                    stageSize={stageSize}
+                            <Box className={styles.timelineWrapper}>
+                                <Timeline
+                                    customStageSize={customStageSize}
+                                    framerate={framerate}
                                     vm={vm}
                                 />
                             </Box>
@@ -545,6 +547,7 @@ GUIComponent.propTypes = {
     costumeLibraryVisible: PropTypes.bool,
     costumesTabVisible: PropTypes.bool,
     fontsTabVisible: PropTypes.bool,
+    framerate: PropTypes.number.isRequired,
     modelsTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
@@ -637,6 +640,7 @@ GUIComponent.defaultProps = {
 
 const mapStateToProps = state => ({
     customStageSize: state.scratchGui.customStageSize,
+    framerate: state.scratchGui.tw.framerate,
     isWindowFullScreen: state.scratchGui.tw.isWindowFullScreen,
     // This is the button's mode, as opposed to the actual current state
     blocksId: state.scratchGui.timeTravel.year.toString(),
