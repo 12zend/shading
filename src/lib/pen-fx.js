@@ -113,6 +113,104 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const SIGNAL_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform vec2 u_resolution;
+    uniform int u_mode;
+    uniform float u_tracking;
+    uniform float u_chroma;
+    uniform float u_noise;
+    uniform float u_scanlines;
+    uniform float u_evolution;
+    uniform float u_slices;
+    uniform float u_shift;
+    uniform float u_rgb;
+    uniform float u_density;
+    uniform float u_mix;
+
+    vec4 sampleImage(vec2 uv) {
+      if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
+        return vec4(0.0);
+      }
+      return texture2D(u_image, uv);
+    }
+
+    vec3 straightColor(vec4 pixel) {
+      return pixel.a > 0.00001 ? pixel.rgb / pixel.a : vec3(0.0);
+    }
+
+    float hash(vec2 value) {
+      return fract(sin(dot(value, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    void main() {
+      vec4 original = texture2D(u_image, v_uv);
+      vec2 pixel = v_uv * u_resolution;
+      vec2 uv = v_uv;
+      float frame = mod(u_evolution, 100000.0);
+      float alpha;
+      vec3 color;
+
+      if (u_mode == 0) {
+        float line = floor(pixel.y * 0.25);
+        float lineNoise = hash(vec2(line, frame * 0.071)) * 2.0 - 1.0;
+        float wobble = sin(pixel.y * 0.045 + frame * 0.83) * 0.45;
+        float trackingCenter = mix(0.12, 0.88, hash(vec2(floor(frame * 0.19), 41.0)));
+        float trackingBand = exp(-pow((v_uv.y - trackingCenter) / 0.035, 2.0));
+        float trackingNoise = hash(vec2(floor(pixel.y), floor(frame * 2.0))) * 2.0 - 1.0;
+        float horizontalShift = (lineNoise * 0.28 + wobble + trackingNoise * trackingBand * 1.8) * u_tracking;
+        uv.x += horizontalShift / max(u_resolution.x, 1.0);
+
+        float chromaWave = 0.65 + 0.35 * sin(pixel.y * 0.021 + frame * 0.37);
+        vec2 chromaOffset = vec2(u_chroma * chromaWave / max(u_resolution.x, 1.0), 0.0);
+        vec4 redPixel = sampleImage(uv + chromaOffset);
+        vec4 greenPixel = sampleImage(uv);
+        vec4 bluePixel = sampleImage(uv - chromaOffset);
+        alpha = max(redPixel.a, max(greenPixel.a, bluePixel.a));
+        color = vec3(straightColor(redPixel).r, straightColor(greenPixel).g, straightColor(bluePixel).b);
+
+        float tapeNoise = hash(floor(pixel * vec2(0.5, 1.0)) + vec2(frame * 13.7, frame * 5.3)) * 2.0 - 1.0;
+        float streakNoise = hash(vec2(floor(pixel.y * 0.5), floor(frame * 3.0))) * 2.0 - 1.0;
+        color += (tapeNoise * 0.72 + streakNoise * 0.28) * u_noise;
+        float scanline = 0.5 + 0.5 * sin(pixel.y * 3.14159265359);
+        color *= 1.0 - u_scanlines * (0.35 + 0.65 * scanline);
+        color = mix(color, vec3(dot(color, vec3(0.299, 0.587, 0.114))), 0.08);
+        color += vec3(trackingBand * u_noise * (0.25 + 0.75 * hash(vec2(pixel.x, frame))));
+      } else {
+        float slices = max(u_slices, 1.0);
+        float slice = floor(v_uv.y * slices);
+        float sliceRandom = hash(vec2(slice, floor(frame)));
+        float activeMask = step(1.0 - u_density, sliceRandom);
+        float blockWidth = max(8.0, u_resolution.x / 12.0);
+        float block = floor(pixel.x / blockWidth);
+        float blockRandom = hash(vec2(block + slice * 17.0, floor(frame * 1.7)));
+        float blockGate = mix(0.45, 1.0, step(0.38, blockRandom));
+        float sliceShift = (hash(vec2(slice * 3.1, frame * 0.53)) * 2.0 - 1.0) * u_shift * activeMask * blockGate;
+        uv.x += sliceShift / max(u_resolution.x, 1.0);
+
+        float splitPulse = activeMask * (0.45 + 0.55 * blockRandom);
+        vec2 rgbOffset = vec2(u_rgb * splitPulse / max(u_resolution.x, 1.0), 0.0);
+        vec4 redPixel = sampleImage(uv + rgbOffset);
+        vec4 greenPixel = sampleImage(uv);
+        vec4 bluePixel = sampleImage(uv - rgbOffset);
+        alpha = max(redPixel.a, max(greenPixel.a, bluePixel.a));
+        color = vec3(straightColor(redPixel).r, straightColor(greenPixel).g, straightColor(bluePixel).b);
+
+        float dropoutRandom = hash(vec2(block * 7.3 + slice, floor(frame * 2.3)));
+        float dropout = activeMask * step(0.91, dropoutRandom);
+        vec3 dropoutColor = vec3(hash(vec2(slice, frame)), 0.08, hash(vec2(block, frame + 9.0))) * 0.35;
+        color = mix(color, dropoutColor, dropout);
+        float digitalNoise = hash(floor(pixel) + vec2(frame * 19.0, frame * 23.0)) - 0.5;
+        color += digitalNoise * activeMask * u_density * 0.16;
+      }
+
+      vec4 effected = vec4(clamp(color, 0.0, 1.0) * alpha, alpha);
+      gl_FragColor = mix(original, effected, clamp(u_mix, 0.0, 1.0));
+    }
+  `;
+
   const GAUSSIAN_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -983,6 +1081,7 @@ const createPenFXClass = vm => {
         copy: COPY_SHADER,
         color: COLOR_SHADER,
         rgbShift: RGB_SHIFT_SHADER,
+        signal: SIGNAL_SHADER,
         gaussian: GAUSSIAN_SHADER,
         bloom: BLOOM_SHADER,
         wavy: WAVY_SHADER,
@@ -1386,6 +1485,40 @@ const createPenFXClass = vm => {
         u_resolution: this.resolution, u_direction: direction, u_value: value, u_pair: pair,
         u_mix: mixValue
       }, ['u_pair'], blendMode);
+    }
+
+    vhs(tracking, chroma, noise, scanlines, evolution, mixValue, blendMode) {
+      this._singlePass(this._program('signal'), {
+        u_resolution: this.resolution,
+        u_mode: 0,
+        u_tracking: Math.min(128, Math.max(0, Math.abs(tracking))),
+        u_chroma: Math.min(64, Math.max(0, Math.abs(chroma))),
+        u_noise: Math.min(1, Math.max(0, noise)),
+        u_scanlines: Math.min(1, Math.max(0, scanlines)),
+        u_evolution: evolution,
+        u_slices: 1,
+        u_shift: 0,
+        u_rgb: 0,
+        u_density: 0,
+        u_mix: mixValue
+      }, ['u_mode'], blendMode);
+    }
+
+    digitalGlitch(slices, shift, rgb, density, evolution, mixValue, blendMode) {
+      this._singlePass(this._program('signal'), {
+        u_resolution: this.resolution,
+        u_mode: 1,
+        u_tracking: 0,
+        u_chroma: 0,
+        u_noise: 0,
+        u_scanlines: 0,
+        u_evolution: evolution,
+        u_slices: Math.min(256, Math.max(1, Math.round(Math.abs(slices)))),
+        u_shift: Math.min(512, Math.max(0, Math.abs(shift))),
+        u_rgb: Math.min(128, Math.max(0, Math.abs(rgb))),
+        u_density: Math.min(1, Math.max(0, density)),
+        u_mix: mixValue
+      }, ['u_mode'], blendMode);
     }
 
     gaussian(type, direction, radius, mixValue, blendMode) {
@@ -1829,6 +1962,8 @@ const createPenFXClass = vm => {
 
   const mixAmount = value => Math.min(1, Math.max(0, numberOr(value, 100) / 100));
 
+  const evolutionAmount = value => Math.min(100000, Math.max(-100000, number(value)));
+
   const color = value => {
     const rgb = Cast.toRgbColorObject(value);
     return [rgb.r / 255, rgb.g / 255, rgb.b / 255];
@@ -1885,6 +2020,8 @@ const createPenFXClass = vm => {
           {opcode: 'halftone', blockType: BlockType.COMMAND, text: 'CMYK halftone size: [SIZE] mix: [MIX] %', arguments: {SIZE: {type: ArgumentType.NUMBER, defaultValue: 4}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'ascii', blockType: BlockType.COMMAND, text: 'ASCII cell x: [X] y: [Y] foreground: [FG] background: [BG] invert: [INVERT] mix: [MIX] %', arguments: {X: {type: ArgumentType.NUMBER, defaultValue: 6}, Y: {type: ArgumentType.NUMBER, defaultValue: 8}, FG: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, BG: {type: ArgumentType.COLOR, defaultValue: '#000000'}, INVERT: {type: ArgumentType.STRING, menu: 'boolean'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'crt', blockType: BlockType.COMMAND, text: 'CRT curvature: [CURVATURE] border: [BORDER] scan size: [SIZE] strength: [STRENGTH] mix: [MIX] %', arguments: {CURVATURE: {type: ArgumentType.NUMBER, defaultValue: 10}, BORDER: {type: ArgumentType.NUMBER, defaultValue: 0.08}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 2}, STRENGTH: {type: ArgumentType.NUMBER, defaultValue: 0.35}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'vhs', blockType: BlockType.COMMAND, text: 'VHS tracking: [TRACKING] px chroma bleed: [CHROMA] px noise: [NOISE] % scanlines: [SCANLINES] % evolution: [EVOLUTION] mix: [MIX] %', arguments: {TRACKING: {type: ArgumentType.NUMBER, defaultValue: 6}, CHROMA: {type: ArgumentType.NUMBER, defaultValue: 3}, NOISE: {type: ArgumentType.NUMBER, defaultValue: 12}, SCANLINES: {type: ArgumentType.NUMBER, defaultValue: 25}, EVOLUTION: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'glitch', blockType: BlockType.COMMAND, text: 'digital glitch slices: [SLICES] shift: [SHIFT] px RGB split: [RGB] px density: [DENSITY] % evolution: [EVOLUTION] mix: [MIX] %', arguments: {SLICES: {type: ArgumentType.NUMBER, defaultValue: 24}, SHIFT: {type: ArgumentType.NUMBER, defaultValue: 28}, RGB: {type: ArgumentType.NUMBER, defaultValue: 6}, DENSITY: {type: ArgumentType.NUMBER, defaultValue: 35}, EVOLUTION: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'vignette', blockType: BlockType.COMMAND, text: 'vignette color: [COLOR] size x: [X] y: [Y] offset x: [OFFSETX] y: [OFFSETY] intensity: [INTENSITY] roundness: [ROUNDNESS] softness: [SOFTNESS] mix: [MIX] %', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, X: {type: ArgumentType.NUMBER, defaultValue: 1}, Y: {type: ArgumentType.NUMBER, defaultValue: 1}, OFFSETX: {type: ArgumentType.NUMBER, defaultValue: 0}, OFFSETY: {type: ArgumentType.NUMBER, defaultValue: 0}, INTENSITY: {type: ArgumentType.NUMBER, defaultValue: 1}, ROUNDNESS: {type: ArgumentType.NUMBER, defaultValue: 1}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'composition', blockType: BlockType.COMMAND, text: 'composition grid [DIVISIONS] divisions width: [WIDTH] color: [COLOR] opacity: [OPACITY] % mix: [MIX] %', arguments: {DIVISIONS: {type: ArgumentType.NUMBER, defaultValue: 3}, WIDTH: {type: ArgumentType.NUMBER, defaultValue: 1}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, OPACITY: {type: ArgumentType.NUMBER, defaultValue: 50}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'framing', blockType: BlockType.COMMAND, text: 'frame [SHAPE] radius: [RADIUS] softness: [SOFTNESS] color: [COLOR] opacity: [OPACITY] % offset x: [X] y: [Y] mix: [MIX] %', arguments: {SHAPE: {type: ArgumentType.STRING, menu: 'frameShape'}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 0.45}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.02}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, OPACITY: {type: ArgumentType.NUMBER, defaultValue: 100}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -2077,6 +2214,18 @@ const createPenFXClass = vm => {
     crt(args) {
       this._safe(engine => engine.crt(Math.max(1, numberOr(args.CURVATURE, 10)), Math.max(0.001, numberOr(args.BORDER, 0.08)),
         Math.max(1, numberOr(args.SIZE, 2)), Math.min(1, Math.max(0, numberOr(args.STRENGTH, 0.35))),
+        mixAmount(args.MIX), this.blendMode));
+    }
+
+    vhs(args) {
+      this._safe(engine => engine.vhs(numberOr(args.TRACKING, 6), numberOr(args.CHROMA, 3),
+        numberOr(args.NOISE, 12) / 100, numberOr(args.SCANLINES, 25) / 100,
+        evolutionAmount(args.EVOLUTION), mixAmount(args.MIX), this.blendMode));
+    }
+
+    glitch(args) {
+      this._safe(engine => engine.digitalGlitch(numberOr(args.SLICES, 24), numberOr(args.SHIFT, 28),
+        numberOr(args.RGB, 6), numberOr(args.DENSITY, 35) / 100, evolutionAmount(args.EVOLUTION),
         mixAmount(args.MIX), this.blendMode));
     }
 
