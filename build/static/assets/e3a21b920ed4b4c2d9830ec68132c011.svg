@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="40px"
+   height="40px"
+   viewBox="0 0 40 40"
+   version="1.1"
+   id="svg2"
+   sodipodi:docname="face-sensing-small.svg"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2" />
+  <sodipodi:namedview
+     id="namedview2"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="14.124458"
+     inkscape:cx="24.744312"
+     inkscape:cy="21.558349"
+     inkscape:window-width="1349"
+     inkscape:window-height="850"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg2" />
+  <!-- Generator: Sketch 52.2 (67145) - http://www.bohemiancoding.com/sketch -->
+  <title
+     id="title1">Extensions/Software/Video-Sensing-Block</title>
+  <desc
+     id="desc1">Created with Sketch.</desc>
+  <g
+     stroke-miterlimit="10"
+     id="g31"
+     transform="matrix(0.46686253,0,0,0.46686253,-92.047016,-64.021393)">
+    <path
+       d="m 218.87192,180 c 0,-11.66875 9.45938,-21.12814 21.12815,-21.12814 11.66875,0 21.12814,9.45937 21.12814,21.12814 0,11.66875 -9.45937,21.12814 -21.12814,21.12814 -11.66875,0 -21.12815,-9.45937 -21.12815,-21.12814 z"
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="9.5"
+       stroke-linecap="butt"
+       id="path1" />
+    <path
+       d="m 216.38508,193.37275 c 0,0 -1.03885,5.33009 -2.20706,6.9966 -1.16141,1.65681 -4.78198,2.97355 -4.78198,2.97355"
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="path2" />
+    <path
+       d="m 223.415,203.3429 c 0,0 -3.62058,-1.31675 -4.78198,-2.97355 -1.16822,-1.66653 -2.20707,-6.9966 -2.20707,-6.9966"
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="path3" />
+    <path
+       d="m 209.39605,203.40122 c 0,0 3.62057,1.31674 4.78198,2.97355 1.16822,1.66653 2.20707,6.99661 2.20707,6.99661"
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="path4" />
+    <path
+       d="m 216.42597,213.12137 c 0,0 1.03885,-5.3301 2.20707,-6.99661 1.16141,-1.65681 4.78198,-2.97355 4.78198,-2.97355"
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="path5" />
+    <path
+       d="m 216.38508,193.58362 c 0,0 -1.03885,5.33008 -2.20706,6.9966 -1.16141,1.65681 -4.78198,2.97356 -4.78198,2.97356"
+       fill="none"
+       stroke="#ffbf00"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path6" />
+    <path
+       d="m 223.415,203.55377 c 0,0 -3.62058,-1.31674 -4.78198,-2.97355 -1.16822,-1.66653 -2.20707,-6.9966 -2.20707,-6.9966"
+       fill="none"
+       stroke="#ffbf00"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path7" />
+    <path
+       d="m 209.39605,203.61209 c 0,0 3.62057,1.31675 4.78198,2.97355 1.16822,1.66653 2.20707,6.9966 2.20707,6.9966"
+       fill="none"
+       stroke="#ffbf00"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path8" />
+    <path
+       d="m 216.42597,213.37137 c 0,0 1.03885,-5.3301 2.20707,-6.99661 1.16141,-1.65681 4.78198,-2.97355 4.78198,-2.97355"
+       fill="none"
+       stroke="#ffbf00"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path9" />
+    <path
+       d="m 211.58639,203.69274 4.83958,-6.90384 4.83958,6.90384 -4.83958,6.90386 z"
+       fill="#ffbf00"
+       stroke="none"
+       stroke-width="5"
+       stroke-linecap="butt"
+       id="path10" />
+    <path
+       d=""
+       fill="#000000"
+       stroke="#000000"
+       stroke-width="0.5"
+       stroke-linecap="butt"
+       id="path11" />
+    <path
+       d=""
+       fill="#000000"
+       stroke="#000000"
+       stroke-width="0.5"
+       stroke-linecap="butt"
+       id="path12" />
+    <path
+       d=""
+       fill="none"
+       stroke="#000000"
+       stroke-width="21"
+       stroke-linecap="round"
+       id="path13" />
+    <g
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="g15">
+      <path
+         d="m 202.71724,142.64398 h 16.92008"
+         id="path14" />
+      <path
+         d="M 202.68063,159.67394 V 142.75387"
+         id="path15" />
+    </g>
+    <g
+       fill="none"
+       stroke="#0b8e69"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="g17">
+      <path
+         d="M 277.2828,217.35602 H 260.36273"
+         id="path16" />
+      <path
+         d="m 277.3194,200.32607 v 16.92007"
+         id="path17" />
+    </g>
+    <path
+       d="m 218.87192,180 c 0,-11.66875 9.45938,-21.12814 21.12815,-21.12814 11.66875,0 21.12814,9.45937 21.12814,21.12814 0,11.66875 -9.45937,21.12814 -21.12814,21.12814 -11.66875,0 -21.12815,-9.45937 -21.12815,-21.12814 z"
+       fill="#0b8e69"
+       stroke="#ffffff"
+       stroke-width="5"
+       stroke-linecap="butt"
+       id="path18" />
+    <path
+       d="m 248.65064,185.30124 c 0,0 -3.82817,4.7468 -8.74359,4.65085 -5.37597,-0.10494 -8.18549,-4.65085 -8.18549,-4.65085"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path19" />
+    <path
+       d="m 231.82617,174.40736 v 1.41851"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path20" />
+    <path
+       d="m 248.17389,175.82587 v -1.41851"
+       fill="none"
+       stroke="#ffffff"
+       stroke-width="5"
+       stroke-linecap="round"
+       id="path21" />
+    <g
+       id="g30">
+      <path
+         d="m 262.73976,145.08459 c 0,0 -1.4268,7.16463 -3.03132,9.40474 -1.59517,2.22707 -6.56787,3.99701 -6.56787,3.99701"
+         fill="none"
+         stroke="#0b8e69"
+         stroke-width="10"
+         stroke-linecap="round"
+         id="path22" />
+      <path
+         d="m 272.39508,158.48634 c 0,0 -4.9727,-1.76994 -6.56787,-3.99701 -1.60451,-2.24013 -3.03134,-9.40474 -3.03134,-9.40474"
+         fill="none"
+         stroke="#0b8e69"
+         stroke-width="10"
+         stroke-linecap="round"
+         id="path23" />
+      <path
+         d="m 253.14057,158.56471 c 0,0 4.97271,1.76995 6.56787,3.99702 1.60451,2.24013 3.03132,9.40473 3.03132,9.40473"
+         fill="none"
+         stroke="#0b8e69"
+         stroke-width="10"
+         stroke-linecap="round"
+         id="path24" />
+      <path
+         d="m 262.79589,171.96647 c 0,0 1.4268,-7.16463 3.03132,-9.40473 1.59517,-2.22707 6.56788,-3.99702 6.56788,-3.99702"
+         fill="none"
+         stroke="#0b8e69"
+         stroke-width="10"
+         stroke-linecap="round"
+         id="path25" />
+      <path
+         d="m 262.73976,145.08459 c 0,0 -1.42681,7.16463 -3.03131,9.40474 -1.59517,2.22707 -6.56787,3.99701 -6.56787,3.99701"
+         fill="none"
+         stroke="#ffbf00"
+         stroke-width="5"
+         stroke-linecap="round"
+         id="path26" />
+      <path
+         d="m 272.39508,158.48634 c 0,0 -4.9727,-1.76994 -6.56787,-3.99701 -1.60451,-2.24013 -3.03134,-9.40474 -3.03134,-9.40474"
+         fill="none"
+         stroke="#ffbf00"
+         stroke-width="5"
+         stroke-linecap="round"
+         id="path27" />
+      <path
+         d="m 253.14057,158.56471 c 0,0 4.97271,1.76995 6.56787,3.99702 1.60451,2.24013 3.03132,9.40473 3.03132,9.40473"
+         fill="none"
+         stroke="#ffbf00"
+         stroke-width="5"
+         stroke-linecap="round"
+         id="path28" />
+      <path
+         d="m 262.79589,171.96647 c 0,0 1.4268,-7.16463 3.03132,-9.40473 1.59517,-2.22707 6.56788,-3.99702 6.56788,-3.99702"
+         fill="none"
+         stroke="#ffbf00"
+         stroke-width="5"
+         stroke-linecap="round"
+         id="path29" />
+      <path
+         d="m 256.14894,158.95657 6.64697,-9.28005 6.64697,9.28005 -6.64697,9.28008 z"
+         fill="#ffbf00"
+         stroke="none"
+         stroke-width="5"
+         stroke-linecap="butt"
+         id="path30" />
+    </g>
+  </g>
+</svg>
