@@ -290,6 +290,26 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                 </shadow>
             </value>
         </block>
+        <block type="looks_clearlight"/>
+        <block type="looks_addpointlight">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
+            <value name="RADIUS"><shadow type="math_number"><field name="NUM">1000</field></shadow></value>
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            <value name="INTENSITY"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
+            <value name="SHADOW"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+        </block>
+        <block type="looks_addlight">
+            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
+            <value name="Z"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
+            <value name="RADIUS"><shadow type="math_number"><field name="NUM">1000</field></shadow></value>
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            <value name="INTENSITY"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
+            <value name="ANGLE"><shadow type="math_angle"><field name="NUM">45</field></shadow></value>
+            <value name="SHADOW"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+        </block>
         <block id="${targetId}_rendervideo" type="looks_rendervideo">
             <value name="VIDEO">
                 <shadow type="looks_video"></shadow>

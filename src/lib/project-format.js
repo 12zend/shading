@@ -26,6 +26,9 @@ const MOVIE_OPERATOR_BLOCKS = [
 ];
 
 const MOVIE_3D_BLOCKS = [
+    'looks_addlight',
+    'looks_addpointlight',
+    'looks_clearlight',
     'motion_changecamerarotationby',
     'motion_changecameraxby',
     'motion_changecamerayby',

@@ -126,6 +126,16 @@ describe('Movie project format', () => {
         expect(json.mb3.features).toEqual(['3d-engine', 'model-assets', 'movie-blocks']);
     });
 
+    test('marks model lighting blocks as Movie 3D project data', () => {
+        const json = project({
+            clear: block('looks_clearlight'),
+            point: block('looks_addpointlight'),
+            spot: block('looks_addlight')
+        });
+
+        expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);
+    });
+
     test('marks rendering export blocks as Movie project data', () => {
         const json = project({export: block('looks_exportrenderingmp4')});
 

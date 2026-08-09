@@ -28,6 +28,22 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
 
+    test('offers point and spot lights with color pickers and fractional shadows', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="looks_clearlight"');
+        expect(toolbox).toContain('type="looks_addpointlight"');
+        expect(toolbox).toContain('type="looks_addlight"');
+        expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker">');
+        expect(toolbox).toContain('<value name="SHADOW"><shadow type="math_number">');
+        expect(toolbox.indexOf('type="looks_clearlight"')).toBeLessThan(
+            toolbox.indexOf('type="looks_addpointlight"')
+        );
+        expect(toolbox.indexOf('type="looks_addpointlight"')).toBeLessThan(
+            toolbox.indexOf('type="looks_addlight"')
+        );
+    });
+
     test('offers one atomic video-frame render block for reliable stamping', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 

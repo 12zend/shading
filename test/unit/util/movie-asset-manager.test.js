@@ -23,6 +23,7 @@ const makeManager = () => {
     manager.models = new Map();
     manager.modelObjects = new Map();
     manager.fontFaces = new Map();
+    manager.lights = null;
     return manager;
 };
 
@@ -639,6 +640,64 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(clearResult).toBeUndefined();
         expect(manager.clearModelScene).toHaveBeenCalledWith(target);
+    });
+
+    test('registers accumulating point and spot lights and clears the authored light scene', () => {
+        const manager = makeManager();
+        manager.runtime.targets = [];
+        manager.installPrimitives();
+
+        manager.runtime._primitives.looks_addpointlight({
+            COLOR: '#ff8040',
+            INTENSITY: 3,
+            RADIUS: 800,
+            SHADOW: 0.25,
+            X: 10,
+            Y: 20,
+            Z: 30
+        });
+        manager.runtime._primitives.looks_addlight({
+            ANGLE: 35,
+            COLOR: '#ffffff',
+            INTENSITY: 2,
+            RADIUS: 1200,
+            SHADOW: 1,
+            X: -10,
+            Y: 40,
+            Z: 100
+        });
+
+        expect(manager.lights).toEqual([
+            expect.objectContaining({
+                color: '#ff8040',
+                shadow: 0.25,
+                type: 'point'
+            }),
+            expect.objectContaining({
+                angle: 35,
+                shadow: 1,
+                type: 'spot'
+            })
+        ]);
+
+        manager.runtime._primitives.looks_clearlight();
+        expect(manager.lights).toEqual([]);
+    });
+
+    test('rerenders only targets currently displaying a 3D model when lights change', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const otherTarget = {...makeTarget(), id: 'other'};
+        manager.runtime.targets = [target, otherTarget];
+        manager.getTargetState(target).requestedMode = 'model';
+        manager.getTargetState(target).modelScene = [{assetId: 'cube'}];
+        manager.getTargetState(otherTarget).requestedMode = 'video';
+        manager.queueModelSceneRender = jest.fn();
+
+        manager.clearLights();
+
+        expect(manager.queueModelSceneRender).toHaveBeenCalledTimes(1);
+        expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
     });
 
     test('accumulates model snapshots in one sprite scene until clear scene', () => {

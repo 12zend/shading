@@ -198,6 +198,8 @@ class MovieAssetManager extends EventEmitter {
         this.timelineSoundSources = new Set();
         this.previewRendererSize = null;
         this.modelRenderer = null;
+        // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
+        this.lights = null;
         const [stageWidth, stageHeight] = this.getStageSize();
         this.timeline = {
             currentTime: 0,
@@ -293,6 +295,9 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_setmodelframeto = (args, util) => {
             this.runWithoutWaiting(this.setModelFrame(util.target, args.FRAME));
         };
+        primitives.looks_clearlight = () => this.clearLights();
+        primitives.looks_addpointlight = args => this.addLight('point', args);
+        primitives.looks_addlight = args => this.addLight('spot', args);
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
         primitives.looks_addrenderingframe = () => this.addRenderingFrame();
@@ -382,6 +387,37 @@ class MovieAssetManager extends EventEmitter {
         promise.catch(error => this.emit('renderError', error));
     }
 
+    rerenderLightedModelScenes () {
+        const renders = [];
+        for (const target of this.runtime.targets || []) {
+            const state = this.targetStates.get(target.id);
+            if (!state || state.requestedMode !== 'model' || !state.modelScene.length) continue;
+            const render = this.queueModelSceneRender(target);
+            if (render && typeof render.then === 'function') renders.push(render);
+        }
+        return renders.length ? Promise.all(renders) : undefined;
+    }
+
+    clearLights () {
+        this.lights = [];
+        return this.rerenderLightedModelScenes();
+    }
+
+    addLight (type, args = {}) {
+        const light = {
+            angle: args.ANGLE,
+            color: args.COLOR,
+            intensity: args.INTENSITY,
+            position: {x: args.X, y: args.Y, z: args.Z},
+            radius: args.RADIUS,
+            shadow: args.SHADOW,
+            type
+        };
+        // The first authored light replaces the preview-oriented studio setup. Further blocks accumulate lights.
+        this.lights = (Array.isArray(this.lights) ? this.lights : []).concat(light);
+        return this.rerenderLightedModelScenes();
+    }
+
     trackBlockingVideoRender (promise) {
         if (!promise || typeof promise.then !== 'function') return promise;
         if (!(this.blockingVideoRenders instanceof Set)) this.blockingVideoRenders = new Set();
@@ -441,6 +477,7 @@ class MovieAssetManager extends EventEmitter {
         const originalDeserializeProject = this.vm.deserializeProject.bind(this.vm);
         this.vm.deserializeProject = async (projectJSON, zip) => {
             this.clearRenderingFrames();
+            this.lights = null;
             const videoPromise = this.deserializeVideos(projectJSON[VIDEO_PROJECT_KEY], zip);
             const modelPromise = this.deserializeModels(projectJSON[MODEL_PROJECT_KEY], zip);
             const transformDescriptors = this.readTransformDescriptors(projectJSON);
@@ -1774,12 +1811,9 @@ class MovieAssetManager extends EventEmitter {
         });
         if (cachedItems.length && cachedItems.every(Boolean) && state.requestedMode === 'model') {
             if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-            const canvas = this.modelRenderer.renderWorldScene(
-                cachedItems,
-                this.camera,
-                this.getStageSize(),
-                BITMAP_RESOLUTION
-            );
+            const renderArguments = [cachedItems, this.camera, this.getStageSize(), BITMAP_RESOLUTION];
+            if (Array.isArray(this.lights)) renderArguments.push(this.lights);
+            const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
             this.applyBitmap(target, canvas, 'model');
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
@@ -1811,12 +1845,14 @@ class MovieAssetManager extends EventEmitter {
                 if (this.targetStates.get(target.id) !== state || state.requestedMode !== 'model') return;
                 if (state.modelRenderVersion !== version) continue;
                 if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-                const canvas = this.modelRenderer.renderWorldScene(
+                const renderArguments = [
                     loadedItems.filter(Boolean),
                     this.camera,
                     this.getStageSize(),
                     BITMAP_RESOLUTION
-                );
+                ];
+                if (Array.isArray(this.lights)) renderArguments.push(this.lights);
+                const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
                 this.applyBitmap(target, canvas, 'model');
                 return;
             }

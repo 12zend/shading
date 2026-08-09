@@ -10,6 +10,7 @@ import {
     fovFromFocalLength,
     moviePositionToThree,
     movieRotationToThreeQuaternion,
+    normalizeLight,
     projectPosition,
     resampleAnimationClip,
     restoreMMDBoneHierarchy,
@@ -24,6 +25,64 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('normalizes user light inputs and clamps fractional shadow strength', () => {
+        expect(normalizeLight({
+            angle: 180,
+            color: '#ff8040',
+            intensity: -2,
+            position: {x: '10', y: 'invalid', z: 30},
+            radius: -100,
+            shadow: 1.5,
+            type: 'spot'
+        })).toEqual({
+            angle: 90,
+            color: '#ff8040',
+            intensity: 0,
+            position: {x: 10, y: 0, z: 30},
+            radius: 0,
+            shadow: 1,
+            type: 'spot'
+        });
+        expect(normalizeLight({shadow: -1, type: 'unknown'})).toEqual(expect.objectContaining({
+            shadow: 0,
+            type: 'point'
+        }));
+    });
+
+    test('splits a fractional shadow into shadowed and unshadowed GPU lights', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.scene = new THREE.Scene();
+        renderer.renderer = {shadowMap: {enabled: false}};
+        renderer.lightObjects = [];
+        renderer.lightConfiguration = null;
+        renderer.usesShadows = false;
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial());
+        renderer.currentObjects = [mesh];
+
+        const lights = [{
+            color: '#ffffff',
+            intensity: 4,
+            position: {x: 0, y: 100, z: 200},
+            radius: 1000,
+            shadow: 0.25,
+            type: 'point'
+        }];
+        renderer.setLights(lights);
+
+        const pointLights = renderer.lightObjects.filter(object => object.isPointLight);
+        expect(pointLights).toHaveLength(2);
+        expect(pointLights.find(light => light.castShadow).intensity).toBe(1);
+        expect(pointLights.find(light => !light.castShadow).intensity).toBe(3);
+        expect(renderer.renderer.shadowMap.enabled).toBe(true);
+        expect(mesh.castShadow).toBe(true);
+        expect(mesh.receiveShadow).toBe(true);
+
+        renderer.setLights([]);
+        expect(renderer.renderer.shadowMap.enabled).toBe(false);
+        expect(mesh.castShadow).toBe(false);
+        expect(mesh.receiveShadow).toBe(false);
+    });
+
     test('reuses a cloned model hierarchy while only its transform changes', () => {
         const renderer = Object.create(ModelRenderer.prototype);
         renderer.canvas = {height: 0, reusable: true, width: 0};

@@ -529,6 +529,47 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_clearlight = {
+        init: function () {
+            this.jsonInit(looksStatement('clear light', []));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_addpointlight = {
+        init: function () {
+            this.jsonInit(looksStatement(
+                'add point light x: %1 y: %2 z: %3 radius: %4 color: %5 intensity: %6 shadow: %7',
+                [
+                    {type: 'input_value', name: 'X'},
+                    {type: 'input_value', name: 'Y'},
+                    {type: 'input_value', name: 'Z'},
+                    {type: 'input_value', name: 'RADIUS'},
+                    {type: 'input_value', name: 'COLOR'},
+                    {type: 'input_value', name: 'INTENSITY'},
+                    {type: 'input_value', name: 'SHADOW'}
+                ]
+            ));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_addlight = {
+        init: function () {
+            this.jsonInit(looksStatement(
+                'add light x: %1 y: %2 z: %3 radius: %4 color: %5 intensity: %6 angle: %7 shadow: %8',
+                [
+                    {type: 'input_value', name: 'X'},
+                    {type: 'input_value', name: 'Y'},
+                    {type: 'input_value', name: 'Z'},
+                    {type: 'input_value', name: 'RADIUS'},
+                    {type: 'input_value', name: 'COLOR'},
+                    {type: 'input_value', name: 'INTENSITY'},
+                    {type: 'input_value', name: 'ANGLE'},
+                    {type: 'input_value', name: 'SHADOW'}
+                ]
+            ));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_addrenderingframe = {
         init: function () {
             this.jsonInit({

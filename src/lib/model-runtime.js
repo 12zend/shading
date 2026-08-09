@@ -10,6 +10,9 @@ const DEFAULT_FOV = 2 * Math.atan((Math.max(DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_H
 const DEFAULT_DEPTH = 480;
 const ROTATION_ORDERS = ['XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX'];
 const MMD_FRAME_RATE = 30;
+const POINT_SHADOW_MAP_SIZE = 256;
+const SPOT_SHADOW_MAP_SIZE = 512;
+const DEFAULT_SHADOW_FAR = 10000;
 const TRANSPARENT_TEXTURE =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mP4z8AAAAMBAQDJ' +
     'Pv/AAAAAAElFTkSuQmCC';
@@ -465,6 +468,28 @@ const movieRotationToThreeQuaternion = (rotation, order) => {
 
 const moviePositionToThree = position => new THREE.Vector3(position.x, position.y, -position.z);
 
+const clampLightValue = (value, min, max, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+};
+
+const normalizeLight = light => ({
+    angle: clampLightValue(light && light.angle, 0.1, 90, 45),
+    color: light && light.color,
+    intensity: clampLightValue(light && light.intensity, 0, Number.MAX_SAFE_INTEGER, 1),
+    position: {
+        x: clampLightValue(light && light.position && light.position.x, -Number.MAX_SAFE_INTEGER,
+            Number.MAX_SAFE_INTEGER, 0),
+        y: clampLightValue(light && light.position && light.position.y, -Number.MAX_SAFE_INTEGER,
+            Number.MAX_SAFE_INTEGER, 0),
+        z: clampLightValue(light && light.position && light.position.z, -Number.MAX_SAFE_INTEGER,
+            Number.MAX_SAFE_INTEGER, 0)
+    },
+    radius: clampLightValue(light && light.radius, 0, Number.MAX_SAFE_INTEGER, 0),
+    shadow: clampLightValue(light && light.shadow, 0, 1, 0),
+    type: light && light.type === 'spot' ? 'spot' : 'point'
+});
+
 const verticalFOVFromFocalLength = (focalLength, height) => (
     2 * Math.atan((Math.max(1, height) / 2) / Math.max(0.001, focalLength)) * (180 / Math.PI)
 );
@@ -553,18 +578,18 @@ class ModelRenderer {
         this.renderer.setPixelRatio(1);
         this.renderer.setSize(MODEL_RENDER_SIZE, MODEL_RENDER_SIZE, false);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = false;
+        this.renderer.shadowMap.autoUpdate = false;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
         this.camera.position.set(0, 0, 310);
         this.camera.lookAt(0, 0, 0);
-        this.scene.add(new THREE.HemisphereLight(0xffffff, 0x303848, 1.8));
-        const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-        keyLight.position.set(2, 3, 4);
-        this.scene.add(keyLight);
-        const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
-        fillLight.position.set(-4, 1, 2);
-        this.scene.add(fillLight);
+        this.lightObjects = [];
+        this.lightConfiguration = undefined;
+        this.usesShadows = false;
+        this.setLights(null);
 
         // Keep cloned scene objects and their animation mixers alive between frames. A PMX model can have
         // hundreds of bones, so cloning its hierarchy and rebuilding the mixer for every frame is substantially
@@ -573,6 +598,102 @@ class ModelRenderer {
         this.currentSources = [];
         this.currentAnimationNames = [];
         this.animationStates = new WeakMap();
+    }
+
+    clearLightObjects () {
+        (this.lightObjects || []).forEach(object => {
+            this.scene.remove(object);
+            if (object.shadow && object.shadow.map) object.shadow.map.dispose();
+        });
+        this.lightObjects = [];
+    }
+
+    addLightObject (light) {
+        this.scene.add(light);
+        this.lightObjects.push(light);
+        if (light.target) {
+            this.scene.add(light.target);
+            this.lightObjects.push(light.target);
+        }
+    }
+
+    makeLight (configuration, intensity, castShadow) {
+        const color = new THREE.Color();
+        try {
+            color.set(configuration.color || 0xffffff);
+        } catch (error) {
+            color.set(0xffffff);
+        }
+        let light;
+        if (configuration.type === 'spot') {
+            light = new THREE.SpotLight(
+                color,
+                intensity,
+                configuration.radius,
+                THREE.MathUtils.degToRad(configuration.angle),
+                0.2,
+                2
+            );
+            light.target.position.set(0, 0, -DEFAULT_DEPTH);
+            light.shadow.mapSize.set(SPOT_SHADOW_MAP_SIZE, SPOT_SHADOW_MAP_SIZE);
+        } else {
+            light = new THREE.PointLight(color, intensity, configuration.radius, 2);
+            light.shadow.mapSize.set(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE);
+        }
+        light.position.copy(moviePositionToThree(configuration.position));
+        light.castShadow = castShadow;
+        if (castShadow) {
+            light.shadow.bias = -0.0005;
+            light.shadow.normalBias = 0.5;
+            light.shadow.radius = 2;
+            light.shadow.camera.near = 0.5;
+            light.shadow.camera.far = Math.max(1, configuration.radius || DEFAULT_SHADOW_FAR);
+            light.shadow.camera.updateProjectionMatrix();
+        }
+        return light;
+    }
+
+    setObjectShadowState (object) {
+        object.traverse(child => {
+            if (!child.isMesh) return;
+            child.castShadow = this.usesShadows;
+            child.receiveShadow = this.usesShadows;
+        });
+    }
+
+    setLights (requestedLights) {
+        if (this.lightConfiguration === requestedLights) return;
+        this.lightConfiguration = requestedLights;
+        this.clearLightObjects();
+
+        // A null configuration keeps existing projects and model previews using the original studio lighting.
+        if (!Array.isArray(requestedLights)) {
+            this.addLightObject(new THREE.HemisphereLight(0xffffff, 0x303848, 1.8));
+            const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+            keyLight.position.set(2, 3, 4);
+            this.addLightObject(keyLight);
+            const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
+            fillLight.position.set(-4, 1, 2);
+            this.addLightObject(fillLight);
+            this.usesShadows = false;
+        } else {
+            const configurations = requestedLights.map(normalizeLight);
+            this.usesShadows = configurations.some(light => light.shadow > 0 && light.intensity > 0);
+            configurations.forEach(configuration => {
+                // Split a partially shadowed light into a shadow-casting and an unshadowed contribution. This
+                // keeps the lit intensity constant while making 0 fully unshadowed and 1 maximally dark.
+                const shadowedIntensity = configuration.intensity * configuration.shadow;
+                const unshadowedIntensity = configuration.intensity - shadowedIntensity;
+                if (unshadowedIntensity > 0) {
+                    this.addLightObject(this.makeLight(configuration, unshadowedIntensity, false));
+                }
+                if (shadowedIntensity > 0) {
+                    this.addLightObject(this.makeLight(configuration, shadowedIntensity, true));
+                }
+            });
+        }
+        if (this.renderer.shadowMap) this.renderer.shadowMap.enabled = this.usesShadows;
+        (this.currentObjects || []).forEach(object => this.setObjectShadowState(object));
     }
 
     setOutputSize (width, height) {
@@ -646,6 +767,7 @@ class ModelRenderer {
                 this.currentSources[index] = item.sourceObject;
                 this.currentAnimationNames[index] = item.animationName;
                 this.scene.add(object);
+                this.setObjectShadowState(object);
             }
             this.applyAnimation(this.currentObjects[index], item.animationName, item.frame);
         }
@@ -696,10 +818,11 @@ class ModelRenderer {
         }], cameraTransform, stageSize, bitmapResolution);
     }
 
-    renderWorldScene (sceneItems, cameraTransform, stageSize, bitmapResolution = 2) {
+    renderWorldScene (sceneItems, cameraTransform, stageSize, bitmapResolution = 2, lights = null) {
         const width = Math.max(1, stageSize[0]);
         const height = Math.max(1, stageSize[1]);
         this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
+        this.setLights(lights);
         this.syncObjects(sceneItems);
         this.currentObjects.forEach((object, index) => {
             const item = sceneItems[index];
@@ -734,12 +857,14 @@ class ModelRenderer {
         this.camera.updateProjectionMatrix();
         this.camera.updateMatrixWorld(true);
 
+        if (this.usesShadows && this.renderer.shadowMap) this.renderer.shadowMap.needsUpdate = true;
         this.renderer.render(this.scene, this.camera);
         return this.canvas;
     }
 
     dispose () {
         this.clearObjects();
+        this.clearLightObjects();
         this.renderer.dispose();
     }
 }
@@ -764,6 +889,7 @@ export {
     loadGLBObject,
     moviePositionToThree,
     movieRotationToThreeQuaternion,
+    normalizeLight,
     normalizeFOV,
     projectPosition,
     resampleAnimationClip,
