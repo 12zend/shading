@@ -394,6 +394,42 @@ describe('MovieAssetManager rendering performance', () => {
         }]);
     });
 
+    test('limits the rendering audio mix before it reaches the encoder', () => {
+        const manager = makeTimelineManager();
+        const destination = {};
+        const gain = {
+            connect: jest.fn(),
+            gain: {value: 1}
+        };
+        const limiter = {
+            attack: {value: 0},
+            connect: jest.fn(),
+            knee: {value: 0},
+            ratio: {value: 1},
+            release: {value: 0},
+            threshold: {value: 0}
+        };
+        const context = {
+            createDynamicsCompressor: jest.fn(() => limiter),
+            createGain: jest.fn(() => gain)
+        };
+
+        const master = manager.createRenderingAudioMaster(context, destination);
+
+        expect(master.input).toBe(gain);
+        expect(master.nodes).toEqual([gain, limiter]);
+        expect(gain.gain.value).toBeCloseTo(0.89125);
+        expect(gain.connect).toHaveBeenCalledWith(limiter);
+        expect(limiter).toMatchObject({
+            attack: {value: 0.003},
+            knee: {value: 0},
+            ratio: {value: 20},
+            release: {value: 0.1},
+            threshold: {value: -3}
+        });
+        expect(limiter.connect).toHaveBeenCalledWith(destination);
+    });
+
     test('restarts and stops the selected sound when seeking and pausing', () => {
         const manager = makeTimelineManager();
         manager.timeline.playing = true;

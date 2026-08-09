@@ -32,6 +32,8 @@ const BITMAP_RESOLUTION = 2;
 const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';
+const RENDERING_MASTER_GAIN = 0.8912509381337456; // -1 dBFS headroom before encoding.
+const RENDERING_LIMITER_THRESHOLD = -3;
 const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
 const VIDEO_PROJECT_KEY = 'movieVideos';
@@ -1452,6 +1454,34 @@ class MovieAssetManager extends EventEmitter {
         throw new Error('This browser cannot encode MP4 with MediaRecorder.');
     }
 
+    createRenderingAudioMaster (audioContext, destination) {
+        const nodes = [];
+        let input = destination;
+
+        // Leave codec headroom even for a single full-scale clip. When several clips overlap, the compressor
+        // acts as a near-brick-wall limiter so their summed signal cannot clip the MediaRecorder audio track.
+        if (typeof audioContext.createDynamicsCompressor === 'function') {
+            const limiter = audioContext.createDynamicsCompressor();
+            limiter.threshold.value = RENDERING_LIMITER_THRESHOLD;
+            limiter.knee.value = 0;
+            limiter.ratio.value = 20;
+            limiter.attack.value = 0.003;
+            limiter.release.value = 0.1;
+            limiter.connect(destination);
+            input = limiter;
+            nodes.push(limiter);
+        }
+        if (typeof audioContext.createGain === 'function') {
+            const gain = audioContext.createGain();
+            gain.gain.value = RENDERING_MASTER_GAIN;
+            gain.connect(input);
+            input = gain;
+            nodes.unshift(gain);
+        }
+
+        return {input, nodes};
+    }
+
     async encodeRenderingFrames (frames, framerate, audio) {
         if (typeof document === 'undefined' || typeof MediaStream === 'undefined') {
             throw new Error('Rendering export is only available in a browser.');
@@ -1492,11 +1522,14 @@ class MovieAssetManager extends EventEmitter {
 
         const audioSources = [];
         let audioDestination = null;
+        let audioMasterNodes = [];
         if (audio) {
             if (!audio.context || typeof audio.context.createMediaStreamDestination !== 'function') {
                 throw new Error('This browser cannot add audio to the rendering.');
             }
             audioDestination = audio.context.createMediaStreamDestination();
+            const audioMaster = this.createRenderingAudioMaster(audio.context, audioDestination);
+            audioMasterNodes = audioMaster.nodes;
             for (const clip of audio.clips) {
                 const source = audio.context.createBufferSource();
                 const nodes = [source];
@@ -1517,7 +1550,7 @@ class MovieAssetManager extends EventEmitter {
                     output = gainNode;
                     nodes.push(gainNode);
                 }
-                output.connect(audioDestination);
+                output.connect(audioMaster.input);
                 audioSources.push({nodes, offset: clip.offset, source, startTime: clip.startTime});
             }
             const audioTrack = audioDestination.stream.getAudioTracks()[0];
@@ -1544,6 +1577,9 @@ class MovieAssetManager extends EventEmitter {
                     if (typeof node.disconnect === 'function') node.disconnect();
                 });
             }
+            audioMasterNodes.forEach(node => {
+                if (typeof node.disconnect === 'function') node.disconnect();
+            });
             if (audioDestination && typeof audioDestination.disconnect === 'function') {
                 audioDestination.disconnect();
             }
