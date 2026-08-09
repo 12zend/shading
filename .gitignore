@@ -11,6 +11,7 @@ npm-*
 
 # Build
 /dist
+/build
 /.opt-in
 
 # Generated translation files
@@ -22,6 +23,7 @@ npm-*
 
 # Downloaded during "npm install"
 /static/microbit
+/docs
 
 # for act
 .secrets
