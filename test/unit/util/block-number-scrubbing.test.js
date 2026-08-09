@@ -72,7 +72,8 @@ describe('block number scrubbing', () => {
 
     test('changes a number horizontally and uses a tenth of the rate with Shift', () => {
         const ScratchBlocks = makeScratchBlocks();
-        installBlockNumberScrubbing(ScratchBlocks);
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
         const field = makeField(ScratchBlocks);
         const gesture = makeGesture(ScratchBlocks, field);
 
@@ -80,6 +81,7 @@ describe('block number scrubbing', () => {
         gesture.handleMove({clientX: 15, clientY: 0, shiftKey: true});
 
         expect(field.setValue.mock.calls).toEqual([['15'], ['16']]);
+        expect(onChange).toHaveBeenCalledTimes(2);
         expect(document.body.style.cursor).toBe('ew-resize');
 
         gesture.handleUp({clientX: 15, clientY: 0, shiftKey: true});
@@ -109,6 +111,20 @@ describe('block number scrubbing', () => {
         gesture.handleMove({clientX: -5, clientY: 0, shiftKey: false});
 
         expect(field.setValue).toHaveBeenLastCalledWith('0');
+    });
+
+    test('does not request a preview when rounding keeps the value unchanged', () => {
+        const ScratchBlocks = makeScratchBlocks();
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
+        const field = makeField(ScratchBlocks, '3');
+        field.decimalAllowed_ = false;
+        const gesture = makeGesture(ScratchBlocks, field);
+
+        gesture.handleMove({clientX: 4, clientY: 0, shiftKey: true});
+
+        expect(field.setValue).toHaveBeenLastCalledWith('3');
+        expect(onChange).not.toHaveBeenCalled();
     });
 
     test('leaves vertical drags to the original block gesture', () => {

@@ -147,6 +147,47 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
     });
 
+    test('refreshes a paused timeline preview at its current time', () => {
+        jest.useFakeTimers();
+        const manager = makeTimelineManager();
+        manager.timeline.currentTime = 2.5;
+
+        manager.requestTimelinePreviewRefresh();
+        jest.runOnlyPendingTimers();
+
+        expect(manager.runtime.stopAll).toHaveBeenCalledTimes(1);
+        expect(manager.timeline.currentTime).toBe(2.5);
+        expect(manager.timeline.pendingFrame).toBe(true);
+        expect(manager.runtime.ioDevices.clock._paused).toBe(true);
+        jest.useRealTimers();
+    });
+
+    test('does not interrupt timeline playback to refresh a preview', () => {
+        jest.useFakeTimers();
+        const manager = makeTimelineManager();
+        manager.timeline.playing = true;
+
+        manager.requestTimelinePreviewRefresh();
+        jest.runOnlyPendingTimers();
+
+        expect(manager.runtime.stopAll).not.toHaveBeenCalled();
+        expect(manager.timeline.pendingFrame).toBe(false);
+        jest.useRealTimers();
+    });
+
+    test('coalesces repeated timeline preview refresh requests', () => {
+        jest.useFakeTimers();
+        const manager = makeTimelineManager();
+
+        manager.requestTimelinePreviewRefresh();
+        manager.requestTimelinePreviewRefresh();
+        manager.requestTimelinePreviewRefresh();
+        jest.runOnlyPendingTimers();
+
+        expect(manager.runtime.stopAll).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+    });
+
     test('starts the render frame sound at the selected timeline time', () => {
         const manager = makeTimelineManager();
         const source = {

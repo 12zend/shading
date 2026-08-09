@@ -629,6 +629,15 @@ class MovieAssetManager extends EventEmitter {
         this.emitTimelineChanged();
     }
 
+    requestTimelinePreviewRefresh () {
+        clearTimeout(this.timelinePreviewRefreshTimeout);
+        this.timelinePreviewRefreshTimeout = setTimeout(() => {
+            this.timelinePreviewRefreshTimeout = null;
+            if (this.timeline.playing || this.timeline.recording) return;
+            this.seekTimeline(this.timeline.currentTime);
+        }, 0);
+    }
+
     updateTimelineSettings (settings) {
         const previousDuration = this.timeline.duration;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);

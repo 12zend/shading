@@ -54,7 +54,7 @@ const startScrubbing = (ScratchBlocks, gesture) => {
     }
 };
 
-const updateScrubbing = (gesture, event) => {
+const updateScrubbing = (ScratchBlocks, gesture, event) => {
     const state = gesture.movieNumberScrub_;
     if (!state || typeof event.clientX !== 'number') return;
 
@@ -63,7 +63,14 @@ const updateScrubbing = (gesture, event) => {
     if (!deltaX) return;
 
     state.value += deltaX * (event.shiftKey ? FINE_DRAG_RATE : NORMAL_DRAG_RATE);
+    const previousValue = state.field.getValue();
     state.field.setValue(formatValue(state.field, state.value));
+    if (
+        state.field.getValue() !== previousValue &&
+        typeof ScratchBlocks.movieNumberScrubChangeCallback_ === 'function'
+    ) {
+        ScratchBlocks.movieNumberScrubChangeCallback_();
+    }
 };
 
 const stopScrubbing = (ScratchBlocks, gesture) => {
@@ -82,8 +89,10 @@ const stopScrubbing = (ScratchBlocks, gesture) => {
  * A click still opens the regular editor, while a vertical drag continues to
  * move the block. Holding Shift changes the drag rate from 1 to 0.1 per pixel.
  * @param {object} ScratchBlocks Scratch Blocks namespace.
+ * @param {Function} onChange Called after a drag changes the field value.
  */
-const installBlockNumberScrubbing = ScratchBlocks => {
+const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
+    ScratchBlocks.movieNumberScrubChangeCallback_ = onChange;
     if (ScratchBlocks.movieNumberScrubbingInstalled_) return;
     ScratchBlocks.movieNumberScrubbingInstalled_ = true;
 
@@ -108,11 +117,11 @@ const installBlockNumberScrubbing = ScratchBlocks => {
 
     gesturePrototype.handleMove = function (event) {
         originalHandleMove.call(this, event);
-        updateScrubbing(this, event);
+        updateScrubbing(ScratchBlocks, this, event);
     };
 
     gesturePrototype.handleUp = function (event) {
-        updateScrubbing(this, event);
+        updateScrubbing(ScratchBlocks, this, event);
         originalHandleUp.call(this, event);
     };
 

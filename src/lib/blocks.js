@@ -8,7 +8,12 @@ import installBlockNumberScrubbing from './block-number-scrubbing';
  */
 export default function (vm) {
     const ScratchBlocks = LazyScratchBlocks.get();
-    installBlockNumberScrubbing(ScratchBlocks);
+    installBlockNumberScrubbing(ScratchBlocks, () => {
+        const manager = vm.runtime && vm.runtime.movieAssetManager;
+        if (manager && typeof manager.requestTimelinePreviewRefresh === 'function') {
+            manager.requestTimelinePreviewRefresh();
+        }
+    });
     const jsonForMenuBlock = function (name, menuOptionsFn, colors, start) {
         return {
             message0: '%1',
