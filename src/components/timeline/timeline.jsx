@@ -44,8 +44,6 @@ class Timeline extends React.Component {
         this.handleToggleSettings = this.handleToggleSettings.bind(this);
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
-        this.handleClearFrames = this.handleClearFrames.bind(this);
-        this.handleRenderFrames = this.handleRenderFrames.bind(this);
         this.handleExport = this.handleExport.bind(this);
     }
 
@@ -160,21 +158,6 @@ class Timeline extends React.Component {
         this.setState({settingsOpen: false});
     }
 
-    handleClearFrames () {
-        this.manager.clearRenderingFrames();
-    }
-
-    handleRenderFrames () {
-        this.manager.updateTimelineSettings({
-            duration: Number(this.state.draft.duration),
-            framerate: Number(this.state.draft.framerate),
-            height: Number(this.state.draft.height),
-            width: Number(this.state.draft.width)
-        });
-        this.manager.renderTimeline();
-        this.setState({settingsOpen: false});
-    }
-
     handleExport () {
         const settings = this.state.draft || this.state.timeline;
         this.manager.updateTimelineSettings({
@@ -259,22 +242,6 @@ class Timeline extends React.Component {
                     </label>
                 </div>
                 <div className={styles.settingsActions}>
-                    <button
-                        className={styles.secondaryButton}
-                        disabled={
-                            this.state.timeline.recording ||
-                            this.state.exporting ||
-                            this.state.timeline.frameCount === 0
-                        }
-                        type="button"
-                        onClick={this.handleClearFrames}
-                    >{'Clear frames'}</button>
-                    <button
-                        className={styles.secondaryButton}
-                        disabled={this.state.timeline.recording || this.state.exporting}
-                        type="button"
-                        onClick={this.handleRenderFrames}
-                    >{this.state.timeline.recording ? 'Rendering…' : 'Render frames'}</button>
                     <button
                         className={styles.secondaryButton}
                         disabled={

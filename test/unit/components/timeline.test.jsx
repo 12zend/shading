@@ -171,6 +171,16 @@ describe('Timeline keyboard controls', () => {
         expect(exportButton.prop('disabled')).toBe(false);
     });
 
+    test('rendering settings omit standalone frame actions', () => {
+        component.setState({
+            draft: Object.assign({}, instance.state.timeline),
+            settingsOpen: true
+        });
+
+        expect(component.text()).not.toContain('Clear frames');
+        expect(component.text()).not.toContain('Render frames');
+    });
+
     test('rendering settings do not show the legacy Audio selector', () => {
         component.setState({
             draft: Object.assign({}, instance.state.timeline),
