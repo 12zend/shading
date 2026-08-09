@@ -2,8 +2,8 @@
 const manifest = {
   "editorOnly": true,
   "noTranslations": true,
-  "name": "Automatically add extensions",
-  "description": "Auto-shows music, pen, and other extensions in the block category menu in the editor.",
+  "name": "Automatically add optional extensions",
+  "description": "Auto-shows selected optional extensions in the block category menu in the editor.",
   "userscripts": [
     {
       "url": "userscript.js"
@@ -13,12 +13,6 @@ const manifest = {
     {
       "name": "Music",
       "id": "music",
-      "type": "boolean",
-      "default": true
-    },
-    {
-      "name": "Pen",
-      "id": "pen",
       "type": "boolean",
       "default": true
     },

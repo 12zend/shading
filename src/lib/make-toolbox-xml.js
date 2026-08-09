@@ -936,6 +936,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
     const looksXML = moveCategory('looks') ||
         looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
+    const penXML = moveCategory('pen');
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
@@ -956,6 +957,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         xmlOpen,
         motionXML, gap,
         looksXML, gap,
+        ...(penXML ? [penXML, gap] : []),
         ...(penFXXML ? [penFXXML, gap] : []),
         soundXML, gap,
         eventsXML, gap,

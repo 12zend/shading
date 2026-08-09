@@ -175,6 +175,15 @@ describe('Working with the blocks', () => {
         await expect(logs).toEqual([]);
     });
 
+    test('Pen extension is available by default', async () => {
+        await loadUri(uri);
+        await clickBlocksCategory('Pen');
+        await findByText('stamp', scope.blocksTab);
+
+        const logs = await getLogs();
+        await expect(logs).toEqual([]);
+    });
+
     test('Record option from sound block menu opens sound recorder', async () => {
         await loadUri(uri);
         await clickText('Code');
