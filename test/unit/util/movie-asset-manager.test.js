@@ -54,6 +54,7 @@ const makeTimelineManager = () => {
     manager.runtime.updateCurrentMSecs = jest.fn();
     manager.runtime.stopAll = jest.fn();
     manager.runtime.startHats = jest.fn();
+    manager.runtime.threads = [];
     manager.runtime.emitProjectChanged = jest.fn();
     manager.runtime.targets = [];
     manager.runtime.ioDevices = {
@@ -437,6 +438,53 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
         expect(manager.timeline.currentTime).toBe(0.1);
         expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(9900);
+    });
+
+    test('waits for every render-frame thread to finish before capturing', () => {
+        const manager = makeTimelineManager();
+        const slowThread = {};
+        manager.runtime.startHats.mockReturnValue([slowThread]);
+        manager.runtime.threads = [slowThread];
+        manager.addRenderingFrame = jest.fn();
+
+        manager.renderTimeline();
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.timeline.renderFrameIndex).toBe(0);
+        expect(manager.timeline.waitingForFrame).toBe(true);
+
+        manager.handleTimelineBeforeExecute();
+        expect(manager.runtime.startHats).toHaveBeenCalledTimes(1);
+        manager.runtime.threads = [];
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
+        expect(manager.timeline.renderFrameIndex).toBe(1);
+    });
+
+    test('waits for asynchronous visual rendering after the frame script finishes', () => {
+        const manager = makeTimelineManager();
+        const target = makeTarget();
+        const visualRender = deferred();
+        const state = manager.getTargetState(target);
+        state.requestedMode = 'model';
+        state.modelRenderPromise = visualRender.promise;
+        manager.addRenderingFrame = jest.fn();
+
+        manager.renderTimeline();
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.timeline.waitingForFrame).toBe(true);
+
+        state.modelRenderPromise = null;
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
     });
 
     test('renders fresh frames before exporting the timeline', async () => {

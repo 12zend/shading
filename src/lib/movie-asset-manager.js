@@ -206,7 +206,9 @@ class MovieAssetManager extends EventEmitter {
             pendingFrame: true,
             playing: false,
             recording: false,
+            renderFrameThreads: [],
             sound: '',
+            waitingForFrame: false,
             waitingForVideo: false,
             width: stageWidth
         };
@@ -395,6 +397,26 @@ class MovieAssetManager extends EventEmitter {
         return this.blockingVideoRenders instanceof Set && this.blockingVideoRenders.size > 0;
     }
 
+    hasActiveRenderFrameThreads () {
+        const renderFrameThreads = this.timeline && this.timeline.renderFrameThreads;
+        const runtimeThreads = this.runtime && this.runtime.threads;
+        if (!Array.isArray(renderFrameThreads) || !Array.isArray(runtimeThreads)) return false;
+        return renderFrameThreads.some(thread => runtimeThreads.indexOf(thread) !== -1);
+    }
+
+    hasPendingVisualRenders () {
+        if (!(this.targetStates instanceof Map)) return false;
+        for (const state of this.targetStates.values()) {
+            if (state.requestedMode === 'model' && state.modelRenderPromise) return true;
+            if (state.requestedMode === 'text' && (state.textRenderPromise || state.textQueue.length > 0)) return true;
+            if (
+                state.requestedMode === 'video' &&
+                (state.videoRenderPromise || state.pendingVideoFrame)
+            ) return true;
+        }
+        return false;
+    }
+
     installSerializationHooks () {
         const originalToJSON = this.vm.toJSON.bind(this.vm);
         this.vm.toJSON = (targetId, serializationOptions) => {
@@ -461,7 +483,9 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.renderFrameThreads = [];
         this.timeline.sound = String(settings.sound || '');
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.timeline.width = Math.max(1, Math.round(toNumber(settings.width, stageWidth)));
         this.setTimelineClock(0, true);
@@ -513,6 +537,8 @@ class MovieAssetManager extends EventEmitter {
         this.setTimelineClock(this.timeline.currentTime, false);
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
@@ -524,6 +550,8 @@ class MovieAssetManager extends EventEmitter {
             this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
         }
         this.timeline.playing = false;
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.setTimelineClock(this.timeline.currentTime, true);
         this.stopTimelineSounds();
@@ -537,6 +565,8 @@ class MovieAssetManager extends EventEmitter {
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.stopTimelineSounds();
         this.runtime.stopAll();
@@ -554,6 +584,8 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.stopAll();
         this.setTimelineClock(seconds, !wasPlaying);
         this.timeline.pendingFrame = true;
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         if (wasPlaying) this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
@@ -589,6 +621,8 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.playing = true;
         this.timeline.recording = true;
         this.timeline.renderFrameIndex = 0;
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.setTimelineClock(0, false);
         this.emitTimelineChanged();
@@ -897,10 +931,11 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleTimelineBeforeExecute () {
-        if (this.timeline.waitingForVideo) {
-            if (this.hasBlockingVideoRenders()) return;
-            // The render-frame thread can now resume after the video block and run its following stamp. Do not
-            // restart the hat or advance the deterministic recording clock until that continuation is captured.
+        if (this.timeline.waitingForFrame || this.timeline.waitingForVideo) {
+            if (this.hasBlockingVideoRenders() || this.hasPendingVisualRenders()) return;
+            // Continue the frame's existing threads after every slow visual operation has completed. Do not
+            // restart the hat or advance the deterministic clock while the current frame is still being drawn.
+            this.timeline.waitingForFrame = false;
             this.timeline.waitingForVideo = false;
             this.timeline.renderedThisStep = true;
             return;
@@ -918,16 +953,22 @@ class MovieAssetManager extends EventEmitter {
         }
         this.timeline.pendingFrame = false;
         this.timeline.renderedThisStep = true;
-        this.runtime.startHats('event_renderframe');
+        const threads = this.runtime.startHats('event_renderframe');
+        this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     }
 
     handleTimelineAfterExecute () {
         if (!this.timeline.renderedThisStep) return;
         this.timeline.renderedThisStep = false;
-        if (this.hasBlockingVideoRenders()) {
-            this.timeline.waitingForVideo = true;
+        const waitingForVideo = this.hasBlockingVideoRenders();
+        if (waitingForVideo || this.hasPendingVisualRenders() || this.hasActiveRenderFrameThreads()) {
+            this.timeline.waitingForFrame = true;
+            this.timeline.waitingForVideo = waitingForVideo;
             return;
         }
+        this.timeline.renderFrameThreads = [];
+        this.timeline.waitingForFrame = false;
+        this.timeline.waitingForVideo = false;
         if (this.timeline.recording) {
             try {
                 this.addRenderingFrame();
@@ -1434,9 +1475,18 @@ class MovieAssetManager extends EventEmitter {
             throw new Error('This browser cannot capture rendering frames.');
         }
 
-        const videoStream = canvas.captureStream(framerate);
-        const videoTrack = videoStream.getVideoTracks()[0];
+        // Prefer explicit frame capture so MediaRecorder can never sample the export canvas between clearing it
+        // and drawing the completed frame. Fall back to timed capture for browsers without requestFrame().
+        let videoStream = canvas.captureStream(0);
+        let videoTrack = videoStream.getVideoTracks()[0];
         if (!videoTrack) throw new Error('Could not create a video stream for the rendering.');
+        const manuallyCaptureFrames = typeof videoTrack.requestFrame === 'function';
+        if (!manuallyCaptureFrames) {
+            videoTrack.stop();
+            videoStream = canvas.captureStream(framerate);
+            videoTrack = videoStream.getVideoTracks()[0];
+            if (!videoTrack) throw new Error('Could not create a video stream for the rendering.');
+        }
         const recordingStream = new MediaStream();
         recordingStream.addTrack(videoTrack);
 
@@ -1552,9 +1602,11 @@ class MovieAssetManager extends EventEmitter {
 
             const frameDuration = 1000 / framerate;
             const startTime = now();
+            if (manuallyCaptureFrames) videoTrack.requestFrame();
             for (let index = 1; index < frames.length; index++) {
                 await wait(Math.max(0, startTime + (index * frameDuration) - now()));
                 drawFrame(frames[index]);
+                if (manuallyCaptureFrames) videoTrack.requestFrame();
             }
             await wait(Math.max(0, startTime + (frames.length * frameDuration) - now()));
             if (recorder.state !== 'inactive') recorder.stop();
