@@ -3,6 +3,30 @@ import VM from 'scratch-vm';
 import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
 
 describe('built-in Pen FX category', () => {
+    test('clamps wavy samples to the image bounds instead of making them transparent', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+
+        const wavyShader = penFX._getEngine().programSources.wavy;
+
+        expect(wavyShader).toContain('texture2D(u_image, clamp(uv, vec2(0.0), vec2(1.0)))');
+        expect(wavyShader).not.toContain('return vec4(0.0)');
+    });
+
     test('exposes the Pen FX blocks through an internal category', () => {
         const vm = {runtime: {renderer: {}}};
         const PenFX = createPenFXClass(vm);

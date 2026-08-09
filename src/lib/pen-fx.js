@@ -367,10 +367,7 @@ const createPenFXClass = vm => {
     uniform float u_mix;
 
     vec4 sampleImage(vec2 uv) {
-      if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
-        return vec4(0.0);
-      }
-      return texture2D(u_image, uv);
+      return texture2D(u_image, clamp(uv, vec2(0.0), vec2(1.0)));
     }
 
     float hash(vec2 p) {
