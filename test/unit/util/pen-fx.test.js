@@ -23,6 +23,9 @@ describe('built-in Pen FX category', () => {
         expect(info.menus.stretchType.items).toEqual(['x', 'y', 'size', 'dir']);
         expect(info.menus.sortAxis.items).toEqual(['x', 'y', 'size', 'dir']);
         expect(info.menus.turbulenceType.items).toEqual(['both', 'x', 'y', 'size', 'dir']);
+        const edgeDetection = info.blocks.find(block => block.opcode === 'edgeDetection');
+        expect(edgeDetection.arguments.BACKGROUND.defaultValue).toBe('#ffffff');
+        expect(info.blocks.find(block => block.opcode === 'duplicate')).toBeDefined();
         expect(info.blocks.find(block => block.opcode === 'bufferStackSize')).toBeDefined();
     });
 
@@ -62,6 +65,39 @@ describe('built-in Pen FX category', () => {
         expect(penFX.engine.pixelSort).toHaveBeenCalledWith('dir', 80, false, 0.2, 0.8, 'hue', true, 1.2,
             10, -5, 0.65, 'normal');
         expect(penFX.engine.wavy).toHaveBeenCalledWith(14, 4, 8, -3, 72, 5, 180, 'dir', 16, 9, 0.9, 'normal');
+    });
+
+    test('routes edge background and duplicate transform controls to the GPU engine', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {
+            edgeDetection: jest.fn(),
+            geometry: jest.fn()
+        };
+
+        penFX.edgeDetection({THRESHOLD: 0.2, VALUE: 2, RADIUS: 3, SOFTNESS: 0.04,
+            COLOR: '#ff0000', BACKGROUND: '#204080', ALPHA: 75, MIX: 60});
+        penFX.duplicate({X: 12, Y: -8, SIZE: 40, DIR: 30, ANCHORX: 4, ANCHORY: 6, MIX: 80});
+
+        expect(penFX.engine.edgeDetection).toHaveBeenCalledWith(0.2, 2, 3, 0.04,
+            [1, 0, 0], [32 / 255, 64 / 255, 128 / 255], true, 0.75, 0.6, 'normal');
+        expect(penFX.engine.geometry).toHaveBeenCalledWith(4, 0, {
+            offset: [12, -8], size: 40, direction: 30, anchor: [4, 6], mix: 0.8
+        }, 'normal');
+    });
+
+    test('keeps legacy edge detection blocks transparent when no background input exists', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {edgeDetection: jest.fn()};
+
+        penFX.edgeDetection({THRESHOLD: 0.1, VALUE: 1, RADIUS: 1, SOFTNESS: 0.02,
+            COLOR: '#000000', ALPHA: 100, MIX: 100});
+
+        expect(penFX.engine.edgeDetection).toHaveBeenCalledWith(0.1, 1, 1, 0.02,
+            [0, 0, 0], [0, 0, 0], false, 1, 1, 'normal');
     });
 
     test('loads Pen FX automatically as a built-in extension service', () => {

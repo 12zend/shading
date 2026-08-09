@@ -520,6 +520,13 @@ const createPenFXClass = vm => {
       return texture2D(u_image, (floor(pixel) + vec2(0.5)) / u_resolution);
     }
 
+    vec4 samplePosition(vec2 pixel) {
+      if (any(lessThan(pixel, vec2(0.0))) || any(greaterThanEqual(pixel, u_resolution))) {
+        return vec4(0.0);
+      }
+      return texture2D(u_image, pixel / u_resolution);
+    }
+
     void main() {
       vec2 pixel = v_uv * u_resolution;
       vec2 center = u_resolution * 0.5 + u_center;
@@ -535,46 +542,52 @@ const createPenFXClass = vm => {
         float axisCenter = u_type == 0 ? center.x : center.y;
         float axisLimit = u_type == 0 ? u_resolution.x : u_resolution.y;
         float sourcePosition = clamp(axisCenter + u_position, 0.5, axisLimit - 0.5);
-        active = axisPosition >= sourcePosition - halfSize && axisPosition <= sourcePosition + halfSize;
+        float distanceFromSource = axisPosition - sourcePosition;
+        active = abs(distanceFromSource) <= halfSize;
         if (u_type == 0) {
-          sampleBase.x = sourcePosition;
+          sampleBase.x = active ? sourcePosition : axisPosition - sign(distanceFromSource) * halfSize;
           sampleDirection = vec2(1.0, 0.0);
         } else {
-          sampleBase.y = sourcePosition;
+          sampleBase.y = active ? sourcePosition : axisPosition - sign(distanceFromSource) * halfSize;
           sampleDirection = vec2(0.0, 1.0);
         }
       } else if (u_type == 2) {
         float radius = length(fromCenter);
         float sourceRadius = max(0.0, abs(u_position));
         vec2 radial = radius > 0.0001 ? fromCenter / radius : vec2(1.0, 0.0);
-        active = radius >= max(0.0, sourceRadius - halfSize) && radius <= sourceRadius + halfSize;
-        sampleBase = center + radial * sourceRadius;
+        float distanceFromSource = radius - sourceRadius;
+        active = abs(distanceFromSource) <= halfSize || sourceRadius < halfSize && radius <= sourceRadius + halfSize;
+        float sampleRadius = active ? sourceRadius : max(0.0, radius - sign(distanceFromSource) * halfSize);
+        sampleBase = center + radial * sampleRadius;
         sampleDirection = radial;
       } else {
         float sourceAngle = radians(u_position);
         float angle = atan(fromCenter.y, fromCenter.x);
-        float angularDistance = abs(wrappedAngle(angle - sourceAngle));
-        active = angularDistance <= radians(halfSize);
+        float angularDistance = wrappedAngle(angle - sourceAngle);
+        float halfAngle = radians(halfSize);
+        active = abs(angularDistance) <= halfAngle;
         float radius = length(fromCenter);
-        sampleBase = center + vec2(cos(sourceAngle), sin(sourceAngle)) * radius;
+        float sampleAngle = active ? sourceAngle : angle - sign(angularDistance) * halfAngle;
+        sampleBase = center + vec2(cos(sampleAngle), sin(sampleAngle)) * radius;
         sampleStep = max(radius * pi / 180.0, 0.25);
         sampleDirection = vec2(-sin(sourceAngle), cos(sourceAngle));
       }
 
+      vec4 transformed;
       if (active) {
-        vec4 stretched = vec4(0.0);
+        transformed = vec4(0.0);
         float samples = 0.0;
         for (int i = -4; i <= 4; i++) {
           float sampleActive = step(abs(float(i)), min(abs(u_sampleSize) * 0.5, 4.0));
-          stretched += samplePixel(sampleBase + sampleDirection * float(i) * sampleStep) * sampleActive;
+          transformed += samplePixel(sampleBase + sampleDirection * float(i) * sampleStep) * sampleActive;
           samples += sampleActive;
         }
-        stretched /= max(samples, 1.0);
-        float mixValue = clamp(u_mix, 0.0, 1.0);
-        gl_FragColor = mixValue == 1.0 ? stretched : mix(texture2D(u_image, v_uv), stretched, mixValue);
-        return;
+        transformed /= max(samples, 1.0);
+      } else {
+        transformed = samplePosition(sampleBase);
       }
-      gl_FragColor = texture2D(u_image, v_uv);
+      float mixValue = clamp(u_mix, 0.0, 1.0);
+      gl_FragColor = mixValue == 1.0 ? transformed : mix(texture2D(u_image, v_uv), transformed, mixValue);
     }
   `;
 
@@ -687,6 +700,7 @@ const createPenFXClass = vm => {
         mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
         pixel = rotation * pixel;
         uv = (pixel + anchor) / u_resolution;
+        if (u_mode == 4) uv = fract(uv);
       }
       float mixValue = clamp(u_mix, 0.0, 1.0);
       if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
@@ -977,6 +991,7 @@ const createPenFXClass = vm => {
     uniform float u_mix;
     uniform vec2 u_vec;
     uniform vec3 u_color;
+    uniform vec3 u_color2;
 
     vec3 straightColor(vec4 p) { return p.a > 0.00001 ? p.rgb / p.a : vec3(0.0); }
     float luminance(vec4 p) { return dot(straightColor(p), vec3(0.2126, 0.7152, 0.0722)); }
@@ -1014,7 +1029,11 @@ const createPenFXClass = vm => {
         float neighborhoodAlpha = max(center.a, max(max(tlPixel.a, tcPixel.a), max(trPixel.a,
           max(mlPixel.a, max(mrPixel.a, max(blPixel.a, max(bcPixel.a, brPixel.a)))))));
         float a = edge * neighborhoodAlpha * clamp(u_vec.x, 0.0, 1.0);
-        result = vec4(lineColor * a, a);
+        if (u_vec.y > 0.5) {
+          result = vec4(lineColor * a + u_color2 * (1.0 - a), 1.0);
+        } else {
+          result = vec4(lineColor * a, a);
+        }
       } else if (u_mode == 1) {
         float m = luminance(center);
         float n = luminance(texture2D(u_image, v_uv + vec2(0.0, px.y)));
@@ -1692,15 +1711,17 @@ const createPenFXClass = vm => {
       }, ['u_type'], blendMode);
     }
 
-    edgeDetection(threshold, value, radius, softness, edgeColor, alpha, mixValue, blendMode) {
+    edgeDetection(threshold, value, radius, softness, edgeColor, backgroundColor, hasBackground,
+      alpha, mixValue, blendMode) {
       const normalizedThreshold = threshold > 1 ? threshold / 100 : threshold;
       const normalizedSoftness = softness > 1 ? softness / 100 : softness;
       this._acerolaPass(this._program('acerolaSpatial'), 0, {
         u_value: Math.min(4, Math.max(0, normalizedThreshold / Math.max(value, 0.0001))),
         u_value2: Math.min(8, Math.max(1, Math.abs(radius))),
         u_value3: Math.max(0.0001, normalizedSoftness),
-        u_vec: [Math.min(1, Math.max(0, alpha)), 0],
+        u_vec: [Math.min(1, Math.max(0, alpha)), hasBackground ? 1 : 0],
         u_color: edgeColor,
+        u_color2: backgroundColor,
         u_mix: mixValue
       }, [], blendMode);
     }
@@ -2173,7 +2194,7 @@ const createPenFXClass = vm => {
           {opcode: 'lensDistortion', blockType: BlockType.COMMAND, text: 'lens distortion value: [VALUE] center x: [X] y: [Y] zoom: [ZOOM] % mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 25}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, ZOOM: {type: ArgumentType.NUMBER, defaultValue: 100}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'bloom', blockType: BlockType.COMMAND, text: 'bloom threshold: [THRESHOLD] radius: [RADIUS] value: [VALUE] color: [COLOR] invert: [INVERT]', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.7}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 8}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, INVERT: {type: ArgumentType.STRING, menu: 'boolean'}}},
           {opcode: 'deepGlow', blockType: BlockType.COMMAND, text: 'deep glow threshold: [THRESHOLD] radius: [RADIUS] value: [VALUE] color: [COLOR]', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.7}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 8}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}}},
-          {opcode: 'edgeDetection', blockType: BlockType.COMMAND, text: 'edge detection threshold: [THRESHOLD] strength: [VALUE] radius: [RADIUS] softness: [SOFTNESS] color: [COLOR] alpha: [ALPHA] % mix: [MIX] %', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.1}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 1}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.02}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, ALPHA: {type: ArgumentType.NUMBER, defaultValue: 100}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'edgeDetection', blockType: BlockType.COMMAND, text: 'edge detection threshold: [THRESHOLD] strength: [VALUE] radius: [RADIUS] softness: [SOFTNESS] color: [COLOR] background: [BACKGROUND] alpha: [ALPHA] % mix: [MIX] %', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.1}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 1}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.02}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, BACKGROUND: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, ALPHA: {type: ArgumentType.NUMBER, defaultValue: 100}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'sharpen', blockType: BlockType.COMMAND, text: 'sharpen value: [VALUE] radius: [RADIUS] mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'fxaa', blockType: BlockType.COMMAND, text: 'FXAA contrast: [CONTRAST] relative: [RELATIVE] subpixel: [SUBPIXEL] mix: [MIX] %', arguments: {CONTRAST: {type: ArgumentType.NUMBER, defaultValue: 0.0312}, RELATIVE: {type: ArgumentType.NUMBER, defaultValue: 0.063}, SUBPIXEL: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'differenceOfGaussians', blockType: BlockType.COMMAND, text: 'difference of gaussians sigma: [SIGMA] scale: [SCALE] tau: [TAU] threshold: [THRESHOLD] colored: [COLORED] ink: [COLOR] mix: [MIX] %', arguments: {SIGMA: {type: ArgumentType.NUMBER, defaultValue: 1}, SCALE: {type: ArgumentType.NUMBER, defaultValue: 1.6}, TAU: {type: ArgumentType.NUMBER, defaultValue: 0.98}, THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.02}, COLORED: {type: ArgumentType.STRING, menu: 'boolean'}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#101020'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -2197,6 +2218,7 @@ const createPenFXClass = vm => {
           {opcode: 'pixelStretch', blockType: BlockType.COMMAND, text: 'pixel stretch type: [TYPE] position: [POSITION] size: [SIZE] sample width: [SAMPLE] center x: [CENTERX] y: [CENTERY] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'stretchType'}, POSITION: {type: ArgumentType.NUMBER, defaultValue: 0}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 100}, SAMPLE: {type: ArgumentType.NUMBER, defaultValue: 1}, CENTERX: {type: ArgumentType.NUMBER, defaultValue: 0}, CENTERY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'mirror', blockType: BlockType.COMMAND, text: 'mirror type: [TYPE] center x: [X] y: [Y] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'mirrorType'}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'transform', blockType: BlockType.COMMAND, text: 'transform x: [X] y: [Y] size: [SIZE] dir: [DIR] anchor x: [ANCHORX] y: [ANCHORY] mix: [MIX] %', arguments: {X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 100}, DIR: {type: ArgumentType.ANGLE, defaultValue: 0}, ANCHORX: {type: ArgumentType.NUMBER, defaultValue: 0}, ANCHORY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'duplicate', blockType: BlockType.COMMAND, text: 'duplicate x: [X] y: [Y] size: [SIZE] dir: [DIR] anchor x: [ANCHORX] y: [ANCHORY] mix: [MIX] %', arguments: {X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 50}, DIR: {type: ArgumentType.ANGLE, defaultValue: 0}, ANCHORX: {type: ArgumentType.NUMBER, defaultValue: 0}, ANCHORY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'pixelSort', blockType: BlockType.COMMAND, text: 'pixelsort [TYPE] span: [SPAN] min: [MIN] max: [MAX] invert mask: [INVERT] sort by: [SORTBY] reverse: [REVERSE] gamma: [GAMMA] center x: [CENTERX] y: [CENTERY] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'sortAxis'}, SPAN: {type: ArgumentType.NUMBER, defaultValue: 64}, MIN: {type: ArgumentType.NUMBER, defaultValue: 0.4}, MAX: {type: ArgumentType.NUMBER, defaultValue: 0.72}, INVERT: {type: ArgumentType.STRING, menu: 'boolean'}, SORTBY: {type: ArgumentType.STRING, menu: 'sortBy'}, REVERSE: {type: ArgumentType.STRING, menu: 'boolean'}, GAMMA: {type: ArgumentType.NUMBER, defaultValue: 1}, CENTERX: {type: ArgumentType.NUMBER, defaultValue: 0}, CENTERY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'colorAdjustment', blockType: BlockType.COMMAND, text: 'color adjustment add: [ADD] mul: [MUL] div: [DIV] mix: [MIX] %', arguments: {ADD: {type: ArgumentType.COLOR, defaultValue: '#000000'}, MUL: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, DIV: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           '---',
@@ -2330,8 +2352,10 @@ const createPenFXClass = vm => {
     }
 
     edgeDetection(args) {
+      const hasBackground = args.BACKGROUND !== undefined && args.BACKGROUND !== null && args.BACKGROUND !== '';
       this._safe(engine => engine.edgeDetection(number(args.THRESHOLD), numberOr(args.VALUE, 1),
         numberOr(args.RADIUS, 1), numberOr(args.SOFTNESS, 0.02), color(args.COLOR || '#000000'),
+        color(hasBackground ? args.BACKGROUND : '#000000'), hasBackground,
         Math.min(1, Math.max(0, numberOr(args.ALPHA, 100) / 100)), mixAmount(args.MIX), this.blendMode));
     }
 
@@ -2457,6 +2481,13 @@ const createPenFXClass = vm => {
     transform(args) {
       this._safe(engine => engine.geometry(3, 0, {
         offset: [number(args.X), number(args.Y)], size: number(args.SIZE), direction: number(args.DIR),
+        anchor: [numberOr(args.ANCHORX, 0), numberOr(args.ANCHORY, 0)], mix: mixAmount(args.MIX)
+      }, this.blendMode));
+    }
+
+    duplicate(args) {
+      this._safe(engine => engine.geometry(4, 0, {
+        offset: [number(args.X), number(args.Y)], size: numberOr(args.SIZE, 50), direction: number(args.DIR),
         anchor: [numberOr(args.ANCHORX, 0), numberOr(args.ANCHORY, 0)], mix: mixAmount(args.MIX)
       }, this.blendMode));
     }
