@@ -1,5 +1,0 @@
-User-agent: *
-Disallow: /*/embed
-Disallow: /embed
-# bingbot moment
-Crawl-Delay: 30
