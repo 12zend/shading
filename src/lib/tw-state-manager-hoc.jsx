@@ -98,9 +98,12 @@ class HashRouter extends Router {
 class FileHashRouter extends HashRouter {
     constructor (callbacks) {
         super(callbacks);
-        this.playerPath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-        this.editorPath = `${this.playerPath}editor.html`;
-        this.fullscreenPath = `${this.playerPath}fullscreen.html`;
+        this.rootPath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+        this.editorPath = this.rootPath;
+        this.editorFilePath = `${this.rootPath}index.html`;
+        this.legacyEditorPath = `${this.rootPath}editor.html`;
+        this.playerPath = `${this.rootPath}player.html`;
+        this.fullscreenPath = `${this.rootPath}fullscreen.html`;
     }
 
     onpathchange () {
@@ -109,7 +112,11 @@ class FileHashRouter extends HashRouter {
         if (pathName === this.playerPath) {
             this.onSetIsPlayerOnly(true);
             this.onSetIsFullScreen(false);
-        } else if (pathName === this.editorPath) {
+        } else if (
+            pathName === this.editorPath ||
+            pathName === this.editorFilePath ||
+            pathName === this.legacyEditorPath
+        ) {
             this.onSetIsPlayerOnly(false);
             this.onSetIsFullScreen(false);
         } else if (pathName === this.fullscreenPath) {
@@ -166,7 +173,7 @@ class WildcardRouter extends Router {
                 history.replaceState(null, null, `${location.pathname}${location.search}`);
             }
         } else {
-            // Do not detect page type here as it is already setup by index.html, editor.html, etc.
+            // Do not detect page type here as it is already set up by index.html, player.html, etc.
             this.parseURL(false);
         }
     }
@@ -193,11 +200,11 @@ class WildcardRouter extends Router {
             }
             if (type === 'fullscreen') {
                 this.onSetIsFullScreen(true);
-            } else if (type === 'editor') {
-                this.onSetIsPlayerOnly(false);
+            } else if (type === 'player') {
+                this.onSetIsPlayerOnly(true);
                 this.onSetIsFullScreen(false);
             } else {
-                this.onSetIsPlayerOnly(true);
+                this.onSetIsPlayerOnly(false);
                 this.onSetIsFullScreen(false);
             }
         };
@@ -219,8 +226,8 @@ class WildcardRouter extends Router {
         }
         if (isFullScreen) {
             parts.push('fullscreen');
-        } else if (!isPlayerOnly) {
-            parts.push('editor');
+        } else if (isPlayerOnly) {
+            parts.push('player');
         }
 
         const path = `${this.root}${parts.join('/')}`;

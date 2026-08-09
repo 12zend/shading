@@ -58,7 +58,7 @@ Open a Command Prompt or Terminal in the repository and run:
 ```bash
 npm start
 ```
-Then go to [http://localhost:8601/](http://localhost:8601/) - the playground outputs the default GUI component
+Then go to [http://localhost:8601/](http://localhost:8601/) to open the editor. The player-only view is available at [http://localhost:8601/player.html](http://localhost:8601/player.html).
 
 ## Developing alongside other Scratch repositories
 
