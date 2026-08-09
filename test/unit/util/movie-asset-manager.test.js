@@ -394,40 +394,44 @@ describe('MovieAssetManager rendering performance', () => {
         }]);
     });
 
-    test('limits the rendering audio mix before it reaches the encoder', () => {
+    test('turns down the entire rendering mix when audio clips overlap', () => {
         const manager = makeTimelineManager();
         const destination = {};
         const gain = {
             connect: jest.fn(),
             gain: {value: 1}
         };
-        const limiter = {
-            attack: {value: 0},
-            connect: jest.fn(),
-            knee: {value: 0},
-            ratio: {value: 1},
-            release: {value: 0},
-            threshold: {value: 0}
-        };
         const context = {
-            createDynamicsCompressor: jest.fn(() => limiter),
             createGain: jest.fn(() => gain)
         };
 
-        const master = manager.createRenderingAudioMaster(context, destination);
+        const clips = [
+            {buffer: {duration: 2}, offset: 0, playbackRate: 1, startTime: 0},
+            {buffer: {duration: 2}, offset: 0, playbackRate: 1, startTime: 1}
+        ];
+        const master = manager.createRenderingAudioMaster(context, destination, clips);
 
         expect(master.input).toBe(gain);
-        expect(master.nodes).toEqual([gain, limiter]);
-        expect(gain.gain.value).toBeCloseTo(0.89125);
-        expect(gain.connect).toHaveBeenCalledWith(limiter);
-        expect(limiter).toMatchObject({
-            attack: {value: 0.003},
-            knee: {value: 0},
-            ratio: {value: 20},
-            release: {value: 0.1},
-            threshold: {value: -3}
-        });
-        expect(limiter.connect).toHaveBeenCalledWith(destination);
+        expect(master.nodes).toEqual([gain]);
+        expect(gain.gain.value).toBeCloseTo(0.445625);
+        expect(gain.connect).toHaveBeenCalledWith(destination);
+    });
+
+    test('does not alter rendering audio when clips do not overlap', () => {
+        const manager = makeTimelineManager();
+        const destination = {};
+        const context = {
+            createGain: jest.fn()
+        };
+        const clips = [
+            {buffer: {duration: 1}, offset: 0, playbackRate: 1, startTime: 0},
+            {buffer: {duration: 1}, offset: 0, playbackRate: 1, startTime: 1}
+        ];
+
+        const master = manager.createRenderingAudioMaster(context, destination, clips);
+
+        expect(master).toEqual({input: destination, nodes: []});
+        expect(context.createGain).not.toHaveBeenCalled();
     });
 
     test('restarts and stops the selected sound when seeking and pausing', () => {

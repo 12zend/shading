@@ -33,7 +33,6 @@ const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';
 const RENDERING_MASTER_GAIN = 0.8912509381337456; // -1 dBFS headroom before encoding.
-const RENDERING_LIMITER_THRESHOLD = -3;
 const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
 const VIDEO_PROJECT_KEY = 'movieVideos';
@@ -1454,29 +1453,45 @@ class MovieAssetManager extends EventEmitter {
         throw new Error('This browser cannot encode MP4 with MediaRecorder.');
     }
 
-    createRenderingAudioMaster (audioContext, destination) {
+    getRenderingAudioMasterGain (clips) {
+        if (!Array.isArray(clips) || clips.length === 0) return 1;
+        const events = [];
+        for (const clip of clips) {
+            const start = Math.max(0, toNumber(clip.startTime));
+            const offset = Math.max(0, toNumber(clip.offset));
+            const playbackRate = Math.max(Number.EPSILON, toNumber(clip.playbackRate, 1));
+            const bufferDuration = clip.buffer && Number(clip.buffer.duration);
+            const duration = Number.isFinite(bufferDuration) ?
+                Math.max(0, (bufferDuration - offset) / playbackRate) : Infinity;
+            const volume = clamp(toNumber(clip.volume, 1), 0, 1);
+            if (duration <= 0 || volume <= 0) continue;
+            events.push({change: volume, time: start});
+            events.push({change: -volume, time: start + duration});
+        }
+        events.sort((a, b) => (a.time - b.time) || (a.change - b.change));
+
+        let currentVolume = 0;
+        let maximumVolume = 0;
+        for (const event of events) {
+            currentVolume += event.change;
+            maximumVolume = Math.max(maximumVolume, currentVolume);
+        }
+        return maximumVolume > 1 ? RENDERING_MASTER_GAIN / maximumVolume : 1;
+    }
+
+    createRenderingAudioMaster (audioContext, destination, clips) {
         const nodes = [];
         let input = destination;
 
-        // Leave codec headroom even for a single full-scale clip. When several clips overlap, the compressor
-        // acts as a near-brick-wall limiter so their summed signal cannot clip the MediaRecorder audio track.
-        if (typeof audioContext.createDynamicsCompressor === 'function') {
-            const limiter = audioContext.createDynamicsCompressor();
-            limiter.threshold.value = RENDERING_LIMITER_THRESHOLD;
-            limiter.knee.value = 0;
-            limiter.ratio.value = 20;
-            limiter.attack.value = 0.003;
-            limiter.release.value = 0.1;
-            limiter.connect(destination);
-            input = limiter;
-            nodes.push(limiter);
-        }
-        if (typeof audioContext.createGain === 'function') {
+        // Scale the entire mix linearly from the maximum simultaneous clip volume. Unlike compression or
+        // limiting, a constant gain preserves the original tone and dynamics.
+        const masterGain = this.getRenderingAudioMasterGain(clips);
+        if (masterGain < 1 && typeof audioContext.createGain === 'function') {
             const gain = audioContext.createGain();
-            gain.gain.value = RENDERING_MASTER_GAIN;
-            gain.connect(input);
+            gain.gain.value = masterGain;
+            gain.connect(destination);
             input = gain;
-            nodes.unshift(gain);
+            nodes.push(gain);
         }
 
         return {input, nodes};
@@ -1528,7 +1543,7 @@ class MovieAssetManager extends EventEmitter {
                 throw new Error('This browser cannot add audio to the rendering.');
             }
             audioDestination = audio.context.createMediaStreamDestination();
-            const audioMaster = this.createRenderingAudioMaster(audio.context, audioDestination);
+            const audioMaster = this.createRenderingAudioMaster(audio.context, audioDestination, audio.clips);
             audioMasterNodes = audioMaster.nodes;
             for (const clip of audio.clips) {
                 const source = audio.context.createBufferSource();
