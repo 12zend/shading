@@ -294,9 +294,16 @@ class MovieAssetManager extends EventEmitter {
         };
         // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
         primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
-        primitives.looks_renderwall = (args, util) => this.renderBuildingPrimitive('wall', args, util.target);
-        primitives.looks_renderfloor = (args, util) => this.renderBuildingPrimitive('floor', args, util.target);
-        primitives.looks_renderbox = (args, util) => this.renderBuildingPrimitive('box', args, util.target);
+        // Building blocks must not yield between erase-all and stamp; otherwise the cleared pen frame flashes.
+        primitives.looks_renderwall = (args, util) => {
+            this.runWithoutWaiting(this.renderBuildingPrimitive('wall', args, util.target));
+        };
+        primitives.looks_renderfloor = (args, util) => {
+            this.runWithoutWaiting(this.renderBuildingPrimitive('floor', args, util.target));
+        };
+        primitives.looks_renderbox = (args, util) => {
+            this.runWithoutWaiting(this.renderBuildingPrimitive('box', args, util.target));
+        };
         primitives.looks_clearmaterial = () => this.clearBuildingMaterials();
         primitives.looks_addmaterial = args => this.addBuildingMaterial(args.MATERIAL);
         primitives.looks_setalbedofromcolor = args => this.setBuildingMaterialColor(
@@ -305,12 +312,17 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_setemissionfromcolor = args => this.setBuildingMaterialColor(
             args.MATERIAL, 'emission', args.COLOR
         );
-        primitives.looks_setalbedofromtexture = (args, util) => this.setBuildingMaterialTexture(
-            args.MATERIAL, 'albedo', args.TEXTURE, util.target
-        );
-        primitives.looks_setemissionfromtexture = (args, util) => this.setBuildingMaterialTexture(
-            args.MATERIAL, 'emission', args.TEXTURE, util.target
-        );
+        // Texture decoding continues in the background without putting the current script into promise-wait mode.
+        primitives.looks_setalbedofromtexture = (args, util) => {
+            this.runWithoutWaiting(this.setBuildingMaterialTexture(
+                args.MATERIAL, 'albedo', args.TEXTURE, util.target
+            ));
+        };
+        primitives.looks_setemissionfromtexture = (args, util) => {
+            this.runWithoutWaiting(this.setBuildingMaterialTexture(
+                args.MATERIAL, 'emission', args.TEXTURE, util.target
+            ));
+        };
         // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
         // is not restarted before it reaches a following render-model block.
         primitives.looks_setmodelframeto = (args, util) => {

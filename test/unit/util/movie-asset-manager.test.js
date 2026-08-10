@@ -762,6 +762,34 @@ describe('MovieAssetManager rendering performance', () => {
         expect(typeof manager.runtime._primitives.looks_setemissionfromtexture).toBe('function');
     });
 
+    test('does not put building or texture blocks into VM promise-wait mode', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const backgroundRender = Promise.resolve();
+        const backgroundTexture = Promise.resolve();
+        manager.renderBuildingPrimitive = jest.fn(() => backgroundRender);
+        manager.setBuildingMaterialTexture = jest.fn(() => backgroundTexture);
+        manager.runWithoutWaiting = jest.fn();
+        manager.installPrimitives();
+
+        const renderArgs = {MATERIAL: 'brick'};
+        expect(manager.runtime._primitives.looks_renderwall(renderArgs, {target})).toBeUndefined();
+        expect(manager.runtime._primitives.looks_renderfloor(renderArgs, {target})).toBeUndefined();
+        expect(manager.runtime._primitives.looks_renderbox(renderArgs, {target})).toBeUndefined();
+        expect(manager.runtime._primitives.looks_setalbedofromtexture({
+            MATERIAL: 'brick',
+            TEXTURE: 'costume1'
+        }, {target})).toBeUndefined();
+        expect(manager.runtime._primitives.looks_setemissionfromtexture({
+            MATERIAL: 'brick',
+            TEXTURE: 'costume1'
+        }, {target})).toBeUndefined();
+
+        expect(manager.runWithoutWaiting).toHaveBeenCalledTimes(5);
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(backgroundRender);
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(backgroundTexture);
+    });
+
     test('clears all building materials back to the invalid defaults', () => {
         const manager = makeManager();
         const albedoTexture = {dispose: jest.fn()};
