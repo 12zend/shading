@@ -2334,7 +2334,9 @@ class MovieAssetManager extends EventEmitter {
             rotationOrder: 'XYZ'
         });
         this.runtime.renderer.updateDrawablePosition(target.drawableID, [projection.x, projection.y]);
-        const direction = state.mode === 'model' ? 90 : 90 - state.rotation.z;
+        const cameraRotationZ = state.ignoreCamera ? 0 :
+            toNumber(this.camera && this.camera.rotation && this.camera.rotation.z);
+        const direction = state.mode === 'model' ? 90 : 90 - state.rotation.z + cameraRotationZ;
         const renderedScale = typeof target._getRenderedDirectionAndScale === 'function' ?
             target._getRenderedDirectionAndScale().scale : [target.size, target.size];
         const perspective = Math.abs(projection.perspective);

@@ -649,6 +649,25 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenCalledWith(1, true);
     });
 
+    test('applies set camera z rotation to a projected sprite', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.runtime.emitProjectChanged = jest.fn();
+        manager.runtime.targets = [target];
+        manager.emit = jest.fn();
+        manager.camera = {
+            focalLength: 480,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        manager.installPrimitives();
+
+        manager.runtime._primitives.motion_setcamerarotation({X: 0, Y: 0, Z: 35});
+
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenCalledWith(1, 125, [100, 100]);
+    });
+
     test('uses the sprite drawable for a model skin and obeys sprite visibility', () => {
         const manager = makeManager();
         const target = makeTarget();
