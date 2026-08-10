@@ -293,8 +293,11 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_clearscene = (args, util) => {
             this.runWithoutWaiting(this.clearModelScene(util.target));
         };
-        // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
-        primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
+        // Timeline playback tracks pending visual work separately. Never put the render-frame script into
+        // promise-wait mode, or repeated hats can prevent the model from appearing during playback.
+        primitives.looks_rendermodel = (args, util) => {
+            this.runWithoutWaiting(this.renderModelToScene(util.target, args.MODEL));
+        };
         // Building blocks must not yield between erase-all and stamp; otherwise the cleared pen frame flashes.
         primitives.looks_renderwall = (args, util) => {
             this.runWithoutWaiting(this.renderBuildingPrimitive('wall', args, util.target));

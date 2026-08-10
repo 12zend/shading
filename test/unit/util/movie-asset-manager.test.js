@@ -700,7 +700,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(1, 90, [160, 45]);
     });
 
-    test('waits for a model scene before following blocks run', () => {
+    test('renders a model scene without putting timeline playback into promise-wait mode', () => {
         const manager = makeManager();
         const target = makeTarget();
         const modelRender = deferred();
@@ -709,7 +709,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         const renderResult = manager.runtime._primitives.looks_rendermodel({MODEL: 'Cube'}, {target});
 
-        expect(renderResult).toBe(modelRender.promise);
+        expect(renderResult).toBeUndefined();
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
     });
 
