@@ -662,6 +662,23 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).mode).toBe('model');
     });
 
+    test('keeps per-axis sprite dimensions when a text or costume skin is applied', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target._getRenderedDirectionAndScale = jest.fn(() => ({
+            direction: 90,
+            scale: [160, 45]
+        }));
+        target.currentCostume = 0;
+        target.getCostumes = jest.fn(() => [{skinId: 2}]);
+
+        manager.applyBitmap(target, {}, 'text');
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(1, 90, [160, 45]);
+
+        manager.showCostume(target);
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(1, 90, [160, 45]);
+    });
+
     test('waits for a model scene before following blocks run', () => {
         const manager = makeManager();
         const target = makeTarget();

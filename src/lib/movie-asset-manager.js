@@ -2335,8 +2335,13 @@ class MovieAssetManager extends EventEmitter {
         });
         this.runtime.renderer.updateDrawablePosition(target.drawableID, [projection.x, projection.y]);
         const direction = state.mode === 'model' ? 90 : 90 - state.rotation.z;
-        const scale = target.size * Math.abs(projection.perspective);
-        this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, direction, [scale, scale]);
+        const renderedScale = typeof target._getRenderedDirectionAndScale === 'function' ?
+            target._getRenderedDirectionAndScale().scale : [target.size, target.size];
+        const perspective = Math.abs(projection.perspective);
+        this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, direction, [
+            renderedScale[0] * perspective,
+            renderedScale[1] * perspective
+        ]);
         this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible && projection.inFront);
         if (target.visible) {
             target.emitVisualChange();
