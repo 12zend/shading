@@ -565,6 +565,12 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_clearmaterial = {
+        init: function () {
+            this.jsonInit(looksStatement('clear material', []));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_setalbedofromcolor = {
         init: function () {
             this.jsonInit(looksStatement('set albedo %1 from color: %2', [

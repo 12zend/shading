@@ -45,6 +45,7 @@ describe('Movie toolbox categories', () => {
     test('offers building primitives and material setup with native color and costume inputs', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
+        expect(toolbox).toContain('type="looks_clearmaterial"');
         expect(toolbox).toContain('type="looks_addmaterial"');
         expect(toolbox).toContain('type="looks_setalbedofromcolor"');
         expect(toolbox).toContain('type="looks_setalbedofromtexture"');
@@ -56,6 +57,9 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker">');
         expect(toolbox).toContain('<value name="TEXTURE"><shadow type="looks_costume">');
         expect(toolbox).toContain('<value name="U2"><shadow type="math_number"><field name="NUM">1</field>');
+        expect(toolbox.indexOf('type="looks_clearmaterial"')).toBeLessThan(
+            toolbox.indexOf('type="looks_addmaterial"')
+        );
     });
 
     test('offers point and spot lights with color pickers and fractional shadows', () => {

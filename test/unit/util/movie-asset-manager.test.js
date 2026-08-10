@@ -754,11 +754,36 @@ describe('MovieAssetManager rendering performance', () => {
         expect(typeof manager.runtime._primitives.looks_renderwall).toBe('function');
         expect(typeof manager.runtime._primitives.looks_renderfloor).toBe('function');
         expect(typeof manager.runtime._primitives.looks_renderbox).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_clearmaterial).toBe('function');
         expect(typeof manager.runtime._primitives.looks_addmaterial).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setalbedofromcolor).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setalbedofromtexture).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setemissionfromcolor).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setemissionfromtexture).toBe('function');
+    });
+
+    test('clears all building materials back to the invalid defaults', () => {
+        const manager = makeManager();
+        const albedoTexture = {dispose: jest.fn()};
+        const emissionTexture = {dispose: jest.fn()};
+        const brick = manager.getBuildingMaterialRecord('brick');
+        const glass = manager.getBuildingMaterialRecord('glass');
+        brick.albedo = '#804020';
+        brick.albedoTexture = albedoTexture;
+        glass.emission = '#ffffff';
+        glass.emissionTexture = emissionTexture;
+
+        manager.clearBuildingMaterials();
+
+        expect(brick.albedo).toBe('#ff00ff');
+        expect(brick.albedoTexture).toBeNull();
+        expect(glass.emission).toBe('#000000');
+        expect(glass.emissionTexture).toBeNull();
+        expect(brick.material.color.getHexString()).toBe('ff00ff');
+        expect(glass.material.emissive.getHexString()).toBe('000000');
+        expect(albedoTexture.dispose).toHaveBeenCalledTimes(1);
+        expect(emissionTexture.dispose).toHaveBeenCalledTimes(1);
+        expect(manager.buildingMaterials.get('brick')).toBe(brick);
     });
 
     test('sets a one-based model animation frame without putting the VM into promise-wait mode', () => {

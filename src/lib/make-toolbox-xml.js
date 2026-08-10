@@ -278,6 +278,7 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
         `}
         ${blockSeparator}
         <block type="looks_clearscene"/>
+        <block type="looks_clearmaterial"/>
         <block type="looks_addmaterial">
             <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
         </block>

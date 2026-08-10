@@ -297,6 +297,7 @@ class MovieAssetManager extends EventEmitter {
         primitives.looks_renderwall = (args, util) => this.renderBuildingPrimitive('wall', args, util.target);
         primitives.looks_renderfloor = (args, util) => this.renderBuildingPrimitive('floor', args, util.target);
         primitives.looks_renderbox = (args, util) => this.renderBuildingPrimitive('box', args, util.target);
+        primitives.looks_clearmaterial = () => this.clearBuildingMaterials();
         primitives.looks_addmaterial = args => this.addBuildingMaterial(args.MATERIAL);
         primitives.looks_setalbedofromcolor = args => this.setBuildingMaterialColor(
             args.MATERIAL, 'albedo', args.COLOR
@@ -1838,8 +1839,7 @@ class MovieAssetManager extends EventEmitter {
         }
     }
 
-    addBuildingMaterial (requestedName) {
-        const record = this.getBuildingMaterialRecord(requestedName);
+    resetBuildingMaterial (record) {
         const textures = [record.albedoTexture, record.emissionTexture].filter(Boolean);
         record.albedo = '#ff00ff';
         record.albedoTexture = null;
@@ -1850,6 +1850,18 @@ class MovieAssetManager extends EventEmitter {
         record.textureVersion++;
         this.syncBuildingMaterial(record);
         textures.forEach(texture => texture.dispose());
+    }
+
+    clearBuildingMaterials () {
+        for (const record of this.buildingMaterials.values()) {
+            this.resetBuildingMaterial(record);
+        }
+        this.rerenderBuildingScenes();
+    }
+
+    addBuildingMaterial (requestedName) {
+        const record = this.getBuildingMaterialRecord(requestedName);
+        this.resetBuildingMaterial(record);
         this.rerenderBuildingScenes();
     }
 

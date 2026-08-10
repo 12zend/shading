@@ -7,6 +7,7 @@ const MOVIE_ASSET_BLOCKS = [
     'event_renderframe',
     'looks_addrenderingframe',
     'looks_changevideoframeby',
+    'looks_clearmaterial',
     'looks_clearscene',
     'looks_clearrenderingframe',
     'looks_exportrenderingmp4',
