@@ -25,6 +25,7 @@ const makeManager = () => {
     manager.models = new Map();
     manager.modelObjects = new Map();
     manager.buildingMaterials = new Map();
+    manager.buildingTextures = new Map();
     manager.fontFaces = new Map();
     manager.lights = null;
     return manager;
@@ -809,9 +810,45 @@ describe('MovieAssetManager rendering performance', () => {
         expect(glass.emissionTexture).toBeNull();
         expect(brick.material.color.getHexString()).toBe('ff00ff');
         expect(glass.material.emissive.getHexString()).toBe('000000');
-        expect(albedoTexture.dispose).toHaveBeenCalledTimes(1);
-        expect(emissionTexture.dispose).toHaveBeenCalledTimes(1);
+        expect(albedoTexture.dispose).not.toHaveBeenCalled();
+        expect(emissionTexture.dispose).not.toHaveBeenCalled();
         expect(manager.buildingMaterials.get('brick')).toBe(brick);
+    });
+
+    test('reuses decoded textures synchronously across clear-render-stamp loops', () => {
+        const manager = makeManager();
+        const texture = {dispose: jest.fn()};
+        const asset = {encodeDataURI: jest.fn(() => 'data:image/png;base64,unused')};
+        const target = makeTarget();
+        target.getCostumes = jest.fn(() => [{asset, name: 'brick'}]);
+        manager.buildingTextures.set(asset, {
+            promise: Promise.resolve(texture),
+            texture
+        });
+
+        manager.addBuildingMaterial('wall');
+        expect(manager.setBuildingMaterialTexture('wall', 'albedo', 'brick', target)).toBeUndefined();
+        const record = manager.buildingMaterials.get('wall');
+        expect(record.material.map).toBe(texture);
+
+        manager.clearBuildingMaterials();
+        manager.addBuildingMaterial('wall');
+        expect(manager.setBuildingMaterialTexture('wall', 'albedo', 'brick', target)).toBeUndefined();
+
+        expect(record.material.map).toBe(texture);
+        expect(record.material.color.getHexString()).toBe('ffffff');
+        expect(texture.dispose).not.toHaveBeenCalled();
+        expect(asset.encodeDataURI).not.toHaveBeenCalled();
+    });
+
+    test('does not reset an existing material when add material runs again in a loop', () => {
+        const manager = makeManager();
+        manager.addBuildingMaterial('wall');
+        manager.setBuildingMaterialColor('wall', 'albedo', '#804020');
+
+        manager.addBuildingMaterial('wall');
+
+        expect(manager.buildingMaterials.get('wall').material.color.getHexString()).toBe('804020');
     });
 
     test('sets a one-based model animation frame without putting the VM into promise-wait mode', () => {

@@ -195,6 +195,7 @@ class MovieAssetManager extends EventEmitter {
         this.fontFaces = new Map();
         this.modelObjects = new Map();
         this.buildingMaterials = new Map();
+        this.buildingTextures = new Map();
         this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
         this.renderingSoundEvents = [];
@@ -1810,8 +1811,12 @@ class MovieAssetManager extends EventEmitter {
             record = {
                 albedo: '#ff00ff',
                 albedoTexture: null,
+                albedoTexturePending: null,
+                albedoTextureSource: null,
                 emission: '#000000',
                 emissionTexture: null,
+                emissionTexturePending: null,
+                emissionTextureSource: null,
                 ior: 1.45,
                 material: makeBuildingMaterial(),
                 name,
@@ -1852,16 +1857,18 @@ class MovieAssetManager extends EventEmitter {
     }
 
     resetBuildingMaterial (record) {
-        const textures = [record.albedoTexture, record.emissionTexture].filter(Boolean);
         record.albedo = '#ff00ff';
         record.albedoTexture = null;
+        record.albedoTexturePending = null;
+        record.albedoTextureSource = null;
         record.emission = '#000000';
         record.emissionTexture = null;
+        record.emissionTexturePending = null;
+        record.emissionTextureSource = null;
         record.ior = 1.45;
         record.roughness = 1;
         record.textureVersion++;
         this.syncBuildingMaterial(record);
-        textures.forEach(texture => texture.dispose());
     }
 
     clearBuildingMaterials () {
@@ -1872,20 +1879,22 @@ class MovieAssetManager extends EventEmitter {
     }
 
     addBuildingMaterial (requestedName) {
-        const record = this.getBuildingMaterialRecord(requestedName);
-        this.resetBuildingMaterial(record);
-        this.rerenderBuildingScenes();
+        const name = this.normalizeBuildingMaterialName(requestedName);
+        if (this.buildingMaterials.has(name)) return;
+        this.getBuildingMaterialRecord(name);
     }
 
     setBuildingMaterialColor (requestedName, channel, requestedColor) {
         const record = this.getBuildingMaterialRecord(requestedName);
         const textureKey = `${channel}Texture`;
-        const oldTexture = record[textureKey];
+        const pendingKey = `${channel}TexturePending`;
+        const sourceKey = `${channel}TextureSource`;
         record[channel] = String(requestedColor || (channel === 'albedo' ? '#ff00ff' : '#000000'));
         record[textureKey] = null;
+        record[pendingKey] = null;
+        record[sourceKey] = null;
         record.textureVersion++;
         this.syncBuildingMaterial(record);
-        if (oldTexture) oldTexture.dispose();
         this.rerenderBuildingScenes();
     }
 
@@ -1899,22 +1908,54 @@ class MovieAssetManager extends EventEmitter {
         return costumes.find(costume => costume.name === String(requestedCostume)) || costumes[0];
     }
 
-    async setBuildingMaterialTexture (requestedName, channel, requestedCostume, target) {
+    getBuildingTexture (costume) {
+        const source = costume.asset;
+        let cached = this.buildingTextures.get(source);
+        if (cached) return cached;
+        cached = {promise: null, texture: null};
+        cached.promise = Promise.resolve().then(() => loadBuildingTexture(source.encodeDataURI())).then(texture => {
+            cached.texture = texture;
+            return texture;
+        }, error => {
+            if (this.buildingTextures.get(source) === cached) this.buildingTextures.delete(source);
+            throw error;
+        });
+        this.buildingTextures.set(source, cached);
+        return cached;
+    }
+
+    setBuildingMaterialTexture (requestedName, channel, requestedCostume, target) {
         const record = this.getBuildingMaterialRecord(requestedName);
         const costume = this.getCostumeByName(target, requestedCostume);
         if (!costume || !costume.asset || typeof costume.asset.encodeDataURI !== 'function') return;
+        const textureKey = `${channel}Texture`;
+        const pendingKey = `${channel}TexturePending`;
+        const sourceKey = `${channel}TextureSource`;
+        const source = costume.asset;
+        if (record[sourceKey] === source && record[textureKey]) return;
+        if (record[sourceKey] === source && record[pendingKey]) return record[pendingKey];
+        const cached = this.getBuildingTexture(costume);
         const version = ++record.textureVersion;
-        const texture = await loadBuildingTexture(costume.asset.encodeDataURI());
-        if (record.textureVersion !== version) {
-            texture.dispose();
+        record[sourceKey] = source;
+        if (cached.texture) {
+            record[textureKey] = cached.texture;
+            this.syncBuildingMaterial(record);
+            this.rerenderBuildingScenes();
             return;
         }
-        const textureKey = `${channel}Texture`;
-        const oldTexture = record[textureKey];
-        record[textureKey] = texture;
-        this.syncBuildingMaterial(record);
-        if (oldTexture) oldTexture.dispose();
-        this.rerenderBuildingScenes();
+        let pending;
+        const clearPending = () => {
+            if (record[pendingKey] === pending) record[pendingKey] = null;
+        };
+        pending = cached.promise.then(texture => {
+            if (record.textureVersion !== version || record[sourceKey] !== source) return;
+            record[textureKey] = texture;
+            this.syncBuildingMaterial(record);
+            this.rerenderBuildingScenes();
+        });
+        record[pendingKey] = pending;
+        pending.then(clearPending, clearPending);
+        return pending;
     }
 
     renderBuildingPrimitive (type, args, target) {
