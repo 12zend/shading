@@ -2016,15 +2016,7 @@ class MovieAssetManager extends EventEmitter {
         state.modelScene.push({
             materialName: record.name,
             sourceObject,
-            transform: {
-                rotation: {x: 0, y: 0, z: 0},
-                rotationOrder: 'XYZ',
-                scale: {x: 1, y: 1, z: 1},
-                size: 100,
-                worldX: 0,
-                worldY: 0,
-                worldZ: 0
-            }
+            transform: this.getModelTransform(target, state)
         });
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;

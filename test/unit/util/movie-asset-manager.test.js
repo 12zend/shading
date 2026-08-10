@@ -713,7 +713,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
     });
 
-    test('creates default building materials and renders wall geometry into the shared scene', () => {
+    test('renders wall geometry with the current Motion position, rotation, and scale', () => {
         const manager = makeManager();
         const target = makeTarget();
         manager.queueModelSceneRender = jest.fn();
@@ -726,6 +726,9 @@ describe('MovieAssetManager rendering performance', () => {
         expect(record.material.ior).toBe(1.45);
 
         manager.setBuildingMaterialColor('brick', 'albedo', '#804020');
+        manager.setTargetPosition(target, 12, -8, 720);
+        manager.setTargetRotation(target, 10, 20, 30);
+        manager.setTargetScale(target, 2, 0.5, 3);
         manager.renderBuildingPrimitive('wall', {
             MATERIAL: 'brick',
             U1: 0,
@@ -745,6 +748,15 @@ describe('MovieAssetManager rendering performance', () => {
         expect(state.modelScene).toHaveLength(1);
         expect(state.modelScene[0].sourceObject.isMesh).toBe(true);
         expect(state.modelScene[0].sourceObject.material).toBe(record.material);
+        expect(state.modelScene[0].transform).toEqual({
+            rotation: {x: 10, y: 20, z: 30},
+            rotationOrder: 'XYZ',
+            scale: {x: 2, y: 0.5, z: 3},
+            size: 100,
+            worldX: 12,
+            worldY: -8,
+            worldZ: 720
+        });
         expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
     });
 
