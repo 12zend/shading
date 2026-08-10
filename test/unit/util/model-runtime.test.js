@@ -5,6 +5,7 @@ import {
     ModelRenderer,
     bindAnimationToMesh,
     cameraLookAt,
+    createBuildingPrimitive,
     disableFullyTransparentMaterials,
     focalLengthFromFOV,
     fovFromFocalLength,
@@ -25,6 +26,69 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('builds a diagonal wall with height and repeatable UV coordinates', () => {
+        const wall = createBuildingPrimitive('wall', {
+            x1: 0,
+            y1: 0,
+            z1: 0,
+            x2: 100,
+            y2: 100,
+            z2: 100
+        }, {u1: 0, v1: 0, u2: 10, v2: 2});
+
+        expect(Array.from(wall.geometry.getAttribute('position').array)).toEqual([
+            0, 0, 0,
+            100, 0, -100,
+            100, 100, -100,
+            0, 100, 0
+        ]);
+        expect(Array.from(wall.geometry.getAttribute('uv').array)).toEqual([
+            0, 0,
+            10, 0,
+            10, 2,
+            0, 2
+        ]);
+        expect(wall.material.color.getHexString()).toBe('ff00ff');
+        expect(wall.material.emissive.getHexString()).toBe('000000');
+        expect(wall.material.roughness).toBe(1);
+        expect(wall.material.ior).toBe(1.45);
+    });
+
+    test('builds a floor whose height slopes along the z axis', () => {
+        const floor = createBuildingPrimitive('floor', {
+            x1: 0,
+            y1: 0,
+            z1: 0,
+            x2: 100,
+            y2: 50,
+            z2: 100
+        }, {u1: 0, v1: 0, u2: 1, v2: 1});
+
+        expect(Array.from(floor.geometry.getAttribute('position').array)).toEqual([
+            0, 0, 0,
+            100, 0, 0,
+            100, 50, -100,
+            0, 50, -100
+        ]);
+    });
+
+    test('maps the requested UV range onto every face of a box', () => {
+        const box = createBuildingPrimitive('box', {
+            x1: 0,
+            y1: 0,
+            z1: 0,
+            x2: 100,
+            y2: 50,
+            z2: 20
+        }, {u1: 2, v1: 3, u2: 12, v2: 8});
+        const uv = Array.from(box.geometry.getAttribute('uv').array);
+
+        expect(Math.min(...uv.filter((value, index) => index % 2 === 0))).toBe(2);
+        expect(Math.max(...uv.filter((value, index) => index % 2 === 0))).toBe(12);
+        expect(Math.min(...uv.filter((value, index) => index % 2 === 1))).toBe(3);
+        expect(Math.max(...uv.filter((value, index) => index % 2 === 1))).toBe(8);
+    });
+
     test('normalizes user light inputs and clamps fractional shadow strength', () => {
         expect(normalizeLight({
             angle: 180,

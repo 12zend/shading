@@ -42,6 +42,22 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
 
+    test('offers building primitives and material setup with native color and costume inputs', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('type="looks_addmaterial"');
+        expect(toolbox).toContain('type="looks_setalbedofromcolor"');
+        expect(toolbox).toContain('type="looks_setalbedofromtexture"');
+        expect(toolbox).toContain('type="looks_setemissionfromcolor"');
+        expect(toolbox).toContain('type="looks_setemissionfromtexture"');
+        expect(toolbox).toContain('type="looks_renderwall"');
+        expect(toolbox).toContain('type="looks_renderfloor"');
+        expect(toolbox).toContain('type="looks_renderbox"');
+        expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker">');
+        expect(toolbox).toContain('<value name="TEXTURE"><shadow type="looks_costume">');
+        expect(toolbox).toContain('<value name="U2"><shadow type="math_number"><field name="NUM">1</field>');
+    });
+
     test('offers point and spot lights with color pickers and fractional shadows', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 

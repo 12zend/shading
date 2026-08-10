@@ -136,6 +136,16 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);
     });
 
+    test('marks building geometry and material blocks as Movie project data', () => {
+        const json = project({
+            material: block('looks_addmaterial'),
+            texture: block('looks_setalbedofromtexture'),
+            wall: block('looks_renderwall')
+        });
+
+        expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);
+    });
+
     test('marks rendering export blocks as Movie project data', () => {
         const json = project({export: block('looks_exportrenderingmp4')});
 

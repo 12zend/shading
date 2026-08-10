@@ -18,10 +18,13 @@ import {
     attachMotionToGLB,
     cameraLookAt,
     convertModelToGLB,
+    createBuildingPrimitive,
     disposeObject,
     focalLengthFromFOV,
     fovFromFocalLength,
     loadGLBObject,
+    loadBuildingTexture,
+    makeBuildingMaterial,
     normalizeFOV,
     projectPosition
 } from './model-runtime';
@@ -191,6 +194,7 @@ class MovieAssetManager extends EventEmitter {
         this.targetStates = new Map();
         this.fontFaces = new Map();
         this.modelObjects = new Map();
+        this.buildingMaterials = new Map();
         this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
         this.renderingSoundEvents = [];
@@ -290,6 +294,22 @@ class MovieAssetManager extends EventEmitter {
         };
         // The next block may consume the rendered skin (for example, pen stamp), so wait for the model frame.
         primitives.looks_rendermodel = (args, util) => this.renderModelToScene(util.target, args.MODEL);
+        primitives.looks_renderwall = (args, util) => this.renderBuildingPrimitive('wall', args, util.target);
+        primitives.looks_renderfloor = (args, util) => this.renderBuildingPrimitive('floor', args, util.target);
+        primitives.looks_renderbox = (args, util) => this.renderBuildingPrimitive('box', args, util.target);
+        primitives.looks_addmaterial = args => this.addBuildingMaterial(args.MATERIAL);
+        primitives.looks_setalbedofromcolor = args => this.setBuildingMaterialColor(
+            args.MATERIAL, 'albedo', args.COLOR
+        );
+        primitives.looks_setemissionfromcolor = args => this.setBuildingMaterialColor(
+            args.MATERIAL, 'emission', args.COLOR
+        );
+        primitives.looks_setalbedofromtexture = (args, util) => this.setBuildingMaterialTexture(
+            args.MATERIAL, 'albedo', args.TEXTURE, util.target
+        );
+        primitives.looks_setemissionfromtexture = (args, util) => this.setBuildingMaterialTexture(
+            args.MATERIAL, 'emission', args.TEXTURE, util.target
+        );
         // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
         // is not restarted before it reaches a following render-model block.
         primitives.looks_setmodelframeto = (args, util) => {
@@ -1766,6 +1786,149 @@ class MovieAssetManager extends EventEmitter {
         return this.queueModelSceneRender(target);
     }
 
+    normalizeBuildingMaterialName (requestedName) {
+        return String(requestedName || '').trim() || 'material';
+    }
+
+    getBuildingMaterialRecord (requestedName) {
+        const name = this.normalizeBuildingMaterialName(requestedName);
+        let record = this.buildingMaterials.get(name);
+        if (!record) {
+            record = {
+                albedo: '#ff00ff',
+                albedoTexture: null,
+                emission: '#000000',
+                emissionTexture: null,
+                ior: 1.45,
+                material: makeBuildingMaterial(),
+                name,
+                roughness: 1,
+                textureVersion: 0
+            };
+            this.buildingMaterials.set(name, record);
+        }
+        return record;
+    }
+
+    syncBuildingMaterial (record) {
+        const material = record.material;
+        try {
+            material.color.set(record.albedoTexture ? '#ffffff' : record.albedo);
+        } catch (error) {
+            material.color.set('#ff00ff');
+        }
+        try {
+            material.emissive.set(record.emissionTexture ? '#ffffff' : record.emission);
+        } catch (error) {
+            material.emissive.set('#000000');
+        }
+        material.map = record.albedoTexture;
+        material.emissiveMap = record.emissionTexture;
+        material.ior = record.ior;
+        material.roughness = record.roughness;
+        material.needsUpdate = true;
+    }
+
+    rerenderBuildingScenes () {
+        for (const target of this.runtime.targets || []) {
+            const state = this.targetStates.get(target.id);
+            if (!state || state.requestedMode !== 'model' ||
+                !state.modelScene.some(item => item.sourceObject)) continue;
+            this.runWithoutWaiting(this.queueModelSceneRender(target));
+        }
+    }
+
+    addBuildingMaterial (requestedName) {
+        const record = this.getBuildingMaterialRecord(requestedName);
+        const textures = [record.albedoTexture, record.emissionTexture].filter(Boolean);
+        record.albedo = '#ff00ff';
+        record.albedoTexture = null;
+        record.emission = '#000000';
+        record.emissionTexture = null;
+        record.ior = 1.45;
+        record.roughness = 1;
+        record.textureVersion++;
+        this.syncBuildingMaterial(record);
+        textures.forEach(texture => texture.dispose());
+        this.rerenderBuildingScenes();
+    }
+
+    setBuildingMaterialColor (requestedName, channel, requestedColor) {
+        const record = this.getBuildingMaterialRecord(requestedName);
+        const textureKey = `${channel}Texture`;
+        const oldTexture = record[textureKey];
+        record[channel] = String(requestedColor || (channel === 'albedo' ? '#ff00ff' : '#000000'));
+        record[textureKey] = null;
+        record.textureVersion++;
+        this.syncBuildingMaterial(record);
+        if (oldTexture) oldTexture.dispose();
+        this.rerenderBuildingScenes();
+    }
+
+    getCostumeByName (target, requestedCostume) {
+        const original = getOriginalTarget(target);
+        const costumes = original && typeof original.getCostumes === 'function' ? original.getCostumes() : [];
+        if (!costumes.length) return null;
+        if (typeof requestedCostume === 'number' || /^\s*\d+\s*$/.test(String(requestedCostume))) {
+            return costumes[clamp(Number(requestedCostume) - 1, 0, costumes.length - 1)];
+        }
+        return costumes.find(costume => costume.name === String(requestedCostume)) || costumes[0];
+    }
+
+    async setBuildingMaterialTexture (requestedName, channel, requestedCostume, target) {
+        const record = this.getBuildingMaterialRecord(requestedName);
+        const costume = this.getCostumeByName(target, requestedCostume);
+        if (!costume || !costume.asset || typeof costume.asset.encodeDataURI !== 'function') return;
+        const version = ++record.textureVersion;
+        const texture = await loadBuildingTexture(costume.asset.encodeDataURI());
+        if (record.textureVersion !== version) {
+            texture.dispose();
+            return;
+        }
+        const textureKey = `${channel}Texture`;
+        const oldTexture = record[textureKey];
+        record[textureKey] = texture;
+        this.syncBuildingMaterial(record);
+        if (oldTexture) oldTexture.dispose();
+        this.rerenderBuildingScenes();
+    }
+
+    renderBuildingPrimitive (type, args, target) {
+        const record = this.getBuildingMaterialRecord(args.MATERIAL);
+        const sourceObject = createBuildingPrimitive(type, {
+            x1: args.X1,
+            x2: args.X2,
+            y1: args.Y1,
+            y2: args.Y2,
+            z1: args.Z1,
+            z2: args.Z2
+        }, {
+            u1: args.U1,
+            u2: args.U2,
+            v1: args.V1,
+            v2: args.V2
+        }, record.material);
+        const state = this.getTargetState(target);
+        state.modelAssetId = null;
+        state.modelScene.push({
+            materialName: record.name,
+            sourceObject,
+            transform: {
+                rotation: {x: 0, y: 0, z: 0},
+                rotationOrder: 'XYZ',
+                scale: {x: 1, y: 1, z: 1},
+                size: 100,
+                worldX: 0,
+                worldY: 0,
+                worldZ: 0
+            }
+        });
+        state.requestedMode = 'model';
+        state.pendingVideoFrame = null;
+        state.textQueue.length = 0;
+        return this.queueModelSceneRender(target);
+    }
+
     renderModelToScene (target, requestedModel) {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return Promise.resolve();
@@ -1814,6 +1977,18 @@ class MovieAssetManager extends EventEmitter {
         state.modelRenderVersion++;
 
         const cachedItems = state.modelScene.map(item => {
+            if (item.sourceObject) {
+                return {
+                    animationName: '',
+                    frame: 1,
+                    sourceObject: item.sourceObject,
+                    transform: {
+                        ...item.transform,
+                        rotation: {...item.transform.rotation},
+                        scale: cloneScale(item.transform.scale)
+                    }
+                };
+            }
             const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
             const record = model && this.modelObjects.get(model.assetId);
             if (!record || !record.object) return null;
@@ -1845,6 +2020,7 @@ class MovieAssetManager extends EventEmitter {
                 const version = state.modelRenderVersion;
                 const sceneItems = state.modelScene.map(item => ({
                     assetId: item.assetId,
+                    sourceObject: item.sourceObject,
                     transform: {
                         ...item.transform,
                         rotation: {...item.transform.rotation},
@@ -1852,6 +2028,14 @@ class MovieAssetManager extends EventEmitter {
                     }
                 }));
                 const loadedItems = await Promise.all(sceneItems.map(async item => {
+                    if (item.sourceObject) {
+                        return {
+                            animationName: '',
+                            frame: 1,
+                            sourceObject: item.sourceObject,
+                            transform: item.transform
+                        };
+                    }
                     const model = this.getModels(target).find(candidate => candidate.assetId === item.assetId);
                     if (!model) return null;
                     return {

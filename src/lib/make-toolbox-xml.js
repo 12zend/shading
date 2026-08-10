@@ -278,10 +278,69 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
         `}
         ${blockSeparator}
         <block type="looks_clearscene"/>
+        <block type="looks_addmaterial">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+        </block>
+        <block type="looks_setalbedofromcolor">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ff00ff</field></shadow></value>
+        </block>
+        <block type="looks_setalbedofromtexture">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="TEXTURE"><shadow type="looks_costume"></shadow></value>
+        </block>
+        <block type="looks_setemissionfromcolor">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#000000</field></shadow></value>
+        </block>
+        <block type="looks_setemissionfromtexture">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="TEXTURE"><shadow type="looks_costume"></shadow></value>
+        </block>
+        ${blockSeparator}
         <block id="${targetId}_rendermodel" type="looks_rendermodel">
             <value name="MODEL">
                 <shadow type="looks_model"></shadow>
             </value>
+        </block>
+        <block type="looks_renderwall">
+            <value name="X1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="X2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="Y2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="Z2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="U1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="V1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="U2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="V2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+        </block>
+        <block type="looks_renderfloor">
+            <value name="X1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="X2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="Y2"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
+            <value name="Z2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="U1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="V1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="U2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="V2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+        </block>
+        <block type="looks_renderbox">
+            <value name="X1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Y1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="Z1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="X2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="Y2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="Z2"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+            <value name="U1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="V1"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="U2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="V2"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
         </block>
         <block type="looks_setmodelframeto">
             <value name="FRAME">

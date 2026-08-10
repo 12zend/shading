@@ -24,6 +24,7 @@ const makeManager = () => {
     manager.videos = new Map();
     manager.models = new Map();
     manager.modelObjects = new Map();
+    manager.buildingMaterials = new Map();
     manager.fontFaces = new Map();
     manager.lights = null;
     return manager;
@@ -709,6 +710,55 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(renderResult).toBe(modelRender.promise);
         expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube');
+    });
+
+    test('creates default building materials and renders wall geometry into the shared scene', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.queueModelSceneRender = jest.fn();
+
+        manager.addBuildingMaterial('brick');
+        const record = manager.buildingMaterials.get('brick');
+        expect(record.material.color.getHexString()).toBe('ff00ff');
+        expect(record.material.emissive.getHexString()).toBe('000000');
+        expect(record.material.roughness).toBe(1);
+        expect(record.material.ior).toBe(1.45);
+
+        manager.setBuildingMaterialColor('brick', 'albedo', '#804020');
+        manager.renderBuildingPrimitive('wall', {
+            MATERIAL: 'brick',
+            U1: 0,
+            U2: 10,
+            V1: 0,
+            V2: 1,
+            X1: 0,
+            X2: 100,
+            Y1: 0,
+            Y2: 100,
+            Z1: 0,
+            Z2: 100
+        }, target);
+
+        const state = manager.getTargetState(target);
+        expect(record.material.color.getHexString()).toBe('804020');
+        expect(state.modelScene).toHaveLength(1);
+        expect(state.modelScene[0].sourceObject.isMesh).toBe(true);
+        expect(state.modelScene[0].sourceObject.material).toBe(record.material);
+        expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
+    });
+
+    test('registers building and material primitives', () => {
+        const manager = makeManager();
+        manager.installPrimitives();
+
+        expect(typeof manager.runtime._primitives.looks_renderwall).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_renderfloor).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_renderbox).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_addmaterial).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_setalbedofromcolor).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_setalbedofromtexture).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_setemissionfromcolor).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_setemissionfromtexture).toBe('function');
     });
 
     test('sets a one-based model animation frame without putting the VM into promise-wait mode', () => {

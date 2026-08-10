@@ -525,6 +525,82 @@ export default function (vm) {
         }
     };
 
+    const buildingPrimitiveBlock = type => ({
+        init: function () {
+            this.jsonInit({
+                message0: `render ${type} x: %1 y: %2 z: %3 ~ x: %4 y: %5 z: %6`,
+                args0: [
+                    {type: 'input_value', name: 'X1'},
+                    {type: 'input_value', name: 'Y1'},
+                    {type: 'input_value', name: 'Z1'},
+                    {type: 'input_value', name: 'X2'},
+                    {type: 'input_value', name: 'Y2'},
+                    {type: 'input_value', name: 'Z2'}
+                ],
+                message1: 'uv: u: %1 v: %2 ~ u: %3 v: %4',
+                args1: [
+                    {type: 'input_value', name: 'U1'},
+                    {type: 'input_value', name: 'V1'},
+                    {type: 'input_value', name: 'U2'},
+                    {type: 'input_value', name: 'V2'}
+                ],
+                message2: 'material: %1',
+                args2: [{type: 'input_value', name: 'MATERIAL'}],
+                inputsInline: true,
+                category: ScratchBlocks.Categories.looks,
+                extensions: ['colours_looks', 'shape_statement']
+            });
+        }
+    });
+
+    ScratchBlocks.Blocks.looks_renderwall = buildingPrimitiveBlock('wall');
+    ScratchBlocks.Blocks.looks_renderfloor = buildingPrimitiveBlock('floor');
+    ScratchBlocks.Blocks.looks_renderbox = buildingPrimitiveBlock('box');
+
+    ScratchBlocks.Blocks.looks_addmaterial = {
+        init: function () {
+            this.jsonInit(looksStatement('add material %1', [
+                {type: 'input_value', name: 'MATERIAL'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setalbedofromcolor = {
+        init: function () {
+            this.jsonInit(looksStatement('set albedo %1 from color: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'COLOR'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setalbedofromtexture = {
+        init: function () {
+            this.jsonInit(looksStatement('set albedo %1 from texture: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'TEXTURE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setemissionfromcolor = {
+        init: function () {
+            this.jsonInit(looksStatement('set emission %1 from color: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'COLOR'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setemissionfromtexture = {
+        init: function () {
+            this.jsonInit(looksStatement('set emission %1 from texture: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'TEXTURE'}
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_setmodelframeto = {
         init: function () {
             this.jsonInit({

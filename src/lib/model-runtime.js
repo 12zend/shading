@@ -28,6 +28,13 @@ const TEXTURE_MIME_TYPES = {
     webp: 'image/webp'
 };
 
+const DEFAULT_BUILDING_MATERIAL = Object.freeze({
+    albedo: '#ff00ff',
+    emission: '#000000',
+    ior: 1.45,
+    roughness: 1
+});
+
 const normalizeFOV = value => {
     const number = Number(value);
     if (!Number.isFinite(number)) return DEFAULT_FOV;
@@ -499,6 +506,113 @@ const modelScale = value => {
     return Number.isFinite(number) ? Math.max(0, number) : 1;
 };
 
+const buildingNumber = value => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+};
+
+const buildingUV = value => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+};
+
+const buildingZ = value => {
+    const z = buildingNumber(value);
+    return z === 0 ? 0 : -z;
+};
+
+const setBuildingUVs = (geometry, requestedUV) => {
+    const uv = geometry.getAttribute('uv');
+    if (!uv) return;
+    const u1 = buildingUV(requestedUV && requestedUV.u1);
+    const v1 = buildingUV(requestedUV && requestedUV.v1);
+    const u2 = buildingUV(requestedUV && requestedUV.u2);
+    const v2 = buildingUV(requestedUV && requestedUV.v2);
+    for (let index = 0; index < uv.count; index++) {
+        uv.setXY(
+            index,
+            u1 + ((u2 - u1) * uv.getX(index)),
+            v1 + ((v2 - v1) * uv.getY(index))
+        );
+    }
+    uv.needsUpdate = true;
+};
+
+const makeBuildingPlaneGeometry = (positions, requestedUV) => {
+    const u1 = buildingUV(requestedUV && requestedUV.u1);
+    const v1 = buildingUV(requestedUV && requestedUV.v1);
+    const u2 = buildingUV(requestedUV && requestedUV.u2);
+    const v2 = buildingUV(requestedUV && requestedUV.v2);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute([
+        u1, v1,
+        u2, v1,
+        u2, v2,
+        u1, v2
+    ], 2));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    geometry.computeVertexNormals();
+    return geometry;
+};
+
+const makeBuildingMaterial = () => new THREE.MeshPhysicalMaterial({
+    color: DEFAULT_BUILDING_MATERIAL.albedo,
+    emissive: DEFAULT_BUILDING_MATERIAL.emission,
+    ior: DEFAULT_BUILDING_MATERIAL.ior,
+    roughness: DEFAULT_BUILDING_MATERIAL.roughness,
+    side: THREE.DoubleSide
+});
+
+const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = makeBuildingMaterial()) => {
+    const bounds = requestedBounds || {};
+    const x1 = buildingNumber(bounds.x1);
+    const y1 = buildingNumber(bounds.y1);
+    const z1 = buildingNumber(bounds.z1);
+    const x2 = buildingNumber(bounds.x2);
+    const y2 = buildingNumber(bounds.y2);
+    const z2 = buildingNumber(bounds.z2);
+    let geometry;
+
+    if (type === 'wall') {
+        geometry = makeBuildingPlaneGeometry([
+            x1, y1, buildingZ(z1),
+            x2, y1, buildingZ(z2),
+            x2, y2, buildingZ(z2),
+            x1, y2, buildingZ(z1)
+        ], requestedUV);
+    } else if (type === 'floor') {
+        geometry = makeBuildingPlaneGeometry([
+            x1, y1, buildingZ(z1),
+            x2, y1, buildingZ(z1),
+            x2, y2, buildingZ(z2),
+            x1, y2, buildingZ(z2)
+        ], requestedUV);
+    } else {
+        geometry = new THREE.BoxGeometry(
+            Math.abs(x2 - x1),
+            Math.abs(y2 - y1),
+            Math.abs(z2 - z1)
+        );
+        geometry.translate((x1 + x2) / 2, (y1 + y2) / 2, buildingZ((z1 + z2) / 2));
+        setBuildingUVs(geometry, requestedUV);
+    }
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = `Movie ${type}`;
+    return mesh;
+};
+
+const loadBuildingTexture = source => new Promise((resolve, reject) => {
+    new THREE.TextureLoader().load(source, texture => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.needsUpdate = true;
+        resolve(texture);
+    }, undefined, reject);
+});
+
 const worldToCamera = (position, camera) => {
     const result = new THREE.Vector3(
         position.x - camera.position.x,
@@ -870,6 +984,7 @@ class ModelRenderer {
 }
 
 export {
+    DEFAULT_BUILDING_MATERIAL,
     DEFAULT_DEPTH,
     DEFAULT_FOV,
     DEFAULT_FOCAL_LENGTH,
@@ -882,11 +997,14 @@ export {
     bindAnimationToMesh,
     cameraLookAt,
     convertModelToGLB,
+    createBuildingPrimitive,
     disableFullyTransparentMaterials,
     disposeObject,
     focalLengthFromFOV,
     fovFromFocalLength,
     loadGLBObject,
+    loadBuildingTexture,
+    makeBuildingMaterial,
     moviePositionToThree,
     movieRotationToThreeQuaternion,
     normalizeLight,
