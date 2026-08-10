@@ -53,6 +53,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="looks_setemissionfromtexture"');
         expect(toolbox).toContain('type="looks_setdisplacementmap"');
         expect(toolbox).toContain('type="looks_setnormalmap"');
+        expect(toolbox).toContain('type="looks_setroughmap"');
         expect(toolbox).toContain('type="looks_renderwall"');
         expect(toolbox).toContain('type="looks_renderfloor"');
         expect(toolbox).toContain('type="looks_renderbox"');

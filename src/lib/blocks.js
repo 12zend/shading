@@ -625,6 +625,15 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_setroughmap = {
+        init: function () {
+            this.jsonInit(looksStatement('set rough map %1 texture: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'TEXTURE'}
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_setmodelframeto = {
         init: function () {
             this.jsonInit({

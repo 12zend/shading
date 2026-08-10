@@ -334,6 +334,11 @@ class MovieAssetManager extends EventEmitter {
                 args.MATERIAL, 'normal', args.TEXTURE, util.target
             ));
         };
+        primitives.looks_setroughmap = (args, util) => {
+            this.runWithoutWaiting(this.setBuildingMaterialTexture(
+                args.MATERIAL, 'roughness', args.TEXTURE, util.target
+            ));
+        };
         // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
         // is not restarted before it reaches a following render-model block.
         primitives.looks_setmodelframeto = (args, util) => {
@@ -1837,11 +1842,15 @@ class MovieAssetManager extends EventEmitter {
                 normalTexturePending: null,
                 normalTextureSource: null,
                 roughness: 1,
+                roughnessTexture: null,
+                roughnessTexturePending: null,
+                roughnessTextureSource: null,
                 textureVersions: {
                     albedo: 0,
                     displacement: 0,
                     emission: 0,
-                    normal: 0
+                    normal: 0,
+                    roughness: 0
                 }
             };
             this.buildingMaterials.set(name, record);
@@ -1867,6 +1876,7 @@ class MovieAssetManager extends EventEmitter {
         material.normalMap = record.normalTexture;
         material.ior = record.ior;
         material.roughness = record.roughness;
+        material.roughnessMap = record.roughnessTexture;
         material.needsUpdate = true;
     }
 
@@ -1896,6 +1906,9 @@ class MovieAssetManager extends EventEmitter {
         record.normalTextureSource = null;
         record.ior = 1.45;
         record.roughness = 1;
+        record.roughnessTexture = null;
+        record.roughnessTexturePending = null;
+        record.roughnessTextureSource = null;
         Object.keys(record.textureVersions).forEach(channel => record.textureVersions[channel]++);
         this.syncBuildingMaterial(record);
     }

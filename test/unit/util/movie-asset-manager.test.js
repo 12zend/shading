@@ -775,6 +775,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(typeof manager.runtime._primitives.looks_setemissionfromtexture).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setdisplacementmap).toBe('function');
         expect(typeof manager.runtime._primitives.looks_setnormalmap).toBe('function');
+        expect(typeof manager.runtime._primitives.looks_setroughmap).toBe('function');
     });
 
     test('does not put building or texture blocks into VM promise-wait mode', () => {
@@ -807,8 +808,12 @@ describe('MovieAssetManager rendering performance', () => {
             MATERIAL: 'brick',
             TEXTURE: 'costume1'
         }, {target})).toBeUndefined();
+        expect(manager.runtime._primitives.looks_setroughmap({
+            MATERIAL: 'brick',
+            TEXTURE: 'costume1'
+        }, {target})).toBeUndefined();
 
-        expect(manager.runWithoutWaiting).toHaveBeenCalledTimes(7);
+        expect(manager.runWithoutWaiting).toHaveBeenCalledTimes(8);
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(backgroundRender);
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(backgroundTexture);
     });
@@ -865,7 +870,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(asset.encodeDataURI).not.toHaveBeenCalled();
     });
 
-    test('sets cached displacement and normal textures synchronously after a material clear', () => {
+    test('sets cached data-map textures synchronously after a material clear', () => {
         const manager = makeManager();
         const texture = {dispose: jest.fn()};
         const asset = {encodeDataURI: jest.fn(() => 'data:image/png;base64,unused')};
@@ -881,9 +886,11 @@ describe('MovieAssetManager rendering performance', () => {
         manager.addBuildingMaterial('wall');
         expect(manager.setBuildingMaterialTexture('wall', 'displacement', 'surface', target)).toBeUndefined();
         expect(manager.setBuildingMaterialTexture('wall', 'normal', 'surface', target)).toBeUndefined();
+        expect(manager.setBuildingMaterialTexture('wall', 'roughness', 'surface', target)).toBeUndefined();
         const record = manager.buildingMaterials.get('wall');
         expect(record.material.displacementMap).toBe(texture);
         expect(record.material.normalMap).toBe(texture);
+        expect(record.material.roughnessMap).toBe(texture);
 
         manager.clearBuildingMaterials();
         manager.addBuildingMaterial('wall');
@@ -891,6 +898,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(record.material.displacementMap).toBeNull();
         expect(record.material.normalMap).toBe(texture);
+        expect(record.material.roughnessMap).toBeNull();
         expect(texture.dispose).not.toHaveBeenCalled();
         expect(asset.encodeDataURI).not.toHaveBeenCalled();
     });

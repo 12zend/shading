@@ -23,6 +23,7 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_setemissionfromcolor',
     'looks_setemissionfromtexture',
     'looks_setnormalmap',
+    'looks_setroughmap',
     'looks_setmodelframeto',
     'looks_settextfont',
     'looks_setvideoframeto',

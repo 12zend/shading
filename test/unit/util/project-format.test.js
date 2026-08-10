@@ -142,6 +142,7 @@ describe('Movie project format', () => {
             displacement: block('looks_setdisplacementmap'),
             material: block('looks_addmaterial'),
             normal: block('looks_setnormalmap'),
+            roughness: block('looks_setroughmap'),
             texture: block('looks_setalbedofromtexture'),
             wall: block('looks_renderwall')
         });
