@@ -298,6 +298,14 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
             <value name="TEXTURE"><shadow type="looks_costume"></shadow></value>
         </block>
+        <block type="looks_setdisplacementmap">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="TEXTURE"><shadow type="looks_costume"></shadow></value>
+        </block>
+        <block type="looks_setnormalmap">
+            <value name="MATERIAL"><shadow type="text"><field name="TEXT">material</field></shadow></value>
+            <value name="TEXTURE"><shadow type="looks_costume"></shadow></value>
+        </block>
         ${blockSeparator}
         <block id="${targetId}_rendermodel" type="looks_rendermodel">
             <value name="MODEL">

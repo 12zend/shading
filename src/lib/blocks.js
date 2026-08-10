@@ -607,6 +607,24 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.looks_setdisplacementmap = {
+        init: function () {
+            this.jsonInit(looksStatement('set displacement map %1 texture: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'TEXTURE'}
+            ]));
+        }
+    };
+
+    ScratchBlocks.Blocks.looks_setnormalmap = {
+        init: function () {
+            this.jsonInit(looksStatement('set normal map %1 texture: %2', [
+                {type: 'input_value', name: 'MATERIAL'},
+                {type: 'input_value', name: 'TEXTURE'}
+            ]));
+        }
+    };
+
     ScratchBlocks.Blocks.looks_setmodelframeto = {
         init: function () {
             this.jsonInit({

@@ -139,7 +139,9 @@ describe('Movie project format', () => {
     test('marks building geometry and material blocks as Movie project data', () => {
         const json = project({
             clear: block('looks_clearmaterial'),
+            displacement: block('looks_setdisplacementmap'),
             material: block('looks_addmaterial'),
+            normal: block('looks_setnormalmap'),
             texture: block('looks_setalbedofromtexture'),
             wall: block('looks_renderwall')
         });

@@ -1,9 +1,11 @@
 import {BitmapAdapter, sanitizeSvg, fixForVanilla} from '@turbowarp/scratch-svg-renderer';
 import randomizeSpritePosition from './randomize-sprite-position.js';
 import bmpConverter from './bmp-converter';
+import exrConverter from './exr-converter';
 import gifDecoder from './gif-decoder';
 import convertAudioToWav from './tw-convert-audio-wav.js';
 import log from './log.js';
+import {getFileType} from './costume-upload-formats';
 
 /**
  * Extract the file name given a string of the form fileName + ext
@@ -36,7 +38,7 @@ const handleFileUpload = function (fileInput, onload, onerror) {
         const file = files[i];
         const reader = new FileReader();
         reader.onload = () => {
-            const fileType = file.type;
+            const fileType = getFileType(file);
             const fileName = extractFileName(file.name);
             onload(reader.result, fileType, fileName, i, files.length);
             readFile(i + 1, files);
@@ -156,6 +158,13 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
             }, handleError);
         });
         return; // Abandon this load, do not try to load gif itself
+    }
+    case 'image/exr':
+    case 'image/x-exr': {
+        exrConverter(fileData).then(dataUrl => {
+            costumeUpload(dataUrl, 'image/png', vm, handleCostume, handleError);
+        }).catch(handleError);
+        return;
     }
     default:
         handleError(`Encountered unexpected file type: ${fileType}`);

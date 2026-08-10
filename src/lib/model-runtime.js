@@ -603,9 +603,9 @@ const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = 
     return mesh;
 };
 
-const loadBuildingTexture = source => new Promise((resolve, reject) => {
+const loadBuildingTexture = (source, isColorTexture = true) => new Promise((resolve, reject) => {
     new THREE.TextureLoader().load(source, texture => {
-        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.colorSpace = isColorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.needsUpdate = true;

@@ -324,6 +324,16 @@ class MovieAssetManager extends EventEmitter {
                 args.MATERIAL, 'emission', args.TEXTURE, util.target
             ));
         };
+        primitives.looks_setdisplacementmap = (args, util) => {
+            this.runWithoutWaiting(this.setBuildingMaterialTexture(
+                args.MATERIAL, 'displacement', args.TEXTURE, util.target
+            ));
+        };
+        primitives.looks_setnormalmap = (args, util) => {
+            this.runWithoutWaiting(this.setBuildingMaterialTexture(
+                args.MATERIAL, 'normal', args.TEXTURE, util.target
+            ));
+        };
         // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
         // is not restarted before it reaches a following render-model block.
         primitives.looks_setmodelframeto = (args, util) => {
@@ -1813,6 +1823,9 @@ class MovieAssetManager extends EventEmitter {
                 albedoTexture: null,
                 albedoTexturePending: null,
                 albedoTextureSource: null,
+                displacementTexture: null,
+                displacementTexturePending: null,
+                displacementTextureSource: null,
                 emission: '#000000',
                 emissionTexture: null,
                 emissionTexturePending: null,
@@ -1820,8 +1833,16 @@ class MovieAssetManager extends EventEmitter {
                 ior: 1.45,
                 material: makeBuildingMaterial(),
                 name,
+                normalTexture: null,
+                normalTexturePending: null,
+                normalTextureSource: null,
                 roughness: 1,
-                textureVersion: 0
+                textureVersions: {
+                    albedo: 0,
+                    displacement: 0,
+                    emission: 0,
+                    normal: 0
+                }
             };
             this.buildingMaterials.set(name, record);
         }
@@ -1841,7 +1862,9 @@ class MovieAssetManager extends EventEmitter {
             material.emissive.set('#000000');
         }
         material.map = record.albedoTexture;
+        material.displacementMap = record.displacementTexture;
         material.emissiveMap = record.emissionTexture;
+        material.normalMap = record.normalTexture;
         material.ior = record.ior;
         material.roughness = record.roughness;
         material.needsUpdate = true;
@@ -1861,13 +1884,19 @@ class MovieAssetManager extends EventEmitter {
         record.albedoTexture = null;
         record.albedoTexturePending = null;
         record.albedoTextureSource = null;
+        record.displacementTexture = null;
+        record.displacementTexturePending = null;
+        record.displacementTextureSource = null;
         record.emission = '#000000';
         record.emissionTexture = null;
         record.emissionTexturePending = null;
         record.emissionTextureSource = null;
+        record.normalTexture = null;
+        record.normalTexturePending = null;
+        record.normalTextureSource = null;
         record.ior = 1.45;
         record.roughness = 1;
-        record.textureVersion++;
+        Object.keys(record.textureVersions).forEach(channel => record.textureVersions[channel]++);
         this.syncBuildingMaterial(record);
     }
 
@@ -1893,7 +1922,7 @@ class MovieAssetManager extends EventEmitter {
         record[textureKey] = null;
         record[pendingKey] = null;
         record[sourceKey] = null;
-        record.textureVersion++;
+        record.textureVersions[channel]++;
         this.syncBuildingMaterial(record);
         this.rerenderBuildingScenes();
     }
@@ -1908,19 +1937,28 @@ class MovieAssetManager extends EventEmitter {
         return costumes.find(costume => costume.name === String(requestedCostume)) || costumes[0];
     }
 
-    getBuildingTexture (costume) {
+    getBuildingTexture (costume, channel) {
         const source = costume.asset;
-        let cached = this.buildingTextures.get(source);
+        const usage = channel === 'albedo' || channel === 'emission' ? 'color' : 'data';
+        let cachedByUsage = this.buildingTextures.get(source);
+        if (!cachedByUsage) {
+            cachedByUsage = {};
+            this.buildingTextures.set(source, cachedByUsage);
+        }
+        let cached = cachedByUsage[usage];
         if (cached) return cached;
         cached = {promise: null, texture: null};
-        cached.promise = Promise.resolve().then(() => loadBuildingTexture(source.encodeDataURI())).then(texture => {
+        cached.promise = Promise.resolve().then(() => loadBuildingTexture(
+            source.encodeDataURI(), usage === 'color'
+        )).then(texture => {
             cached.texture = texture;
             return texture;
         }, error => {
-            if (this.buildingTextures.get(source) === cached) this.buildingTextures.delete(source);
+            if (cachedByUsage[usage] === cached) delete cachedByUsage[usage];
+            if (!Object.keys(cachedByUsage).length) this.buildingTextures.delete(source);
             throw error;
         });
-        this.buildingTextures.set(source, cached);
+        cachedByUsage[usage] = cached;
         return cached;
     }
 
@@ -1934,8 +1972,8 @@ class MovieAssetManager extends EventEmitter {
         const source = costume.asset;
         if (record[sourceKey] === source && record[textureKey]) return;
         if (record[sourceKey] === source && record[pendingKey]) return record[pendingKey];
-        const cached = this.getBuildingTexture(costume);
-        const version = ++record.textureVersion;
+        const cached = this.getBuildingTexture(costume, channel);
+        const version = ++record.textureVersions[channel];
         record[sourceKey] = source;
         if (cached.texture) {
             record[textureKey] = cached.texture;
@@ -1948,7 +1986,7 @@ class MovieAssetManager extends EventEmitter {
             if (record[pendingKey] === pending) record[pendingKey] = null;
         };
         pending = cached.promise.then(texture => {
-            if (record.textureVersion !== version || record[sourceKey] !== source) return;
+            if (record.textureVersions[channel] !== version || record[sourceKey] !== source) return;
             record[textureKey] = texture;
             this.syncBuildingMaterial(record);
             this.rerenderBuildingScenes();
