@@ -1061,7 +1061,17 @@ class MovieAssetManager extends EventEmitter {
         target.setXY = (x, y, force) => this.setTargetXY(target, x, y, force);
         target.setDirection = direction => this.setLegacyDirection(target, direction);
         target.setSize = size => {
-            const result = originalSetSize(size);
+            // Scratch's size fencing clamps the scale based on the costume and stage dimensions.
+            // Keep position fencing enabled, but do not let it change an explicitly requested size.
+            const runtimeOptions = this.runtime.runtimeOptions;
+            const restoreFencing = runtimeOptions && runtimeOptions.fencing;
+            if (restoreFencing) runtimeOptions.fencing = false;
+            let result;
+            try {
+                result = originalSetSize(size);
+            } finally {
+                if (restoreFencing) runtimeOptions.fencing = true;
+            }
             this.applyProjection(target);
             this.rerenderTargetModel(target);
             return result;

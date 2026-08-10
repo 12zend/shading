@@ -1,3 +1,5 @@
+import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
+
 import {MovieAssetManager} from '../../../src/lib/movie-asset-manager';
 
 const makeManager = () => {
@@ -45,6 +47,23 @@ const deferred = () => {
     return {promise, resolve};
 };
 
+const makePatchableTarget = manager => {
+    const target = makeTarget();
+    manager.runtime.stageHeight = 360;
+    manager.runtime.stageWidth = 480;
+    manager.runtime.renderer.getCurrentSkinSize = jest.fn(() => [100, 100]);
+    target.renderer = manager.runtime.renderer;
+    target.runtime = manager.runtime;
+    target.setCostume = jest.fn();
+    target.setXY = jest.fn();
+    target.setDirection = jest.fn();
+    target.setVisible = jest.fn();
+    target.updateAllDrawableProperties = jest.fn();
+    target._getRenderedDirectionAndScale = jest.fn(() => ({direction: 90, scale: [target.size, target.size]}));
+    target.setSize = RenderedTarget.prototype.setSize;
+    return target;
+};
+
 const makeTimelineManager = () => {
     const manager = makeManager();
     manager.vm = {
@@ -87,6 +106,23 @@ const makeTimelineManager = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('sets exact sprite sizes and restores position fencing', () => {
+        const manager = makeManager();
+        manager.runtime.runtimeOptions = {fencing: true};
+        manager.applyProjection = jest.fn();
+        manager.rerenderTargetModel = jest.fn();
+        const target = makePatchableTarget(manager);
+
+        manager.patchTarget(target);
+        target.setSize(0);
+        expect(target.size).toBe(0);
+        expect(manager.runtime.runtimeOptions.fencing).toBe(true);
+
+        target.setSize(10000);
+        expect(target.size).toBe(10000);
+        expect(manager.runtime.runtimeOptions.fencing).toBe(true);
+    });
+
     test('uses current advanced settings for a project without saved timeline settings', () => {
         const manager = makeTimelineManager();
         manager.runtime.frameLoop = {framerate: 60};
