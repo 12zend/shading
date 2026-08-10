@@ -72,12 +72,17 @@ describe('SBFileUploaderHOC', () => {
         expect(projectName).toBe('my project is great');
     });
 
-    test('correctly sets title with .mb3 filename', () => {
+    test('correctly sets title with .shade filename', () => {
+        const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.shade');
+        expect(projectName).toBe('my movie is great');
+    });
+
+    test('correctly sets title with legacy .mb3 filename', () => {
         const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.mb3');
         expect(projectName).toBe('my movie is great');
     });
 
-    test('does not filter mb3 out of the native file picker', () => {
+    test('does not filter shade out of the native file picker', () => {
         const showOpenFilePicker = jest.fn(() => new Promise(() => {}));
         const instance = unwrappedInstance({showOpenFilePicker});
 

@@ -47,7 +47,7 @@ const projectJSON = {
 };
 
 describe('Movie project save and load', () => {
-    test('keeps custom blocks in a marked project.json inside an mb3-compatible ZIP', async () => {
+    test('keeps custom blocks in a marked project.json inside a shade-compatible ZIP', async () => {
         const vm = new VM();
         installMovieAssetManager(vm);
         await vm.loadProject(JSON.stringify(projectJSON));

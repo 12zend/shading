@@ -41,7 +41,7 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
         expect(getProjectExtension({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('mb3');
+        })).toBe('shade');
     });
 
     test('marks built-in Pen FX blocks as Movie project data', () => {
@@ -50,7 +50,7 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['pen-fx']);
         expect(getProjectExtension({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('mb3');
+        })).toBe('shade');
     });
 
     test('round-trips custom opcodes and inputs through project.json block serialization', () => {
@@ -156,7 +156,7 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
         expect(getProjectExtension({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('mb3');
+        })).toBe('shade');
     });
 
     test('marks the render frame hat and timeline settings as Movie project data', () => {
@@ -192,13 +192,13 @@ describe('Movie project format', () => {
         expect(markMovieProject(project({move: block('motion_movesteps')})).mb3).toBeUndefined();
     });
 
-    test('uses mb3 for hydrated custom blocks in the runtime', () => {
+    test('uses shade for hydrated custom blocks in the runtime', () => {
         const runtime = {
             targets: [{blocks: {_blocks: {
                 text: block('looks_settextfont')
             }}}]
         };
 
-        expect(getProjectExtension(runtime)).toBe('mb3');
+        expect(getProjectExtension(runtime)).toBe('shade');
     });
 });

@@ -25,7 +25,7 @@ import {
     closeFileMenu
 } from '../reducers/menus';
 
-const PROJECT_FILE_EXTENSIONS = ['.mb3', '.sb3', '.sb2', '.sb'];
+const PROJECT_FILE_EXTENSIONS = ['.shade', '.mb3', '.sb3', '.sb2', '.sb'];
 
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
@@ -79,7 +79,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 (async () => {
                     try {
                         // Do not pass a type filter here. Chromium on macOS can grey out an unregistered custom
-                        // extension such as .mb3 even when it is included in the accepted extension list.
+                        // extension such as .shade even when it is included in the accepted extension list.
                         // The fallback <input> below can still use an extension filter safely.
                         const [handle] = await this.props.showOpenFilePicker({multiple: false});
                         const file = await handle.getFile();
@@ -137,7 +137,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
                     if (handle) {
-                        if (/\.(?:sb3|mb3)$/i.test(this.fileToUpload.name)) {
+                        if (/\.(?:sb3|shade|mb3)$/i.test(this.fileToUpload.name)) {
                             this.props.onSetFileHandle(handle);
                         } else {
                             this.props.onSetFileHandle(null);
@@ -173,8 +173,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         getProjectTitleFromFilename (fileInputFilename) {
             if (!fileInputFilename) return '';
             // only parse title with valid scratch project extensions
-            // (.sb, .sb2, .sb3, and Movie's .mb3)
-            const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|mb3)$/i);
+            // (.sb, .sb2, .sb3, Movie's .shade, and legacy .mb3)
+            const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade|mb3)$/i);
             if (!matches) return '';
             return matches[1].substring(0, 100); // truncate project title to max 100 chars
         }

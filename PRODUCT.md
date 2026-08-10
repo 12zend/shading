@@ -17,7 +17,7 @@ Movie is not a Scratch mod whose primary goal is to run every project on scratch
 1. **Frames are deterministic.** A project rendered at a given timeline time and animation frame should produce the same image.
 2. **Complex media stays approachable.** Creators work with models, motions, poses, cameras, and frames; low-level bone manipulation is not required for ordinary animation.
 3. **Assets belong to an explicit owner.** Videos and 3D models are assigned per sprite. Every model retains its source type (GLB, PMX, FBX, or OBJ/MTL) even when Movie normalizes storage to GLB.
-4. **Movie capabilities are explicit.** Movie-only blocks and assets are recorded as project features and use the `.mb3` format when necessary.
+4. **Movie capabilities are explicit.** Movie-only blocks and assets are recorded as project features and use the `.shade` format when necessary.
 5. **Compatibility is additive.** Existing opcodes, block inputs, field meanings, and saved project data must not be changed incompatibly. New behavior that would alter an existing block is introduced as a new block. Legacy opcodes remain loadable even when they are no longer shown in the toolbox.
 6. **Future formats share concepts.** Frame selection is model-level rather than VMD-specific, so the same block can drive VMD and future animation formats.
 
