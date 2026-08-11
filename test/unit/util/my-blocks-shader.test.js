@@ -79,6 +79,10 @@ describe('My Blocks Shader', () => {
         expect(source).toContain('uniform sampler2D u_image');
         expect(source).toContain('texture2D(u_image, clamp(uv');
         expect(source).toContain('shaderSample(cx, cy).r');
+        expect(source).toContain('pixel.rgb / pixel.a');
+        expect(source).toContain('clamp(vec3(');
+        expect(source).toContain('), 0.0, 1.0);');
+        expect(source).not.toContain('255.0');
         expect(source).toContain('u_arg_arg_v');
         expect(uniforms).toEqual({u_arg_arg_v: 1.5, u_random_seed: 1});
     });

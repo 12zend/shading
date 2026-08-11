@@ -814,7 +814,7 @@ float shaderHash(vec3 value) {
 vec3 shaderSample(float x, float y) {
     vec2 uv = vec2(x / u_resolution.x + 0.5, y / u_resolution.y + 0.5);
     vec4 pixel = texture2D(u_image, clamp(uv, vec2(0.0), vec2(1.0)));
-    return pixel.a > 0.00001 ? pixel.rgb * (255.0 / pixel.a) : vec3(0.0);
+    return pixel.a > 0.00001 ? pixel.rgb / pixel.a : vec3(0.0);
 }
 
 ${functions}
@@ -825,7 +825,7 @@ void main() {
 ${variableInitializers}
 ${statements}
     vec4 original = texture2D(u_image, v_uv);
-    vec3 shaderColor = clamp(vec3(${red}, ${green}, ${blue}), 0.0, 255.0) / 255.0;
+    vec3 shaderColor = clamp(vec3(${red}, ${green}, ${blue}), 0.0, 1.0);
     gl_FragColor = vec4(shaderColor * original.a, original.a);
 }`;
     }
