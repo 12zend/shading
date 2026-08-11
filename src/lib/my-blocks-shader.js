@@ -1,5 +1,5 @@
-// My Blocks Shader compiles a deliberately small, numeric subset of Scratch
-// reporter blocks to GLSL and applies it to the pen framebuffer in one pass.
+// My Blocks Shader compiles Scratch's numeric shader-safe blocks to GLSL and
+// applies them to the pen framebuffer in one pass.
 // The source is copied before drawing so every get r/g/b sample observes the
 // image as it was before this block started.
 
@@ -13,6 +13,7 @@ const SHADER_GET_OPCODES = {
     myblocksshader_get_g: 'g',
     myblocksshader_get_b: 'b'
 };
+const MAX_SHADER_LOOP = 256;
 
 const VERTEX_SHADER = `
 attribute vec2 a_position;
@@ -39,12 +40,12 @@ const parseJSON = (value, fallback = []) => {
     }
 };
 
-const safeIdentifier = value => {
+const safeIdentifier = (value, prefix = 'u_arg_') => {
     const sanitized = String(value)
         .replace(/[^a-zA-Z0-9_]/g, '_')
         .replace(/_+/g, '_')
         .replace(/^_+|_+$/g, '');
-    return `u_arg_${sanitized || 'value'}`;
+    return `${prefix}${sanitized || 'value'}`;
 };
 
 const blockField = (block, name, fallback = '') => {
@@ -56,23 +57,338 @@ class ShaderExpressionCompiler {
     constructor (blocks, argumentNames, argumentIds) {
         this.blocks = blocks;
         this.argumentUniforms = new Map();
+        this.externalUniforms = new Map();
+        this.uniformNames = new Map();
+        this.variables = new Map();
+        this.variableNames = new Map();
+        this.functions = new Map();
+        this.procedureNames = new Map();
+        this.compilingProcedures = new Set();
+        this.scope = null;
+        this.isReporterFunction = false;
+        this.loopCounter = 0;
+        this.randomCounter = 0;
         for (let i = 0; i < argumentIds.length; i++) {
             this.argumentUniforms.set(argumentNames[i], safeIdentifier(argumentIds[i]));
         }
     }
 
-    input (block, name, fallback = '0.0') {
-        if (!block || !block.inputs || !block.inputs[name]) return fallback;
+    block (blockId) {
+        return blockId && this.blocks[blockId];
+    }
+
+    inputId (block, name) {
+        if (!block || !block.inputs || !block.inputs[name]) return null;
         const input = block.inputs[name];
-        return this.expression(input.block || input.shadow, fallback);
+        return input.block === null || !Object.prototype.hasOwnProperty.call(input, 'block') ?
+            input.shadow : input.block;
+    }
+
+    input (block, name, fallback = '0.0') {
+        return this.expression(this.inputId(block, name), fallback);
     }
 
     binary (block, left, operator, right, fallback) {
         return `((${this.input(block, left, fallback)}) ${operator} (${this.input(block, right, fallback)}))`;
     }
 
+    literalNumber (blockId) {
+        const block = this.block(blockId);
+        if (!block) return null;
+        if (['math_number', 'math_integer', 'math_whole_number', 'math_positive_number', 'math_angle']
+            .includes(block.opcode)) {
+            const value = Number(blockField(block, 'NUM', 0));
+            return Number.isFinite(value) ? value : 0;
+        }
+        if (block.opcode === 'text') {
+            const value = Number(blockField(block, 'TEXT', 0));
+            return Number.isFinite(value) ? value : 0;
+        }
+        return null;
+    }
+
+    constantString (blockId, literalOnly = false) {
+        const block = this.block(blockId);
+        if (!block) return null;
+        if (block.opcode === 'text') return String(blockField(block, 'TEXT'));
+        if (['math_number', 'math_integer', 'math_whole_number', 'math_positive_number', 'math_angle']
+            .includes(block.opcode)) {
+            return literalOnly ? null : String(blockField(block, 'NUM', 0));
+        }
+        if (block.opcode === 'operator_join') {
+            const left = this.constantString(this.inputId(block, 'STRING1'), literalOnly);
+            const right = this.constantString(this.inputId(block, 'STRING2'), literalOnly);
+            return left === null || right === null ? null : left + right;
+        }
+        if (block.opcode === 'operator_letter_of') {
+            const value = this.constantString(this.inputId(block, 'STRING'), literalOnly);
+            const index = this.literalNumber(this.inputId(block, 'LETTER'));
+            if (value === null || index === null) return null;
+            const offset = Math.floor(index) - 1;
+            return offset >= 0 && offset < value.length ? value[offset] : '';
+        }
+        return null;
+    }
+
+    constantComparison (block, operator) {
+        const left = this.constantString(this.inputId(block, 'OPERAND1'), true);
+        const right = this.constantString(this.inputId(block, 'OPERAND2'), true);
+        if (left === null || right === null) return null;
+        if (operator === '<') return left.toLowerCase() < right.toLowerCase();
+        if (operator === '>') return left.toLowerCase() > right.toLowerCase();
+        return left.toLowerCase() === right.toLowerCase();
+    }
+
+    uniform (kind, key, descriptor) {
+        const logicalKey = `${kind}:${key}`;
+        if (this.uniformNames.has(logicalKey)) return this.uniformNames.get(logicalKey);
+        const base = safeIdentifier(key, `u_${kind}_`);
+        let name = base;
+        let suffix = 2;
+        while (this.externalUniforms.has(name)) name = `${base}_${suffix++}`;
+        this.uniformNames.set(logicalKey, name);
+        if (!this.externalUniforms.has(name)) {
+            this.externalUniforms.set(name, Object.assign({kind, key}, descriptor));
+        }
+        return name;
+    }
+
+    variable (block) {
+        const field = block && block.fields && block.fields.VARIABLE;
+        const name = String(field && Object.prototype.hasOwnProperty.call(field, 'value') ?
+            field.value : 'variable');
+        const id = field && field.id;
+        const key = id || name;
+        if (this.variableNames.has(key)) return this.variableNames.get(key);
+        const base = safeIdentifier(key, 's_var_');
+        let glslName = base;
+        let suffix = 2;
+        while (this.variables.has(glslName)) glslName = `${base}_${suffix++}`;
+        this.variableNames.set(key, glslName);
+        if (!this.variables.has(glslName)) {
+            const uniformName = this.uniform('var', key, {id, scratchName: name});
+            this.variables.set(glslName, uniformName);
+        }
+        return glslName;
+    }
+
+    reporterUniform (block, args = {}) {
+        const detail = JSON.stringify(args);
+        return this.uniform('reporter', `${block.opcode}_${detail}`, {opcode: block.opcode, args});
+    }
+
+    listUniform (block, operation, extra = {}) {
+        const field = block && block.fields && block.fields.LIST;
+        const scratchName = String(field && Object.prototype.hasOwnProperty.call(field, 'value') ?
+            field.value : 'list');
+        const id = field && field.id;
+        const key = `${id || scratchName}_${operation}_${JSON.stringify(extra)}`;
+        return this.uniform('list', key, {id, scratchName, operation, extra});
+    }
+
+    menuValue (block, inputName, fieldName) {
+        const ownValue = blockField(block, fieldName, null);
+        if (ownValue !== null) return String(ownValue);
+        const child = this.block(this.inputId(block, inputName));
+        const childValue = blockField(child, fieldName, null);
+        if (childValue !== null) return String(childValue);
+        return this.constantString(this.inputId(block, inputName));
+    }
+
+    condition (block, name) {
+        const child = this.block(this.inputId(block, name));
+        if (!child) return `(${this.input(block, name)} != 0.0)`;
+        switch (child.opcode) {
+        case 'operator_lt': {
+            const constant = this.constantComparison(child, '<');
+            if (constant !== null) return constant ? '(true)' : '(false)';
+            return `((${this.input(child, 'OPERAND1')}) < (${this.input(child, 'OPERAND2')}))`;
+        }
+        case 'operator_gt': {
+            const constant = this.constantComparison(child, '>');
+            if (constant !== null) return constant ? '(true)' : '(false)';
+            return `((${this.input(child, 'OPERAND1')}) > (${this.input(child, 'OPERAND2')}))`;
+        }
+        case 'operator_equals': {
+            const constant = this.constantComparison(child, '=');
+            if (constant !== null) return constant ? '(true)' : '(false)';
+            return `(abs((${this.input(child, 'OPERAND1')}) - (${this.input(child, 'OPERAND2')})) < 0.000001)`;
+        }
+        case 'operator_and':
+            return `(${this.condition(child, 'OPERAND1')} && ${this.condition(child, 'OPERAND2')})`;
+        case 'operator_or':
+            return `(${this.condition(child, 'OPERAND1')} || ${this.condition(child, 'OPERAND2')})`;
+        case 'operator_not':
+            return `(!${this.condition(child, 'OPERAND')})`;
+        default:
+            return `((${this.expression(this.inputId(block, name))}) != 0.0)`;
+        }
+    }
+
+    statements (headId, stopId = null, indent = '    ') {
+        const result = [];
+        let id = headId;
+        while (id && id !== stopId) {
+            const block = this.block(id);
+            if (!block || block.opcode === SHADER_RETURN_OPCODE) break;
+            result.push(this.statement(block, indent));
+            id = block.next;
+        }
+        return result.filter(Boolean).join('\n');
+    }
+
+    substack (block, name, indent) {
+        return this.statements(this.inputId(block, name), null, indent);
+    }
+
+    statement (block, indent) {
+        switch (block.opcode) {
+        case 'data_setvariableto':
+            return `${indent}${this.variable(block)} = ${this.input(block, 'VALUE')};`;
+        case 'data_changevariableby':
+            return `${indent}${this.variable(block)} += ${this.input(block, 'VALUE')};`;
+        case 'control_if': {
+            const body = this.substack(block, 'SUBSTACK', `${indent}    `);
+            return `${indent}if (${this.condition(block, 'CONDITION')}) {\n${body}\n${indent}}`;
+        }
+        case 'control_if_else': {
+            const first = this.substack(block, 'SUBSTACK', `${indent}    `);
+            const second = this.substack(block, 'SUBSTACK2', `${indent}    `);
+            return `${indent}if (${this.condition(block, 'CONDITION')}) {\n${first}\n${indent}} else {\n` +
+                `${second}\n${indent}}`;
+        }
+        case 'control_repeat': {
+            const loop = safeIdentifier(this.loopCounter++, 's_loop_');
+            const body = this.substack(block, 'SUBSTACK', `${indent}    `);
+            return `${indent}for (int ${loop} = 0; ${loop} < ${MAX_SHADER_LOOP}; ${loop}++) {\n` +
+                `${indent}    if (float(${loop}) >= ${this.input(block, 'TIMES')}) break;\n${body}\n${indent}}`;
+        }
+        case 'control_repeat_until':
+        case 'control_while': {
+            const loop = safeIdentifier(this.loopCounter++, 's_loop_');
+            const body = this.substack(block, 'SUBSTACK', `${indent}    `);
+            const condition = this.condition(block, 'CONDITION');
+            const shouldBreak = block.opcode === 'control_repeat_until' ? condition : `!(${condition})`;
+            return `${indent}for (int ${loop} = 0; ${loop} < ${MAX_SHADER_LOOP}; ${loop}++) {\n` +
+                `${indent}    if (${shouldBreak}) break;\n${body}\n${indent}}`;
+        }
+        case 'control_for_each': {
+            const loop = safeIdentifier(this.loopCounter++, 's_loop_');
+            const body = this.substack(block, 'SUBSTACK', `${indent}    `);
+            const variable = this.variable(block);
+            return `${indent}for (int ${loop} = 0; ${loop} < ${MAX_SHADER_LOOP}; ${loop}++) {\n` +
+                `${indent}    if (float(${loop}) >= ${this.input(block, 'VALUE')}) break;\n` +
+                `${indent}    ${variable} = float(${loop}) + 1.0;\n${body}\n${indent}}`;
+        }
+        case 'control_forever': {
+            const loop = safeIdentifier(this.loopCounter++, 's_loop_');
+            const body = this.substack(block, 'SUBSTACK', `${indent}    `);
+            return `${indent}for (int ${loop} = 0; ${loop} < ${MAX_SHADER_LOOP}; ${loop}++) {\n${body}\n${indent}}`;
+        }
+        case 'control_all_at_once':
+            return this.substack(block, 'SUBSTACK', indent);
+        case 'procedures_call':
+            return `${indent}${this.procedureCall(block)};`;
+        case 'procedures_return':
+            return `${indent}return ${this.input(block, 'VALUE')};`;
+        case 'control_stop':
+            return this.isReporterFunction ? `${indent}return 0.0;` : `${indent}return;`;
+        case 'control_wait':
+        case 'control_wait_until':
+        case 'control_clear_counter':
+        case 'control_incr_counter':
+            return '';
+        default:
+            // Commands which do not have a per-pixel GPU meaning retain the
+            // previous behavior: they are skipped without yielding the VM.
+            return '';
+        }
+    }
+
+    procedureInfo (procedureCode) {
+        for (const prototype of Object.values(this.blocks)) {
+            if (prototype.opcode !== 'procedures_prototype' || !prototype.mutation) continue;
+            if (prototype.mutation[SHADER_MARKER] === 'true') continue;
+            if (prototype.mutation.proccode !== procedureCode) continue;
+            const definition = this.block(prototype.parent);
+            if (!definition || definition.opcode !== 'procedures_definition') return null;
+            return {prototype, definition};
+        }
+        return null;
+    }
+
+    procedureCall (block, reporterRequired = false) {
+        const procedureCode = block.mutation && block.mutation.proccode;
+        const info = this.procedureInfo(procedureCode);
+        if (!info) throw new Error(`Unknown custom block in shader: ${procedureCode}`);
+        if (reporterRequired && !this.procedureIsReporter(info)) {
+            throw new Error(`Custom command used as a shader reporter: ${procedureCode}`);
+        }
+        const functionName = this.compileProcedure(procedureCode, info);
+        const argumentIds = parseJSON(block.mutation.argumentids,
+            parseJSON(info.prototype.mutation.argumentids));
+        const defaults = parseJSON(info.prototype.mutation.argumentdefaults);
+        const args = argumentIds.map((id, index) => {
+            const childId = this.inputId(block, id);
+            return childId ? this.expression(childId) : numberLiteral(defaults[index]);
+        });
+        return `${functionName}(${args.join(', ')})`;
+    }
+
+    procedureIsReporter (info) {
+        if (String(info.prototype.mutation.return) === 'true') return true;
+        const visit = blockId => {
+            const block = this.block(blockId);
+            if (!block) return false;
+            if (block.opcode === 'procedures_return') return true;
+            for (const input of Object.values(block.inputs || {})) {
+                const childId = input.block === null || !Object.prototype.hasOwnProperty.call(input, 'block') ?
+                    input.shadow : input.block;
+                if (visit(childId)) return true;
+            }
+            return visit(block.next);
+        };
+        return visit(info.definition.next);
+    }
+
+    compileProcedure (procedureCode, info) {
+        let functionName = this.procedureNames.get(procedureCode);
+        if (!functionName) {
+            const base = safeIdentifier(procedureCode, 's_proc_');
+            functionName = base;
+            let suffix = 2;
+            const usedNames = new Set(this.procedureNames.values());
+            while (usedNames.has(functionName)) functionName = `${base}_${suffix++}`;
+            this.procedureNames.set(procedureCode, functionName);
+        }
+        if (this.functions.has(procedureCode)) return functionName;
+        if (this.compilingProcedures.has(procedureCode)) {
+            throw new Error(`Recursion is not supported in shaders: ${procedureCode}`);
+        }
+        this.compilingProcedures.add(procedureCode);
+        const names = parseJSON(info.prototype.mutation.argumentnames);
+        const ids = parseJSON(info.prototype.mutation.argumentids);
+        const isReporter = this.procedureIsReporter(info);
+        const parameters = ids.map((id, index) => safeIdentifier(id || index, 's_arg_'));
+        const previousScope = this.scope;
+        const previousReporter = this.isReporterFunction;
+        this.scope = new Map();
+        for (let i = 0; i < names.length; i++) this.scope.set(String(names[i]), parameters[i]);
+        this.isReporterFunction = isReporter;
+        const body = this.statements(info.definition.next, null, '    ');
+        const fallback = isReporter ? '\n    return 0.0;' : '';
+        const returnType = isReporter ? 'float' : 'void';
+        const declaration = parameters.map(name => `float ${name}`).join(', ');
+        this.functions.set(procedureCode,
+            `${returnType} ${functionName}(${declaration}) {\n${body}${fallback}\n}`);
+        this.scope = previousScope;
+        this.isReporterFunction = previousReporter;
+        this.compilingProcedures.delete(procedureCode);
+        return functionName;
+    }
+
     expression (blockId, fallback = '0.0') {
-        const block = blockId && this.blocks[blockId];
+        const block = this.block(blockId);
         if (!block) return fallback;
 
         switch (block.opcode) {
@@ -89,7 +405,47 @@ class ShaderExpressionCompiler {
             const name = String(blockField(block, 'VALUE'));
             if (name === 'cx') return 'cx';
             if (name === 'cy') return 'cy';
-            return this.argumentUniforms.get(name) || '0.0';
+            if (/^(is compiled\?|is turbowarp\?)$/i.test(name)) return '1.0';
+            return (this.scope && this.scope.get(name)) || this.argumentUniforms.get(name) || '0.0';
+        }
+        case 'data_variable':
+            return this.variable(block);
+        case 'motion_xposition':
+        case 'motion_yposition':
+        case 'motion_direction':
+        case 'looks_size':
+        case 'sound_volume':
+        case 'sensing_timer':
+        case 'sensing_mousex':
+        case 'sensing_mousey':
+        case 'sensing_mousedown':
+        case 'sensing_dayssince2000':
+        case 'sensing_answer':
+        case 'sensing_loudness':
+        case 'sensing_loud':
+        case 'sensing_online':
+        case 'control_get_counter':
+            return this.reporterUniform(block);
+        case 'looks_costumenumbername':
+            return this.reporterUniform(block, {NUMBER_NAME: blockField(block, 'NUMBER_NAME', 'number')});
+        case 'looks_backdropnumbername':
+            return this.reporterUniform(block, {NUMBER_NAME: blockField(block, 'NUMBER_NAME', 'number')});
+        case 'sensing_current':
+            return this.reporterUniform(block, {CURRENTMENU: blockField(block, 'CURRENTMENU', '')});
+        case 'sensing_keypressed': {
+            const key = this.menuValue(block, 'KEY_OPTION', 'KEY_OPTION');
+            if (key === null) throw new Error('Shader key pressed block needs a fixed key menu value.');
+            return this.reporterUniform(block, {KEY_OPTION: key});
+        }
+        case 'sensing_distanceto': {
+            const target = this.menuValue(block, 'DISTANCETOMENU', 'DISTANCETOMENU');
+            if (target === null) throw new Error('Shader distance block needs a fixed target menu value.');
+            return this.reporterUniform(block, {DISTANCETOMENU: target});
+        }
+        case 'sensing_of': {
+            const object = this.menuValue(block, 'OBJECT', 'OBJECT');
+            if (object === null) throw new Error('Shader attribute block needs a fixed object value.');
+            return this.reporterUniform(block, {PROPERTY: blockField(block, 'PROPERTY', ''), OBJECT: object});
         }
         case 'operator_add':
             return this.binary(block, 'NUM1', '+', 'NUM2', '0.0');
@@ -98,21 +454,33 @@ class ShaderExpressionCompiler {
         case 'operator_multiply':
             return this.binary(block, 'NUM1', '*', 'NUM2', '0.0');
         case 'operator_divide':
-            return `((${this.input(block, 'NUM1')}) / shaderSafeDivisor(${this.input(block, 'NUM2')}))`;
+            return `shaderScratchDivide(${this.input(block, 'NUM1')}, ${this.input(block, 'NUM2')})`;
         case 'operator_mod':
-            return `mod((${this.input(block, 'NUM1')}), shaderSafeDivisor(${this.input(block, 'NUM2')}))`;
+            return `shaderScratchMod(${this.input(block, 'NUM1')}, ${this.input(block, 'NUM2')})`;
         case 'operator_round':
             return `floor((${this.input(block, 'NUM')}) + 0.5)`;
-        case 'operator_lt':
+        case 'operator_lt': {
+            const constant = this.constantComparison(block, '<');
+            if (constant !== null) return constant ? '1.0' : '0.0';
             return `((${this.input(block, 'OPERAND1')}) < (${this.input(block, 'OPERAND2')}) ? 1.0 : 0.0)`;
-        case 'operator_gt':
+        }
+        case 'operator_gt': {
+            const constant = this.constantComparison(block, '>');
+            if (constant !== null) return constant ? '1.0' : '0.0';
             return `((${this.input(block, 'OPERAND1')}) > (${this.input(block, 'OPERAND2')}) ? 1.0 : 0.0)`;
-        case 'operator_equals':
-            return `(abs((${this.input(block, 'OPERAND1')}) - (${this.input(block, 'OPERAND2')})) < 0.000001 ? 1.0 : 0.0)`;
+        }
+        case 'operator_equals': {
+            const constant = this.constantComparison(block, '=');
+            if (constant !== null) return constant ? '1.0' : '0.0';
+            return `(abs((${this.input(block, 'OPERAND1')}) - ` +
+                `(${this.input(block, 'OPERAND2')})) < 0.000001 ? 1.0 : 0.0)`;
+        }
         case 'operator_and':
-            return `(((${this.input(block, 'OPERAND1')}) != 0.0 && (${this.input(block, 'OPERAND2')}) != 0.0) ? 1.0 : 0.0)`;
+            return `(((${this.input(block, 'OPERAND1')}) != 0.0 && ` +
+                `(${this.input(block, 'OPERAND2')}) != 0.0) ? 1.0 : 0.0)`;
         case 'operator_or':
-            return `(((${this.input(block, 'OPERAND1')}) != 0.0 || (${this.input(block, 'OPERAND2')}) != 0.0) ? 1.0 : 0.0)`;
+            return `(((${this.input(block, 'OPERAND1')}) != 0.0 || ` +
+                `(${this.input(block, 'OPERAND2')}) != 0.0) ? 1.0 : 0.0)`;
         case 'operator_not':
             return `((${this.input(block, 'OPERAND')}) == 0.0 ? 1.0 : 0.0)`;
         case 'operator_mathop':
@@ -120,8 +488,57 @@ class ShaderExpressionCompiler {
         case 'operator_random': {
             const from = this.input(block, 'FROM');
             const to = this.input(block, 'TO');
-            return `mix((${from}), (${to}), shaderHash(vec2(cx, cy)))`;
+            const fromLiteral = this.literalNumber(this.inputId(block, 'FROM'));
+            const toLiteral = this.literalNumber(this.inputId(block, 'TO'));
+            const random = `shaderHash(vec3(cx, cy, u_random_seed + ${numberLiteral(this.randomCounter++)}))`;
+            if (Number.isInteger(fromLiteral) && Number.isInteger(toLiteral)) {
+                const low = Math.min(fromLiteral, toLiteral);
+                const high = Math.max(fromLiteral, toLiteral);
+                return `floor(mix(${numberLiteral(low)}, ${numberLiteral(high + 1)}, ${random}))`;
+            }
+            return `mix((${from}), (${to}), ${random})`;
         }
+        case 'operator_join': {
+            const value = this.constantString(blockId);
+            if (value === null) throw new Error('Dynamic join is not supported in shaders.');
+            return numberLiteral(value);
+        }
+        case 'operator_length': {
+            const value = this.constantString(this.inputId(block, 'STRING'));
+            if (value === null) throw new Error('Dynamic string length is not supported in shaders.');
+            return numberLiteral(value.length);
+        }
+        case 'operator_letter_of': {
+            const value = this.constantString(blockId);
+            if (value === null) throw new Error('Dynamic letter of is not supported in shaders.');
+            return numberLiteral(value);
+        }
+        case 'operator_contains': {
+            const value = this.constantString(this.inputId(block, 'STRING1'));
+            const search = this.constantString(this.inputId(block, 'STRING2'));
+            if (value === null || search === null) throw new Error('Dynamic contains is not supported in shaders.');
+            return value.toLowerCase().includes(search.toLowerCase()) ? '1.0' : '0.0';
+        }
+        case 'data_lengthoflist':
+            return this.listUniform(block, 'length');
+        case 'data_itemoflist': {
+            const text = this.constantString(this.inputId(block, 'INDEX'));
+            const numericIndex = Number(text);
+            const index = text !== null && Number.isFinite(numericIndex) ? numericIndex : null;
+            if (text !== 'last' && index === null) {
+                throw new Error('Shader list item needs a fixed numeric index or "last".');
+            }
+            return this.listUniform(block, 'item', {index: text === 'last' ? 'last' : index});
+        }
+        case 'data_itemnumoflist':
+        case 'data_listcontainsitem': {
+            const item = this.constantString(this.inputId(block, 'ITEM'));
+            if (item === null) throw new Error('Shader list search needs a fixed item.');
+            const operation = block.opcode === 'data_itemnumoflist' ? 'indexOf' : 'contains';
+            return this.listUniform(block, operation, {item});
+        }
+        case 'procedures_call':
+            return this.procedureCall(block, true);
         default:
             if (Object.prototype.hasOwnProperty.call(SHADER_GET_OPCODES, block.opcode)) {
                 const channel = SHADER_GET_OPCODES[block.opcode];
@@ -137,15 +554,15 @@ class ShaderExpressionCompiler {
         case 'abs': return `abs(${value})`;
         case 'floor': return `floor(${value})`;
         case 'ceiling': return `ceil(${value})`;
-        case 'sqrt': return `sqrt(max(${value}, 0.0))`;
+        case 'sqrt': return `((${value}) < 0.0 ? 0.0 : sqrt(${value}))`;
         case 'sin': return `sin(radians(${value}))`;
         case 'cos': return `cos(radians(${value}))`;
-        case 'tan': return `tan(radians(${value}))`;
+        case 'tan': return `shaderScratchTan(${value})`;
         case 'asin': return `degrees(asin(clamp(${value}, -1.0, 1.0)))`;
         case 'acos': return `degrees(acos(clamp(${value}, -1.0, 1.0)))`;
         case 'atan': return `degrees(atan(${value}))`;
-        case 'ln': return `log(max(${value}, 0.000001))`;
-        case 'log': return `(log(max(${value}, 0.000001)) / log(10.0))`;
+        case 'ln': return `((${value}) <= 0.0 ? 0.0 : log(${value}))`;
+        case 'log': return `((${value}) <= 0.0 ? 0.0 : (log(${value}) / 2.302585092994046))`;
         case 'e ^': return `exp(${value})`;
         case '10 ^': return `pow(10.0, ${value})`;
         default: return value;
@@ -315,6 +732,7 @@ class MyBlocksShaderManager {
         this.runtime = vm.runtime;
         this.engine = new MyBlocksShaderEngine(this.runtime.renderer);
         this.errors = new Set();
+        this.randomSeed = 0;
     }
 
     _findDefinition (target, shaderId, userProcCode) {
@@ -337,30 +755,60 @@ class MyBlocksShaderManager {
         while (id) {
             const block = blocks[id];
             if (!block) return null;
-            if (block.opcode === SHADER_RETURN_OPCODE) return block;
+            if (block.opcode === SHADER_RETURN_OPCODE) return {block, id};
             id = block.next;
         }
         return null;
     }
 
-    _source (returnBlock, compiler, uniformNames) {
+    _source (definition, returnInfo, compiler, argumentUniformNames) {
+        const returnBlock = returnInfo.block;
+        const statements = compiler.statements(definition.next, returnInfo.id);
         const red = compiler.input(returnBlock, 'R');
         const green = compiler.input(returnBlock, 'G');
         const blue = compiler.input(returnBlock, 'B');
-        const declarations = uniformNames.map(name => `uniform float ${name};`).join('\n');
+        const externalUniformNames = Array.from(compiler.externalUniforms.keys());
+        const declarations = argumentUniformNames.concat(externalUniformNames)
+            .map(name => `uniform float ${name};`)
+            .join('\n');
+        const variables = Array.from(compiler.variables.keys())
+            .map(name => `float ${name};`)
+            .join('\n');
+        const variableInitializers = Array.from(compiler.variables.entries())
+            .map(([name, uniform]) => `    ${name} = ${uniform};`)
+            .join('\n');
+        const functions = Array.from(compiler.functions.values()).join('\n\n');
         return `
 precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_image;
 uniform vec2 u_resolution;
+uniform float u_random_seed;
 ${declarations}
+float cx;
+float cy;
+${variables}
 
-float shaderSafeDivisor(float value) {
-    return abs(value) < 0.000001 ? (value < 0.0 ? -0.000001 : 0.000001) : value;
+float shaderScratchDivide(float numerator, float denominator) {
+    if (denominator != 0.0) return numerator / denominator;
+    if (numerator > 0.0) return 1e20;
+    if (numerator < 0.0) return -1e20;
+    return 0.0;
 }
 
-float shaderHash(vec2 value) {
-    return fract(sin(dot(value, vec2(127.1, 311.7))) * 43758.5453123);
+float shaderScratchMod(float numerator, float denominator) {
+    return denominator == 0.0 ? 0.0 : mod(numerator, denominator);
+}
+
+float shaderScratchTan(float value) {
+    float angle = mod(mod(value, 360.0) + 360.0, 360.0);
+    if (abs(angle - 90.0) < 0.000001) return 1e20;
+    if (abs(angle - 270.0) < 0.000001) return -1e20;
+    return tan(radians(value));
+}
+
+float shaderHash(vec3 value) {
+    return fract(sin(dot(value, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
 }
 
 vec3 shaderSample(float x, float y) {
@@ -369,32 +817,160 @@ vec3 shaderSample(float x, float y) {
     return pixel.a > 0.00001 ? pixel.rgb * (255.0 / pixel.a) : vec3(0.0);
 }
 
+${functions}
+
 void main() {
-    float cx = v_uv.x * u_resolution.x - u_resolution.x * 0.5;
-    float cy = v_uv.y * u_resolution.y - u_resolution.y * 0.5;
+    cx = v_uv.x * u_resolution.x - u_resolution.x * 0.5;
+    cy = v_uv.y * u_resolution.y - u_resolution.y * 0.5;
+${variableInitializers}
+${statements}
     vec4 original = texture2D(u_image, v_uv);
     vec3 shaderColor = clamp(vec3(${red}, ${green}, ${blue}), 0.0, 255.0) / 255.0;
     gl_FragColor = vec4(shaderColor * original.a, original.a);
 }`;
     }
 
+    _findVariable (target, descriptor, type) {
+        let variable = null;
+        if (target && descriptor.id && typeof target.lookupVariableById === 'function') {
+            variable = target.lookupVariableById(descriptor.id);
+        }
+        if (!variable && target && target.variables && descriptor.id) variable = target.variables[descriptor.id];
+        if (!variable && target && typeof target.lookupVariableByNameAndType === 'function') {
+            variable = target.lookupVariableByNameAndType(descriptor.scratchName, type);
+        }
+        if (!variable && this.runtime && typeof this.runtime.getTargetForStage === 'function') {
+            const stage = this.runtime.getTargetForStage();
+            if (stage && descriptor.id && stage.variables) variable = stage.variables[descriptor.id];
+            if (!variable && stage && typeof stage.lookupVariableByNameAndType === 'function') {
+                variable = stage.lookupVariableByNameAndType(descriptor.scratchName, type, true);
+            }
+        }
+        return variable;
+    }
+
+    _number (value) {
+        if (value === true) return 1;
+        if (value === false || value === null || value === '') return 0;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    }
+
+    _listValue (descriptor, target) {
+        const variable = this._findVariable(target, descriptor, 'list');
+        const list = variable && Array.isArray(variable.value) ? variable.value :
+            (Array.isArray(variable) && Array.isArray(variable[1]) ? variable[1] : []);
+        switch (descriptor.operation) {
+        case 'length':
+            return list.length;
+        case 'item': {
+            const requested = descriptor.extra.index;
+            const index = requested === 'last' ? list.length - 1 : Math.floor(Number(requested)) - 1;
+            return index >= 0 && index < list.length ? this._number(list[index]) : 0;
+        }
+        case 'indexOf':
+        case 'contains': {
+            const expected = descriptor.extra.item;
+            const expectedNumber = Number(expected);
+            const index = list.findIndex(value => {
+                const number = Number(value);
+                if (!Number.isNaN(expectedNumber) && !Number.isNaN(number)) return number === expectedNumber;
+                return String(value).toLowerCase() === String(expected).toLowerCase();
+            });
+            return descriptor.operation === 'contains' ? (index === -1 ? 0 : 1) : index + 1;
+        }
+        default:
+            return 0;
+        }
+    }
+
+    _reporterValue (descriptor, util) {
+        const primitive = this.runtime._primitives && this.runtime._primitives[descriptor.opcode];
+        if (typeof primitive === 'function') {
+            try {
+                const result = primitive(Object.assign({}, descriptor.args), util);
+                if (!result || typeof result.then !== 'function') return this._number(result);
+            } catch (error) {
+                // Minimal test runtimes and embedders do not always install all
+                // primitives. The property fallbacks below cover common values.
+            }
+        }
+        const target = util && util.target;
+        const io = this.runtime.ioDevices || {};
+        switch (descriptor.opcode) {
+        case 'motion_xposition': return this._number(target && target.x);
+        case 'motion_yposition': return this._number(target && target.y);
+        case 'motion_direction': return this._number(target && target.direction);
+        case 'looks_size': return this._number(target && target.size);
+        case 'sound_volume': return this._number(target && target.volume);
+        case 'sensing_timer':
+            return this._number(io.clock && io.clock.projectTimer && io.clock.projectTimer());
+        case 'sensing_mousex':
+            return this._number(io.mouse && io.mouse.getScratchX && io.mouse.getScratchX());
+        case 'sensing_mousey':
+            return this._number(io.mouse && io.mouse.getScratchY && io.mouse.getScratchY());
+        case 'sensing_mousedown':
+            return this._number(io.mouse && io.mouse.getIsDown && io.mouse.getIsDown());
+        case 'sensing_keypressed':
+            return this._number(io.keyboard && io.keyboard.getKeyIsDown &&
+                io.keyboard.getKeyIsDown(descriptor.args.KEY_OPTION));
+        case 'sensing_current': {
+            const date = new Date();
+            const values = {
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                date: date.getDate(),
+                dayofweek: date.getDay() + 1,
+                hour: date.getHours(),
+                minute: date.getMinutes(),
+                second: date.getSeconds()
+            };
+            return values[String(descriptor.args.CURRENTMENU).toLowerCase()] || 0;
+        }
+        case 'sensing_dayssince2000':
+            return (Date.now() - new Date(2000, 0, 1).valueOf()) / (24 * 60 * 60 * 1000);
+        case 'sensing_online':
+            return typeof navigator === 'object' && navigator.onLine ? 1 : 0;
+        default:
+            return 0;
+        }
+    }
+
+    _externalUniformValue (descriptor, util) {
+        if (descriptor.kind === 'var') {
+            const variable = this._findVariable(util.target, descriptor, '');
+            const value = variable && Object.prototype.hasOwnProperty.call(variable, 'value') ? variable.value :
+                (Array.isArray(variable) ? variable[1] : 0);
+            return this._number(value);
+        }
+        if (descriptor.kind === 'list') return this._listValue(descriptor, util.target);
+        if (descriptor.kind === 'reporter') return this._reporterValue(descriptor, util);
+        return 0;
+    }
+
     _applyDefinition (definition, values, util) {
         try {
             const blocks = util.target.blocks._blocks;
             const prototype = blocks[definition.inputs.custom_block.block];
-            const returnBlock = this._findReturn(blocks, definition);
-            if (!returnBlock) throw new Error('A shader definition needs a return RGB block.');
+            const returnInfo = this._findReturn(blocks, definition);
+            if (!returnInfo) throw new Error('A shader definition needs a return RGB block.');
 
             const userNames = parseJSON(prototype.mutation.shaderuserargumentnames);
             const userIds = parseJSON(prototype.mutation.shaderuserargumentids);
             const compiler = new ShaderExpressionCompiler(blocks, userNames, userIds);
-            const uniformNames = userIds.map(safeIdentifier);
+            const uniformNames = userIds.map(id => safeIdentifier(id));
             const uniforms = {};
             for (let i = 0; i < userIds.length; i++) {
                 const value = Number(values[userIds[i]]);
                 uniforms[uniformNames[i]] = Number.isFinite(value) ? value : 0;
             }
-            this.engine.apply(this._source(returnBlock, compiler, uniformNames), uniforms);
+            const source = this._source(definition, returnInfo, compiler, uniformNames);
+            for (const [name, descriptor] of compiler.externalUniforms) {
+                uniforms[name] = this._externalUniformValue(descriptor, util);
+            }
+            this.randomSeed = (this.randomSeed + 1) % 1000000;
+            uniforms.u_random_seed = this.randomSeed;
+            this.engine.apply(source, uniforms);
         } catch (error) {
             const message = error && error.message ? error.message : String(error);
             if (!this.errors.has(message)) {
