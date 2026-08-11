@@ -2,11 +2,16 @@ import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
     test('places My Blocks Shader next to My Blocks as a native category', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', []);
+        const categories = [{
+            id: 'myblocksshader',
+            xml: '<category id="myblocksshader" name="My Blocks Shader" />'
+        }];
+        const toolbox = makeToolboxXML(false, false, 'target', categories);
 
         expect(toolbox).toContain('id="myBlocksShader"');
         expect(toolbox).toContain('custom="MY_BLOCKS_SHADER"');
         expect(toolbox).toContain('id="myBlocksShader"\n        colour="#FF6680"');
+        expect(toolbox).not.toContain('id="myblocksshader"');
         expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="myBlocksShader"'));
     });
 

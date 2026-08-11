@@ -15,6 +15,20 @@ const SHADER_GET_OPCODES = {
 };
 const MAX_SHADER_LOOP = 256;
 
+// Scratch VM derives extension IDs from the part of an opcode before the
+// first underscore. My Blocks Shader owns native-looking Blockly blocks and
+// installs its primitives below, but it still needs an extension registration
+// so a saved myblocksshader_* opcode can pass the VM's project loader.
+class MyBlocksShaderExtension {
+    getInfo () {
+        return {
+            id: SHADER_MARKER,
+            name: 'My Blocks Shader',
+            blocks: []
+        };
+    }
+}
+
 const VERTEX_SHADER = `
 attribute vec2 a_position;
 varying vec2 v_uv;
@@ -1044,6 +1058,18 @@ const installMyBlocksShader = vm => {
     vm.runtime.getAddonBlock = procedureCode => (
         originalGetAddonBlock(procedureCode) || manager.getAddonBlock(procedureCode)
     );
+
+    const extensionManager = vm.extensionManager;
+    if (extensionManager &&
+        typeof extensionManager.addBuiltinExtension === 'function' &&
+        typeof extensionManager.loadExtensionIdSync === 'function') {
+        if (!extensionManager.isBuiltinExtension(SHADER_MARKER)) {
+            extensionManager.addBuiltinExtension(SHADER_MARKER, MyBlocksShaderExtension);
+        }
+        if (!extensionManager.isExtensionLoaded(SHADER_MARKER)) {
+            extensionManager.loadExtensionIdSync(SHADER_MARKER);
+        }
+    }
     return manager;
 };
 

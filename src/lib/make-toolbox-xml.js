@@ -1029,6 +1029,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
+    // The VM registration allows myblocksshader_* opcodes to deserialize. Its
+    // empty extension category is replaced by the native dynamic category.
+    moveCategory('myblocksshader');
     const myBlocksShaderXML = myBlocksShader();
 
     // Always display TurboWarp blocks as the first extension, if it exists,
