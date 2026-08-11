@@ -43,6 +43,7 @@ import installGraphicEffectsManager from '../lib/graphic-effects-manager';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 import installMovieEasing from '../lib/movie-easing';
 import installPenFX from '../lib/pen-fx';
+import installMyBlocksShader from '../lib/my-blocks-shader';
 
 import GUIComponent from '../components/gui/gui.jsx';
 import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
@@ -70,6 +71,7 @@ class GUI extends React.Component {
         installMovieAssetManager(this.props.vm);
         installDefaultExtensions(this.props.vm);
         installPenFX(this.props.vm);
+        installMyBlocksShader(this.props.vm);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }

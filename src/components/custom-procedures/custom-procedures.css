@@ -16,6 +16,16 @@
     margin: 3px;
 }
 
+.shader-note {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: $space;
+    background: rgba(107, 86, 217, 0.12);
+    color: $text-primary;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
 /* Blocks workspace for custom procedure declaration editor */
 .workspace {
     min-height: 200px;

@@ -21,7 +21,8 @@ const messages = defineMessages({
 const CustomProcedures = props => (
     <Modal
         className={styles.modalContent}
-        contentLabel={props.intl.formatMessage(messages.myblockModalTitle)}
+        contentLabel={props.shader ?
+            'Make a Shader Block' : props.intl.formatMessage(messages.myblockModalTitle)}
         onRequestClose={props.onCancel}
         id="customProceduresModal"
     >
@@ -30,6 +31,11 @@ const CustomProcedures = props => (
             componentRef={props.componentRef}
         />
         <Box className={styles.body}>
+            {props.shader ? (
+                <div className={styles.shaderNote}>
+                    cx and cy are added automatically. They are the coordinates of the pixel being shaded.
+                </div>
+            ) : null}
             <div className={styles.optionsRow}>
                 <div
                     className={styles.optionCard}
@@ -103,7 +109,7 @@ const CustomProcedures = props => (
                     </div>
                 </div>
             </div>
-            <div className={styles.checkboxRow}>
+            {props.shader ? null : <div className={styles.checkboxRow}>
                 <label>
                     <input
                         checked={props.warp}
@@ -116,7 +122,7 @@ const CustomProcedures = props => (
                         id="gui.customProcedures.runWithoutScreenRefresh"
                     />
                 </label>
-            </div>
+            </div>}
             <Box className={styles.buttonRow}>
                 <button
                     className={styles.cancelButton}
@@ -152,7 +158,12 @@ CustomProcedures.propTypes = {
     onCancel: PropTypes.func.isRequired,
     onOk: PropTypes.func.isRequired,
     onToggleWarp: PropTypes.func.isRequired,
+    shader: PropTypes.bool,
     warp: PropTypes.bool.isRequired
+};
+
+CustomProcedures.defaultProps = {
+    shader: false
 };
 
 export default injectIntl(CustomProcedures);

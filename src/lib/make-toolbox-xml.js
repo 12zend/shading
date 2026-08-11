@@ -960,6 +960,18 @@ const myBlocks = function (isInitialSetup, isStage, targetId, colors) {
     `;
 };
 
+const myBlocksShader = function () {
+    return `
+    <category
+        name="My Blocks Shader"
+        id="myBlocksShader"
+        colour="#FF6680"
+        secondaryColour="#FF4D6A"
+        custom="MY_BLOCKS_SHADER">
+    </category>
+    `;
+};
+
 // eslint-disable-next-line max-len
 const extraTurboWarpBlocks = `
 <block type="argument_reporter_boolean"><field name="VALUE">is compiled?</field></block>
@@ -1017,6 +1029,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
+    const myBlocksShaderXML = myBlocksShader();
 
     // Always display TurboWarp blocks as the first extension, if it exists,
     // and also add an "is compiled?" block to the top.
@@ -1037,7 +1050,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         sensingXML, gap,
         operatorsXML, gap,
         variablesXML, gap,
-        myBlocksXML
+        myBlocksXML, gap,
+        myBlocksShaderXML
     ];
 
     if (turbowarpXML) {

@@ -1,6 +1,15 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
+    test('places My Blocks Shader next to My Blocks as a native category', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('id="myBlocksShader"');
+        expect(toolbox).toContain('custom="MY_BLOCKS_SHADER"');
+        expect(toolbox).toContain('id="myBlocksShader"\n        colour="#FF6680"');
+        expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="myBlocksShader"'));
+    });
+
     test('places the default Pen category before Pen FX', () => {
         const categories = [
             {id: 'custom', xml: '<category id="custom" />'},
