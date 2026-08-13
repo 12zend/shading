@@ -1,5 +1,6 @@
 import ArgumentType from 'scratch-vm/src/extension-support/argument-type';
 import BlockType from 'scratch-vm/src/extension-support/block-type';
+import Thread from 'scratch-vm/src/engine/thread';
 
 const EXTENSION_ID = 'objects';
 const PRIMARY = '#4968D4';
@@ -16,6 +17,36 @@ const trackPendingDraw = (pendingDraw, util, manager) => {
     };
     pendingDraw.then(removePending, removePending);
     manager.runWithoutWaiting(pendingDraw);
+};
+
+const runGroupingBranch = (runtime, util, branchNumber) => {
+    // startBranch(..., true) re-enters a conditional block through the VM's loop path, which yields
+    // after every branch in both the interpreter and compiler. Execute the branch as a child warp
+    // thread instead so grouping remains atomic without returning a Promise to the parent thread.
+    const parentThread = util.thread;
+    const target = parentThread && parentThread.target;
+    const blocks = parentThread && (parentThread.blockContainer || (target && target.blocks));
+    const sequencer = runtime && runtime.sequencer;
+    const parentBlockId = parentThread && typeof parentThread.peekStack === 'function' ?
+        parentThread.peekStack() : null;
+    const branchId = blocks && typeof blocks.getBranch === 'function' ?
+        blocks.getBranch(parentBlockId, branchNumber) : null;
+    if (!branchId || !target || !sequencer || typeof sequencer.stepThread !== 'function') return null;
+
+    const branchThread = new Thread(branchId);
+    branchThread.target = target;
+    branchThread.blockContainer = blocks;
+    branchThread.pushStack(branchId);
+    branchThread.peekStackFrame().warpMode = true;
+
+    const activeThread = sequencer.activeThread;
+    try {
+        sequencer.activeThread = branchThread;
+        sequencer.stepThread(branchThread);
+    } finally {
+        sequencer.activeThread = activeThread;
+    }
+    return branchThread;
 };
 
 const createObjectBlocksClass = vm => class ObjectBlocks {
@@ -85,28 +116,14 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     grouping (args, util) {
         const penFX = this.runtime.penFX;
-        if (!util.stackFrame.objectGroupingPhase) {
-            util.stackFrame.objectGroupingPhase = 1;
-            const pendingDraws = util.thread.objectPendingDraws;
-            util.stackFrame.objectGroupingPendingStart = Array.isArray(pendingDraws) ? pendingDraws.length : 0;
-            if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
-            util.startBranch(1, true);
-            return;
+        if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
+        const objectThread = runGroupingBranch(this.runtime, util, 1);
+        const pendingDraws = objectThread && Array.isArray(objectThread.objectPendingDraws) ?
+            objectThread.objectPendingDraws.slice() : [];
+        if (pendingDraws.length && penFX && typeof penFX.beginEffectCapture === 'function') {
+            penFX.beginEffectCapture();
         }
-        if (util.stackFrame.objectGroupingPhase === 1) {
-            util.stackFrame.objectGroupingPhase = 2;
-            const pendingDraws = util.thread.objectPendingDraws;
-            util.stackFrame.objectGroupingPending = Array.isArray(pendingDraws) ? pendingDraws.slice(
-                util.stackFrame.objectGroupingPendingStart
-            ) : [];
-            if (util.stackFrame.objectGroupingPending.length && penFX &&
-                typeof penFX.beginEffectCapture === 'function') {
-                penFX.beginEffectCapture();
-            }
-            util.startBranch(2, true);
-            return;
-        }
-        const pendingDraws = util.stackFrame.objectGroupingPending || [];
+        runGroupingBranch(this.runtime, util, 2);
         if (pendingDraws.length && penFX && typeof penFX.endEffectCapture === 'function') {
             const effects = penFX.endEffectCapture();
             const finishGroup = Promise.all(pendingDraws)
