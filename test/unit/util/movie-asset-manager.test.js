@@ -1318,6 +1318,18 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.graphicEffectsManager.setScale).toHaveBeenCalledWith(target, 'height', 80);
         expect(target.setCostume).toHaveBeenCalledWith(2);
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(manager.setTargetPosition.mock.invocationCallOrder[0])
+            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(manager.setTargetRotation.mock.invocationCallOrder[0])
+            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(manager.setTargetScale.mock.invocationCallOrder[0])
+            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(target.setSize.mock.invocationCallOrder[0])
+            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(manager.runtime.graphicEffectsManager.setScale.mock.invocationCallOrder[1])
+            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(target.setCostume.mock.invocationCallOrder[0])
+            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
     });
 
     test('waits for an exact video frame before a following stamp can run', () => {

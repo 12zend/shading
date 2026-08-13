@@ -16,7 +16,23 @@ describe('Objects blocks', () => {
         expect(getFieldSourceBlock({getSourceBlock: () => sourceBlock})).toBe(sourceBlock);
     });
 
-    test('collects one object stack and never returns a promise to the VM', () => {
+    test('exposes one draw command instead of separate transform commands', () => {
+        const vm = {runtime: {}};
+        const ObjectBlocks = createObjectBlocksClass(vm);
+        const blocks = new ObjectBlocks();
+        const info = blocks.getInfo();
+
+        expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual(['draw', 'grouping']);
+        expect(Object.keys(info.blocks[0].arguments)).toEqual([
+            'SOURCE', 'ASSET', 'TEXT',
+            'PX', 'PY', 'PZ',
+            'RX', 'RY', 'RZ',
+            'SX', 'SY', 'SZ',
+            'SIZE', 'WIDTH', 'HEIGHT'
+        ]);
+    });
+
+    test('draws one complete object and never returns a promise to the VM', () => {
         const pending = new Promise(() => {});
         const manager = {
             drawObject: jest.fn(() => pending),
@@ -27,12 +43,23 @@ describe('Objects blocks', () => {
         const blocks = new ObjectBlocks();
         const util = makeUtil();
 
-        expect(blocks.draw({SOURCE: 'text', ASSET: 'Movie Sans', TEXT: 'Title'}, util)).toBeUndefined();
-        expect(blocks.position({X: 10, Y: 20, Z: 30}, util)).toBeUndefined();
-        expect(blocks.rotation({X: 1, Y: 2, Z: 3}, util)).toBeUndefined();
-        expect(blocks.scale({X: 2, Y: 3, Z: 4}, util)).toBeUndefined();
-        expect(blocks.size({SIZE: 75}, util)).toBeUndefined();
-        expect(blocks.dimensions({WIDTH: 125, HEIGHT: 80}, util)).toBeUndefined();
+        expect(blocks.draw({
+            SOURCE: 'text',
+            ASSET: 'Movie Sans',
+            TEXT: 'Title',
+            PX: 10,
+            PY: 20,
+            PZ: 30,
+            RX: 1,
+            RY: 2,
+            RZ: 3,
+            SX: 2,
+            SY: 3,
+            SZ: 4,
+            SIZE: 75,
+            WIDTH: 125,
+            HEIGHT: 80
+        }, util)).toBeUndefined();
 
         expect(manager.drawObject).toHaveBeenCalledWith(util.target, {
             asset: 'Movie Sans',

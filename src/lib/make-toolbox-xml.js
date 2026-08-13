@@ -982,21 +982,11 @@ const objects = function (costumeName) {
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
             <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
-            <next><block type="objects_position">
-                ${number('X', 0)}${number('Y', 0)}${number('Z', 480)}
-                <next><block type="objects_rotation">
-                    ${number('X', 0)}${number('Y', 0)}${number('Z', 0)}
-                    <next><block type="objects_scale">
-                        ${number('X', 1)}${number('Y', 1)}${number('Z', 1)}
-                        <next><block type="objects_size">
-                            ${number('SIZE', 100)}
-                            <next><block type="objects_dimensions">
-                                ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-                            </block></next>
-                        </block></next>
-                    </block></next>
-                </block></next>
-            </block></next>
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+            ${number('SIZE', 100)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
         </block>
         <sep gap="36"/>
         <block type="objects_grouping"/>

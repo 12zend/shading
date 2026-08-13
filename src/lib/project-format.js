@@ -29,13 +29,8 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_setvideoframeto',
     'looks_switchmodelto',
     'looks_switchvideoto',
-    'objects_dimensions',
     'objects_draw',
     'objects_grouping',
-    'objects_position',
-    'objects_rotation',
-    'objects_scale',
-    'objects_size',
     'sound_playatframe',
     'sound_playattime'
 ];
@@ -71,10 +66,7 @@ const MOVIE_3D_BLOCKS = [
     'motion_setrotationorder',
     'motion_setscale',
     'motion_setz',
-    'objects_draw',
-    'objects_position',
-    'objects_rotation',
-    'objects_scale'
+    'objects_draw'
 ];
 
 const MOVIE_3D_REPORTER_BLOCKS = [
