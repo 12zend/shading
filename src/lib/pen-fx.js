@@ -1225,6 +1225,7 @@ const createPenFXClass = vm => {
       this.textures = [];
       this.framebuffers = [];
       this.bufferStack = [];
+      this.groupStack = [];
       this.blendOpacity = 1;
       this.uniformCache = new WeakMap();
       this.positionCache = new WeakMap();
@@ -1302,6 +1303,7 @@ const createPenFXClass = vm => {
     _resize(width, height) {
       if (this.width === width && this.height === height) return;
       this.clearBufferStack();
+      this.clearGroupStack();
       for (const framebuffer of this.framebuffers) gl.deleteFramebuffer(framebuffer);
       for (const texture of this.textures) gl.deleteTexture(texture);
       this.width = width;
@@ -1414,6 +1416,44 @@ const createPenFXClass = vm => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       return {texture, framebuffer};
+    }
+
+    beginGroup() {
+      const skin = this._prepare(false, false);
+      if (!skin) return;
+      const baseline = this._createBufferTexture();
+      this._render(this._program('copy'), baseline.framebuffer, [{name: 'u_image', texture: skin._texture}], {}, []);
+      this.groupStack.push(baseline);
+      const target = skin._framebuffer.framebuffer || skin._framebuffer;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this._restoreGLState();
+    }
+
+    endGroup() {
+      if (!this.groupStack.length) return;
+      const skin = this._prepare(false, false);
+      if (!skin) return;
+      const baseline = this.groupStack.pop();
+      this._render(this._program('copy'), this.framebuffers[0], [{name: 'u_image', texture: skin._texture}], {}, []);
+      const target = skin._framebuffer.framebuffer || skin._framebuffer;
+      this._render(this._program('composite'), target, [
+        {name: 'u_base', texture: baseline.texture},
+        {name: 'u_effect', texture: this.textures[0]}
+      ], {u_blend: 0, u_opacity: 1}, ['u_blend']);
+      gl.deleteFramebuffer(baseline.framebuffer);
+      gl.deleteTexture(baseline.texture);
+      this._markSkinChanged(skin);
+    }
+
+    clearGroupStack() {
+      if (!this.groupStack) return;
+      for (const entry of this.groupStack) {
+        gl.deleteFramebuffer(entry.framebuffer);
+        gl.deleteTexture(entry.texture);
+      }
+      this.groupStack.length = 0;
     }
 
     stackCurrent(weight, limit) {
@@ -2160,6 +2200,8 @@ const createPenFXClass = vm => {
       this.blendMode = 'normal';
       this.blendOpacity = 1;
       this.warned = false;
+      this.effectCaptureStack = [];
+      vm.runtime.penFX = this;
     }
 
     getInfo() {
@@ -2257,13 +2299,46 @@ const createPenFXClass = vm => {
       return this.engine;
     }
 
-    _safe(callback) {
+    _executeSafe(callback, blendMode, blendOpacity) {
+      const previousBlendMode = this.blendMode;
+      const previousBlendOpacity = this.blendOpacity;
       try {
+        this.blendMode = blendMode;
+        this.blendOpacity = blendOpacity;
         const engine = this._getEngine();
         engine.blendOpacity = this.blendOpacity;
         callback(engine);
       } catch (error) {
         console.error('[Pen FX]', error);
+      } finally {
+        this.blendMode = previousBlendMode;
+        this.blendOpacity = previousBlendOpacity;
+      }
+    }
+
+    _safe(callback) {
+      if (this.effectCaptureStack.length) {
+        this.effectCaptureStack[this.effectCaptureStack.length - 1].push({
+          blendMode: this.blendMode,
+          blendOpacity: this.blendOpacity,
+          callback
+        });
+        return;
+      }
+      this._executeSafe(callback, this.blendMode, this.blendOpacity);
+    }
+
+    beginEffectCapture() {
+      this.effectCaptureStack.push([]);
+    }
+
+    endEffectCapture() {
+      return this.effectCaptureStack.pop() || [];
+    }
+
+    applyCapturedEffects(effects) {
+      for (const effect of effects || []) {
+        this._executeSafe(effect.callback, effect.blendMode, effect.blendOpacity);
       }
     }
 
@@ -2527,6 +2602,14 @@ const createPenFXClass = vm => {
 
     bufferStackSize() {
       return this.engine ? this.engine.bufferStackSize() : 0;
+    }
+
+    beginGroup() {
+      this._safe(engine => engine.beginGroup());
+    }
+
+    endGroup() {
+      this._safe(engine => engine.endGroup());
     }
 
     setBlendMode(args) {

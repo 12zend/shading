@@ -42,6 +42,7 @@ import installDefaultExtensions from '../lib/default-extensions';
 import installGraphicEffectsManager from '../lib/graphic-effects-manager';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 import installMovieEasing from '../lib/movie-easing';
+import installObjectBlocks from '../lib/object-blocks';
 import installPenFX from '../lib/pen-fx';
 import installMyBlocksShader from '../lib/my-blocks-shader';
 
@@ -71,6 +72,7 @@ class GUI extends React.Component {
         installMovieAssetManager(this.props.vm);
         installDefaultExtensions(this.props.vm);
         installPenFX(this.props.vm);
+        installObjectBlocks(this.props.vm);
         installMyBlocksShader(this.props.vm);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);

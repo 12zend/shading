@@ -44,6 +44,15 @@ describe('Movie project format', () => {
         })).toBe('shade');
     });
 
+    test('marks object drawing and grouping as Movie blocks', () => {
+        const json = project({
+            draw: block('objects_draw'),
+            grouping: block('objects_grouping')
+        });
+
+        expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);
+    });
+
     test('marks built-in Pen FX blocks as Movie project data', () => {
         const json = project({contrast: block('penfx_contrast')});
 

@@ -1,6 +1,25 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
+    test('offers the complete connected object stack and grouping block in a dedicated category', () => {
+        const categories = [{id: 'objects', xml: '<category id="objects" />'}];
+        const toolbox = makeToolboxXML(false, false, 'target', categories, 'costume1');
+
+        expect(toolbox).toContain('<category name="Objects" id="objects"');
+        expect(toolbox).toContain('<block type="objects_draw">');
+        expect(toolbox).not.toContain('<statement name="SUBSTACK">');
+        expect(toolbox).toContain('<value name="TEXT"><shadow type="text">');
+        expect(toolbox).toContain('<next><block type="objects_position">');
+        expect(toolbox).toContain('<next><block type="objects_rotation">');
+        expect(toolbox).toContain('<next><block type="objects_scale">');
+        expect(toolbox).toContain('<next><block type="objects_size">');
+        expect(toolbox).toContain('<next><block type="objects_dimensions">');
+        expect(toolbox).toContain('<field name="ASSET">costume1</field>');
+        expect(toolbox).toContain('<block type="objects_grouping"/>');
+        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="objects"'));
+        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+    });
+
     test('places My Blocks Shader next to My Blocks as a native category', () => {
         const categories = [{
             id: 'myblocksshader',

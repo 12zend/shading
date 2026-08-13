@@ -2055,6 +2055,58 @@ class MovieAssetManager extends EventEmitter {
         return this.queueModelSceneRender(target);
     }
 
+    stampTarget (target) {
+        if (!target) return;
+        const pen = this.runtime.ext_pen;
+        if (pen && typeof pen._stamp === 'function') {
+            pen._stamp(target);
+            return;
+        }
+        const stamp = this.runtime._primitives && this.runtime._primitives.pen_stamp;
+        if (typeof stamp === 'function') stamp({}, {target});
+    }
+
+    drawObject (target, configuration = {}) {
+        if (!target || target.isStage) return;
+        const position = configuration.position || {};
+        const rotation = configuration.rotation || {};
+        const scale = configuration.scale || {};
+        this.setTargetPosition(target, position.x, position.y, position.z);
+        this.setTargetRotation(target, rotation.x, rotation.y, rotation.z);
+        this.setTargetScale(target, scale.x, scale.y, scale.z);
+        if (typeof target.setSize === 'function') target.setSize(toNumber(configuration.size, 100));
+
+        const graphicEffects = this.runtime.graphicEffectsManager;
+        if (graphicEffects && typeof graphicEffects.setScale === 'function') {
+            graphicEffects.setScale(target, 'width', configuration.width);
+            graphicEffects.setScale(target, 'height', configuration.height);
+        }
+
+        const source = String(configuration.source || 'costume').toLowerCase();
+        let render;
+        if (source === 'costume') {
+            const costumeIndex = typeof target.getCostumeIndexByName === 'function' ?
+                target.getCostumeIndexByName(String(configuration.asset)) : -1;
+            if (costumeIndex < 0 || typeof target.setCostume !== 'function') return;
+            target.setCostume(costumeIndex);
+        } else if (source === 'video') {
+            if (!this.getVideoByName(target, configuration.asset)) return;
+            render = this.switchVideo(target, configuration.asset);
+        } else if (source === 'text') {
+            this.setText(target, configuration.asset, configuration.text);
+        } else if (source === 'model') {
+            if (!this.getModelByName(target, configuration.asset)) return;
+            render = this.replaceModelScene(target, configuration.asset);
+        } else {
+            return;
+        }
+
+        if (render && typeof render.then === 'function') {
+            return render.then(() => this.stampTarget(target));
+        }
+        this.stampTarget(target);
+    }
+
     replaceModelScene (target, requestedModel) {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return Promise.resolve();

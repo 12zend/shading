@@ -1285,6 +1285,41 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeUndefined();
     });
 
+    test('draws and stamps a costume with the complete object transform', () => {
+        const manager = makeManager();
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const target = {
+            getCostumeIndexByName: jest.fn(() => 2),
+            isStage: false,
+            setCostume: jest.fn(),
+            setSize: jest.fn()
+        };
+        const configuration = {
+            asset: 'costume1',
+            height: 80,
+            position: {x: 10, y: 20, z: 30},
+            rotation: {x: 1, y: 2, z: 3},
+            scale: {x: 2, y: 3, z: 4},
+            size: 75,
+            source: 'costume',
+            width: 125
+        };
+
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(manager.setTargetPosition).toHaveBeenCalledWith(target, 10, 20, 30);
+        expect(manager.setTargetRotation).toHaveBeenCalledWith(target, 1, 2, 3);
+        expect(manager.setTargetScale).toHaveBeenCalledWith(target, 2, 3, 4);
+        expect(target.setSize).toHaveBeenCalledWith(75);
+        expect(manager.runtime.graphicEffectsManager.setScale).toHaveBeenCalledWith(target, 'width', 125);
+        expect(manager.runtime.graphicEffectsManager.setScale).toHaveBeenCalledWith(target, 'height', 80);
+        expect(target.setCostume).toHaveBeenCalledWith(2);
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+    });
+
     test('waits for an exact video frame before a following stamp can run', () => {
         const manager = makeManager();
         const target = makeTarget();

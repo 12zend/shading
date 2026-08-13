@@ -51,6 +51,7 @@ import {
     stripShaderCoordinates,
     syncShaderCalls
 } from '../lib/my-blocks-shader-blocks';
+import installObjectBlockDefinitions from '../lib/object-blocks-ui';
 import {SHADER_MARKER} from '../lib/my-blocks-shader';
 
 // TW: Strings we add to scratch-blocks are localized here
@@ -577,6 +578,7 @@ class Blocks extends React.Component {
                 .map(fieldTypeName => categoryInfo.customFieldTypes[fieldTypeName].scratchBlocksDefinition));
         defineBlocks(categoryInfo.menus);
         defineBlocks(categoryInfo.blocks);
+        if (categoryInfo.id === 'objects') installObjectBlockDefinitions(this.ScratchBlocks, this.props.vm);
 
         // Update the toolbox with new blocks if possible
         const toolboxXML = this.getToolboxXML();

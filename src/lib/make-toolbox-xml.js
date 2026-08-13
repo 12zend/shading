@@ -972,6 +972,38 @@ const myBlocksShader = function () {
     `;
 };
 
+const objects = function (costumeName) {
+    const number = (name, value) => (
+        `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
+    );
+    return `
+    <category name="Objects" id="objects" colour="#4968D4" secondaryColour="#334A99">
+        <block type="objects_draw">
+            <field name="SOURCE">costume</field>
+            <field name="ASSET">${costumeName}</field>
+            <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
+            <next><block type="objects_position">
+                ${number('X', 0)}${number('Y', 0)}${number('Z', 480)}
+                <next><block type="objects_rotation">
+                    ${number('X', 0)}${number('Y', 0)}${number('Z', 0)}
+                    <next><block type="objects_scale">
+                        ${number('X', 1)}${number('Y', 1)}${number('Z', 1)}
+                        <next><block type="objects_size">
+                            ${number('SIZE', 100)}
+                            <next><block type="objects_dimensions">
+                                ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+                            </block></next>
+                        </block></next>
+                    </block></next>
+                </block></next>
+            </block></next>
+        </block>
+        <sep gap="36"/>
+        <block type="objects_grouping"/>
+    </category>
+    `;
+};
+
 // eslint-disable-next-line max-len
 const extraTurboWarpBlocks = `
 <block type="argument_reporter_boolean"><field name="VALUE">is compiled?</field></block>
@@ -1020,6 +1052,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
     const looksXML = moveCategory('looks') ||
         looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
+    const objectsXML = moveCategory('objects') ? objects(costumeName) : undefined;
     const penXML = moveCategory('pen');
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
@@ -1045,6 +1078,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         xmlOpen,
         motionXML, gap,
         looksXML, gap,
+        ...(objectsXML ? [objectsXML, gap] : []),
         ...(penXML ? [penXML, gap] : []),
         ...(penFXXML ? [penFXXML, gap] : []),
         soundXML, gap,

@@ -69,6 +69,37 @@ describe('built-in Pen FX category', () => {
         expect(penFX.engine.digitalGlitch).toHaveBeenCalledWith(32, 40, 7, 0.45, 92, 13, 0.8, 'normal');
     });
 
+    test('exposes grouping boundaries to the Objects control block', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {
+            beginGroup: jest.fn(),
+            endGroup: jest.fn()
+        };
+
+        expect(penFX.beginGroup()).toBeUndefined();
+        expect(penFX.endGroup()).toBeUndefined();
+        expect(penFX.engine.beginGroup).toHaveBeenCalledTimes(1);
+        expect(penFX.engine.endGroup).toHaveBeenCalledTimes(1);
+        expect(vm.runtime.penFX).toBe(penFX);
+    });
+
+    test('captures grouped effects without running them early', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {color: jest.fn()};
+
+        penFX.beginEffectCapture();
+        penFX.contrast({VALUE: 2, PIVOT: 0.5, MIX: 100});
+        const effects = penFX.endEffectCapture();
+        expect(penFX.engine.color).not.toHaveBeenCalled();
+
+        penFX.applyCapturedEffects(effects);
+        expect(penFX.engine.color).toHaveBeenCalledTimes(1);
+    });
+
     test('routes polar stretch, sort, and turbulent wavy controls to the GPU engine', () => {
         const vm = {runtime: {renderer: {}}};
         const PenFX = createPenFXClass(vm);
