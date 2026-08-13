@@ -551,6 +551,63 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const FOG_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform sampler2D u_depth;
+    uniform float u_cameraNear;
+    uniform float u_cameraFar;
+    uniform int u_mode;
+    uniform float u_start;
+    uniform float u_end;
+    uniform float u_density;
+    uniform float u_curve;
+    uniform vec3 u_nearColor;
+    uniform vec3 u_farColor;
+    uniform float u_mix;
+
+    float unpackDepth(vec3 packed) {
+      if (all(greaterThan(packed, vec3(0.999)))) return 1.0;
+      return dot(packed, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
+    }
+
+    float viewDepth(vec2 uv) {
+      float depth = unpackDepth(texture2D(u_depth, clamp(uv, vec2(0.0), vec2(1.0))).rgb);
+      float z = depth * 2.0 - 1.0;
+      return (2.0 * u_cameraNear * u_cameraFar) /
+        max(u_cameraFar + u_cameraNear - z * (u_cameraFar - u_cameraNear), 0.00001);
+    }
+
+    void main() {
+      vec4 original = texture2D(u_image, v_uv);
+      if (original.a <= 0.00001 || u_density <= 0.0 || u_mix <= 0.0) {
+        gl_FragColor = original;
+        return;
+      }
+
+      float depth = viewDepth(v_uv);
+      float span = u_end - u_start;
+      float distanceFactor = abs(span) < 0.0001 ? step(u_start, depth) :
+        clamp((depth - u_start) / span, 0.0, 1.0);
+      float fogFactor = distanceFactor;
+      if (u_mode == 1) {
+        fogFactor = distanceFactor * distanceFactor * (3.0 - 2.0 * distanceFactor);
+      } else if (u_mode == 2) {
+        fogFactor = (1.0 - exp(-4.0 * distanceFactor)) / (1.0 - exp(-4.0));
+      } else if (u_mode == 3) {
+        fogFactor = (1.0 - exp(-4.0 * distanceFactor * distanceFactor)) / (1.0 - exp(-4.0));
+      }
+      fogFactor = pow(clamp(fogFactor, 0.0, 1.0), max(u_curve, 0.01));
+      fogFactor *= clamp(u_density, 0.0, 1.0) * clamp(u_mix, 0.0, 1.0);
+
+      vec3 originalColor = original.rgb / original.a;
+      vec3 fogColor = mix(u_nearColor, u_farColor, distanceFactor);
+      vec3 color = mix(originalColor, fogColor, clamp(fogFactor, 0.0, 1.0));
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0) * original.a, original.a);
+    }
+  `;
+
   const LENS_DISTORTION_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -1289,6 +1346,7 @@ const createPenFXClass = vm => {
         wavy: WAVY_SHADER,
         lensBlur: LENS_BLUR_SHADER,
         depthOfField: DEPTH_OF_FIELD_SHADER,
+        fog: FOG_SHADER,
         lensDistortion: LENS_DISTORTION_SHADER,
         pixelStretch: PIXEL_STRETCH_SHADER,
         sharpen: SHARPEN_SHADER,
@@ -1880,6 +1938,30 @@ const createPenFXClass = vm => {
       }, [], blendMode);
     }
 
+    fog(depthBuffer, type, start, end, density, curve, nearColor, farColor, mixValue, blendMode) {
+      if (!depthBuffer || this._isNoOp(mixValue, blendMode)) return;
+      const skin = this._prepare();
+      if (!skin) return;
+      const depthTexture = this._uploadDepthBuffer(depthBuffer);
+      if (!depthTexture) return;
+      const mode = Math.max(0, ['linear', 'smooth', 'exponential', 'exponential squared'].indexOf(type));
+      this._renderEffect(skin, this._program('fog'), [
+        {name: 'u_image', texture: this.textures[0]},
+        {name: 'u_depth', texture: depthTexture}
+      ], {
+        u_cameraNear: Math.max(0.0001, depthBuffer.near),
+        u_cameraFar: Math.max(depthBuffer.near + 0.0001, depthBuffer.far),
+        u_mode: mode,
+        u_start: start,
+        u_end: end,
+        u_density: Math.min(1, Math.max(0, density)),
+        u_curve: Math.min(100, Math.max(0.01, curve)),
+        u_nearColor: nearColor,
+        u_farColor: farColor,
+        u_mix: mixValue
+      }, ['u_mode'], blendMode);
+    }
+
     lensDistortion(value, centerX, centerY, zoom, mixValue, blendMode) {
       this._singlePass(this._program('lensDistortion'), {
         u_resolution: this.resolution,
@@ -2385,6 +2467,7 @@ const createPenFXClass = vm => {
           {opcode: 'radialBlur', blockType: BlockType.COMMAND, text: 'radial blur type: [TYPE] value: [VALUE] center x: [X] y: [Y] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'polarType'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'lensBlur', blockType: BlockType.COMMAND, text: 'lens blur radius: [RADIUS] shape: [SHAPE] rotation: [ROTATION] mix: [MIX] %', arguments: {RADIUS: {type: ArgumentType.NUMBER, defaultValue: 8}, SHAPE: {type: ArgumentType.STRING, menu: 'lensShape'}, ROTATION: {type: ArgumentType.ANGLE, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'depthOfField', blockType: BlockType.COMMAND, text: 'depth of field focus: [FOCUS] range: [RANGE] aperture: [APERTURE] max blur: [MAXBLUR] near: [NEAR] % far: [FAR] % edge softness: [EDGE] shape: [SHAPE] rotation: [ROTATION] mix: [MIX] %', arguments: {FOCUS: {type: ArgumentType.NUMBER, defaultValue: 480}, RANGE: {type: ArgumentType.NUMBER, defaultValue: 24}, APERTURE: {type: ArgumentType.NUMBER, defaultValue: 48}, MAXBLUR: {type: ArgumentType.NUMBER, defaultValue: 24}, NEAR: {type: ArgumentType.NUMBER, defaultValue: 100}, FAR: {type: ArgumentType.NUMBER, defaultValue: 100}, EDGE: {type: ArgumentType.NUMBER, defaultValue: 8}, SHAPE: {type: ArgumentType.STRING, menu: 'lensShape'}, ROTATION: {type: ArgumentType.ANGLE, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'fog', blockType: BlockType.COMMAND, text: 'fog [TYPE] start: [START] end: [END] near color: [NEARCOLOR] far color: [FARCOLOR] density: [DENSITY] % curve: [CURVE] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'fogType'}, START: {type: ArgumentType.NUMBER, defaultValue: 100}, END: {type: ArgumentType.NUMBER, defaultValue: 1000}, NEARCOLOR: {type: ArgumentType.COLOR, defaultValue: '#d9e7f2'}, FARCOLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, DENSITY: {type: ArgumentType.NUMBER, defaultValue: 100}, CURVE: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'lensDistortion', blockType: BlockType.COMMAND, text: 'lens distortion value: [VALUE] center x: [X] y: [Y] zoom: [ZOOM] % mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 25}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, ZOOM: {type: ArgumentType.NUMBER, defaultValue: 100}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'bloom', blockType: BlockType.COMMAND, text: 'bloom threshold: [THRESHOLD] radius: [RADIUS] value: [VALUE] color: [COLOR] invert: [INVERT]', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.7}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 8}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, INVERT: {type: ArgumentType.STRING, menu: 'boolean'}}},
           {opcode: 'deepGlow', blockType: BlockType.COMMAND, text: 'deep glow threshold: [THRESHOLD] radius: [RADIUS] value: [VALUE] color: [COLOR]', arguments: {THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 0.7}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 8}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}}},
@@ -2432,6 +2515,7 @@ const createPenFXClass = vm => {
           chromaBehavior: {acceptReporters: true, items: ['solid', 'gradient', 'transparent']},
           gaussianType: {acceptReporters: true, items: ['normal', 'horizontal', 'vertical']},
           lensShape: {acceptReporters: true, items: ['circle', 'hexagon', 'octagon']},
+          fogType: {acceptReporters: true, items: ['linear', 'smooth', 'exponential', 'exponential squared']},
           polarType: {acceptReporters: true, items: ['dir', 'size']},
           axisType: {acceptReporters: true, items: ['x', 'y', 'size', 'dir']},
           sortAxis: {acceptReporters: true, items: ['x', 'y', 'size', 'dir']},
@@ -2572,6 +2656,14 @@ const createPenFXClass = vm => {
         numberOr(args.FOCUS, 480), numberOr(args.RANGE, 24), numberOr(args.APERTURE, 48),
         numberOr(args.MAXBLUR, 24), numberOr(args.NEAR, 100) / 100, numberOr(args.FAR, 100) / 100,
         numberOr(args.EDGE, 8), shape, numberOr(args.ROTATION, 0), mixAmount(args.MIX), this.blendMode));
+    }
+
+    fog(args) {
+      const type = ['linear', 'smooth', 'exponential', 'exponential squared'].includes(String(args.TYPE)) ?
+        String(args.TYPE) : 'linear';
+      this._safe(engine => engine.fog(vm.runtime.movieZBuffer, type, numberOr(args.START, 100),
+        numberOr(args.END, 1000), numberOr(args.DENSITY, 100) / 100, numberOr(args.CURVE, 1),
+        color(args.NEARCOLOR || '#d9e7f2'), color(args.FARCOLOR || '#ffffff'), mixAmount(args.MIX), this.blendMode));
     }
 
     lensDistortion(args) {

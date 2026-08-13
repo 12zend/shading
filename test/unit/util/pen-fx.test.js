@@ -54,6 +54,13 @@ describe('built-in Pen FX category', () => {
         const depthOfField = info.blocks.find(block => block.opcode === 'depthOfField');
         expect(depthOfField).toBeDefined();
         expect(depthOfField.arguments.FOCUS.defaultValue).toBe(480);
+        const fog = info.blocks.find(block => block.opcode === 'fog');
+        expect(fog).toBeDefined();
+        expect(fog.arguments.START.defaultValue).toBe(100);
+        expect(fog.arguments.END.defaultValue).toBe(1000);
+        expect(fog.arguments.NEARCOLOR.defaultValue).toBe('#d9e7f2');
+        expect(fog.arguments.FARCOLOR.defaultValue).toBe('#ffffff');
+        expect(info.menus.fogType.items).toEqual(['linear', 'smooth', 'exponential', 'exponential squared']);
     });
 
     test('routes depth of field controls and the current 3D zBuffer without returning a promise', () => {
@@ -103,6 +110,57 @@ describe('built-in Pen FX category', () => {
         expect(shader).toContain('uniform sampler2D u_depth');
         expect(shader).toContain('float behindForeground');
         expect(shader).toContain('for (int i = 0; i < 20; i++)');
+    });
+
+    test('routes flexible depth fog controls and the current 3D zBuffer without returning a promise', () => {
+        const zBuffer = {canvas: {}, near: 1, far: 2000, version: 4};
+        const vm = {runtime: {renderer: {}, movieZBuffer: zBuffer}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {fog: jest.fn()};
+
+        const result = penFX.fog({
+            TYPE: 'exponential squared',
+            START: 75,
+            END: 1600,
+            NEARCOLOR: '#204080',
+            FARCOLOR: '#ffe0c0',
+            DENSITY: 65,
+            CURVE: 1.75,
+            MIX: 80
+        });
+
+        expect(result).toBeUndefined();
+        expect(penFX.engine.fog).toHaveBeenCalledWith(
+            zBuffer, 'exponential squared', 75, 1600, 0.65, 1.75,
+            [32 / 255, 64 / 255, 128 / 255], [1, 224 / 255, 192 / 255], 0.8, 'normal'
+        );
+    });
+
+    test('uses depth-aware fog which preserves transparent pixels and supports reversed ranges', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const shader = new PenFX()._getEngine().programSources.fog;
+
+        expect(shader).toContain('uniform sampler2D u_depth');
+        expect(shader).toContain('(depth - u_start) / span');
+        expect(shader).toContain('if (original.a <= 0.00001');
+        expect(shader).toContain('u_nearColor');
+        expect(shader).toContain('u_farColor');
+        expect(shader).toContain('u_mode == 3');
     });
 
     test('routes deterministic VHS and glitch controls to the GPU engine', () => {
