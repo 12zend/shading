@@ -763,6 +763,83 @@ class ModelRenderer {
         this.renderer.shadowMap.autoUpdate = false;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+        // Render the scene into a color target with a real GPU depth attachment. The color target is copied
+        // back to the public canvas, while the depth attachment is packed into depthCanvas for consumers which
+        // use another WebGL context (notably Pen FX). Keeping the transfer as a canvas avoids a synchronous
+        // readPixels stall on every Movie frame.
+        this.renderTarget = new THREE.WebGLRenderTarget(MODEL_RENDER_SIZE, MODEL_RENDER_SIZE, {
+            depthBuffer: true,
+            format: THREE.RGBAFormat,
+            magFilter: THREE.LinearFilter,
+            minFilter: THREE.LinearFilter,
+            stencilBuffer: false
+        });
+        this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+        this.renderTarget.depthTexture = new THREE.DepthTexture(
+            MODEL_RENDER_SIZE,
+            MODEL_RENDER_SIZE,
+            THREE.UnsignedIntType
+        );
+        this.renderTarget.depthTexture.magFilter = THREE.NearestFilter;
+        this.renderTarget.depthTexture.minFilter = THREE.NearestFilter;
+        if (this.renderer.capabilities.isWebGL2) this.renderTarget.samples = 4;
+
+        this.depthCanvas = document.createElement('canvas');
+        this.depthCanvas.width = MODEL_RENDER_SIZE;
+        this.depthCanvas.height = MODEL_RENDER_SIZE;
+        this.depthCanvas.reusable = false;
+        this.depthContext = this.depthCanvas.getContext('2d', {alpha: false});
+        this.depthVersion = 0;
+
+        const screenGeometry = new THREE.PlaneGeometry(2, 2);
+        this.screenScene = new THREE.Scene();
+        this.screenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.colorCopyMaterial = new THREE.ShaderMaterial({
+            blending: THREE.NoBlending,
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+            uniforms: {u_image: {value: this.renderTarget.texture}},
+            vertexShader: `
+                varying vec2 v_uv;
+                void main() {
+                    v_uv = uv;
+                    gl_Position = vec4(position.xy, 0.0, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec2 v_uv;
+                uniform sampler2D u_image;
+                void main() {
+                    gl_FragColor = texture2D(u_image, v_uv);
+                }
+            `
+        });
+        this.depthCopyMaterial = new THREE.ShaderMaterial({
+            blending: THREE.NoBlending,
+            depthTest: false,
+            depthWrite: false,
+            uniforms: {u_depth: {value: this.renderTarget.depthTexture}},
+            vertexShader: this.colorCopyMaterial.vertexShader,
+            fragmentShader: `
+                varying vec2 v_uv;
+                uniform sampler2D u_depth;
+
+                vec3 packDepth(float value) {
+                    vec3 packed = fract(value * vec3(1.0, 255.0, 65025.0));
+                    packed -= packed.yzz * vec3(1.0 / 255.0, 1.0 / 255.0, 0.0);
+                    return packed;
+                }
+
+                void main() {
+                    float depth = texture2D(u_depth, v_uv).x;
+                    gl_FragColor = depth >= 0.999999 ? vec4(1.0) : vec4(packDepth(depth), 1.0);
+                }
+            `
+        });
+        this.screenQuad = new THREE.Mesh(screenGeometry, this.colorCopyMaterial);
+        this.screenScene.add(this.screenQuad);
+
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
         this.camera.position.set(0, 0, 310);
@@ -880,7 +957,87 @@ class ModelRenderer {
     setOutputSize (width, height) {
         if (this.canvas.width === width && this.canvas.height === height) return;
         this.renderer.setSize(width, height, false);
+        if (this.renderTarget) this.renderTarget.setSize(width, height);
+        if (this.depthCanvas) {
+            this.depthCanvas.width = width;
+            this.depthCanvas.height = height;
+            this.depthCanvas.reusable = false;
+        }
         this.canvas.reusable = false;
+    }
+
+    updateCameraDepthRange () {
+        this.camera.updateMatrixWorld(true);
+        const bounds = new THREE.Box3();
+        const point = new THREE.Vector3();
+        let closest = Infinity;
+        let farthest = 0;
+        for (const object of this.currentObjects) {
+            bounds.setFromObject(object);
+            if (bounds.isEmpty()) continue;
+            for (let index = 0; index < 8; index++) {
+                point.set(
+                    index & 1 ? bounds.max.x : bounds.min.x,
+                    index & 2 ? bounds.max.y : bounds.min.y,
+                    index & 4 ? bounds.max.z : bounds.min.z
+                ).applyMatrix4(this.camera.matrixWorldInverse);
+                const depth = -point.z;
+                if (depth > 0) {
+                    closest = Math.min(closest, depth);
+                    farthest = Math.max(farthest, depth);
+                }
+            }
+        }
+        if (!Number.isFinite(closest) || farthest <= 0) {
+            this.camera.near = 0.1;
+            this.camera.far = 10000000;
+            return;
+        }
+        const span = Math.max(1, farthest - closest);
+        const margin = Math.max(1, span * 0.05);
+        this.camera.near = Math.max(0.01, closest - margin);
+        this.camera.far = Math.max(this.camera.near + 1, farthest + margin);
+    }
+
+    renderSceneWithZBuffer () {
+        if (!this.renderTarget || typeof this.renderer.setRenderTarget !== 'function') return this.renderer.render(
+            this.scene,
+            this.camera
+        );
+        const outputColorSpace = this.renderer.outputColorSpace;
+        try {
+            this.renderer.setRenderTarget(this.renderTarget);
+            this.renderer.clear();
+            this.renderer.render(this.scene, this.camera);
+            this.renderer.setRenderTarget(null);
+
+            // Depth bytes must not pass through an sRGB transfer curve: Pen FX decodes these exact RGB values.
+            this.renderer.outputColorSpace = THREE.NoColorSpace;
+            this.screenQuad.material = this.depthCopyMaterial;
+            this.renderer.render(this.screenScene, this.screenCamera);
+            if (this.depthContext) {
+                this.depthContext.drawImage(this.canvas, 0, 0, this.depthCanvas.width, this.depthCanvas.height);
+            }
+
+            this.screenQuad.material = this.colorCopyMaterial;
+            this.renderer.render(this.screenScene, this.screenCamera);
+            this.depthVersion++;
+        } finally {
+            this.renderer.setRenderTarget(null);
+            this.renderer.outputColorSpace = outputColorSpace;
+        }
+    }
+
+    getDepthBuffer () {
+        if (!this.depthCanvas) return null;
+        return {
+            canvas: this.depthCanvas,
+            far: this.camera.far,
+            height: this.depthCanvas.height,
+            near: this.camera.near,
+            version: this.depthVersion,
+            width: this.depthCanvas.width
+        };
     }
 
     setObject (sourceObject, animationName, frame) {
@@ -1035,17 +1192,22 @@ class ModelRenderer {
             cameraTransform.rotation,
             cameraTransform.rotationOrder
         ));
+        this.updateCameraDepthRange();
         this.camera.updateProjectionMatrix();
         this.camera.updateMatrixWorld(true);
 
         if (this.usesShadows && this.renderer.shadowMap) this.renderer.shadowMap.needsUpdate = true;
-        this.renderer.render(this.scene, this.camera);
+        this.renderSceneWithZBuffer();
         return this.canvas;
     }
 
     dispose () {
         this.clearObjects();
         this.clearLightObjects();
+        if (this.renderTarget) this.renderTarget.dispose();
+        if (this.screenQuad && this.screenQuad.geometry) this.screenQuad.geometry.dispose();
+        if (this.colorCopyMaterial) this.colorCopyMaterial.dispose();
+        if (this.depthCopyMaterial) this.depthCopyMaterial.dispose();
         this.renderer.dispose();
     }
 }

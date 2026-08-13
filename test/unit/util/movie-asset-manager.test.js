@@ -1082,6 +1082,19 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
     });
 
+    test('publishes the rendered 3D zBuffer for Pen FX', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const depthBuffer = {canvas: {name: 'depth'}, near: 4, far: 900, version: 7};
+        manager.modelRenderer = {getDepthBuffer: jest.fn(() => depthBuffer)};
+        manager.getTargetState(target);
+
+        manager.publishModelZBuffer(target);
+
+        expect(manager.runtime.movieZBuffer).toEqual({...depthBuffer, targetId: target.id});
+        expect(manager.getTargetState(target).zBuffer).toBe(manager.runtime.movieZBuffer);
+    });
+
     test('renders cached models synchronously after project loading', () => {
         const manager = makeManager();
         const target = makeTarget();

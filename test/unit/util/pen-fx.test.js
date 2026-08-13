@@ -51,6 +51,58 @@ describe('built-in Pen FX category', () => {
         expect(edgeDetection.arguments.BACKGROUND.defaultValue).toBe('#ffffff');
         expect(info.blocks.find(block => block.opcode === 'duplicate')).toBeDefined();
         expect(info.blocks.find(block => block.opcode === 'bufferStackSize')).toBeDefined();
+        const depthOfField = info.blocks.find(block => block.opcode === 'depthOfField');
+        expect(depthOfField).toBeDefined();
+        expect(depthOfField.arguments.FOCUS.defaultValue).toBe(480);
+    });
+
+    test('routes depth of field controls and the current 3D zBuffer without returning a promise', () => {
+        const zBuffer = {canvas: {}, near: 1, far: 1000, version: 3};
+        const vm = {runtime: {renderer: {}, movieZBuffer: zBuffer}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {depthOfField: jest.fn()};
+
+        const result = penFX.depthOfField({
+            FOCUS: 520,
+            RANGE: 30,
+            APERTURE: 64,
+            MAXBLUR: 28,
+            NEAR: 80,
+            FAR: 125,
+            EDGE: 6,
+            SHAPE: 'hexagon',
+            ROTATION: 15,
+            MIX: 75
+        });
+
+        expect(result).toBeUndefined();
+        expect(penFX.engine.depthOfField).toHaveBeenCalledWith(
+            zBuffer, 520, 30, 64, 28, 0.8, 1.25, 6, 'hexagon', 15, 0.75, 'normal'
+        );
+    });
+
+    test('uses a depth-aware bokeh shader which rejects samples across foreground edges', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const shader = new PenFX()._getEngine().programSources.depthOfField;
+
+        expect(shader).toContain('uniform sampler2D u_depth');
+        expect(shader).toContain('float behindForeground');
+        expect(shader).toContain('for (int i = 0; i < 20; i++)');
     });
 
     test('routes deterministic VHS and glitch controls to the GPU engine', () => {

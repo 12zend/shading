@@ -204,6 +204,7 @@ class MovieAssetManager extends EventEmitter {
         this.timelineSoundSources = new Set();
         this.previewRendererSize = null;
         this.modelRenderer = null;
+        this.runtime.movieZBuffer = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;
         const [stageWidth, stageHeight] = this.getStageSize();
@@ -2173,6 +2174,7 @@ class MovieAssetManager extends EventEmitter {
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
             const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
             this.applyBitmap(target, canvas, 'model');
+            this.publishModelZBuffer(target);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
             return;
@@ -2221,6 +2223,7 @@ class MovieAssetManager extends EventEmitter {
                 if (Array.isArray(this.lights)) renderArguments.push(this.lights);
                 const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
                 this.applyBitmap(target, canvas, 'model');
+                this.publishModelZBuffer(target);
                 return;
             }
         });
@@ -2230,6 +2233,19 @@ class MovieAssetManager extends EventEmitter {
         };
         renderPromise.then(finish, finish);
         return renderPromise;
+    }
+
+    publishModelZBuffer (target) {
+        if (!this.modelRenderer || typeof this.modelRenderer.getDepthBuffer !== 'function') return;
+        const depthBuffer = this.modelRenderer.getDepthBuffer();
+        if (!depthBuffer) return;
+        const published = {
+            ...depthBuffer,
+            targetId: target && target.id
+        };
+        this.runtime.movieZBuffer = published;
+        const state = target && this.targetStates.get(target.id);
+        if (state) state.zBuffer = published;
     }
 
     queueModelRender (target, model) {
@@ -2421,7 +2437,8 @@ class MovieAssetManager extends EventEmitter {
                 videoRenderPromise: null,
                 worldX: toNumber(target.x),
                 worldY: toNumber(target.y),
-                worldZ: DEFAULT_DEPTH
+                worldZ: DEFAULT_DEPTH,
+                zBuffer: null
             };
             this.targetStates.set(target.id, state);
         }

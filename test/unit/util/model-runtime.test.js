@@ -197,6 +197,23 @@ describe('Movie 3D projection', () => {
         expect(renderer.renderer.render).toHaveBeenCalledTimes(2);
     });
 
+    test('tightens the zBuffer camera range around visible 3D geometry', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.camera = new THREE.PerspectiveCamera();
+        renderer.camera.position.set(0, 0, 0);
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), new THREE.MeshBasicMaterial());
+        mesh.position.set(0, 0, -480);
+        mesh.updateMatrixWorld(true);
+        renderer.currentObjects = [mesh];
+
+        renderer.updateCameraDepthRange();
+
+        expect(renderer.camera.near).toBeGreaterThan(400);
+        expect(renderer.camera.near).toBeLessThan(480);
+        expect(renderer.camera.far).toBeGreaterThan(480);
+        expect(renderer.camera.far).toBeLessThan(600);
+    });
+
     test('does not render geometry assigned to fully transparent materials', () => {
         const root = new THREE.Group();
         const hiddenMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: true});
