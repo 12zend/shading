@@ -1394,6 +1394,37 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
     });
 
+    test.each([
+        [0.99, false],
+        [1, true],
+        [2, true],
+        [4, true],
+        [4.01, false]
+    ])('draws only inside the inclusive object time range at %s seconds', (currentTime, expectedDraw) => {
+        const manager = makeManager();
+        manager.timeline = {currentTime};
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const target = {
+            getCostumeIndexByName: jest.fn(() => 0),
+            isStage: false,
+            setCostume: jest.fn(),
+            setSize: jest.fn()
+        };
+
+        expect(manager.drawObject(target, {
+            asset: 'costume1',
+            source: 'costume',
+            time: {start: 1, end: 4}
+        })).toBeUndefined();
+
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(expectedDraw ? 1 : 0);
+        expect(manager.setTargetPosition).toHaveBeenCalledTimes(expectedDraw ? 1 : 0);
+    });
+
     test('reapplies Z perspective after draw dimensions update the drawable scale', () => {
         const manager = makeManager();
         const target = makeTarget();

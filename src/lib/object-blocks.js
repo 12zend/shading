@@ -83,7 +83,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         SZ: numberArgument(1),
                         SIZE: numberArgument(100),
                         WIDTH: numberArgument(100),
-                        HEIGHT: numberArgument(100)
+                        HEIGHT: numberArgument(100),
+                        T1: numberArgument(0),
+                        T2: numberArgument(10)
                     }
                 },
                 {
@@ -108,6 +110,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             text: args.TEXT,
             width: args.WIDTH
         };
+        if (Object.prototype.hasOwnProperty.call(args, 'T1') ||
+            Object.prototype.hasOwnProperty.call(args, 'T2')) {
+            context.time = {start: args.T1, end: args.T2};
+        }
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawObject === 'function') {
             trackPendingDraw(manager.drawObject(util.target, context), util, manager);

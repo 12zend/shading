@@ -18,6 +18,8 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="RZ">');
         expect(toolbox).toContain('<value name="SZ">');
         expect(toolbox).toContain('<value name="HEIGHT">');
+        expect(toolbox).toContain('<value name="T1"><shadow type="math_number"><field name="NUM">0</field>');
+        expect(toolbox).toContain('<value name="T2"><shadow type="math_number"><field name="NUM">10</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="objects"'));

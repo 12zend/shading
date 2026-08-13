@@ -193,6 +193,9 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             const width = this.appendValueInput('WIDTH').appendField('width:');
             width.objectStartRow_ = true;
             this.appendValueInput('HEIGHT').appendField('height:');
+            const startTime = this.appendValueInput('T1').appendField('time:');
+            startTime.objectStartRow_ = true;
+            this.appendValueInput('T2').appendField('~');
             this.setInputsInline(true);
             this.setColour(PRIMARY, SECONDARY, TERTIARY);
             this.setPreviousStatement(true);

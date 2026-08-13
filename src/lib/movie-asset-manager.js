@@ -2071,6 +2071,12 @@ class MovieAssetManager extends EventEmitter {
 
     drawObject (target, configuration = {}) {
         if (!target || target.isStage) return;
+        if (configuration.time) {
+            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
+            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            if (currentTime < startTime || currentTime > endTime) return;
+        }
         const position = configuration.position || {};
         const rotation = configuration.rotation || {};
         const scale = configuration.scale || {};

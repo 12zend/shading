@@ -987,6 +987,7 @@ const objects = function (costumeName) {
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
             ${number('SIZE', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${number('T1', 0)}${number('T2', 10)}
         </block>
         <sep gap="36"/>
         <block type="objects_grouping"/>

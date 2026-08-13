@@ -65,7 +65,8 @@ describe('Objects blocks', () => {
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
-            'SIZE', 'WIDTH', 'HEIGHT'
+            'SIZE', 'WIDTH', 'HEIGHT',
+            'T1', 'T2'
         ]);
     });
 
@@ -95,7 +96,9 @@ describe('Objects blocks', () => {
             SZ: 4,
             SIZE: 75,
             WIDTH: 125,
-            HEIGHT: 80
+            HEIGHT: 80,
+            T1: 1.5,
+            T2: 4.5
         }, util)).toBeUndefined();
 
         expect(manager.drawObject).toHaveBeenCalledWith(util.target, {
@@ -107,6 +110,7 @@ describe('Objects blocks', () => {
             size: 75,
             source: 'text',
             text: 'Title',
+            time: {start: 1.5, end: 4.5},
             width: 125
         });
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
