@@ -1436,6 +1436,12 @@ describe('MovieAssetManager rendering performance', () => {
         );
         expect(manager.runtime.renderer.updateDrawableDirectionScale.mock.invocationCallOrder.at(-1))
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+        expect(manager.runtime.movieZBuffer).toEqual({
+            flatDepth: 1000,
+            targetId: target.id,
+            version: 1
+        });
+        expect(manager.getTargetState(target).zBuffer).toBe(manager.runtime.movieZBuffer);
 
         manager.drawObject(target, {
             ...configuration,

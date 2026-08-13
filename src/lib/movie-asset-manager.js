@@ -204,6 +204,7 @@ class MovieAssetManager extends EventEmitter {
         this.timelineSoundSources = new Set();
         this.previewRendererSize = null;
         this.modelRenderer = null;
+        this.flatDepthVersion = 0;
         this.runtime.movieZBuffer = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;
@@ -2109,6 +2110,7 @@ class MovieAssetManager extends EventEmitter {
             // the corresponding Motion and Looks blocks, including Z perspective.
             this.applyProjection(target);
             this.stampTarget(target);
+            if (source !== 'model') this.publishFlatZBuffer(target);
         };
         if (render && typeof render.then === 'function') return render.then(finishDraw);
         finishDraw();
@@ -2251,6 +2253,31 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.movieZBuffer = published;
         const state = target && this.targetStates.get(target.id);
         if (state) state.zBuffer = published;
+    }
+
+    publishFlatZBuffer (target) {
+        if (!target) return;
+        const state = this.getTargetState(target);
+        const camera = this.camera || {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        const depth = state.ignoreCamera ? state.worldZ : projectPosition({
+            x: state.worldX,
+            y: state.worldY,
+            z: state.worldZ
+        }, camera).depth;
+        if (!Number.isFinite(depth) || depth <= 0) return;
+        this.flatDepthVersion = (Number(this.flatDepthVersion) || 0) + 1;
+        const published = {
+            flatDepth: depth,
+            targetId: target.id,
+            version: this.flatDepthVersion
+        };
+        this.runtime.movieZBuffer = published;
+        state.zBuffer = published;
     }
 
     queueModelRender (target, model) {

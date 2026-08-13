@@ -472,6 +472,7 @@ const createPenFXClass = vm => {
     uniform vec2 u_resolution;
     uniform float u_cameraNear;
     uniform float u_cameraFar;
+    uniform float u_flatDepth;
     uniform float u_focusDistance;
     uniform float u_focusRange;
     uniform float u_aperture;
@@ -489,6 +490,7 @@ const createPenFXClass = vm => {
     }
 
     float viewDepth(vec2 uv) {
+      if (u_flatDepth > 0.0) return u_flatDepth;
       float depth = unpackDepth(texture2D(u_depth, clamp(uv, vec2(0.0), vec2(1.0))).rgb);
       float z = depth * 2.0 - 1.0;
       return (2.0 * u_cameraNear * u_cameraFar) /
@@ -558,6 +560,7 @@ const createPenFXClass = vm => {
     uniform sampler2D u_depth;
     uniform float u_cameraNear;
     uniform float u_cameraFar;
+    uniform float u_flatDepth;
     uniform int u_mode;
     uniform float u_start;
     uniform float u_end;
@@ -573,6 +576,7 @@ const createPenFXClass = vm => {
     }
 
     float viewDepth(vec2 uv) {
+      if (u_flatDepth > 0.0) return u_flatDepth;
       float depth = unpackDepth(texture2D(u_depth, clamp(uv, vec2(0.0), vec2(1.0))).rgb);
       float z = depth * 2.0 - 1.0;
       return (2.0 * u_cameraNear * u_cameraFar) /
@@ -1915,16 +1919,21 @@ const createPenFXClass = vm => {
       if (!depthBuffer || this._isNoOp(mixValue, blendMode)) return;
       const skin = this._prepare();
       if (!skin) return;
-      const depthTexture = this._uploadDepthBuffer(depthBuffer);
+      const flatDepth = Number(depthBuffer.flatDepth);
+      const hasFlatDepth = Number.isFinite(flatDepth) && flatDepth > 0;
+      const depthTexture = hasFlatDepth ? this.textures[0] : this._uploadDepthBuffer(depthBuffer);
       if (!depthTexture) return;
+      const cameraNear = hasFlatDepth ? 0.1 : Math.max(0.0001, Number(depthBuffer.near) || 0.1);
+      const cameraFar = hasFlatDepth ? 1 : Math.max(cameraNear + 0.0001, Number(depthBuffer.far) || 1);
       const blades = shape === 'hexagon' ? 6 : shape === 'octagon' ? 8 : 0;
       this._renderEffect(skin, this._program('depthOfField'), [
         {name: 'u_image', texture: this.textures[0]},
         {name: 'u_depth', texture: depthTexture}
       ], {
         u_resolution: this.resolution,
-        u_cameraNear: Math.max(0.0001, depthBuffer.near),
-        u_cameraFar: Math.max(depthBuffer.near + 0.0001, depthBuffer.far),
+        u_cameraNear: cameraNear,
+        u_cameraFar: cameraFar,
+        u_flatDepth: hasFlatDepth ? flatDepth : -1,
         u_focusDistance: Math.max(0.0001, focusDistance),
         u_focusRange: Math.max(0, focusRange),
         u_aperture: Math.min(512, Math.max(0, aperture)),
@@ -1942,15 +1951,20 @@ const createPenFXClass = vm => {
       if (!depthBuffer || this._isNoOp(mixValue, blendMode)) return;
       const skin = this._prepare();
       if (!skin) return;
-      const depthTexture = this._uploadDepthBuffer(depthBuffer);
+      const flatDepth = Number(depthBuffer.flatDepth);
+      const hasFlatDepth = Number.isFinite(flatDepth) && flatDepth > 0;
+      const depthTexture = hasFlatDepth ? this.textures[0] : this._uploadDepthBuffer(depthBuffer);
       if (!depthTexture) return;
+      const cameraNear = hasFlatDepth ? 0.1 : Math.max(0.0001, Number(depthBuffer.near) || 0.1);
+      const cameraFar = hasFlatDepth ? 1 : Math.max(cameraNear + 0.0001, Number(depthBuffer.far) || 1);
       const mode = Math.max(0, ['linear', 'smooth', 'exponential', 'exponential squared'].indexOf(type));
       this._renderEffect(skin, this._program('fog'), [
         {name: 'u_image', texture: this.textures[0]},
         {name: 'u_depth', texture: depthTexture}
       ], {
-        u_cameraNear: Math.max(0.0001, depthBuffer.near),
-        u_cameraFar: Math.max(depthBuffer.near + 0.0001, depthBuffer.far),
+        u_cameraNear: cameraNear,
+        u_cameraFar: cameraFar,
+        u_flatDepth: hasFlatDepth ? flatDepth : -1,
         u_mode: mode,
         u_start: start,
         u_end: end,

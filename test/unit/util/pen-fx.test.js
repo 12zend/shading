@@ -108,6 +108,7 @@ describe('built-in Pen FX category', () => {
         const shader = new PenFX()._getEngine().programSources.depthOfField;
 
         expect(shader).toContain('uniform sampler2D u_depth');
+        expect(shader).toContain('if (u_flatDepth > 0.0) return u_flatDepth');
         expect(shader).toContain('float behindForeground');
         expect(shader).toContain('for (int i = 0; i < 20; i++)');
     });
@@ -156,11 +157,64 @@ describe('built-in Pen FX category', () => {
         const shader = new PenFX()._getEngine().programSources.fog;
 
         expect(shader).toContain('uniform sampler2D u_depth');
+        expect(shader).toContain('if (u_flatDepth > 0.0) return u_flatDepth');
         expect(shader).toContain('(depth - u_start) / span');
         expect(shader).toContain('if (original.a <= 0.00001');
         expect(shader).toContain('u_nearColor');
         expect(shader).toContain('u_farColor');
         expect(shader).toContain('u_mode == 3');
+    });
+
+    test('renders fog and depth of field from a flat object depth without a model zBuffer texture', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const engine = new PenFX()._getEngine();
+        const imageTexture = {};
+        engine.textures = [imageTexture];
+        engine.resolution = new Float32Array([480, 360]);
+        engine._prepare = jest.fn(() => ({}));
+        engine._program = jest.fn(name => name);
+        engine._renderEffect = jest.fn();
+        engine._uploadDepthBuffer = jest.fn();
+
+        engine.fog({flatDepth: 1000}, 'linear', 0, 1000, 1, 1, [1, 1, 1], [1, 1, 1], 1, 'normal');
+        engine.depthOfField({flatDepth: 1000}, 100, 24, 48, 32, 1, 1, 8, 'hexagon', 0, 1, 'normal');
+
+        expect(engine._uploadDepthBuffer).not.toHaveBeenCalled();
+        expect(engine._renderEffect).toHaveBeenNthCalledWith(
+            1,
+            expect.anything(),
+            'fog',
+            [
+                {name: 'u_image', texture: imageTexture},
+                {name: 'u_depth', texture: imageTexture}
+            ],
+            expect.objectContaining({u_flatDepth: 1000}),
+            ['u_mode'],
+            'normal'
+        );
+        expect(engine._renderEffect).toHaveBeenNthCalledWith(
+            2,
+            expect.anything(),
+            'depthOfField',
+            expect.any(Array),
+            expect.objectContaining({u_flatDepth: 1000}),
+            [],
+            'normal'
+        );
     });
 
     test('routes deterministic VHS and glitch controls to the GPU engine', () => {
