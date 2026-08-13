@@ -5,6 +5,14 @@ const makeScratchBlocks = () => {
     const FieldAngle = function () {};
     const FieldNumberDropdown = function () {};
 
+    [FieldNumber, FieldAngle, FieldNumberDropdown].forEach(FieldClass => {
+        FieldClass.prototype.widgetDispose_ = function () {
+            return () => {
+                if (typeof this.editedValue_ !== 'undefined') this.setValue(this.editedValue_);
+            };
+        };
+    });
+
     const Gesture = function () {};
     Gesture.prototype.updateIsDragging_ = function () {
         this.usedOriginalDrag_ = true;
@@ -124,6 +132,39 @@ describe('block number scrubbing', () => {
         gesture.handleMove({clientX: 4, clientY: 0, shiftKey: true});
 
         expect(field.setValue).toHaveBeenLastCalledWith('3');
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    test('requests a preview after directly editing a numeric field', () => {
+        const ScratchBlocks = makeScratchBlocks();
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
+        const field = makeField(ScratchBlocks, '10');
+        const disposeEditor = field.widgetDispose_();
+
+        field.editedValue_ = '25';
+        disposeEditor();
+
+        expect(field.getValue()).toBe('25');
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not request a preview after an unchanged or flyout direct edit', () => {
+        const ScratchBlocks = makeScratchBlocks();
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
+        const unchangedField = makeField(ScratchBlocks, '10');
+        const disposeUnchangedEditor = unchangedField.widgetDispose_();
+        unchangedField.editedValue_ = '10';
+
+        const flyoutField = makeField(ScratchBlocks, '10');
+        flyoutField.sourceBlock_.isInFlyout = true;
+        const disposeFlyoutEditor = flyoutField.widgetDispose_();
+        flyoutField.editedValue_ = '25';
+
+        disposeUnchangedEditor();
+        disposeFlyoutEditor();
+
         expect(onChange).not.toHaveBeenCalled();
     });
 

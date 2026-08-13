@@ -84,12 +84,35 @@ const stopScrubbing = (ScratchBlocks, gesture) => {
     gesture.movieNumberScrub_ = null;
 };
 
+const installDirectInputChangeCallback = (ScratchBlocks, FieldClass) => {
+    const fieldPrototype = FieldClass.prototype;
+    const originalWidgetDispose = fieldPrototype.widgetDispose_;
+
+    fieldPrototype.widgetDispose_ = function () {
+        const field = this;
+        const originalValue = field.getValue();
+        const dispose = originalWidgetDispose.call(field);
+
+        return function () {
+            dispose();
+            if (
+                field.sourceBlock_ &&
+                !field.sourceBlock_.isInFlyout &&
+                field.getValue() !== originalValue &&
+                typeof ScratchBlocks.movieNumberScrubChangeCallback_ === 'function'
+            ) {
+                ScratchBlocks.movieNumberScrubChangeCallback_();
+            }
+        };
+    };
+};
+
 /**
  * Add horizontal scrubbing to every numeric Scratch Blocks field.
  * A click still opens the regular editor, while a vertical drag continues to
  * move the block. Holding Shift changes the drag rate from 1 to 0.1 per pixel.
  * @param {object} ScratchBlocks Scratch Blocks namespace.
- * @param {Function} onChange Called after a drag changes the field value.
+ * @param {Function} onChange Called after a drag or direct edit changes the field value.
  */
 const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
     ScratchBlocks.movieNumberScrubChangeCallback_ = onChange;
@@ -99,6 +122,10 @@ const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
     ScratchBlocks.FieldNumber.prototype.CURSOR = 'ew-resize';
     ScratchBlocks.FieldAngle.prototype.CURSOR = 'ew-resize';
     ScratchBlocks.FieldNumberDropdown.prototype.CURSOR = 'ew-resize';
+
+    installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldNumber);
+    installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldAngle);
+    installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldNumberDropdown);
 
     const gesturePrototype = ScratchBlocks.Gesture.prototype;
     const originalUpdateIsDragging = gesturePrototype.updateIsDragging_;
