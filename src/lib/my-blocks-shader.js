@@ -8,6 +8,8 @@
 const SHADER_MARKER = 'myblocksshader';
 const SHADER_CALL_OPCODE = 'procedures_call';
 const SHADER_RETURN_OPCODE = 'myblocksshader_return';
+const SHADER_RETURN_FROM_OPCODE = 'myblocksshader_return_from';
+const SHADER_RETURN_OPCODES = new Set([SHADER_RETURN_OPCODE, SHADER_RETURN_FROM_OPCODE]);
 const SHADER_GET_OPCODES = {
     myblocksshader_get_r: 'r',
     myblocksshader_get_g: 'g',
@@ -244,7 +246,7 @@ class ShaderExpressionCompiler {
         let id = headId;
         while (id && id !== stopId) {
             const block = this.block(id);
-            if (!block || block.opcode === SHADER_RETURN_OPCODE) break;
+            if (!block || SHADER_RETURN_OPCODES.has(block.opcode)) break;
             result.push(this.statement(block, indent));
             id = block.next;
         }
@@ -769,7 +771,7 @@ class MyBlocksShaderManager {
         while (id) {
             const block = blocks[id];
             if (!block) return null;
-            if (block.opcode === SHADER_RETURN_OPCODE) return {block, id};
+            if (SHADER_RETURN_OPCODES.has(block.opcode)) return {block, id};
             id = block.next;
         }
         return null;
@@ -778,9 +780,14 @@ class MyBlocksShaderManager {
     _source (definition, returnInfo, compiler, argumentUniformNames) {
         const returnBlock = returnInfo.block;
         const statements = compiler.statements(definition.next, returnInfo.id);
-        const red = compiler.input(returnBlock, 'R');
-        const green = compiler.input(returnBlock, 'G');
-        const blue = compiler.input(returnBlock, 'B');
+        let returnedColor;
+        if (returnBlock.opcode === SHADER_RETURN_FROM_OPCODE) {
+            returnedColor = `shaderSample(${compiler.input(returnBlock, 'X')}, ` +
+                `${compiler.input(returnBlock, 'Y')})`;
+        } else {
+            returnedColor = `vec3(${compiler.input(returnBlock, 'R')}, ` +
+                `${compiler.input(returnBlock, 'G')}, ${compiler.input(returnBlock, 'B')})`;
+        }
         const externalUniformNames = Array.from(compiler.externalUniforms.keys());
         const declarations = argumentUniformNames.concat(externalUniformNames)
             .map(name => `uniform float ${name};`)
@@ -839,7 +846,7 @@ void main() {
 ${variableInitializers}
 ${statements}
     vec4 original = texture2D(u_image, v_uv);
-    vec3 shaderColor = clamp(vec3(${red}, ${green}, ${blue}), 0.0, 1.0);
+    vec3 shaderColor = clamp(${returnedColor}, 0.0, 1.0);
     gl_FragColor = vec4(shaderColor * original.a, original.a);
 }`;
     }
@@ -1051,6 +1058,7 @@ const installMyBlocksShader = vm => {
     const manager = new MyBlocksShaderManager(vm);
     vm.runtime.myBlocksShaderManager = manager;
     vm.runtime._primitives[SHADER_RETURN_OPCODE] = manager.returnRGB.bind(manager);
+    vm.runtime._primitives[SHADER_RETURN_FROM_OPCODE] = manager.returnRGB.bind(manager);
     for (const opcode of Object.keys(SHADER_GET_OPCODES)) {
         vm.runtime._primitives[opcode] = manager.getChannel.bind(manager);
     }
@@ -1077,6 +1085,7 @@ export {
     SHADER_CALL_OPCODE,
     SHADER_GET_OPCODES,
     SHADER_MARKER,
+    SHADER_RETURN_FROM_OPCODE,
     SHADER_RETURN_OPCODE,
     MyBlocksShaderManager,
     ShaderExpressionCompiler,

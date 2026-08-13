@@ -101,6 +101,11 @@ const makeShaderProjectJSON = () => {
         'get-r': shaderBlock('myblocksshader_get_r', {parent: 'return'}),
         'get-g': shaderBlock('myblocksshader_get_g', {parent: 'return'}),
         'get-b': shaderBlock('myblocksshader_get_b', {parent: 'return'}),
+        'return-from': shaderBlock('myblocksshader_return_from', {
+            topLevel: true,
+            x: 10,
+            y: 260
+        }),
         call: shaderBlock('procedures_call', {
             mutation: {
                 tagName: 'mutation',
@@ -173,6 +178,7 @@ describe('Movie project save and load', () => {
             'procedures_prototype',
             'procedures_call',
             'myblocksshader_return',
+            'myblocksshader_return_from',
             'myblocksshader_get_r',
             'myblocksshader_get_g',
             'myblocksshader_get_b'
@@ -189,5 +195,6 @@ describe('Movie project save and load', () => {
             shaderid: 'shader-id'
         }));
         expect(reloadedVM.runtime._primitives.myblocksshader_return({}, {})).toBeUndefined();
+        expect(reloadedVM.runtime._primitives.myblocksshader_return_from({}, {})).toBeUndefined();
     });
 });

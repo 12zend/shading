@@ -87,6 +87,23 @@ describe('My Blocks Shader', () => {
         expect(uniforms).toEqual({u_arg_arg_v: 1.5, u_random_seed: 1});
     });
 
+    test('returns the sampled RGB color directly from coordinates', () => {
+        const target = makeTarget();
+        const blocks = target.blocks._blocks;
+        blocks.return.opcode = 'myblocksshader_return_from';
+        blocks.return.inputs = {
+            X: valueInput('cx-r'),
+            Y: valueInput('cy-r')
+        };
+        const vm = {runtime: {renderer: {}}};
+        const manager = new MyBlocksShaderManager(vm);
+        manager.engine.apply = jest.fn();
+
+        expect(manager.call({mutation: {shaderid: 'shader-id'}, 'arg-v': 1}, {target})).toBeUndefined();
+        const [source] = manager.engine.apply.mock.calls[0];
+        expect(source).toContain('vec3 shaderColor = clamp(shaderSample(cx, cy), 0.0, 1.0);');
+    });
+
     test('supports variables, bounded control flow, runtime reporters, lists and constant strings', () => {
         const target = makeTarget();
         const blocks = target.blocks._blocks;
@@ -229,6 +246,7 @@ describe('My Blocks Shader', () => {
         manager.engine.apply = jest.fn();
 
         expect(vm.runtime._primitives.myblocksshader_return({}, {})).toBeUndefined();
+        expect(vm.runtime._primitives.myblocksshader_return_from({}, {})).toBeUndefined();
         expect(manager.returnRGB()).toBeUndefined();
         expect(vm.runtime._primitives.myblocksshader_get_r({}, {})).toBe(0);
         const addon = vm.runtime.getAddonBlock('contrast %s');

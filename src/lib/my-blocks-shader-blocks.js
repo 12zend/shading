@@ -2,6 +2,7 @@ import {
     SHADER_CALL_OPCODE,
     SHADER_GET_OPCODES,
     SHADER_MARKER,
+    SHADER_RETURN_FROM_OPCODE,
     SHADER_RETURN_OPCODE
 } from './my-blocks-shader';
 
@@ -203,6 +204,27 @@ const patchProcedureMutations = ScratchBlocks => {
 
 const defineShaderBlocks = ScratchBlocks => {
     patchProcedureMutations(ScratchBlocks);
+
+    if (!ScratchBlocks.Blocks[SHADER_RETURN_FROM_OPCODE]) {
+        ScratchBlocks.Blocks[SHADER_RETURN_FROM_OPCODE] = {
+            init: function () {
+                this.jsonInit({
+                    message0: 'return RGB from x: %1 y: %2',
+                    args0: [
+                        {type: 'input_value', name: 'X', check: ['Number', 'String']},
+                        {type: 'input_value', name: 'Y', check: ['Number', 'String']}
+                    ],
+                    inputsInline: true,
+                    colour: PRIMARY,
+                    colourSecondary: SECONDARY,
+                    colourTertiary: TERTIARY,
+                    extensions: ['shape_end']
+                });
+                lockShaderColour(this);
+            }
+        };
+    }
+
     if (ScratchBlocks.Blocks[SHADER_RETURN_OPCODE]) return;
 
     ScratchBlocks.Blocks[SHADER_RETURN_OPCODE] = {
@@ -359,10 +381,12 @@ const shaderFlyout = (ScratchBlocks, workspace) => {
     const returnBlock = `<block type="${SHADER_RETURN_OPCODE}">` +
         `<value name="R">${numberShadow}</value><value name="G">${numberShadow}</value>` +
         `<value name="B">${numberShadow}</value></block>`;
+    const returnFromBlock = `<block type="${SHADER_RETURN_FROM_OPCODE}">` +
+        `<value name="X">${numberShadow}</value><value name="Y">${numberShadow}</value></block>`;
     const result = xmlNodes(ScratchBlocks,
         `<button text="Make a Block" callbackKey="${CREATE_CALLBACK}"></button>` +
         callXML + (callXML ? '<sep gap="36"></sep>' : '') +
-        returnBlock + getBlock('r') + getBlock('g') + getBlock('b'));
+        returnBlock + returnFromBlock + getBlock('r') + getBlock('g') + getBlock('b'));
     // Flyout blocks can receive their category/theme colour after domToMutation.
     // Re-apply the shader family colour once Blockly has rendered that flyout.
     if (typeof requestAnimationFrame === 'function') {
