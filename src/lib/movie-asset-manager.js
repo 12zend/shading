@@ -2103,10 +2103,15 @@ class MovieAssetManager extends EventEmitter {
             return;
         }
 
-        if (render && typeof render.then === 'function') {
-            return render.then(() => this.stampTarget(target));
-        }
-        this.stampTarget(target);
+        const finishDraw = () => {
+            // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
+            // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
+            // the corresponding Motion and Looks blocks, including Z perspective.
+            this.applyProjection(target);
+            this.stampTarget(target);
+        };
+        if (render && typeof render.then === 'function') return render.then(finishDraw);
+        finishDraw();
     }
 
     replaceModelScene (target, requestedModel) {

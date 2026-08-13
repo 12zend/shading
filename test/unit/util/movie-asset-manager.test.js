@@ -1346,6 +1346,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.setTargetPosition = jest.fn();
         manager.setTargetRotation = jest.fn();
         manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
         manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
         manager.runtime._primitives.pen_stamp = jest.fn();
         const target = {
@@ -1386,6 +1387,66 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
         expect(target.setCostume.mock.invocationCallOrder[0])
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+        expect(manager.applyProjection).toHaveBeenCalledWith(target);
+        expect(manager.applyProjection.mock.invocationCallOrder[0])
+            .toBeGreaterThan(target.setCostume.mock.invocationCallOrder[0]);
+        expect(manager.applyProjection.mock.invocationCallOrder[0])
+            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+    });
+
+    test('reapplies Z perspective after draw dimensions update the drawable scale', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.x = 0;
+        target.y = 0;
+        target._getRenderedDirectionAndScale = jest.fn(() => ({
+            direction: 90,
+            scale: [target.size, target.size]
+        }));
+        target.getCostumeIndexByName = jest.fn(() => 0);
+        target.setCostume = jest.fn();
+        target.setSize = jest.fn(size => {
+            target.size = size;
+        });
+        manager.runtime.graphicEffectsManager = {
+            setScale: jest.fn(() => {
+                // This is the normal 2D drawable update which used to be left in place by Objects.draw.
+                manager.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
+            })
+        };
+        manager.runtime._primitives.pen_stamp = jest.fn();
+
+        const configuration = {
+            asset: 'costume1',
+            height: 100,
+            position: {x: 0, y: 0, z: 1000},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            size: 100,
+            source: 'costume',
+            width: 100
+        };
+
+        manager.drawObject(target, configuration);
+
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(
+            target.drawableID,
+            90,
+            [48, 48]
+        );
+        expect(manager.runtime.renderer.updateDrawableDirectionScale.mock.invocationCallOrder.at(-1))
+            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+
+        manager.drawObject(target, {
+            ...configuration,
+            position: {x: 0, y: 0, z: 10000}
+        });
+
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(
+            target.drawableID,
+            90,
+            [4.8, 4.8]
+        );
     });
 
     test('waits for an exact video frame before a following stamp can run', () => {
