@@ -61,6 +61,75 @@ describe('built-in Pen FX category', () => {
         expect(fog.arguments.NEARCOLOR.defaultValue).toBe('#d9e7f2');
         expect(fog.arguments.FARCOLOR.defaultValue).toBe('#ffffff');
         expect(info.menus.fogType.items).toEqual(['linear', 'smooth', 'exponential', 'exponential squared']);
+        const fractalNoise = info.blocks.find(block => block.opcode === 'fractalnoise');
+        expect(fractalNoise).toBeDefined();
+        expect(fractalNoise.arguments.DEPTH.defaultValue).toBe(6);
+        expect(info.menus.fractalType.items).toEqual([
+            '基本', 'タービュレント(滑らか)', 'タービュレント(基本)', 'タービュレント(シャープ)',
+            'ダイナミック', 'ダイナミック（プログレッシブ）', 'ダイナミック（ツイスト）', '最大',
+            'にじみ', '渦巻き', '岩肌', '曇り雲', '土', 'サブスケール', '小さなバンプ',
+            'ストリング', 'スレッド'
+        ]);
+        expect(info.menus.fractalNoiseType.items).toEqual(['ブロック', 'リニア', 'ソフトリニア', 'スプライン']);
+        expect(info.menus.fractalOverflowType.items).toEqual(['HDR', 'Clip', 'Soft clamp']);
+    });
+
+    test('routes fractal noise controls without returning a promise', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {fractalNoise: jest.fn()};
+
+        const result = penFX.fractalnoise({
+            FRACTALTYPE: 'ダイナミック（ツイスト）',
+            NOISETYPE: 'スプライン',
+            INVERT: 'true',
+            CONTRAST: 135,
+            BRIGHTNESS: -12,
+            OVERFLOW: 'Soft clamp',
+            ROTATE: 30,
+            SCALE: 80,
+            WIDTH: 120,
+            HEIGHT: 65,
+            OX: 14,
+            OY: -9,
+            PERSPECTIVE: 'true',
+            DEPTH: 7,
+            EVOLUTION: 540,
+            CYCLEEVOLUTION: 'true',
+            FREQ: 3
+        });
+
+        expect(result).toBeUndefined();
+        expect(penFX.engine.fractalNoise).toHaveBeenCalledWith(
+            'ダイナミック（ツイスト）', 'スプライン', true, 135, -12, 'Soft clamp', 30,
+            80, 120, 65, 14, -9, true, 7, 540, true, 3, 'normal'
+        );
+    });
+
+    test('provides a GPU fractal noise shader with interpolation and cycle controls', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const shader = new PenFX()._getEngine().programSources.fractalNoise;
+
+        expect(shader).toContain('uniform int u_fractalType');
+        expect(shader).toContain('uniform int u_noiseType');
+        expect(shader).toContain('for (int i = 0; i < 10; i++)');
+        expect(shader).toContain('if (u_cycleEvolution == 1)');
+        expect(shader).toContain('if (original.a <= 0.00001)');
     });
 
     test('routes depth of field controls and the current 3D zBuffer without returning a promise', () => {
@@ -109,6 +178,7 @@ describe('built-in Pen FX category', () => {
 
         expect(shader).toContain('uniform sampler2D u_depth');
         expect(shader).toContain('if (u_flatDepth > 0.0) return u_flatDepth');
+        expect(shader).not.toMatch(/\bpacked\b/);
         expect(shader).toContain('float behindForeground');
         expect(shader).toContain('for (int i = 0; i < 20; i++)');
     });
@@ -158,6 +228,7 @@ describe('built-in Pen FX category', () => {
 
         expect(shader).toContain('uniform sampler2D u_depth');
         expect(shader).toContain('if (u_flatDepth > 0.0) return u_flatDepth');
+        expect(shader).not.toMatch(/\bpacked\b/);
         expect(shader).toContain('(depth - u_start) / span');
         expect(shader).toContain('if (original.a <= 0.00001');
         expect(shader).toContain('u_nearColor');
@@ -231,6 +302,26 @@ describe('built-in Pen FX category', () => {
 
         expect(penFX.engine.vhs).toHaveBeenCalledWith(8, 4, 0.2, 0.3, 91, 12, 0.75, 'normal');
         expect(penFX.engine.digitalGlitch).toHaveBeenCalledWith(32, 40, 7, 0.45, 92, 13, 0.8, 'normal');
+    });
+
+    test('restores the renderer state when an effect shader fails', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        const failure = new Error('shader compilation failed');
+        penFX.engine = {
+            blendOpacity: 0,
+            color: jest.fn(() => {
+                throw failure;
+            }),
+            _restoreGLState: jest.fn()
+        };
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(penFX.contrast({VALUE: 2, PIVOT: 0.5, MIX: 100})).toBeUndefined();
+        expect(penFX.engine._restoreGLState).toHaveBeenCalledTimes(1);
+        expect(consoleError).toHaveBeenCalledWith('[Pen FX]', failure);
+        consoleError.mockRestore();
     });
 
     test('exposes grouping boundaries to the Objects control block', () => {

@@ -426,6 +426,167 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const FRACTAL_NOISE_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform vec2 u_resolution;
+    uniform int u_fractalType;
+    uniform int u_noiseType;
+    uniform int u_invert;
+    uniform float u_contrast;
+    uniform float u_brightness;
+    uniform int u_overflow;
+    uniform float u_rotation;
+    uniform float u_scale;
+    uniform vec2 u_scaleDimensions;
+    uniform vec2 u_offset;
+    uniform int u_perspective;
+    uniform float u_depth;
+    uniform float u_evolution;
+    uniform int u_cycleEvolution;
+    uniform float u_cycle;
+
+    float hash(vec2 p) {
+      p = fract(p * vec2(0.1031, 0.1030));
+      p += dot(p, p.yx + 33.33);
+      return fract((p.x + p.y) * p.x);
+    }
+
+    vec2 interpolation(vec2 f) {
+      if (u_noiseType == 0) return vec2(0.0);
+      if (u_noiseType == 1) return f;
+      if (u_noiseType == 2) return f * f * (3.0 - 2.0 * f);
+      return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    }
+
+    float valueNoise(vec2 p) {
+      vec2 cell = floor(p);
+      vec2 f = interpolation(fract(p));
+      float a = hash(cell);
+      float b = hash(cell + vec2(1.0, 0.0));
+      float c = hash(cell + vec2(0.0, 1.0));
+      float d = hash(cell + vec2(1.0, 1.0));
+      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    vec2 rotate2D(vec2 p, float angle) {
+      float c = cos(angle);
+      float s = sin(angle);
+      return mat2(c, -s, s, c) * p;
+    }
+
+    float fractal(vec2 p) {
+      if (u_fractalType == 13) p *= 2.75;
+      if (u_fractalType == 14) p *= 1.8;
+      if (u_fractalType == 15) p = vec2(p.x * 0.22, p.y * 2.4);
+      if (u_fractalType == 16) p = vec2(p.x * 0.1, p.y * 4.2);
+
+      float sum = 0.0;
+      float total = 0.0;
+      float maximum = 0.0;
+      float amplitude = u_fractalType == 11 ? 0.62 : 0.5;
+      float previous = 0.0;
+      for (int i = 0; i < 10; i++) {
+        float octaveMask = step(float(i) + 0.5, clamp(u_depth, 1.0, 10.0));
+        vec2 samplePoint = p;
+        if (u_fractalType == 4) {
+          samplePoint += vec2(previous, valueNoise(p + vec2(9.7, 3.1)) - 0.5) * 1.4;
+        } else if (u_fractalType == 5) {
+          samplePoint = rotate2D(p, previous * 0.9 + float(i) * 0.13);
+        } else if (u_fractalType == 6) {
+          float twist = (length(p) + previous * 2.0) * 0.32;
+          samplePoint = rotate2D(p, twist);
+        } else if (u_fractalType == 8) {
+          samplePoint.x += previous * 3.2;
+        } else if (u_fractalType == 9) {
+          samplePoint = rotate2D(p, previous * 1.8);
+        }
+
+        float n = valueNoise(samplePoint) * 2.0 - 1.0;
+        float contribution = n;
+        if (u_fractalType == 1) {
+          contribution = 1.0 - abs(n);
+          contribution = contribution * contribution;
+        } else if (u_fractalType == 2) {
+          contribution = abs(n);
+        } else if (u_fractalType == 3) {
+          contribution = pow(abs(n), 0.32);
+        } else if (u_fractalType == 7) {
+          maximum = max(maximum, (n * 0.5 + 0.5) * (0.72 + amplitude) * octaveMask);
+        } else if (u_fractalType == 10) {
+          contribution = 1.0 - abs(n);
+          contribution *= contribution;
+          contribution = contribution * 2.0 - 1.0;
+        } else if (u_fractalType == 12) {
+          contribution = floor((n * 0.5 + 0.5) * 7.0) / 6.0 * 2.0 - 1.0;
+        } else if (u_fractalType == 14) {
+          contribution = 1.0 - abs(n);
+          contribution = pow(contribution, 4.0) * 2.0 - 1.0;
+        } else if (u_fractalType == 15) {
+          contribution = pow(1.0 - abs(n), 3.0) * 2.0 - 1.0;
+        } else if (u_fractalType == 16) {
+          contribution = pow(1.0 - abs(n), 7.0) * 2.0 - 1.0;
+        }
+
+        sum += contribution * amplitude * octaveMask;
+        total += amplitude * octaveMask;
+        previous = n;
+        float lacunarity = u_fractalType == 11 ? 1.78 : u_fractalType == 13 ? 2.65 : 2.03;
+        p = rotate2D(p * lacunarity + vec2(17.13, 9.27), 0.17);
+        amplitude *= u_fractalType == 11 ? 0.62 : 0.5;
+      }
+
+      if (u_fractalType == 7) return maximum;
+      float result = sum / max(total, 0.0001) * 0.5 + 0.5;
+      if (u_fractalType == 8) result = mix(result, smoothstep(0.18, 0.82, result), 0.7);
+      if (u_fractalType == 9) result = smoothstep(0.08, 0.92, result);
+      if (u_fractalType == 11) result = smoothstep(0.12, 0.88, result);
+      if (u_fractalType == 12) result += (valueNoise(p * 3.7) - 0.5) * 0.16;
+      return result;
+    }
+
+    void main() {
+      vec4 original = texture2D(u_image, v_uv);
+      if (original.a <= 0.00001) {
+        gl_FragColor = vec4(0.0);
+        return;
+      }
+
+      vec2 centered = v_uv * u_resolution - u_resolution * 0.5;
+      if (u_perspective == 1) {
+        float perspective = max(0.3, 1.0 + centered.y / max(u_resolution.y, 1.0) * 0.85);
+        centered.x /= perspective;
+        centered.y /= perspective;
+      }
+      centered = rotate2D(centered, radians(u_rotation));
+      centered += u_offset;
+      vec2 dimensions = max(abs(u_scaleDimensions), vec2(0.01)) * 0.01;
+      vec2 scale = max(abs(u_scale) * dimensions, vec2(0.01));
+      vec2 p = centered / scale;
+
+      float evolution = u_evolution / 360.0;
+      if (u_cycleEvolution == 1) {
+        float cycle = max(abs(u_cycle), 0.0001);
+        float phase = fract(evolution / cycle) * 6.28318530718;
+        p += vec2(cos(phase), sin(phase)) * 4.0;
+      } else {
+        p += vec2(evolution * 0.73, evolution * 0.41);
+      }
+
+      float value = fractal(p);
+      if (u_invert == 1) value = 1.0 - value;
+      value = (value - 0.5) * (u_contrast * 0.01) + 0.5 + u_brightness * 0.01;
+      if (u_overflow == 1) {
+        value = clamp(value, 0.0, 1.0);
+      } else if (u_overflow == 2) {
+        float centeredValue = value - 0.5;
+        value = 0.5 + centeredValue / (1.0 + 2.0 * abs(centeredValue));
+      }
+      gl_FragColor = vec4(vec3(value) * original.a, original.a);
+    }
+  `;
+
   const LENS_BLUR_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -484,9 +645,9 @@ const createPenFXClass = vm => {
     uniform float u_rotation;
     uniform float u_mix;
 
-    float unpackDepth(vec3 packed) {
-      if (all(greaterThan(packed, vec3(0.999)))) return 1.0;
-      return dot(packed, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
+    float unpackDepth(vec3 encodedDepth) {
+      if (all(greaterThan(encodedDepth, vec3(0.999)))) return 1.0;
+      return dot(encodedDepth, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
     }
 
     float viewDepth(vec2 uv) {
@@ -570,9 +731,9 @@ const createPenFXClass = vm => {
     uniform vec3 u_farColor;
     uniform float u_mix;
 
-    float unpackDepth(vec3 packed) {
-      if (all(greaterThan(packed, vec3(0.999)))) return 1.0;
-      return dot(packed, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
+    float unpackDepth(vec3 encodedDepth) {
+      if (all(greaterThan(encodedDepth, vec3(0.999)))) return 1.0;
+      return dot(encodedDepth, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
     }
 
     float viewDepth(vec2 uv) {
@@ -1337,6 +1498,13 @@ const createPenFXClass = vm => {
   `;
 
   const BLEND_MODES = ['normal', 'add', 'mul', 'screen', 'overlay', 'darken', 'lighten', 'color dodge'];
+  const FRACTAL_TYPES = [
+    '基本', 'タービュレント(滑らか)', 'タービュレント(基本)', 'タービュレント(シャープ)',
+    'ダイナミック', 'ダイナミック（プログレッシブ）', 'ダイナミック（ツイスト）', '最大', 'にじみ',
+    '渦巻き', '岩肌', '曇り雲', '土', 'サブスケール', '小さなバンプ', 'ストリング', 'スレッド'
+  ];
+  const FRACTAL_NOISE_TYPES = ['ブロック', 'リニア', 'ソフトリニア', 'スプライン'];
+  const FRACTAL_OVERFLOW_TYPES = ['HDR', 'Clip', 'Soft clamp'];
 
   class PenFXEngine {
     constructor() {
@@ -1348,6 +1516,7 @@ const createPenFXClass = vm => {
         gaussian: GAUSSIAN_SHADER,
         bloom: BLOOM_SHADER,
         wavy: WAVY_SHADER,
+        fractalNoise: FRACTAL_NOISE_SHADER,
         lensBlur: LENS_BLUR_SHADER,
         depthOfField: DEPTH_OF_FIELD_SHADER,
         fog: FOG_SHADER,
@@ -2088,6 +2257,29 @@ const createPenFXClass = vm => {
       }, ['u_type'], blendMode);
     }
 
+    fractalNoise(fractalType, noiseType, invert, contrast, brightness, overflow, rotation, scale,
+      width, height, offsetX, offsetY, perspective, depth, evolution, cycleEvolution, cycle, blendMode) {
+      this._singlePass(this._program('fractalNoise'), {
+        u_resolution: this.resolution,
+        u_fractalType: Math.max(0, FRACTAL_TYPES.indexOf(fractalType)),
+        u_noiseType: Math.max(0, FRACTAL_NOISE_TYPES.indexOf(noiseType)),
+        u_invert: invert ? 1 : 0,
+        u_contrast: contrast,
+        u_brightness: brightness,
+        u_overflow: Math.max(0, FRACTAL_OVERFLOW_TYPES.indexOf(overflow)),
+        u_rotation: rotation,
+        u_scale: scale,
+        u_scaleDimensions: [width, height],
+        u_offset: [offsetX, offsetY],
+        u_perspective: perspective ? 1 : 0,
+        u_depth: Math.min(10, Math.max(1, depth)),
+        u_evolution: evolution,
+        u_cycleEvolution: cycleEvolution ? 1 : 0,
+        u_cycle: cycle
+      }, ['u_fractalType', 'u_noiseType', 'u_invert', 'u_overflow', 'u_perspective', 'u_cycleEvolution'],
+      blendMode);
+    }
+
     alpha(value, mixValue, blendMode) {
       this._acerolaPass(this._program('acerolaColor'), 0, {u_value: value, u_mix: mixValue}, [], blendMode);
     }
@@ -2504,6 +2696,30 @@ const createPenFXClass = vm => {
           {opcode: 'framing', blockType: BlockType.COMMAND, text: 'frame [SHAPE] radius: [RADIUS] softness: [SOFTNESS] color: [COLOR] opacity: [OPACITY] % offset x: [X] y: [Y] mix: [MIX] %', arguments: {SHAPE: {type: ArgumentType.STRING, menu: 'frameShape'}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 0.45}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.02}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, OPACITY: {type: ArgumentType.NUMBER, defaultValue: 100}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'zoom', blockType: BlockType.COMMAND, text: 'zoom scale: [VALUE] offset x: [X] y: [Y] sample: [SAMPLE] mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, SAMPLE: {type: ArgumentType.STRING, menu: 'sampleMode'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'wavy', blockType: BlockType.COMMAND, text: 'wavy type: [TYPE] amount: [VALUE] size: [SIZE] complexity: [COMPLEXITY] evolution: [EVOLUTION] seed: [SEED] offset x: [X] y: [Y] center x: [CENTERX] y: [CENTERY] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'turbulenceType'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 8}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 64}, COMPLEXITY: {type: ArgumentType.NUMBER, defaultValue: 3}, EVOLUTION: {type: ArgumentType.NUMBER, defaultValue: 0}, SEED: {type: ArgumentType.NUMBER, defaultValue: 0}, X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, CENTERX: {type: ArgumentType.NUMBER, defaultValue: 0}, CENTERY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {
+            opcode: 'fractalnoise',
+            blockType: BlockType.COMMAND,
+            text: 'fractal noise fractal type: [FRACTALTYPE] noise type: [NOISETYPE] invert: [INVERT] contrast: [CONTRAST] brightness: [BRIGHTNESS] overflow: [OVERFLOW] rotate: [ROTATE] scale: [SCALE] width: [WIDTH] height: [HEIGHT] random offset: [OX] [OY] perspective offset: [PERSPECTIVE] depth: [DEPTH] evolution: [EVOLUTION] cycle evolution: [CYCLEEVOLUTION] cycle: [FREQ]',
+            arguments: {
+              FRACTALTYPE: {type: ArgumentType.STRING, menu: 'fractalType'},
+              NOISETYPE: {type: ArgumentType.STRING, menu: 'fractalNoiseType'},
+              INVERT: {type: ArgumentType.STRING, menu: 'boolean'},
+              CONTRAST: {type: ArgumentType.NUMBER, defaultValue: 100},
+              BRIGHTNESS: {type: ArgumentType.NUMBER, defaultValue: 0},
+              OVERFLOW: {type: ArgumentType.STRING, menu: 'fractalOverflowType'},
+              ROTATE: {type: ArgumentType.ANGLE, defaultValue: 0},
+              SCALE: {type: ArgumentType.NUMBER, defaultValue: 100},
+              WIDTH: {type: ArgumentType.NUMBER, defaultValue: 100},
+              HEIGHT: {type: ArgumentType.NUMBER, defaultValue: 100},
+              OX: {type: ArgumentType.NUMBER, defaultValue: 0},
+              OY: {type: ArgumentType.NUMBER, defaultValue: 0},
+              PERSPECTIVE: {type: ArgumentType.STRING, menu: 'boolean'},
+              DEPTH: {type: ArgumentType.NUMBER, defaultValue: 6},
+              EVOLUTION: {type: ArgumentType.NUMBER, defaultValue: 0},
+              CYCLEEVOLUTION: {type: ArgumentType.STRING, menu: 'boolean'},
+              FREQ: {type: ArgumentType.NUMBER, defaultValue: 1}
+            }
+          },
           {opcode: 'pulse', blockType: BlockType.COMMAND, text: 'pulse center x: [X] y: [Y] radius: [RADIUS] value: [VALUE] width: [WIDTH] frequency: [FREQUENCY] mix: [MIX] %', arguments: {X: {type: ArgumentType.NUMBER, defaultValue: 0}, Y: {type: ArgumentType.NUMBER, defaultValue: 0}, RADIUS: {type: ArgumentType.NUMBER, defaultValue: 80}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 12}, WIDTH: {type: ArgumentType.NUMBER, defaultValue: 18}, FREQUENCY: {type: ArgumentType.NUMBER, defaultValue: 0.55}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'pixelate', blockType: BlockType.COMMAND, text: 'pixelate size x: [X] y: [Y] offset x: [OFFSETX] y: [OFFSETY] mix: [MIX] %', arguments: {X: {type: ArgumentType.NUMBER, defaultValue: 8}, Y: {type: ArgumentType.NUMBER, defaultValue: 8}, OFFSETX: {type: ArgumentType.NUMBER, defaultValue: 0}, OFFSETY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'pixelStretch', blockType: BlockType.COMMAND, text: 'pixel stretch type: [TYPE] position: [POSITION] size: [SIZE] sample width: [SAMPLE] center x: [CENTERX] y: [CENTERY] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'stretchType'}, POSITION: {type: ArgumentType.NUMBER, defaultValue: 0}, SIZE: {type: ArgumentType.NUMBER, defaultValue: 100}, SAMPLE: {type: ArgumentType.NUMBER, defaultValue: 1}, CENTERX: {type: ArgumentType.NUMBER, defaultValue: 0}, CENTERY: {type: ArgumentType.NUMBER, defaultValue: 0}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -2538,6 +2754,9 @@ const createPenFXClass = vm => {
           sampleMode: {acceptReporters: true, items: ['clamp', 'mirror', 'wrap', 'border']},
           stretchType: {acceptReporters: true, items: ['x', 'y', 'size', 'dir']},
           turbulenceType: {acceptReporters: true, items: ['both', 'x', 'y', 'size', 'dir']},
+          fractalType: {acceptReporters: true, items: FRACTAL_TYPES},
+          fractalNoiseType: {acceptReporters: true, items: FRACTAL_NOISE_TYPES},
+          fractalOverflowType: {acceptReporters: true, items: FRACTAL_OVERFLOW_TYPES},
           mapChannel: {acceptReporters: true, items: ['luminance', 'r', 'g', 'b', 'a']},
           bufferMode: {acceptReporters: true, items: ['average', 'add', 'lighten', 'darken']},
           mirrorType: {acceptReporters: true, items: ['x', 'y', 'xy']},
@@ -2555,15 +2774,19 @@ const createPenFXClass = vm => {
     _executeSafe(callback, blendMode, blendOpacity) {
       const previousBlendMode = this.blendMode;
       const previousBlendOpacity = this.blendOpacity;
+      let engine;
       try {
         this.blendMode = blendMode;
         this.blendOpacity = blendOpacity;
-        const engine = this._getEngine();
+        engine = this._getEngine();
         engine.blendOpacity = this.blendOpacity;
         callback(engine);
       } catch (error) {
         console.error('[Pen FX]', error);
       } finally {
+        // _prepare disables blending before compiling the selected program. If compilation or rendering fails,
+        // leaving that state active makes the transparent Pen framebuffer cover the stage as opaque black.
+        if (engine && typeof engine._restoreGLState === 'function') engine._restoreGLState();
         this.blendMode = previousBlendMode;
         this.blendOpacity = previousBlendOpacity;
       }
@@ -2788,6 +3011,20 @@ const createPenFXClass = vm => {
       this._safe(engine => engine.wavy(number(args.VALUE), seedAmount(args.SEED), number(args.X), number(args.Y),
         number(args.SIZE), numberOr(args.COMPLEXITY, 3), evolutionAmount(args.EVOLUTION), type,
         number(args.CENTERX), number(args.CENTERY), mixAmount(args.MIX), this.blendMode));
+    }
+
+    fractalnoise(args) {
+      const fractalType = FRACTAL_TYPES.includes(String(args.FRACTALTYPE)) ?
+        String(args.FRACTALTYPE) : FRACTAL_TYPES[0];
+      const noiseType = FRACTAL_NOISE_TYPES.includes(String(args.NOISETYPE)) ?
+        String(args.NOISETYPE) : FRACTAL_NOISE_TYPES[0];
+      const overflow = FRACTAL_OVERFLOW_TYPES.includes(String(args.OVERFLOW)) ?
+        String(args.OVERFLOW) : FRACTAL_OVERFLOW_TYPES[0];
+      this._safe(engine => engine.fractalNoise(fractalType, noiseType, boolean(args.INVERT),
+        numberOr(args.CONTRAST, 100), number(args.BRIGHTNESS), overflow, number(args.ROTATE),
+        numberOr(args.SCALE, 100), numberOr(args.WIDTH, 100), numberOr(args.HEIGHT, 100),
+        number(args.OX), number(args.OY), boolean(args.PERSPECTIVE), numberOr(args.DEPTH, 6),
+        evolutionAmount(args.EVOLUTION), boolean(args.CYCLEEVOLUTION), numberOr(args.FREQ, 1), this.blendMode));
     }
 
     pulse(args) {

@@ -826,9 +826,9 @@ class ModelRenderer {
                 uniform sampler2D u_depth;
 
                 vec3 packDepth(float value) {
-                    vec3 packed = fract(value * vec3(1.0, 255.0, 65025.0));
-                    packed -= packed.yzz * vec3(1.0 / 255.0, 1.0 / 255.0, 0.0);
-                    return packed;
+                    vec3 encodedDepth = fract(value * vec3(1.0, 255.0, 65025.0));
+                    encodedDepth -= encodedDepth.yzz * vec3(1.0 / 255.0, 1.0 / 255.0, 0.0);
+                    return encodedDepth;
                 }
 
                 void main() {
