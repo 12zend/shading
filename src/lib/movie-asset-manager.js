@@ -26,7 +26,8 @@ import {
     loadBuildingTexture,
     makeBuildingMaterial,
     normalizeFOV,
-    projectPosition
+    projectPosition,
+    spritePlaneMatrix
 } from './model-runtime';
 import downloadBlob from './download-blob';
 
@@ -2514,6 +2515,7 @@ class MovieAssetManager extends EventEmitter {
             y: normalizeScale(y, state.scale.y),
             z: normalizeScale(z, state.scale.z)
         };
+        this.applyProjection(target);
         this.rerenderTargetModel(target);
         this.runtime.requestTargetsUpdate(target);
     }
@@ -2688,14 +2690,47 @@ class MovieAssetManager extends EventEmitter {
             target._getRenderedDirectionAndScale().scale : [target.size, target.size];
         const perspective = Math.abs(projection.perspective);
         this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, direction, [
-            renderedScale[0] * perspective,
-            renderedScale[1] * perspective
+            renderedScale[0] * state.scale.x * perspective,
+            renderedScale[1] * state.scale.y * perspective
         ]);
+        this.applySpritePlaneMatrix(target, state, renderedScale);
         this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible && projection.inFront);
         if (target.visible) {
             target.emitVisualChange();
             this.runtime.requestRedraw();
         }
+    }
+
+    applySpritePlaneMatrix (target, state, renderedScale) {
+        const renderer = this.runtime.renderer;
+        const drawable = renderer && renderer._allDrawables && renderer._allDrawables[target.drawableID];
+        if (!drawable || !drawable.skin || typeof drawable.getUniforms !== 'function') return;
+        const camera = state.ignoreCamera ? {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        } : (this.camera || {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        });
+        const matrix = spritePlaneMatrix({
+            position: {
+                x: state.worldX,
+                y: state.worldY,
+                z: state.ignoreCamera ? DEFAULT_FOCAL_LENGTH : state.worldZ
+            },
+            rotation: state.rotation,
+            rotationOrder: state.rotationOrder,
+            scale: state.scale
+        }, camera, drawable.skin.size, drawable.skin.rotationCenter, renderedScale);
+        const uniforms = drawable.getUniforms();
+        if (!uniforms || !uniforms.u_modelMatrix) return;
+        uniforms.u_modelMatrix.set(matrix);
+        drawable._inverseTransformDirty = true;
+        drawable._transformedHullDirty = true;
     }
 
     switchVideo (target, requestedVideo) {

@@ -1177,8 +1177,10 @@ describe('MovieAssetManager rendering performance', () => {
 
         manager.runtime._primitives.motion_gotoxyz({X: 12, Y: -8, Z: 720}, {target});
         manager.runtime._primitives.motion_gotoxyz_nocamera({X: 20, Y: -10, Z: 300}, {target});
-        manager.runtime._primitives.motion_setrotation({X: 10, Y: 20, Z: 30}, {target});
-        manager.runtime._primitives.motion_setscale({X: 2, Y: 0.5, Z: 3}, {target});
+        expect(manager.runtime._primitives.motion_setrotation({X: 10, Y: 20, Z: 30}, {target}))
+            .toBeUndefined();
+        expect(manager.runtime._primitives.motion_setscale({X: 2, Y: 0.5, Z: 3}, {target}))
+            .toBeUndefined();
         manager.runtime._primitives.motion_setcamerato({X: 1, Y: 2, Z: 3});
         manager.runtime._primitives.motion_setfov({FOV: 60});
 
@@ -1188,6 +1190,47 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.setTargetScale).toHaveBeenCalledWith(target, 2, 0.5, 3);
         expect(manager.setCameraPosition).toHaveBeenCalledWith(1, 2, 3);
         expect(manager.setFOV).toHaveBeenCalledWith(60);
+    });
+
+    test('projects costume, text, and video skins with rotation X/Y and scale X/Y/Z', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.visible = true;
+        target._getRenderedDirectionAndScale = jest.fn(() => ({direction: 90, scale: [100, 100]}));
+        const modelMatrix = new Float32Array(16);
+        const drawable = {
+            _inverseTransformDirty: false,
+            _transformedHullDirty: false,
+            getUniforms: jest.fn(() => ({u_modelMatrix: modelMatrix})),
+            skin: {
+                rotationCenter: [100, 50],
+                size: [200, 100]
+            }
+        };
+        manager.runtime.renderer._allDrawables = [];
+        manager.runtime.renderer._allDrawables[target.drawableID] = drawable;
+        manager.camera = {
+            focalLength: 480,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+
+        manager.setTargetScale(target, 2, 0.5, 3);
+        manager.setTargetRotation(target, 60, 30, 0);
+
+        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(
+            target.drawableID,
+            90,
+            [200, 50]
+        );
+        // X/Y rotation puts local plane axes into depth, producing perspective W terms.
+        expect(Math.abs(modelMatrix[3])).toBeGreaterThan(0);
+        expect(Math.abs(modelMatrix[7])).toBeGreaterThan(0);
+        // Z scale is retained in the third 3D basis even though the current sprite quad is flat.
+        expect(Math.hypot(modelMatrix[8], modelMatrix[9], modelMatrix[11])).toBeGreaterThan(0);
+        expect(drawable._inverseTransformDirty).toBe(true);
+        expect(drawable._transformedHullDirty).toBe(true);
     });
 
     test('captures per-axis scale in a model scene snapshot', () => {

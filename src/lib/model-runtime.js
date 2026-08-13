@@ -639,6 +639,73 @@ const projectPosition = (position, camera) => {
     };
 };
 
+/**
+ * Build a projective Scratch drawable matrix for a flat sprite in Movie's 3D world.
+ *
+ * Scratch drawables are quads on the local XY plane. Their shader accepts a 4 by 4
+ * model matrix, so camera-space depth can be placed in W to give the quad the same
+ * perspective division as a 3D plane without rasterizing the sprite into a new skin.
+ * This keeps costumes, text, and decoded video frames stampable through scratch-render.
+ *
+ * @param {object} transform Movie sprite transform
+ * @param {object} cameraTransform Movie camera transform
+ * @param {Array<number>} skinSize drawable skin width and height
+ * @param {Array<number>} rotationCenter drawable rotation center in skin pixels
+ * @param {Array<number>} renderedScale Scratch per-axis scale percentages before perspective
+ * @returns {Float32Array} column-major projective model matrix
+ */
+const spritePlaneMatrix = (transform, cameraTransform, skinSize, rotationCenter, renderedScale) => {
+    const width = Math.max(0, Number(skinSize && skinSize[0]) || 0);
+    const height = Math.max(0, Number(skinSize && skinSize[1]) || 0);
+    const centerX = Number.isFinite(Number(rotationCenter && rotationCenter[0])) ?
+        Number(rotationCenter[0]) : width / 2;
+    const centerY = Number.isFinite(Number(rotationCenter && rotationCenter[1])) ?
+        Number(rotationCenter[1]) : height / 2;
+    const scratchScaleX = (Number(renderedScale && renderedScale[0]) || 0) / 100;
+    const scratchScaleY = (Number(renderedScale && renderedScale[1]) || 0) / 100;
+    const transformScale = transform.scale || {};
+    const scaleX = modelScale(transformScale.x);
+    const scaleY = modelScale(transformScale.y);
+    const scaleZ = modelScale(transformScale.z);
+    const objectRotation = new THREE.Quaternion().setFromEuler(
+        degreesToEuler(transform.rotation, transform.rotationOrder)
+    );
+    const inverseCameraRotation = new THREE.Quaternion()
+        .setFromEuler(degreesToEuler(cameraTransform.rotation, cameraTransform.rotationOrder))
+        .invert();
+    const toCameraVector = vector => vector
+        .applyQuaternion(objectRotation)
+        .applyQuaternion(inverseCameraRotation);
+
+    const origin = new THREE.Vector3(
+        (centerX - (width / 2)) * scratchScaleX * scaleX,
+        -(centerY - (height / 2)) * scratchScaleY * scaleY,
+        0
+    )
+        .applyQuaternion(objectRotation)
+        .add(new THREE.Vector3(
+            transform.position.x - cameraTransform.position.x,
+            transform.position.y - cameraTransform.position.y,
+            transform.position.z - cameraTransform.position.z
+        ))
+        .applyQuaternion(inverseCameraRotation);
+    const xAxis = toCameraVector(new THREE.Vector3(-width * scratchScaleX * scaleX, 0, 0));
+    const yAxis = toCameraVector(new THREE.Vector3(0, -height * scratchScaleY * scaleY, 0));
+    // The sprite currently has no vertices away from its XY plane, but retaining its transformed Z basis makes
+    // set-scale X/Y/Z a complete 3D transform and keeps the matrix ready for non-flat sprite geometry.
+    const zAxis = toCameraVector(new THREE.Vector3(0, 0, scaleZ));
+    const safeDepth = origin.z > 0.001 ? origin.z : 0.001;
+    const focalScale = cameraTransform.focalLength / safeDepth;
+    const depthScale = 1 / safeDepth;
+
+    return new Float32Array([
+        xAxis.x * focalScale, xAxis.y * focalScale, 0, xAxis.z * depthScale,
+        yAxis.x * focalScale, yAxis.y * focalScale, 0, yAxis.z * depthScale,
+        zAxis.x * focalScale, zAxis.y * focalScale, 1, zAxis.z * depthScale,
+        origin.x * focalScale, origin.y * focalScale, 0, origin.z * depthScale
+    ]);
+};
+
 const cameraLookAt = (position, target, rotationOrder) => {
     const direction = new THREE.Vector3(
         target.x - position.x,
@@ -1010,6 +1077,7 @@ export {
     normalizeLight,
     normalizeFOV,
     projectPosition,
+    spritePlaneMatrix,
     resampleAnimationClip,
     restoreMMDBoneHierarchy,
     verticalFOVFromFocalLength
