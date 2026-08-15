@@ -18,31 +18,10 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
     return `
     <category name="%{BKY_CATEGORY_MOTION}" id="motion" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
         ${isStage ? '' : `
-        <block type="motion_movesteps">
-            <value name="STEPS"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        ${blockSeparator}
-        <block type="motion_goto">
-            <value name="TO"><shadow type="motion_goto_menu"></shadow></value>
-        </block>
         <block type="motion_gotoxyz">
             <value name="X"><shadow id="movex" type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="Y"><shadow id="movey" type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="Z"><shadow id="movez" type="math_number"><field name="NUM">480</field></shadow></value>
-        </block>
-        <block type="motion_gotoxyz_nocamera">
-            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Z"><shadow type="math_number"><field name="NUM">480</field></shadow></value>
-        </block>
-        <block type="motion_glideto" id="motion_glideto">
-            <value name="SECS"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
-            <value name="TO"><shadow type="motion_glideto_menu"></shadow></value>
-        </block>
-        <block type="motion_glidesecstoxy">
-            <value name="SECS"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
-            <value name="X"><shadow id="glidex" type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Y"><shadow id="glidey" type="math_number"><field name="NUM">0</field></shadow></value>
         </block>
         ${blockSeparator}
         <block type="motion_setrotation">
@@ -55,35 +34,7 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
             <value name="Y"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
             <value name="Z"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
         </block>
-        <block type="motion_changerotationby">
-            <value name="X"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
-            <value name="Z"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
-        </block>
         <block type="motion_setrotationorder"/>
-        ${blockSeparator}
-        <block type="motion_changexby">
-            <value name="DX"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        <block type="motion_setx">
-            <value name="X"><shadow id="setx" type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changeyby">
-            <value name="DY"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        <block type="motion_sety">
-            <value name="Y"><shadow id="sety" type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changezby">
-            <value name="DZ"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        <block type="motion_setz">
-            <value name="Z"><shadow id="setz" type="math_number"><field name="NUM">480</field></shadow></value>
-        </block>
-        ${blockSeparator}
-        <block type="motion_ifonedgebounce"/>
-        ${blockSeparator}
-        <block type="motion_setrotationstyle"/>
         ${blockSeparator}
         <block id="${targetId}_xposition" type="motion_xposition"/>
         <block id="${targetId}_yposition" type="motion_yposition"/>
@@ -98,34 +49,10 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
             <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="Z"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
         </block>
-        <block type="motion_setcamerax">
-            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changecameraxby">
-            <value name="X"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        <block type="motion_setcameray">
-            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changecamerayby">
-            <value name="Y"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        <block type="motion_setcameraz">
-            <value name="Z"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changecamerazby">
-            <value name="Z"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-        </block>
-        ${blockSeparator}
         <block type="motion_setcamerarotation">
             <value name="X"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
             <value name="Y"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
             <value name="Z"><shadow type="math_angle"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="motion_changecamerarotationby">
-            <value name="X"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
-            <value name="Z"><shadow type="math_number"><field name="NUM">15</field></shadow></value>
         </block>
         <block type="motion_setcamerarotationorder"/>
         <block type="motion_setfov">
@@ -172,47 +99,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_LOOKS}" id="looks" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        ${isStage ? '' : `
-        <block type="looks_sayforsecs">
-            <value name="MESSAGE">
-                <shadow type="text">
-                    <field name="TEXT">${hello}</field>
-                </shadow>
-            </value>
-            <value name="SECS">
-                <shadow type="math_number">
-                    <field name="NUM">2</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="looks_say">
-            <value name="MESSAGE">
-                <shadow type="text">
-                    <field name="TEXT">${hello}</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="looks_thinkforsecs">
-            <value name="MESSAGE">
-                <shadow type="text">
-                    <field name="TEXT">${hmm}</field>
-                </shadow>
-            </value>
-            <value name="SECS">
-                <shadow type="math_number">
-                    <field name="NUM">2</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="looks_think">
-            <value name="MESSAGE">
-                <shadow type="text">
-                    <field name="TEXT">${hmm}</field>
-                </shadow>
-            </value>
-        </block>
-        ${blockSeparator}
-        `}
         ${isStage ? `
             <block type="looks_switchbackdropto">
                 <value name="BACKDROP">
@@ -237,7 +123,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                     </shadow>
                 </value>
             </block>
-            <block type="looks_nextcostume"/>
             <block type="looks_switchbackdropto">
                 <value name="BACKDROP">
                     <shadow type="looks_backdrops">
@@ -245,15 +130,7 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                     </shadow>
                 </value>
             </block>
-            <block type="looks_nextbackdrop"/>
             ${blockSeparator}
-            <block type="looks_changesizeby">
-                <value name="CHANGE">
-                    <shadow type="math_number">
-                        <field name="NUM">10</field>
-                    </shadow>
-                </value>
-            </block>
             <block type="looks_setsizeto">
                 <value name="SIZE">
                     <shadow type="math_number">
@@ -382,6 +259,7 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
             <value name="ANGLE"><shadow type="math_angle"><field name="NUM">45</field></shadow></value>
             <value name="SHADOW"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
         </block>
+        ${blockSeparator}
         <block id="${targetId}_rendervideo" type="looks_rendervideo">
             <value name="VIDEO">
                 <shadow type="looks_video"></shadow>
@@ -419,53 +297,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
         </block>
         <block type="looks_cleargraphiceffects"/>
         ${blockSeparator}
-        <block type="looks_turbulentdisplace">
-            <value name="AMOUNT"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
-            <value name="SIZE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-            <value name="COMPLEXITY"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
-            <value name="EVOLUTION"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="looks_posterize">
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">8</field></shadow></value>
-        </block>
-        <block type="looks_rgbshift">
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-            <value name="DIR"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
-        </block>
-        <block type="looks_edgedetection">
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-        </block>
-        <block type="looks_circularripple">
-            <value name="FREQUENCY"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-            <value name="OFFSET"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-        </block>
-        <block type="looks_pixelstretch">
-            <value name="OFFSET"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
-            <value name="SMOOTHNESS"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
-            <value name="FALLOFF"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="RADIUS"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-            <value name="ANGLE"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
-        </block>
-        <block type="looks_bloom">
-            <value name="THRESHOLD"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-            <value name="BLUR"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">50</field></shadow></value>
-        </block>
-        <block type="looks_displacementmap">
-            <value name="COSTUME">
-                <shadow type="looks_costume"><field name="COSTUME">${costumeName}</field></shadow>
-            </value>
-            <value name="VALUE"><shadow type="math_number"><field name="NUM">25</field></shadow></value>
-        </block>
-        <block type="looks_effectweight">
-            <value name="COSTUME">
-                <shadow type="looks_costume"><field name="COSTUME">${costumeName}</field></shadow>
-            </value>
-        </block>
-        ${blockSeparator}
         ${isStage ? '' : `
             <block type="looks_show"/>
             <block type="looks_hide"/>
@@ -502,42 +333,6 @@ const sound = function (isInitialSetup, isStage, targetId, soundName, colors) {
                 </shadow>
             </value>
         </block>
-        <block id="${targetId}_sound_play" type="sound_play">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
-                </shadow>
-            </value>
-        </block>
-        <block id="${targetId}_sound_playattime" type="sound_playattime">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
-                </shadow>
-            </value>
-            <value name="TIME">
-                <shadow type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sound_stopallsounds"/>
-        ${blockSeparator}
-        <block type="sound_changeeffectby">
-            <value name="VALUE">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sound_seteffectto">
-            <value name="VALUE">
-                <shadow type="math_number">
-                    <field name="NUM">100</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sound_cleareffects"/>
         ${blockSeparator}
         <block type="sound_changevolumeby">
             <value name="VOLUME">
@@ -564,23 +359,7 @@ const events = function (isInitialSetup, isStage, targetId, soundName, colors) {
     return `
     <category name="%{BKY_CATEGORY_EVENTS}" id="events" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
         <block type="event_renderframe"/>
-        <block type="event_whenkeypressed">
-        </block>
-        ${isStage ? `
-            <block type="event_whenstageclicked"/>
-        ` : `
-            <block type="event_whenthisspriteclicked"/>
-        `}
-        <block type="event_whenbackdropswitchesto">
-        </block>
         ${blockSeparator}
-        <block type="event_whengreaterthan">
-            <value name="VALUE">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
-        </block>
         ${blockSeparator}
         <block type="event_whenbroadcastreceived">
         </block>
@@ -607,14 +386,6 @@ const control = function (isInitialSetup, isStage, targetId, colors) {
         id="control"
         colour="${colors.primary}"
         secondaryColour="${colors.tertiary}">
-        <block type="control_wait">
-            <value name="DURATION">
-                <shadow type="math_positive_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-        </block>
-        ${blockSeparator}
         <block type="control_repeat">
             <value name="TIMES">
                 <shadow type="math_whole_number">
@@ -631,22 +402,6 @@ const control = function (isInitialSetup, isStage, targetId, colors) {
         <block id="while" type="control_while"/>
         ${blockSeparator}
         <block type="control_stop"/>
-        ${blockSeparator}
-        ${isStage ? `
-            <block type="control_create_clone_of">
-                <value name="CLONE_OPTION">
-                    <shadow type="control_create_clone_of_menu"/>
-                </value>
-            </block>
-        ` : `
-            <block type="control_start_as_clone"/>
-            <block type="control_create_clone_of">
-                <value name="CLONE_OPTION">
-                    <shadow type="control_create_clone_of_menu"/>
-                </value>
-            </block>
-            <block type="control_delete_this_clone"/>
-        `}
         ${categorySeparator}
     </category>
     `;
@@ -661,73 +416,8 @@ const sensing = function (isInitialSetup, isStage, targetId, colors) {
         id="sensing"
         colour="${colors.primary}"
         secondaryColour="${colors.tertiary}">
-        ${isStage ? '' : `
-            <block type="sensing_touchingobject">
-                <value name="TOUCHINGOBJECTMENU">
-                    <shadow type="sensing_touchingobjectmenu"/>
-                </value>
-            </block>
-            <block type="sensing_touchingcolor">
-                <value name="COLOR">
-                    <shadow type="colour_picker"/>
-                </value>
-            </block>
-            <block type="sensing_coloristouchingcolor">
-                <value name="COLOR">
-                    <shadow type="colour_picker"/>
-                </value>
-                <value name="COLOR2">
-                    <shadow type="colour_picker"/>
-                </value>
-            </block>
-            <block type="sensing_distanceto">
-                <value name="DISTANCETOMENU">
-                    <shadow type="sensing_distancetomenu"/>
-                </value>
-            </block>
-            ${blockSeparator}
-        `}
-        ${isInitialSetup ? '' : `
-            <block id="askandwait" type="sensing_askandwait">
-                <value name="QUESTION">
-                    <shadow type="text">
-                        <field name="TEXT">${name}</field>
-                    </shadow>
-                </value>
-            </block>
-        `}
-        <block id="answer" type="sensing_answer"/>
-        ${blockSeparator}
-        <block type="sensing_keypressed">
-            <value name="KEY_OPTION">
-                <shadow type="sensing_keyoptions"/>
-            </value>
-        </block>
-        <block type="sensing_mousedown"/>
-        <block type="sensing_mousex"/>
-        <block type="sensing_mousey"/>
-        ${isStage ? '' : `
-            ${blockSeparator}
-            '<block type="sensing_setdragmode" id="sensing_setdragmode"></block>'+
-            ${blockSeparator}
-        `}
-        ${blockSeparator}
-        <block id="loudness" type="sensing_loudness"/>
-        ${blockSeparator}
         <block id="timer" type="sensing_timer"/>
         <block type="sensing_resettimer"/>
-        ${blockSeparator}
-        <block id="of" type="sensing_of">
-            <value name="OBJECT">
-                <shadow id="sensing_of_object_menu" type="sensing_of_object_menu"/>
-            </value>
-        </block>
-        ${blockSeparator}
-        <block id="current" type="sensing_current"/>
-        <block type="sensing_dayssince2000"/>
-        ${blockSeparator}
-        <block id="online" type="sensing_online"/>
-        <block type="sensing_username"/>
         ${categorySeparator}
     </category>
     `;
@@ -1044,7 +734,6 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const looksXML = moveCategory('looks') ||
         looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
     const objectsXML = moveCategory('objects') ? objects(costumeName) : undefined;
-    const penXML = moveCategory('pen');
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
@@ -1053,6 +742,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
+    const penXML = moveCategory('pen');
     // The VM registration allows myblocksshader_* opcodes to deserialize. Its
     // empty extension category is replaced by the native dynamic category.
     moveCategory('myblocksshader');
@@ -1067,11 +757,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
 
     const everything = [
         xmlOpen,
+        ...(objectsXML ? [objectsXML, gap] : []),
         motionXML, gap,
         looksXML, gap,
-        ...(objectsXML ? [objectsXML, gap] : []),
-        ...(penXML ? [penXML, gap] : []),
-        ...(penFXXML ? [penFXXML, gap] : []),
         soundXML, gap,
         eventsXML, gap,
         controlXML, gap,
@@ -1079,7 +767,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         operatorsXML, gap,
         variablesXML, gap,
         myBlocksXML, gap,
-        myBlocksShaderXML
+        myBlocksShaderXML,
+        ...(penXML ? [penXML, gap] : []),
+        ...(penFXXML ? [penFXXML, gap] : [])
     ];
 
     if (turbowarpXML) {
