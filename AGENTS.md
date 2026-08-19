@@ -12,5 +12,8 @@ Guidelines for coding agents working on this repository.
 - Creation blocks used declaratively in a render loop, such as `add material`, must be idempotent and must not reset an existing resource every iteration.
 - Cache decoded asynchronous assets separately from scene/material state so clearing and reapplying them in the same tick does not flash a fallback value.
 - Add a regression test that asserts each new asynchronous command primitive returns `undefined`.
+- `event_renderframe` is a custom hat without a command primitive. Compiled render-frame scripts may execute their full body synchronously from `runtime.startHats('event_renderframe')`; do not assume that starting the hat creates a VM yield.
+- Do not implement automatic `erase all` by calling `pen_clear` from the timeline `BEFORE_EXECUTE` or `AFTER_EXECUTE` hooks. That clears the pen layer outside the render-frame transaction, so a slow Movie render can expose a blank intermediate frame or add apparent delay. A frame reset must be part of the same atomic render transaction and must be tested in both compiled and interpreter execution paths.
+- Do not use a global `renderer.draw` suppression guard as a workaround for render-frame timing. Preserve the existing renderer scheduling and fix the block boundary that exposes the intermediate state.
 
 Existing blocks with deliberately documented atomic behavior are compatibility exceptions. Do not introduce new exceptions without explicit user approval.
