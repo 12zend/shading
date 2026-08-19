@@ -99,6 +99,10 @@ $header-height: calc($stage-menu-height - 2px);
     bottom: 0.75rem;
 }
 
+.file-input {
+    display: none;
+}
+
 .raised, .raised .header {
     background-color: $drop-highlight;
     transition: all 0.25s ease;

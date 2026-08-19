@@ -4,23 +4,16 @@ import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import {intlShape, injectIntl} from 'react-intl';
 
-import {
-    openSpriteLibrary,
-    closeSpriteLibrary
-} from '../reducers/modals';
-import {activateTab, COSTUMES_TAB_INDEX, BLOCKS_TAB_INDEX} from '../reducers/editor-tab';
 import {setReceivedBlocks} from '../reducers/hovered-target';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 import {setRestore} from '../reducers/restore-deletion';
 import DragConstants from '../lib/drag-constants';
 import TargetPaneComponent from '../components/target-pane/target-pane.jsx';
-import {getSpriteLibrary} from '../lib/libraries/tw-async-libraries';
 import {handleFileUpload, spriteUpload} from '../lib/file-uploader.js';
 import sharedMessages from '../lib/shared-messages';
 import {emptySprite} from '../lib/empty-assets';
 import {highlightTarget} from '../reducers/targets';
 import {fetchSprite, fetchCode} from '../lib/backpack-api';
-import randomizeSpritePosition from '../lib/randomize-sprite-position';
 import downloadBlob from '../lib/download-blob';
 import log from '../lib/log';
 import {placeInViewport} from '../lib/backpack/code-payload.js';
@@ -29,7 +22,6 @@ class TargetPane extends React.Component {
     constructor (props) {
         super(props);
         bindAll(this, [
-            'handleActivateBlocksTab',
             'handleBlockDragEnd',
             'handleChangeSpriteRotationStyle',
             'handleChangeSpriteDirection',
@@ -44,7 +36,6 @@ class TargetPane extends React.Component {
             'handleExportSprite',
             'handleNewSprite',
             'handleSelectSprite',
-            'handleSurpriseSpriteClick',
             'handlePaintSpriteClick',
             'handleFileUploadClick',
             'handleSpriteUpload',
@@ -80,7 +71,7 @@ class TargetPane extends React.Component {
     }
     handleDeleteSprite (id) {
         const restoreSprite = this.props.vm.deleteSprite(id);
-        const restoreFun = () => restoreSprite().then(this.handleActivateBlocksTab);
+        const restoreFun = () => restoreSprite();
 
         this.props.dispatchUpdateRestore({
             restoreFun: restoreFun,
@@ -106,16 +97,6 @@ class TargetPane extends React.Component {
             this.props.onHighlightTarget(id);
         }
     }
-    async handleSurpriseSpriteClick () {
-        const spriteLibraryContent = await getSpriteLibrary();
-        const surpriseSprites = spriteLibraryContent.filter(sprite =>
-            (sprite.tags.indexOf('letters') === -1) && (sprite.tags.indexOf('numbers') === -1)
-        );
-        const item = surpriseSprites[Math.floor(Math.random() * surpriseSprites.length)];
-        randomizeSpritePosition(item);
-        this.props.vm.addSprite(JSON.stringify(item))
-            .then(this.handleActivateBlocksTab);
-    }
     handlePaintSpriteClick () {
         const formatMessage = this.props.intl.formatMessage;
         const emptyItem = emptySprite(
@@ -123,21 +104,12 @@ class TargetPane extends React.Component {
             formatMessage(sharedMessages.pop),
             formatMessage(sharedMessages.costume, {index: 1})
         );
-        this.props.vm.addSprite(JSON.stringify(emptyItem)).then(() => {
-            setTimeout(() => { // Wait for targets update to propagate before tab switching
-                this.props.onActivateTab(COSTUMES_TAB_INDEX);
-            });
-        });
-    }
-    handleActivateBlocksTab () {
-        this.props.onActivateTab(BLOCKS_TAB_INDEX);
+        this.props.vm.addSprite(JSON.stringify(emptyItem));
     }
     handleNewSprite (spriteJSONString) {
-        return this.props.vm.addSprite(spriteJSONString)
-            .then(this.handleActivateBlocksTab)
-            .catch(err => {
-                log.error(err);
-            });
+        return this.props.vm.addSprite(spriteJSONString).catch(err => {
+            log.error(err);
+        });
     }
     handleFileUploadClick () {
         this.fileInput.click();
@@ -216,11 +188,11 @@ class TargetPane extends React.Component {
         const {
             dispatchUpdateRestore,
             isRtl,
-            onActivateTab,
             onCloseImporting,
             onHighlightTarget,
             onReceivedBlocks,
             onShowImporting,
+            vm, // eslint-disable-line no-unused-vars
             workspaceMetrics,
             ...componentProps
         } = this.props;
@@ -229,7 +201,6 @@ class TargetPane extends React.Component {
             <TargetPaneComponent
                 {...componentProps}
                 fileInputRef={this.setFileInput}
-                onActivateBlocksTab={this.handleActivateBlocksTab}
                 onChangeSpriteDirection={this.handleChangeSpriteDirection}
                 onChangeSpriteName={this.handleChangeSpriteName}
                 onChangeSpriteRotationStyle={this.handleChangeSpriteRotationStyle}
@@ -245,7 +216,6 @@ class TargetPane extends React.Component {
                 onPaintSpriteClick={this.handlePaintSpriteClick}
                 onSelectSprite={this.handleSelectSprite}
                 onSpriteUpload={this.handleSpriteUpload}
-                onSurpriseSpriteClick={this.handleSurpriseSpriteClick}
             />
         );
     }
@@ -253,7 +223,6 @@ class TargetPane extends React.Component {
 
 const {
     onSelectSprite, // eslint-disable-line no-unused-vars
-    onActivateBlocksTab, // eslint-disable-line no-unused-vars
     ...targetPaneProps
 } = TargetPaneComponent.propTypes;
 
@@ -268,7 +237,6 @@ const mapStateToProps = state => ({
     editingTarget: state.scratchGui.targets.editingTarget,
     hoveredTarget: state.scratchGui.hoveredTarget,
     isRtl: state.locales.isRtl,
-    spriteLibraryVisible: state.scratchGui.modals.spriteLibrary,
     sprites: state.scratchGui.targets.sprites,
     stage: state.scratchGui.targets.stage,
     raiseSprites: state.scratchGui.blockDrag,
@@ -276,16 +244,6 @@ const mapStateToProps = state => ({
 });
 
 const mapDispatchToProps = dispatch => ({
-    onNewSpriteClick: e => {
-        e.preventDefault();
-        dispatch(openSpriteLibrary());
-    },
-    onRequestCloseSpriteLibrary: () => {
-        dispatch(closeSpriteLibrary());
-    },
-    onActivateTab: tabIndex => {
-        dispatch(activateTab(tabIndex));
-    },
     onReceivedBlocks: receivedBlocks => {
         dispatch(setReceivedBlocks(receivedBlocks));
     },

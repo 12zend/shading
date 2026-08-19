@@ -11,27 +11,14 @@ import {isRtl} from '@turbowarp/scratch-l10n';
 
 import styles from './sprite-selector.css';
 
-import fileUploadIcon from '../action-menu/icon--file-upload.svg';
 import paintIcon from '../action-menu/icon--paint.svg';
 import spriteIcon from '../action-menu/icon--sprite.svg';
-import surpriseIcon from '../action-menu/icon--surprise.svg';
-import searchIcon from '../action-menu/icon--search.svg';
 
 const messages = defineMessages({
-    addSpriteFromLibrary: {
-        id: 'gui.spriteSelector.addSpriteFromLibrary',
-        description: 'Button to add a sprite in the target pane from library',
-        defaultMessage: 'Choose a Sprite'
-    },
     addSpriteFromPaint: {
         id: 'gui.spriteSelector.addSpriteFromPaint',
         description: 'Button to add a sprite in the target pane from paint',
         defaultMessage: 'Paint'
-    },
-    addSpriteFromSurprise: {
-        id: 'gui.spriteSelector.addSpriteFromSurprise',
-        description: 'Button to add a random sprite in the target pane',
-        defaultMessage: 'Surprise'
     },
     addSpriteFromFile: {
         id: 'gui.spriteSelector.addSpriteFromFile',
@@ -57,11 +44,9 @@ const SpriteSelectorComponent = function (props) {
         onDuplicateSprite,
         onExportSprite,
         onFileUploadClick,
-        onNewSpriteClick,
         onPaintSpriteClick,
         onSelectSprite,
         onSpriteUpload,
-        onSurpriseSpriteClick,
         raised,
         selectedId,
         spriteFileInput,
@@ -112,35 +97,25 @@ const SpriteSelectorComponent = function (props) {
                 onExportSprite={onExportSprite}
                 onSelectSprite={onSelectSprite}
             />
+            <input
+                accept=".svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .sprite2, .sprite3, .gif"
+                className={styles.fileInput}
+                multiple
+                ref={spriteFileInput}
+                type="file"
+                onChange={onSpriteUpload}
+            />
             <ActionMenu
                 className={styles.addButton}
                 img={spriteIcon}
-                moreButtons={[
-                    {
-                        title: intl.formatMessage(messages.addSpriteFromFile),
-                        img: fileUploadIcon,
-                        onClick: onFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .sprite2, .sprite3, .gif',
-                        fileChange: onSpriteUpload,
-                        fileInput: spriteFileInput,
-                        fileMultiple: true
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromSurprise),
-                        img: surpriseIcon,
-                        onClick: onSurpriseSpriteClick // TODO need real function for this
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromPaint),
-                        img: paintIcon,
-                        onClick: onPaintSpriteClick // TODO need real function for this
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromLibrary),
-                        img: searchIcon,
-                        onClick: onNewSpriteClick
-                    }
-                ]}
-                title={intl.formatMessage(messages.addSpriteFromLibrary)}
+                moreButtons={[{
+                    title: intl.formatMessage(messages.addSpriteFromPaint),
+                    img: paintIcon,
+                    onClick: onPaintSpriteClick // TODO need real function for this
+                }]}
+                title={intl.formatMessage(messages.addSpriteFromFile)}
                 tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onNewSpriteClick}
+                onClick={onFileUploadClick}
             />
         </Box>
     );
@@ -165,11 +140,9 @@ SpriteSelectorComponent.propTypes = {
     onDuplicateSprite: PropTypes.func,
     onExportSprite: PropTypes.func,
     onFileUploadClick: PropTypes.func,
-    onNewSpriteClick: PropTypes.func,
     onPaintSpriteClick: PropTypes.func,
     onSelectSprite: PropTypes.func,
     onSpriteUpload: PropTypes.func,
-    onSurpriseSpriteClick: PropTypes.func,
     raised: PropTypes.bool,
     selectedId: PropTypes.string,
     spriteFileInput: PropTypes.func,

@@ -1,17 +1,112 @@
-import {PRIMARY, SECONDARY, TERTIARY} from './object-blocks';
+import {DRAW_SOURCES, PRIMARY, SECONDARY, TERTIARY, decodeDrawAsset, encodeDrawAsset} from './object-blocks';
+import log from './log';
 
-const SOURCE_OPTIONS = [
-    ['costume', 'costume'],
-    ['video', 'video'],
-    ['text', 'text'],
-    ['model', 'model']
-];
-
-const emptyMenu = () => [['', '']];
+const IMPORT_VALUE = '__movie_import__';
+const SOURCE_LABELS = {
+    costume: 'Costume',
+    model: 'Model',
+    text: 'Font',
+    video: 'Video'
+};
+const IMPORT_ACCEPT = [
+    '.svg', '.png', '.bmp', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.exr',
+    '.wav', '.mp3', '.ogg', '.oga', '.flac', '.aac', '.m4a',
+    '.mp4', '.webm', '.ogv', '.mov',
+    '.ttf', '.otf', '.woff', '.woff2',
+    '.glb', '.pmx', '.fbx', '.obj', '.mtl',
+    '.spa', '.sph', '.tga', '.vmd', '.vpd'
+].join(',');
 
 const getFieldSourceBlock = field => {
     if (field && typeof field.getSourceBlock === 'function') return field.getSourceBlock();
     return field && field.sourceBlock_;
+};
+
+const getAssetOptions = vm => {
+    const options = [['Import', IMPORT_VALUE]];
+    const addOptions = (source, assets) => {
+        assets.forEach(asset => {
+            const name = typeof asset === 'string' ? asset : asset.name;
+            if (!name) return;
+            options.push([
+                `${SOURCE_LABELS[source]}: ${name}`,
+                encodeDrawAsset(source, name)
+            ]);
+        });
+    };
+
+    const target = vm.editingTarget;
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    if (target && typeof target.getCostumes === 'function') addOptions('costume', target.getCostumes());
+    if (manager && target) {
+        addOptions('video', manager.getVideos(target));
+        addOptions('model', manager.getModels(target));
+    }
+
+    const fonts = [
+        {name: 'Sans Serif', value: 'sans-serif'},
+        {name: 'Serif', value: 'serif'},
+        {name: 'Monospace', value: 'monospace'}
+    ];
+    const fontManager = vm.runtime && vm.runtime.fontManager;
+    if (fontManager && typeof fontManager.getFonts === 'function') {
+        fontManager.getFonts().forEach(font => fonts.push({name: font.name, value: font.name}));
+    }
+    fonts.forEach(font => options.push([
+        `${SOURCE_LABELS.text}: ${font.name}`,
+        encodeDrawAsset('text', font.value)
+    ]));
+
+    return options;
+};
+
+const showImportError = (block, error) => {
+    const message = error && error.message ? error.message : String(error);
+    if (block && typeof block.setWarningText === 'function') block.setWarningText(message);
+    log.error(error);
+};
+
+const openImportPicker = (vm, block) => {
+    if (typeof document === 'undefined' || !document.body) return;
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    const target = vm.editingTarget;
+    if (!manager || typeof manager.importFiles !== 'function' || !target) {
+        showImportError(block, new Error('Select an object before importing an asset.'));
+        return;
+    }
+
+    const selection = decodeDrawAsset(
+        block.getFieldValue('ASSET'),
+        block.getFieldValue('SOURCE') || block.objectDrawSource_
+    );
+    const input = document.createElement('input');
+    input.accept = IMPORT_ACCEPT;
+    input.multiple = true;
+    input.type = 'file';
+    input.style.display = 'none';
+    const cleanup = () => {
+        if (input.parentNode) input.parentNode.removeChild(input);
+    };
+    input.addEventListener('cancel', cleanup);
+    input.addEventListener('change', () => {
+        const files = Array.from(input.files || []);
+        cleanup();
+        if (!files.length) return;
+        if (block && typeof block.setWarningText === 'function') block.setWarningText(null);
+        manager.importFiles(target.id, files, {
+            modelName: selection.source === 'model' ? selection.asset : ''
+        }).then(imported => {
+            const drawable = imported.slice().reverse()
+                .find(asset => DRAW_SOURCES.includes(asset.source));
+            if (drawable && typeof block.setDrawAsset_ === 'function') {
+                block.setDrawAsset_(drawable.source, drawable.name);
+            }
+            vm.refreshWorkspace();
+        })
+            .catch(error => showImportError(block, error));
+    });
+    document.body.appendChild(input);
+    input.click();
 };
 
 const makeObjectRowsRenderer = ScratchBlocks => function (iconWidth) {
@@ -128,53 +223,31 @@ const makeObjectRightEdgeRenderer = ScratchBlocks => function (steps, inputRows,
 };
 
 const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
-    const menuForSource = source => {
-        const target = vm.editingTarget;
-        const manager = vm.runtime && vm.runtime.movieAssetManager;
-        if (source === 'costume' && target && typeof target.getCostumes === 'function') {
-            const costumes = target.getCostumes();
-            return costumes.length ? costumes.map(costume => [costume.name, costume.name]) : emptyMenu();
-        }
-        if (source === 'video' && manager && target) {
-            const videos = manager.getVideos(target);
-            return videos.length ? videos.map(video => [video.name, video.name]) : emptyMenu();
-        }
-        if (source === 'model' && manager && target) {
-            const models = manager.getModels(target);
-            return models.length ? models.map(model => [model.name, model.name]) : emptyMenu();
-        }
-        if (source === 'text') {
-            const defaults = [
-                ['Sans Serif', 'sans-serif'],
-                ['Serif', 'serif'],
-                ['Monospace', 'monospace']
-            ];
-            const fontManager = vm.runtime && vm.runtime.fontManager;
-            const fonts = fontManager ? fontManager.getFonts().map(font => [font.name, font.name]) : [];
-            return defaults.concat(fonts);
-        }
-        return emptyMenu();
-    };
-
     ScratchBlocks.Blocks.objects_draw = {
         init: function () {
             const assetOptions = function () {
                 // ScratchBlocks binds dropdown callbacks to the field instance.
                 // eslint-disable-next-line no-invalid-this
-                const block = getFieldSourceBlock(this);
-                return menuForSource(block ? block.objectDrawSource_ : 'costume');
+                return getAssetOptions(vm);
             };
-            const sourceValidator = function (value) {
+            const assetValidator = function (value) {
                 // ScratchBlocks binds dropdown callbacks to the field instance.
                 // eslint-disable-next-line no-invalid-this
                 const block = getFieldSourceBlock(this);
-                if (block) block.updateDrawSource_(value);
+                if (value === IMPORT_VALUE) {
+                    openImportPicker(vm, block);
+                    return (block && block.getFieldValue('ASSET')) || IMPORT_VALUE;
+                }
+                if (block) block.updateDrawSelection_(value);
                 return value;
             };
+            const SourceField = ScratchBlocks.FieldLabelSerializable || ScratchBlocks.FieldLabel;
             this.appendDummyInput('DRAW')
                 .appendField('draw')
-                .appendField(new ScratchBlocks.FieldDropdown(SOURCE_OPTIONS, sourceValidator), 'SOURCE')
-                .appendField(new ScratchBlocks.FieldDropdown(assetOptions), 'ASSET');
+                .appendField(new ScratchBlocks.FieldDropdown(assetOptions, assetValidator), 'ASSET');
+            this.appendDummyInput('LEGACY_SOURCE')
+                .appendField(new SourceField('costume'), 'SOURCE');
+            this.getInput('LEGACY_SOURCE').setVisible(false);
             this.appendValueInput('TEXT').appendField('text:');
             const position = this.appendValueInput('PX').appendField('position x:');
             position.objectStartRow_ = true;
@@ -206,9 +279,36 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             this.setOnChange(function () {
                 // ScratchBlocks binds onchange handlers to the block instance.
                 // eslint-disable-next-line no-invalid-this
-                this.syncDrawTextVisibility_();
+                const block = this;
+                block.syncDrawTextVisibility_();
+                const value = block.getFieldValue('ASSET');
+                if (value && value !== IMPORT_VALUE) {
+                    const selection = decodeDrawAsset(
+                        value,
+                        block.getFieldValue('SOURCE') || block.objectDrawSource_ || 'costume'
+                    );
+                    const normalized = encodeDrawAsset(selection.source, selection.asset);
+                    if (value !== normalized) block.getField('ASSET').setValue(normalized);
+                }
             });
-            this.updateDrawSource_(this.getFieldValue('SOURCE'));
+            this.objectDrawSource_ = this.getFieldValue('SOURCE') || 'costume';
+            this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
+        },
+        updateDrawSelection_: function (requestedValue) {
+            const selection = decodeDrawAsset(
+                requestedValue === IMPORT_VALUE ? '' : requestedValue,
+                this.getFieldValue('SOURCE') || this.objectDrawSource_ || 'costume'
+            );
+            this.objectDrawSource_ = selection.source;
+            const sourceField = this.getField('SOURCE');
+            if (sourceField) sourceField.setValue(selection.source);
+            this.syncDrawTextVisibility_();
+        },
+        setDrawAsset_: function (source, asset) {
+            this.updateDrawSelection_(encodeDrawAsset(source, asset));
+            const assetField = this.getField('ASSET');
+            if (assetField) assetField.setValue(encodeDrawAsset(source, asset));
+            if (this.rendered) this.render();
         },
         syncDrawTextVisibility_: function () {
             const textInput = this.getInput('TEXT');
@@ -226,25 +326,15 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 for (const block of renderList) block.render();
             }
         },
-        updateDrawSource_: function (requestedSource) {
-            const source = String(requestedSource || 'costume');
-            this.objectDrawSource_ = source;
-            this.syncDrawTextVisibility_();
-            const assetField = this.getField('ASSET');
-            if (assetField) {
-                const options = menuForSource(source);
-                const values = options.map(option => option[1]);
-                if (!values.includes(assetField.getValue())) assetField.setValue(values[0]);
-            }
-            if (this.rendered) this.render();
-        },
         mutationToDom: function () {
             const mutation = document.createElement('mutation');
-            mutation.setAttribute('source', this.getFieldValue('SOURCE') || 'costume');
+            mutation.setAttribute('source', this.objectDrawSource_ || 'costume');
             return mutation;
         },
         domToMutation: function (mutation) {
-            this.updateDrawSource_(mutation.getAttribute('source') || 'costume');
+            const source = mutation.getAttribute('source') || 'costume';
+            this.objectDrawSource_ = source;
+            this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
         }
     };
 
@@ -267,5 +357,5 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
     };
 };
 
-export {getFieldSourceBlock};
+export {getFieldSourceBlock, IMPORT_VALUE, getAssetOptions};
 export default installObjectBlockDefinitions;

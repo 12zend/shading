@@ -6,6 +6,27 @@ const EXTENSION_ID = 'objects';
 const PRIMARY = '#4968D4';
 const SECONDARY = '#3E59B8';
 const TERTIARY = '#334A99';
+const DRAW_SOURCES = ['costume', 'video', 'text', 'model'];
+
+const encodeDrawAsset = (source, asset) => `${source}:${asset}`;
+
+const decodeDrawAsset = (value, fallbackSource = 'costume') => {
+    const stringValue = String(value || '');
+    const separator = stringValue.indexOf(':');
+    const source = separator > 0 ? stringValue.slice(0, separator) : '';
+
+    if (DRAW_SOURCES.includes(source)) {
+        return {
+            asset: stringValue.slice(separator + 1),
+            source
+        };
+    }
+
+    return {
+        asset: stringValue,
+        source: String(fallbackSource || 'costume').toLowerCase()
+    };
+};
 
 const trackPendingDraw = (pendingDraw, util, manager) => {
     if (!pendingDraw || typeof pendingDraw.then !== 'function') return;
@@ -67,7 +88,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'draw',
                     blockType: BlockType.COMMAND,
-                    text: 'draw [SOURCE] [ASSET]',
+                    text: 'draw [ASSET]',
                     arguments: {
                         SOURCE: {type: ArgumentType.STRING, defaultValue: 'costume'},
                         ASSET: {type: ArgumentType.STRING, defaultValue: ''},
@@ -99,14 +120,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     draw (args, util) {
+        const selection = decodeDrawAsset(args.ASSET, args.SOURCE);
         const context = {
-            asset: args.ASSET,
+            asset: selection.asset,
             height: args.HEIGHT,
             position: {x: args.PX, y: args.PY, z: args.PZ},
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ},
             size: args.SIZE,
-            source: String(args.SOURCE || 'costume').toLowerCase(),
+            source: selection.source,
             text: args.TEXT,
             width: args.WIDTH
         };
@@ -160,6 +182,9 @@ export {
     PRIMARY,
     SECONDARY,
     TERTIARY,
+    DRAW_SOURCES,
+    encodeDrawAsset,
+    decodeDrawAsset,
     createObjectBlocksClass,
     installObjectBlocks as default
 };

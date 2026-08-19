@@ -36,10 +36,6 @@ import {setConnectionModalExtensionId} from '../reducers/connection-modal';
 import {updateMetrics} from '../reducers/workspace-metrics';
 import {isTimeTravel2020} from '../reducers/time-travel';
 
-import {
-    activateTab,
-    SOUNDS_TAB_INDEX
-} from '../reducers/editor-tab';
 import AddonHooks from '../addons/hooks.js';
 import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
 import {findTopBlock} from '../lib/backpack/code-payload.js';
@@ -853,7 +849,6 @@ const mapDispatchToProps = dispatch => ({
         dispatch(openConnectionModal());
     },
     onOpenSoundRecorder: () => {
-        dispatch(activateTab(SOUNDS_TAB_INDEX));
         dispatch(openSoundRecorder());
     },
     reduxOnOpenCustomExtensionModal: () => dispatch(openCustomExtensionModal()),

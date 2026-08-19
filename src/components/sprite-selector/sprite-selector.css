@@ -77,6 +77,10 @@
     bottom: 0.75rem;
 }
 
+.file-input {
+    display: none;
+}
+
 [dir="ltr"] .add-button {
     right: 1rem;
 }

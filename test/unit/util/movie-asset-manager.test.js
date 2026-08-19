@@ -108,6 +108,35 @@ const makeTimelineManager = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('routes unified imports by file extension', async () => {
+        const manager = makeManager();
+        manager.addModelsFromFiles = jest.fn(async () => [{name: 'scene'}]);
+        manager.addCostumesFromFile = jest.fn(async () => [{name: 'image'}]);
+        manager.addSoundFromFile = jest.fn(async () => ({name: 'audio'}));
+        manager.addVideoFromFile = jest.fn(async () => ({name: 'clip'}));
+        manager.addFontFromFile = jest.fn(async () => 'typeface');
+
+        const modelFiles = [
+            {name: 'scene.obj'},
+            {name: 'scene.mtl'},
+            {name: 'texture.png'}
+        ];
+        await manager.importFiles('target', modelFiles);
+        expect(manager.addModelsFromFiles).toHaveBeenCalledWith('target', modelFiles);
+        expect(manager.addCostumesFromFile).not.toHaveBeenCalled();
+
+        await manager.importFiles('target', [
+            {name: 'image.svg'},
+            {name: 'audio.wav'},
+            {name: 'clip.webm'},
+            {name: 'typeface.woff2'}
+        ]);
+        expect(manager.addCostumesFromFile).toHaveBeenCalledWith('target', {name: 'image.svg'});
+        expect(manager.addSoundFromFile).toHaveBeenCalledWith('target', {name: 'audio.wav'});
+        expect(manager.addVideoFromFile).toHaveBeenCalledWith('target', {name: 'clip.webm'});
+        expect(manager.addFontFromFile).toHaveBeenCalledWith({name: 'typeface.woff2'});
+    });
+
     test('sets exact sprite sizes and restores position fencing', () => {
         const manager = makeManager();
         manager.runtime.runtimeOptions = {fencing: true};

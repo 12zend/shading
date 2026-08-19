@@ -51,6 +51,33 @@ const MIME_TYPES = {
     webm: 'video/webm'
 };
 
+const IMPORT_MIME_TYPES = {
+    aac: 'audio/aac',
+    bmp: 'image/bmp',
+    flac: 'audio/flac',
+    gif: 'image/gif',
+    jfif: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    m4a: 'audio/mp4',
+    mp3: 'audio/mpeg',
+    oga: 'audio/ogg',
+    ogg: 'audio/ogg',
+    otf: 'font/otf',
+    png: 'image/png',
+    svg: 'image/svg+xml',
+    wav: 'audio/wav',
+    webp: 'image/webp',
+    woff: 'font/woff',
+    woff2: 'font/woff2'
+};
+
+const COSTUME_EXTENSIONS = ['svg', 'png', 'bmp', 'jpg', 'jpeg', 'jfif', 'webp', 'gif', 'exr'];
+const SOUND_EXTENSIONS = ['wav', 'mp3', 'ogg', 'oga', 'flac', 'aac', 'm4a'];
+const FONT_EXTENSIONS = ['ttf', 'otf', 'woff', 'woff2'];
+const MODEL_SOURCE_EXTENSIONS = ['glb', 'pmx', 'fbx', 'obj'];
+const MOTION_EXTENSIONS = ['vmd', 'vpd'];
+
 const MP4_VIDEO_MIME_TYPES = [
     'video/mp4;codecs=avc1.42E01E',
     'video/mp4;codecs=avc1.4D401E',
@@ -127,7 +154,14 @@ const getExtension = fileName => {
 
 const getName = fileName => fileName.replace(/\.[^.]+$/, '') || 'video';
 
+const getImportMimeType = file => file.type || IMPORT_MIME_TYPES[getExtension(file.name)] || '';
+
+const normalizeImportError = error => (
+    error instanceof Error ? error : new Error(String(error))
+);
+
 const MODEL_TEXTURE_FORMATS = ['bmp', 'gif', 'jpeg', 'jpg', 'png', 'spa', 'sph', 'tga', 'webp'];
+const MODEL_SUPPORT_EXTENSIONS = ['mtl'].concat(MODEL_TEXTURE_FORMATS);
 
 const getUploadPath = file => String(file.webkitRelativePath || file.name).replace(/\\/g, '/');
 
@@ -2374,6 +2408,121 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.emitProjectChanged();
         this.vm.refreshWorkspace();
         return name;
+    }
+
+    async addCostumesFromFile (targetId, file) {
+        const {costumeUpload} = await import('./file-uploader');
+        const data = await readFile(file);
+        return new Promise((resolve, reject) => {
+            const handleError = error => reject(normalizeImportError(error));
+            try {
+                costumeUpload(
+                    copyArrayBuffer(data),
+                    getImportMimeType(file),
+                    this.vm,
+                    costumes => {
+                        const baseName = getName(file.name);
+                        Promise.all(costumes.map((costume, index) => {
+                            costume.name = `${baseName}${index ? index + 1 : ''}`;
+                            return Promise.resolve(this.vm.addCostume(costume.md5, costume, targetId));
+                        })).then(() => resolve(costumes), handleError);
+                    },
+                    handleError
+                );
+            } catch (error) {
+                handleError(error);
+            }
+        });
+    }
+
+    async addSoundFromFile (targetId, file) {
+        const {soundUpload} = await import('./file-uploader');
+        const data = await readFile(file);
+        return new Promise((resolve, reject) => {
+            const handleError = error => reject(normalizeImportError(error));
+            try {
+                soundUpload(
+                    data,
+                    getImportMimeType(file),
+                    this.runtime.storage,
+                    sound => {
+                        sound.name = getName(file.name);
+                        Promise.resolve(this.vm.addSound(sound, targetId)).then(() => resolve(sound), handleError);
+                    },
+                    handleError
+                );
+            } catch (error) {
+                handleError(error);
+            }
+        });
+    }
+
+    async importFiles (targetId, files, options = {}) {
+        const selectedFiles = Array.from(files || []);
+        if (!selectedFiles.length) return [];
+
+        const extensions = selectedFiles.map(file => getExtension(file.name));
+        const modelSourceFiles = selectedFiles.filter(file => MODEL_SOURCE_EXTENSIONS.includes(
+            getExtension(file.name)
+        ));
+        const modelFiles = modelSourceFiles.length ? selectedFiles.filter(file => MODEL_SUPPORT_EXTENSIONS.concat(
+            MODEL_SOURCE_EXTENSIONS
+        ).includes(getExtension(file.name))) : [];
+        const consumedModelFiles = new Set(modelFiles);
+        const supportedExtensions = new Set([
+            ...Object.keys(MIME_TYPES),
+            ...COSTUME_EXTENSIONS,
+            ...SOUND_EXTENSIONS,
+            ...FONT_EXTENSIONS,
+            ...MOTION_EXTENSIONS
+        ]);
+        const unsupported = selectedFiles.filter((file, index) => (
+            !consumedModelFiles.has(file) && !supportedExtensions.has(extensions[index])
+        ));
+        if (unsupported.length) {
+            throw new Error(`Unsupported file type: ${getExtension(unsupported[0].name) || 'unknown'}.`);
+        }
+
+        const imported = [];
+        if (modelSourceFiles.length) {
+            const models = await this.addModelsFromFiles(targetId, modelFiles);
+            imported.push(...models.map(model => ({
+                name: model.name,
+                source: 'model'
+            })));
+        }
+
+        const motionFiles = selectedFiles.filter(file => MOTION_EXTENSIONS.includes(getExtension(file.name)));
+        if (motionFiles.length) {
+            const models = this.getModels(targetId);
+            const requestedModel = options.modelName && models.find(model => model.name === options.modelName);
+            const modelIndex = requestedModel ? models.indexOf(requestedModel) : models.length - 1;
+            const model = await this.addModelMotionsFromFiles(targetId, modelIndex, motionFiles);
+            imported.push({name: model.name, source: 'model'});
+        }
+
+        for (const file of selectedFiles) {
+            const extension = getExtension(file.name);
+            if (consumedModelFiles.has(file) || MOTION_EXTENSIONS.includes(extension)) continue;
+            if (Object.prototype.hasOwnProperty.call(MIME_TYPES, extension)) {
+                const video = await this.addVideoFromFile(targetId, file);
+                imported.push({name: video.name, source: 'video'});
+            } else if (FONT_EXTENSIONS.includes(extension)) {
+                const name = await this.addFontFromFile(file);
+                imported.push({name, source: 'text'});
+            } else if (COSTUME_EXTENSIONS.includes(extension)) {
+                const costumes = await this.addCostumesFromFile(targetId, file);
+                imported.push(...costumes.map(costume => ({
+                    name: costume.name,
+                    source: 'costume'
+                })));
+            } else if (SOUND_EXTENSIONS.includes(extension)) {
+                const sound = await this.addSoundFromFile(targetId, file);
+                imported.push({name: sound.name, source: 'sound'});
+            }
+        }
+
+        return imported;
     }
 
     deleteFont (index) {

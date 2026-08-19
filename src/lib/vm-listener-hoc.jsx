@@ -25,7 +25,6 @@ import {
 import {setCustomStageSize} from '../reducers/custom-stage-size';
 import {openUnknownPlatformModal} from '../reducers/modals';
 import implementGuiAPI from './tw-extension-gui-api';
-import {BLOCKS_TAB_INDEX} from '../reducers/editor-tab';
 
 let compileErrorCounter = 0;
 
@@ -303,8 +302,7 @@ const vmListenerHOC = function (WrappedComponent) {
         ),
         isEditorUsable: (
             !state.scratchGui.mode.isPlayerOnly &&
-            !state.scratchGui.mode.isFullScreen &&
-            state.scratchGui.editorTab.activeTabIndex === BLOCKS_TAB_INDEX
+            !state.scratchGui.mode.isFullScreen
         ),
         projectChanged: state.scratchGui.projectChanged,
         // Do not emit target or project updates in fullscreen or player only mode

@@ -2,7 +2,11 @@ import VM from 'scratch-vm';
 import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
 import Sprite from 'scratch-vm/src/sprites/sprite';
 
-import installObjectBlocks, {createObjectBlocksClass} from '../../../src/lib/object-blocks';
+import installObjectBlocks, {
+    createObjectBlocksClass,
+    decodeDrawAsset,
+    encodeDrawAsset
+} from '../../../src/lib/object-blocks';
 import {getFieldSourceBlock} from '../../../src/lib/object-blocks-ui';
 
 const makeUtil = () => ({
@@ -51,6 +55,17 @@ describe('Objects blocks', () => {
 
         expect(getFieldSourceBlock({sourceBlock_: sourceBlock})).toBe(sourceBlock);
         expect(getFieldSourceBlock({getSourceBlock: () => sourceBlock})).toBe(sourceBlock);
+    });
+
+    test('encodes the combined draw asset selection while keeping legacy source fields readable', () => {
+        expect(decodeDrawAsset(encodeDrawAsset('model', 'Hero:Idle'), 'costume')).toEqual({
+            asset: 'Hero:Idle',
+            source: 'model'
+        });
+        expect(decodeDrawAsset('legacy-costume', 'costume')).toEqual({
+            asset: 'legacy-costume',
+            source: 'costume'
+        });
     });
 
     test('exposes one draw command instead of separate transform commands', () => {
