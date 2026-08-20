@@ -78,21 +78,31 @@ describe('block number scrubbing', () => {
         delete global.document;
     });
 
-    test('changes a number horizontally and uses a tenth of the rate with Shift', () => {
+    test('only changes a number while Shift is held and uses the fine drag rate', () => {
         const ScratchBlocks = makeScratchBlocks();
         const onChange = jest.fn();
         installBlockNumberScrubbing(ScratchBlocks, onChange);
         const field = makeField(ScratchBlocks);
-        const gesture = makeGesture(ScratchBlocks, field);
+        const blockDragGesture = makeGesture(ScratchBlocks, field);
 
-        gesture.handleMove({clientX: 5, clientY: 0, shiftKey: false});
-        gesture.handleMove({clientX: 15, clientY: 0, shiftKey: true});
+        blockDragGesture.handleMove({clientX: 5, clientY: 0, shiftKey: false});
 
-        expect(field.setValue.mock.calls).toEqual([['15'], ['16']]);
-        expect(onChange).toHaveBeenCalledTimes(2);
+        expect(blockDragGesture.usedOriginalDrag_).toBe(true);
+        expect(blockDragGesture.movieNumberScrub_).toBeUndefined();
+        expect(field.setValue).not.toHaveBeenCalled();
+        expect(document.body.style.cursor).toBe('');
+
+        const scrubGesture = makeGesture(ScratchBlocks, field);
+        scrubGesture.handleMove({clientX: 5, clientY: 0, shiftKey: true});
+        scrubGesture.handleMove({clientX: 15, clientY: 0, shiftKey: true});
+        scrubGesture.handleMove({clientX: 25, clientY: 0, shiftKey: false});
+        scrubGesture.handleMove({clientX: 35, clientY: 0, shiftKey: true});
+
+        expect(field.setValue.mock.calls).toEqual([['10.5'], ['11.5'], ['12.5']]);
+        expect(onChange).toHaveBeenCalledTimes(3);
         expect(document.body.style.cursor).toBe('ew-resize');
 
-        gesture.handleUp({clientX: 15, clientY: 0, shiftKey: true});
+        scrubGesture.handleUp({clientX: 35, clientY: 0, shiftKey: true});
         expect(ScratchBlocks.Events.setGroup.mock.calls).toEqual([[true], [false]]);
         expect(document.body.style.cursor).toBe('');
     });
@@ -116,7 +126,7 @@ describe('block number scrubbing', () => {
         field.negativeAllowed_ = false;
         const gesture = makeGesture(ScratchBlocks, field);
 
-        gesture.handleMove({clientX: -5, clientY: 0, shiftKey: false});
+        gesture.handleMove({clientX: -50, clientY: 0, shiftKey: true});
 
         expect(field.setValue).toHaveBeenLastCalledWith('0');
     });
@@ -173,7 +183,7 @@ describe('block number scrubbing', () => {
         installBlockNumberScrubbing(ScratchBlocks);
         const gesture = makeGesture(ScratchBlocks, makeField(ScratchBlocks));
 
-        gesture.handleMove({clientX: 0, clientY: 5, shiftKey: false});
+        gesture.handleMove({clientX: 0, clientY: 5, shiftKey: true});
 
         expect(gesture.usedOriginalDrag_).toBe(true);
         expect(gesture.movieNumberScrub_).toBeUndefined();
@@ -188,12 +198,12 @@ describe('block number scrubbing', () => {
         dropdown.isCurrentlyEditable = () => true;
         dropdown.getValue = () => 'last';
         const dropdownGesture = makeGesture(ScratchBlocks, dropdown);
-        dropdownGesture.handleMove({clientX: 5, clientY: 0, shiftKey: false});
+        dropdownGesture.handleMove({clientX: 5, clientY: 0, shiftKey: true});
 
         const flyoutField = makeField(ScratchBlocks);
         flyoutField.sourceBlock_.isInFlyout = true;
         const flyoutGesture = makeGesture(ScratchBlocks, flyoutField);
-        flyoutGesture.handleMove({clientX: 5, clientY: 0, shiftKey: false});
+        flyoutGesture.handleMove({clientX: 5, clientY: 0, shiftKey: true});
 
         expect(dropdownGesture.usedOriginalDrag_).toBe(true);
         expect(flyoutGesture.usedOriginalDrag_).toBe(true);

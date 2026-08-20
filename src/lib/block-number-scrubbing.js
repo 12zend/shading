@@ -1,4 +1,3 @@
-const NORMAL_DRAG_RATE = 1;
 const FINE_DRAG_RATE = 0.1;
 const ROUNDING_FACTOR = 1e10;
 
@@ -13,7 +12,8 @@ const isNumericField = (ScratchBlocks, field) => (
 const canStartScrubbing = (ScratchBlocks, gesture) => {
     const field = gesture.startField_;
     const delta = gesture.currentDragDeltaXY_;
-    return field &&
+    return gesture.movieNumberScrubShiftKey_ &&
+        field &&
         isNumericField(ScratchBlocks, field) &&
         field.isCurrentlyEditable() &&
         !field.useTouchInteraction_ &&
@@ -60,9 +60,9 @@ const updateScrubbing = (ScratchBlocks, gesture, event) => {
 
     const deltaX = event.clientX - state.lastClientX;
     state.lastClientX = event.clientX;
-    if (!deltaX) return;
+    if (!event.shiftKey || !deltaX) return;
 
-    state.value += deltaX * (event.shiftKey ? FINE_DRAG_RATE : NORMAL_DRAG_RATE);
+    state.value += deltaX * FINE_DRAG_RATE;
     const previousValue = state.field.getValue();
     state.field.setValue(formatValue(state.field, state.value));
     if (
@@ -109,8 +109,8 @@ const installDirectInputChangeCallback = (ScratchBlocks, FieldClass) => {
 
 /**
  * Add horizontal scrubbing to every numeric Scratch Blocks field.
- * A click still opens the regular editor, while a vertical drag continues to
- * move the block. Holding Shift changes the drag rate from 1 to 0.1 per pixel.
+ * Holding Shift while dragging horizontally changes the value by 0.1 per pixel.
+ * Without Shift, or when dragging vertically, the regular block gesture is used.
  * @param {object} ScratchBlocks Scratch Blocks namespace.
  * @param {Function} onChange Called after a drag or direct edit changes the field value.
  */
@@ -118,10 +118,6 @@ const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
     ScratchBlocks.movieNumberScrubChangeCallback_ = onChange;
     if (ScratchBlocks.movieNumberScrubbingInstalled_) return;
     ScratchBlocks.movieNumberScrubbingInstalled_ = true;
-
-    ScratchBlocks.FieldNumber.prototype.CURSOR = 'ew-resize';
-    ScratchBlocks.FieldAngle.prototype.CURSOR = 'ew-resize';
-    ScratchBlocks.FieldNumberDropdown.prototype.CURSOR = 'ew-resize';
 
     installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldNumber);
     installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldAngle);
@@ -143,17 +139,20 @@ const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
     };
 
     gesturePrototype.handleMove = function (event) {
+        this.movieNumberScrubShiftKey_ = Boolean(event.shiftKey);
         originalHandleMove.call(this, event);
         updateScrubbing(ScratchBlocks, this, event);
     };
 
     gesturePrototype.handleUp = function (event) {
+        this.movieNumberScrubShiftKey_ = Boolean(event.shiftKey);
         updateScrubbing(ScratchBlocks, this, event);
         originalHandleUp.call(this, event);
     };
 
     gesturePrototype.dispose = function () {
         stopScrubbing(ScratchBlocks, this);
+        delete this.movieNumberScrubShiftKey_;
         originalDispose.call(this);
     };
 };
