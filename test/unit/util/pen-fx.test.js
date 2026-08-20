@@ -418,6 +418,20 @@ describe('built-in Pen FX category', () => {
         expect(penFX.engine.cancelFrame).toHaveBeenCalledTimes(1);
     });
 
+    test('draws the default background synchronously into the Pen layer', () => {
+        const pen = {_getPenLayerID: jest.fn(() => 1)};
+        const vm = {runtime: {ext_pen: pen, renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {drawDefaultBackground: jest.fn(() => true)};
+
+        const result = penFX.drawDefaultBackground([1, 1, 1, 1]);
+
+        expect(result).toBeUndefined();
+        expect(pen._getPenLayerID).toHaveBeenCalledTimes(1);
+        expect(penFX.engine.drawDefaultBackground).toHaveBeenCalledWith([1, 1, 1, 1]);
+    });
+
     test('captures grouped effects without running them early', () => {
         const vm = {runtime: {renderer: {}}};
         const PenFX = createPenFXClass(vm);

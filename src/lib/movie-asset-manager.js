@@ -39,6 +39,7 @@ const RENDERING_FILE_NAME = 'rendering.mp4';
 const RENDERING_MASTER_GAIN = 0.8912509381337456; // -1 dBFS headroom before encoding.
 const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
+const DEFAULT_BACKDROP_ASSET_ID = 'cd21514d0531fdffb22204e0ec5ed84a';
 const VIDEO_PROJECT_KEY = 'movieVideos';
 const MODEL_PROJECT_KEY = 'movieModels';
 const CAMERA_PROJECT_KEY = 'movieCamera';
@@ -243,6 +244,7 @@ class MovieAssetManager extends EventEmitter {
         this.flatDepthVersion = 0;
         this.penFrameTransactionActive = false;
         this.penFrameTransactionsInstalled = false;
+        this.defaultStageBackgroundColor = null;
         this.runtime.movieZBuffer = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;
@@ -273,6 +275,7 @@ class MovieAssetManager extends EventEmitter {
         this.handleTargetRemoved = this.handleTargetRemoved.bind(this);
         this.handleFontsChanged = this.handleFontsChanged.bind(this);
         this.handleNativeSizeChanged = this.handleNativeSizeChanged.bind(this);
+        this.handleProjectLoaded = this.handleProjectLoaded.bind(this);
         this.handleTimelineBeforeExecute = this.handleTimelineBeforeExecute.bind(this);
         this.handleTimelineAfterExecute = this.handleTimelineAfterExecute.bind(this);
         this.stopAllObjectVideoAudio = this.stopAllObjectVideoAudio.bind(this);
@@ -284,7 +287,7 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.on('BEFORE_EXECUTE', this.handleTimelineBeforeExecute);
         this.runtime.on('AFTER_EXECUTE', this.handleTimelineAfterExecute);
         this.runtime.on('PROJECT_STOP_ALL', this.stopAllObjectVideoAudio);
-        this.runtime.on('PROJECT_LOADED', this.ensureMainTarget);
+        this.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
             this.runtime.renderer.on('NativeSizeChanged', this.handleNativeSizeChanged);
         }
@@ -315,14 +318,50 @@ class MovieAssetManager extends EventEmitter {
         const compiledClear = pen.clear;
         pen.clear = function (...args) {
             manager.beginPenFrameTransaction();
-            return compiledClear.apply(this, args);
+            const result = compiledClear.apply(this, args);
+            manager.drawDefaultPenBackground();
+            return result;
         };
         const interpreterClear = primitives.pen_clear;
         primitives.pen_clear = function (...args) {
             manager.beginPenFrameTransaction();
-            return interpreterClear.apply(this, args);
+            const result = interpreterClear.apply(this, args);
+            manager.drawDefaultPenBackground();
+            return result;
         };
         this.penFrameTransactionsInstalled = true;
+        this.drawDefaultPenBackground();
+    }
+
+    usesDefaultBackdrop () {
+        const stage = typeof this.runtime.getTargetForStage === 'function' ?
+            this.runtime.getTargetForStage() :
+            (Array.isArray(this.runtime.targets) ? this.runtime.targets.find(target => target.isStage) : null);
+        if (!stage) return false;
+        const costumes = typeof stage.getCostumes === 'function' ?
+            stage.getCostumes() : stage.sprite && stage.sprite.costumes;
+        const costume = Array.isArray(costumes) ? costumes[stage.currentCostume] : null;
+        return Boolean(costume && costume.assetId === DEFAULT_BACKDROP_ASSET_ID);
+    }
+
+    drawDefaultPenBackground () {
+        const renderer = this.runtime.renderer;
+        if (!this.defaultStageBackgroundColor) {
+            const rendererColor = renderer && renderer._backgroundColor4f;
+            this.defaultStageBackgroundColor = rendererColor && rendererColor.length === 4 ?
+                Array.from(rendererColor) : [1, 1, 1, 1];
+        }
+        if (!this.usesDefaultBackdrop()) {
+            if (renderer && typeof renderer.setBackgroundColor === 'function') {
+                renderer.setBackgroundColor(...this.defaultStageBackgroundColor);
+            }
+            return;
+        }
+        if (!this.penFX || typeof this.penFX.drawDefaultBackground !== 'function') return;
+        if (renderer && typeof renderer.setBackgroundColor === 'function') {
+            renderer.setBackgroundColor(0, 0, 0, 0);
+        }
+        this.penFX.drawDefaultBackground(this.defaultStageBackgroundColor);
     }
 
     beginPenFrameTransaction () {
@@ -357,6 +396,11 @@ class MovieAssetManager extends EventEmitter {
         const target = sprites.find(sprite => sprite.getName() === 'main') || sprites[0];
         if (target.getName() !== 'main') this.vm.renameSprite(target.id, 'main');
         if (!this.vm.editingTarget || this.vm.editingTarget.isStage) this.vm.setEditingTarget(target.id);
+    }
+
+    handleProjectLoaded () {
+        this.ensureMainTarget();
+        this.drawDefaultPenBackground();
     }
 
     installPrimitives () {

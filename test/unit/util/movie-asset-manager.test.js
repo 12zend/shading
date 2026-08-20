@@ -1820,6 +1820,40 @@ describe('MovieAssetManager rendering performance', () => {
         }
     );
 
+    test.each(['interpreter', 'compiled'])(
+        'redraws the default backdrop as Pen without yielding after %s erase-all execution',
+        executionPath => {
+            const manager = makeTimelineManager();
+            manager.runtime.targets = [{
+                currentCostume: 0,
+                isStage: true,
+                sprite: {
+                    costumes: [{assetId: 'cd21514d0531fdffb22204e0ec5ed84a'}]
+                }
+            }];
+            manager.runtime.renderer._backgroundColor4f = [1, 1, 1, 1];
+            manager.runtime.renderer.setBackgroundColor = jest.fn();
+            manager.runtime.ext_pen = {clear: jest.fn()};
+            manager.runtime._primitives.pen_clear = jest.fn();
+            const penFX = {
+                beginFrame: jest.fn(() => true),
+                drawDefaultBackground: jest.fn()
+            };
+            manager.attachPenFrameTransactions(penFX);
+            penFX.drawDefaultBackground.mockClear();
+            manager.runtime.renderer.setBackgroundColor.mockClear();
+            manager.timeline.renderedThisStep = true;
+
+            const result = executionPath === 'interpreter' ?
+                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.ext_pen.clear();
+
+            expect(result).toBeUndefined();
+            expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
+            expect(manager.runtime.renderer.setBackgroundColor).toHaveBeenCalledWith(0, 0, 0, 0);
+            expect(penFX.drawDefaultBackground).toHaveBeenCalledWith([1, 1, 1, 1]);
+        }
+    );
+
     test('renders the requested video and frame as one operation', () => {
         const manager = makeManager();
         const target = makeTarget();

@@ -1739,6 +1739,22 @@ const createPenFXClass = vm => {
       gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
+    drawDefaultBackground(color4f) {
+      const skin = this._prepare(false, false);
+      if (!skin) return false;
+      const target = skin._framebuffer.framebuffer || skin._framebuffer;
+      const background = Array.isArray(color4f) || ArrayBuffer.isView(color4f) ? color4f : [1, 1, 1, 1];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.STENCIL_TEST);
+      gl.colorMask(true, true, true, true);
+      gl.clearColor(background[0], background[1], background[2], background[3]);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this._markSkinChanged(skin);
+      return true;
+    }
+
     _createBufferTexture() {
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -3231,6 +3247,16 @@ const createPenFXClass = vm => {
       } catch (error) {
         console.error('[Pen FX]', error);
         return false;
+      }
+    }
+
+    drawDefaultBackground(color4f) {
+      const pen = vm.runtime.ext_pen;
+      if (pen && typeof pen._getPenLayerID === 'function') pen._getPenLayerID();
+      try {
+        this._getEngine().drawDefaultBackground(color4f);
+      } catch (error) {
+        console.error('[Pen FX]', error);
       }
     }
 
