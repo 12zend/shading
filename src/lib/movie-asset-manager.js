@@ -2376,6 +2376,10 @@ class MovieAssetManager extends EventEmitter {
 
     finishObjectDraw (target, configuration, source, reapplyConfiguration = false) {
         if (reapplyConfiguration) this.applyObjectDrawConfiguration(target, configuration);
+        const state = this.getTargetState(target);
+        // Objects video is a Pen source. Keep its drawable available for stamping, but do not leave the
+        // unprocessed video visible above the Pen layer where it would cover the grouped Pen FX result.
+        state.penOnly = source === 'video';
         // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
         // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
         // the corresponding Motion and Looks blocks, including Z perspective.
@@ -2574,7 +2578,7 @@ class MovieAssetManager extends EventEmitter {
                     request.version !== state.objectDrawVersion
                 ) continue;
                 this.applyObjectDrawConfiguration(target, configuration);
-                this.applyBitmap(target, element, 'video');
+                this.applyBitmap(target, element, 'video', null, true);
                 state.currentFrame = frame;
                 state.videoAssetId = video.assetId;
                 state.displayedFrame = frame;
@@ -3161,6 +3165,7 @@ class MovieAssetManager extends EventEmitter {
                 objectDrawVersion: 0,
                 objectVideo: null,
                 objectVideoAssetId: null,
+                penOnly: false,
                 pendingVideoFrame: null,
                 renderVersion: 0,
                 rotation: {x: 0, y: 0, z: 90 - (target.direction || 90)},
@@ -3416,7 +3421,7 @@ class MovieAssetManager extends EventEmitter {
         if (state.mode === 'model') {
             this.runtime.renderer.updateDrawablePosition(target.drawableID, [0, 0]);
             this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
-            this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible);
+            this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible && !state.penOnly);
             if (target.visible) {
                 target.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -3450,7 +3455,10 @@ class MovieAssetManager extends EventEmitter {
             renderedScale[1] * state.scale.y * perspective
         ]);
         this.applySpritePlaneMatrix(target, state, renderedScale);
-        this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible && projection.inFront);
+        this.runtime.renderer.updateDrawableVisible(
+            target.drawableID,
+            target.visible && projection.inFront && !state.penOnly
+        );
         if (target.visible) {
             target.emitVisualChange();
             this.runtime.requestRedraw();
@@ -3556,6 +3564,8 @@ class MovieAssetManager extends EventEmitter {
             !state.pendingVideoFrame &&
             !state.videoRenderPromise
         ) {
+            state.penOnly = false;
+            this.applyProjection(target);
             return Promise.resolve();
         }
 
@@ -3708,18 +3718,20 @@ class MovieAssetManager extends EventEmitter {
         this.applyBitmap(target, canvas, 'text');
     }
 
-    applyBitmap (target, bitmap, mode, rotationCenter) {
+    applyBitmap (target, bitmap, mode, rotationCenter, penOnly = false) {
         const state = this.getTargetState(target);
+        const hasRotationCenter = rotationCenter !== null && typeof rotationCenter !== 'undefined';
         if (state.skinId === null) {
-            state.skinId = typeof rotationCenter === 'undefined' ?
+            state.skinId = !hasRotationCenter ?
                 this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION) :
                 this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION, rotationCenter);
-        } else if (typeof rotationCenter === 'undefined') {
+        } else if (!hasRotationCenter) {
             this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION);
         } else {
             this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION, rotationCenter);
         }
         state.mode = mode;
+        state.penOnly = penOnly;
         this.runtime.renderer.updateDrawableSkinId(target.drawableID, state.skinId);
         this.applyProjection(target);
         if (target.visible) {
@@ -3738,6 +3750,7 @@ class MovieAssetManager extends EventEmitter {
         state.modelScene = [];
         state.modelAssetId = null;
         state.mode = 'costume';
+        state.penOnly = false;
         if (updateRenderer && this.runtime.renderer) {
             const costume = target.getCostumes()[target.currentCostume];
             if (costume) this.runtime.renderer.updateDrawableSkinId(target.drawableID, costume.skinId);

@@ -1545,6 +1545,7 @@ describe('MovieAssetManager rendering performance', () => {
     test('decodes and stamps every layered video draw with its own frame and size', async () => {
         const manager = makeManager();
         const target = makeTarget();
+        target.visible = true;
         target.setSize = jest.fn();
         manager.setTargetPosition = jest.fn();
         manager.setTargetRotation = jest.fn();
@@ -1593,6 +1594,27 @@ describe('MovieAssetManager rendering performance', () => {
             .filter(call => call[1] === 'width').map(call => call[2])).toEqual([100, 50]);
         expect(target.setSize.mock.calls.map(call => call[0])).toEqual([100, 50]);
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(2);
+        expect(manager.getTargetState(target).penOnly).toBe(true);
+    });
+
+    test('hides an Objects video drawable and restores normal video visibility outside Objects draw', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.visible = true;
+        const state = manager.getTargetState(target);
+        const video = {assetId: 'video', duration: 10, frameRate: 30};
+        state.displayedFrame = 4;
+        state.displayedVideoAssetId = video.assetId;
+        state.mode = 'video';
+        state.penOnly = true;
+
+        manager.applyProjection(target);
+        expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenLastCalledWith(target.drawableID, false);
+
+        manager.queueVideoFrame(target, video, 4);
+
+        expect(state.penOnly).toBe(false);
+        expect(manager.runtime.renderer.updateDrawableVisible).toHaveBeenLastCalledWith(target.drawableID, true);
     });
 
     test('maps Objects video time to a speed-adjusted frame and maximum duration', () => {
