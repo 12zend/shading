@@ -236,9 +236,13 @@ class MovieAssetManager extends EventEmitter {
         this.renderingSoundEvents = [];
         this.playedTimelineSoundBlocks = new Set();
         this.timelineSoundSources = new Set();
+        this.objectVideoAudio = new Map();
+        this.objectVideoAudioSeen = new Set();
         this.previewRendererSize = null;
         this.modelRenderer = null;
         this.flatDepthVersion = 0;
+        this.penFrameTransactionActive = false;
+        this.penFrameTransactionsInstalled = false;
         this.runtime.movieZBuffer = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;
@@ -271,6 +275,7 @@ class MovieAssetManager extends EventEmitter {
         this.handleNativeSizeChanged = this.handleNativeSizeChanged.bind(this);
         this.handleTimelineBeforeExecute = this.handleTimelineBeforeExecute.bind(this);
         this.handleTimelineAfterExecute = this.handleTimelineAfterExecute.bind(this);
+        this.stopAllObjectVideoAudio = this.stopAllObjectVideoAudio.bind(this);
         this.ensureMainTarget = this.ensureMainTarget.bind(this);
 
         this.runtime.on('targetWasCreated', this.handleTargetCreated);
@@ -278,6 +283,7 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.fontManager.on('change', this.handleFontsChanged);
         this.runtime.on('BEFORE_EXECUTE', this.handleTimelineBeforeExecute);
         this.runtime.on('AFTER_EXECUTE', this.handleTimelineAfterExecute);
+        this.runtime.on('PROJECT_STOP_ALL', this.stopAllObjectVideoAudio);
         this.runtime.on('PROJECT_LOADED', this.ensureMainTarget);
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
             this.runtime.renderer.on('NativeSizeChanged', this.handleNativeSizeChanged);
@@ -295,6 +301,54 @@ class MovieAssetManager extends EventEmitter {
         this.runtime._hats.event_renderframe = {
             restartExistingThreads: true
         };
+    }
+
+    attachPenFrameTransactions (penFX) {
+        this.penFX = penFX;
+        if (this.penFrameTransactionsInstalled) return;
+        const pen = this.runtime.ext_pen;
+        const primitives = this.runtime._primitives;
+        if (!pen || typeof pen.clear !== 'function' || !primitives ||
+            typeof primitives.pen_clear !== 'function') return;
+
+        const manager = this;
+        const compiledClear = pen.clear;
+        pen.clear = function (...args) {
+            manager.beginPenFrameTransaction();
+            return compiledClear.apply(this, args);
+        };
+        const interpreterClear = primitives.pen_clear;
+        primitives.pen_clear = function (...args) {
+            manager.beginPenFrameTransaction();
+            return interpreterClear.apply(this, args);
+        };
+        this.penFrameTransactionsInstalled = true;
+    }
+
+    beginPenFrameTransaction () {
+        if (this.penFrameTransactionActive || !this.timeline || !this.timeline.renderedThisStep ||
+            !this.penFX || typeof this.penFX.beginFrame !== 'function') return;
+        this.penFrameTransactionActive = this.penFX.beginFrame() === true;
+    }
+
+    commitPenFrameTransaction () {
+        if (!this.penFrameTransactionActive) return;
+        this.penFrameTransactionActive = false;
+        if (this.penFX && typeof this.penFX.commitFrame === 'function') this.penFX.commitFrame();
+    }
+
+    cancelPenFrameTransaction () {
+        if (!this.penFrameTransactionActive) return;
+        this.penFrameTransactionActive = false;
+        if (this.penFX && typeof this.penFX.cancelFrame === 'function') this.penFX.cancelFrame();
+    }
+
+    cancelPendingObjectDraws () {
+        if (!(this.targetStates instanceof Map)) return;
+        for (const state of this.targetStates.values()) {
+            state.objectDrawVersion++;
+            state.objectDrawQueue.length = 0;
+        }
     }
 
     ensureMainTarget () {
@@ -533,6 +587,7 @@ class MovieAssetManager extends EventEmitter {
     hasPendingVisualRenders () {
         if (!(this.targetStates instanceof Map)) return false;
         for (const state of this.targetStates.values()) {
+            if (state.objectDrawPromise || state.objectDrawQueue.length > 0) return true;
             if (state.requestedMode === 'model' && state.modelRenderPromise) return true;
             if (state.requestedMode === 'text' && (state.textRenderPromise || state.textQueue.length > 0)) return true;
             if (
@@ -657,6 +712,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     playTimeline () {
+        this.cancelPenFrameTransaction();
+        this.cancelPendingObjectDraws();
         if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
@@ -672,6 +729,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     pauseTimeline () {
+        this.cancelPenFrameTransaction();
+        this.cancelPendingObjectDraws();
         const clock = this.runtime.ioDevices.clock;
         if (this.timeline.playing) {
             this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
@@ -688,6 +747,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     stopTimeline () {
+        this.cancelPenFrameTransaction();
+        this.cancelPendingObjectDraws();
         const cancelledRendering = this.timeline.recording;
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
@@ -705,6 +766,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     seekTimeline (seconds) {
+        this.cancelPenFrameTransaction();
+        this.cancelPendingObjectDraws();
         const wasPlaying = this.timeline.playing;
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
@@ -747,6 +810,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     renderTimeline () {
+        this.cancelPenFrameTransaction();
+        this.cancelPendingObjectDraws();
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
@@ -1039,7 +1104,6 @@ class MovieAssetManager extends EventEmitter {
     stopTimelineSounds () {
         if (!(this.timelineSoundSources instanceof Set)) {
             this.timelineSoundSources = new Set();
-            return;
         }
         for (const playback of this.timelineSoundSources) {
             playback.source.onended = null;
@@ -1053,6 +1117,51 @@ class MovieAssetManager extends EventEmitter {
             });
         }
         this.timelineSoundSources.clear();
+        this.stopAllObjectVideoAudio();
+    }
+
+    beginObjectVideoAudioFrame () {
+        if (!(this.objectVideoAudioSeen instanceof Set)) this.objectVideoAudioSeen = new Set();
+        this.objectVideoAudioSeen.clear();
+    }
+
+    finishObjectVideoAudioFrame () {
+        if (!(this.objectVideoAudio instanceof Map)) this.objectVideoAudio = new Map();
+        if (!(this.objectVideoAudioSeen instanceof Set)) this.objectVideoAudioSeen = new Set();
+        for (const [key, playback] of this.objectVideoAudio) {
+            if (!this.objectVideoAudioSeen.has(key)) this.stopObjectVideoAudioEntry(key, playback);
+        }
+    }
+
+    stopObjectVideoAudioEntry (key, playback) {
+        if (!playback) return;
+        playback.version = (Number(playback.version) || 0) + 1;
+        const element = playback.element;
+        if (element) {
+            if (typeof element.pause === 'function') element.pause();
+            if (typeof element.removeAttribute === 'function') element.removeAttribute('src');
+            if (typeof element.load === 'function') element.load();
+        }
+        if (this.objectVideoAudio instanceof Map && this.objectVideoAudio.get(key) === playback) {
+            this.objectVideoAudio.delete(key);
+        }
+    }
+
+    stopObjectVideoAudio (target, configuration) {
+        if (!(this.objectVideoAudio instanceof Map) || !target) return;
+        const key = this.getObjectVideoPlaybackKey(target, configuration);
+        this.stopObjectVideoAudioEntry(key, this.objectVideoAudio.get(key));
+    }
+
+    stopAllObjectVideoAudio () {
+        if (!(this.objectVideoAudio instanceof Map)) {
+            this.objectVideoAudio = new Map();
+            return;
+        }
+        for (const [key, playback] of this.objectVideoAudio) {
+            this.stopObjectVideoAudioEntry(key, playback);
+        }
+        if (this.objectVideoAudioSeen instanceof Set) this.objectVideoAudioSeen.clear();
     }
 
     getTimelineSounds () {
@@ -1089,6 +1198,7 @@ class MovieAssetManager extends EventEmitter {
         }
         this.timeline.pendingFrame = false;
         this.timeline.renderedThisStep = true;
+        this.beginObjectVideoAudioFrame();
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     }
@@ -1105,6 +1215,8 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
+        this.finishObjectVideoAudioFrame();
+        this.commitPenFrameTransaction();
         if (this.timeline.recording) {
             try {
                 this.addRenderingFrame();
@@ -1535,6 +1647,48 @@ class MovieAssetManager extends EventEmitter {
         return {buffer, context, ownsContext};
     }
 
+    async decodeRenderingVideoAudio (video, preferredAudio) {
+        const data = video && video.asset && video.asset.data;
+        if (!data) return null;
+        const audioEngine = this.runtime.audioEngine;
+        if (audioEngine && typeof audioEngine.decodeSoundPlayer === 'function') {
+            try {
+                const player = await audioEngine.decodeSoundPlayer({data: data});
+                if (player && player.buffer) {
+                    return {
+                        buffer: player.buffer,
+                        context: audioEngine.audioContext,
+                        ownsContext: false
+                    };
+                }
+            } catch (error) {
+                // Video containers are not accepted by every Scratch audio decoder; Web Audio may still decode it.
+            }
+        }
+
+        let context = preferredAudio && preferredAudio.context;
+        if (!context) context = audioEngine && audioEngine.audioContext;
+        let ownsContext = false;
+        if (!context && typeof window !== 'undefined') {
+            const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextConstructor) {
+                context = new AudioContextConstructor();
+                ownsContext = true;
+            }
+        }
+        if (!context || typeof context.decodeAudioData !== 'function') return null;
+        try {
+            const buffer = await context.decodeAudioData(copyArrayBuffer(data));
+            return {buffer, context, ownsContext};
+        } catch (error) {
+            if (ownsContext && typeof context.close === 'function') {
+                const closePromise = context.close();
+                if (closePromise && typeof closePromise.catch === 'function') closePromise.catch(() => {});
+            }
+            return null;
+        }
+    }
+
     async decodeRenderingAudio (target, requestedSound, framerate) {
         const clips = [];
         const legacySound = this.getRenderingSound(target, requestedSound);
@@ -1556,19 +1710,35 @@ class MovieAssetManager extends EventEmitter {
         let sharedAudio = null;
         const decodedClips = [];
         for (const clip of clips) {
-            const decoded = await this.decodeRenderingSound(clip.sound, sharedAudio);
+            const decoded = clip.video ?
+                await this.decodeRenderingVideoAudio(clip.video, sharedAudio) :
+                await this.decodeRenderingSound(clip.sound, sharedAudio);
             if (!decoded || !decoded.buffer) continue;
             if (!sharedAudio) sharedAudio = decoded;
-            decodedClips.push({
+            const numericPlaybackRate = Number(clip.playbackRate);
+            const decodedClip = {
                 buffer: decoded.buffer,
                 offset: Math.max(0, toNumber(clip.offset)),
                 pan: clamp(toNumber(clip.pan), -100, 100) / 100,
-                playbackRate: Math.pow(2, toNumber(clip.pitch) / 120),
-                startTime: Math.max(0, toNumber(clip.frame) / framerate),
+                playbackRate: Number.isFinite(numericPlaybackRate) && numericPlaybackRate > 0 ?
+                    numericPlaybackRate : Math.pow(2, toNumber(clip.pitch) / 120),
+                startTime: Math.max(0, Number.isFinite(Number(clip.startTime)) ?
+                    Number(clip.startTime) : toNumber(clip.frame) / framerate),
                 volume: clamp(toNumber(clip.volume, 100), 0, 100) / 100
-            });
+            };
+            if (Number.isFinite(Number(clip.duration))) {
+                decodedClip.duration = Math.max(0, Number(clip.duration));
+            }
+            decodedClips.push(decodedClip);
         }
-        if (!sharedAudio || !decodedClips.length) return null;
+        if (!sharedAudio || !decodedClips.length) {
+            if (sharedAudio && sharedAudio.ownsContext && sharedAudio.context &&
+                typeof sharedAudio.context.close === 'function') {
+                const closePromise = sharedAudio.context.close();
+                if (closePromise && typeof closePromise.catch === 'function') closePromise.catch(() => {});
+            }
+            return null;
+        }
         return {
             clips: decodedClips,
             context: sharedAudio.context,
@@ -1606,8 +1776,11 @@ class MovieAssetManager extends EventEmitter {
             const offset = Math.max(0, toNumber(clip.offset));
             const playbackRate = Math.max(Number.EPSILON, toNumber(clip.playbackRate, 1));
             const bufferDuration = clip.buffer && Number(clip.buffer.duration);
-            const duration = Number.isFinite(bufferDuration) ?
+            const naturalDuration = Number.isFinite(bufferDuration) ?
                 Math.max(0, (bufferDuration - offset) / playbackRate) : Infinity;
+            const requestedDuration = Number(clip.duration);
+            const duration = Number.isFinite(requestedDuration) ?
+                Math.min(naturalDuration, Math.max(0, requestedDuration)) : naturalDuration;
             const volume = clamp(toNumber(clip.volume, 1), 0, 1);
             if (duration <= 0 || volume <= 0) continue;
             events.push({change: volume, time: start});
@@ -1711,7 +1884,13 @@ class MovieAssetManager extends EventEmitter {
                     nodes.push(gainNode);
                 }
                 output.connect(audioMaster.input);
-                audioSources.push({nodes, offset: clip.offset, source, startTime: clip.startTime});
+                audioSources.push({
+                    duration: clip.duration,
+                    nodes,
+                    offset: clip.offset,
+                    source,
+                    startTime: clip.startTime
+                });
             }
             const audioTrack = audioDestination.stream.getAudioTracks()[0];
             if (!audioTrack) throw new Error('Could not create an audio stream for the rendering.');
@@ -1793,7 +1972,11 @@ class MovieAssetManager extends EventEmitter {
             recorder.start();
             const audioStartTime = audio && audio.context ? audio.context.currentTime : 0;
             for (const audioSource of audioSources) {
-                audioSource.source.start(audioStartTime + audioSource.startTime, audioSource.offset);
+                const scheduledStart = audioStartTime + audioSource.startTime;
+                audioSource.source.start(scheduledStart, audioSource.offset);
+                if (Number.isFinite(Number(audioSource.duration))) {
+                    audioSource.source.stop(scheduledStart + Math.max(0, Number(audioSource.duration)));
+                }
             }
 
             const frameDuration = 1000 / framerate;
@@ -2103,14 +2286,18 @@ class MovieAssetManager extends EventEmitter {
         if (typeof stamp === 'function') stamp({}, {target});
     }
 
-    drawObject (target, configuration = {}) {
-        if (!target || target.isStage) return;
-        if (configuration.time) {
-            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
-            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
-            if (currentTime < startTime || currentTime > endTime) return;
-        }
+    cloneObjectDrawConfiguration (configuration) {
+        const clone = {
+            ...configuration,
+            position: {...(configuration.position || {})},
+            rotation: {...(configuration.rotation || {})},
+            scale: {...(configuration.scale || {})}
+        };
+        if (configuration.time) clone.time = {...configuration.time};
+        return clone;
+    }
+
+    applyObjectDrawConfiguration (target, configuration) {
         const position = configuration.position || {};
         const rotation = configuration.rotation || {};
         const scale = configuration.scale || {};
@@ -2124,7 +2311,259 @@ class MovieAssetManager extends EventEmitter {
             graphicEffects.setScale(target, 'width', configuration.width);
             graphicEffects.setScale(target, 'height', configuration.height);
         }
+    }
 
+    finishObjectDraw (target, configuration, source, reapplyConfiguration = false) {
+        if (reapplyConfiguration) this.applyObjectDrawConfiguration(target, configuration);
+        // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
+        // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
+        // the corresponding Motion and Looks blocks, including Z perspective.
+        this.applyProjection(target);
+        this.stampTarget(target);
+        if (source !== 'model') this.publishFlatZBuffer(target);
+    }
+
+    getVideoFrameNumber (video, requestedFrame) {
+        const maximumFrame = video.duration > 0 ?
+            Math.max(1, Math.floor(video.duration * video.frameRate) + 1) : Number.MAX_SAFE_INTEGER;
+        const numericFrame = Number(requestedFrame);
+        return Math.round(clamp(Number.isFinite(numericFrame) ? numericFrame : 1, 1, maximumFrame));
+    }
+
+    getObjectVideoPlaybackKey (target, configuration = {}) {
+        const playbackId = String(configuration.playbackId || configuration.asset || 'video');
+        return `${target.id}:${playbackId}`;
+    }
+
+    getObjectVideoPlayback (video, configuration, currentTime) {
+        if (String(configuration.videoMode || '').toLowerCase() !== 'video') return null;
+        const start = configuration.time ?
+            toNumber(configuration.time.start, 0) : 0;
+        const requestedEnd = configuration.time ?
+            toNumber(configuration.time.end, Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+        const numericSpeed = Number(configuration.speed);
+        const speed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
+        const videoDuration = toNumber(video && video.duration);
+        const mediaEnd = videoDuration > 0 && Number.isFinite(start) ? start + (videoDuration / speed) :
+            Number.POSITIVE_INFINITY;
+        const end = Math.min(requestedEnd, mediaEnd);
+        const mediaTime = Math.max(0, (currentTime - start) * speed);
+        return {
+            active: currentTime >= start && currentTime < end,
+            end,
+            frame: this.getVideoFrameNumber(video, (mediaTime * video.frameRate) + 1),
+            mediaTime,
+            speed,
+            start,
+            volume: clamp(toNumber(configuration.volume, 100), 0, 100)
+        };
+    }
+
+    recordObjectVideoAudio (target, video, configuration, playback, currentTime) {
+        const volume = playback.volume * this.getProjectVolume();
+        if (!this.timeline || !this.timeline.recording || volume <= 0) return;
+        if (!(this.playedTimelineSoundBlocks instanceof Set)) this.playedTimelineSoundBlocks = new Set();
+        if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
+        const key = `object-video:${this.getObjectVideoPlaybackKey(target, configuration)}`;
+        if (this.playedTimelineSoundBlocks.has(key)) return;
+        this.playedTimelineSoundBlocks.add(key);
+        this.renderingSoundEvents.push({
+            duration: Math.max(0, playback.end - currentTime),
+            frame: this.timeline.renderFrameIndex,
+            offset: playback.mediaTime,
+            playbackRate: playback.speed,
+            video,
+            volume
+        });
+    }
+
+    getProjectVolume () {
+        const audioEngine = this.runtime && this.runtime.audioEngine;
+        const gain = audioEngine && audioEngine.inputNode && audioEngine.inputNode.gain;
+        return clamp(toNumber(gain && gain.value, 1), 0, 1);
+    }
+
+    setObjectVideoAudioProperties (element, playback) {
+        element.muted = false;
+        element.volume = (playback.volume / 100) * this.getProjectVolume();
+        element.playbackRate = playback.speed;
+        // The speed control intentionally changes pitch together with duration.
+        if ('preservesPitch' in element) element.preservesPitch = false;
+        if ('mozPreservesPitch' in element) element.mozPreservesPitch = false;
+        if ('webkitPreservesPitch' in element) element.webkitPreservesPitch = false;
+    }
+
+    startObjectVideoAudio (key, entry, playback) {
+        if (entry.startPromise) return;
+        const version = ++entry.version;
+        let ready = Promise.resolve();
+        if (entry.element.readyState < 1) ready = once(entry.element, 'loadedmetadata');
+        const startPromise = ready.then(() => {
+            if (!(this.objectVideoAudio instanceof Map) || this.objectVideoAudio.get(key) !== entry ||
+                entry.version !== version) return;
+            this.setObjectVideoAudioProperties(entry.element, playback);
+            const duration = Number(entry.element.duration);
+            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : playback.mediaTime;
+            entry.element.currentTime = clamp(playback.mediaTime, 0, maximumTime);
+            const playResult = entry.element.play();
+            if (playResult && typeof playResult.then === 'function') return playResult;
+        }).catch(error => {
+            // A browser may reject autoplay before the user has interacted with the page. Keep video rendering
+            // available, and let the next user-initiated timeline playback try the audio again.
+            if (error && error.name !== 'AbortError' && error.name !== 'NotAllowedError') {
+                this.emit('renderError', error);
+            }
+        });
+        entry.startPromise = startPromise;
+        const finish = () => {
+            if (entry.startPromise === startPromise) entry.startPromise = null;
+        };
+        startPromise.then(finish, finish);
+    }
+
+    syncObjectVideoAudio (target, video, configuration, playback, currentTime) {
+        const key = this.getObjectVideoPlaybackKey(target, configuration);
+        if (!(this.objectVideoAudioSeen instanceof Set)) this.objectVideoAudioSeen = new Set();
+        this.objectVideoAudioSeen.add(key);
+        if (this.timeline && this.timeline.recording) {
+            this.stopObjectVideoAudioEntry(
+                key,
+                this.objectVideoAudio instanceof Map ? this.objectVideoAudio.get(key) : null
+            );
+            this.recordObjectVideoAudio(target, video, configuration, playback, currentTime);
+            return;
+        }
+        if (!this.timeline || !this.timeline.playing || typeof document === 'undefined') {
+            this.stopObjectVideoAudio(target, configuration);
+            return;
+        }
+        if (!(this.objectVideoAudio instanceof Map)) this.objectVideoAudio = new Map();
+        let entry = this.objectVideoAudio.get(key);
+        if (entry && entry.assetId !== video.assetId) {
+            this.stopObjectVideoAudioEntry(key, entry);
+            entry = null;
+        }
+        if (!entry) {
+            const element = document.createElement('audio');
+            element.preload = 'auto';
+            element.src = video.url;
+            entry = {
+                assetId: video.assetId,
+                element,
+                startPromise: null,
+                targetId: target.id,
+                version: 0
+            };
+            this.objectVideoAudio.set(key, entry);
+        }
+
+        this.setObjectVideoAudioProperties(entry.element, playback);
+        if (entry.element.readyState >= 1 && Number.isFinite(Number(entry.element.currentTime)) &&
+            Math.abs(Number(entry.element.currentTime) - playback.mediaTime) > 0.15) {
+            const duration = Number(entry.element.duration);
+            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : playback.mediaTime;
+            entry.element.currentTime = clamp(playback.mediaTime, 0, maximumTime);
+        }
+        if (entry.element.paused !== false) this.startObjectVideoAudio(key, entry, playback);
+    }
+
+    hasDisplayedObjectVideoFrame (state, video, frame) {
+        return state.mode === 'video' &&
+            state.displayedVideoAssetId === video.assetId &&
+            state.displayedFrame === frame &&
+            !state.pendingVideoFrame &&
+            !state.videoRenderPromise;
+    }
+
+    queueObjectDraw (target, configuration) {
+        const state = this.getTargetState(target);
+        state.objectDrawQueue.push({
+            configuration: this.cloneObjectDrawConfiguration(configuration),
+            version: state.objectDrawVersion
+        });
+        if (state.objectDrawPromise) return state.objectDrawPromise;
+
+        const renderPromise = Promise.resolve().then(() => this.renderQueuedObjectDraws(target, state));
+        state.objectDrawPromise = renderPromise;
+        const finish = () => {
+            if (state.objectDrawPromise !== renderPromise) return;
+            state.objectDrawPromise = null;
+            if (state.objectDrawQueue.length && this.targetStates.get(target.id) === state) {
+                this.runWithoutWaiting(this.queueObjectDraw(target, state.objectDrawQueue.shift().configuration));
+            }
+        };
+        renderPromise.then(finish, finish);
+        return renderPromise;
+    }
+
+    async renderQueuedObjectDraws (target, state) {
+        while (state.objectDrawQueue.length && this.targetStates.get(target.id) === state) {
+            const request = state.objectDrawQueue.shift();
+            if (request.version !== state.objectDrawVersion) continue;
+            const configuration = request.configuration;
+            const source = String(configuration.source || 'costume').toLowerCase();
+
+            if (source === 'video') {
+                const video = this.getVideoByName(target, configuration.asset);
+                if (!video) continue;
+                const frame = this.getVideoFrameNumber(video, configuration.frame);
+                const element = await this.decodeObjectVideoFrame(state, video, frame);
+                if (
+                    this.targetStates.get(target.id) !== state ||
+                    request.version !== state.objectDrawVersion
+                ) continue;
+                this.applyObjectDrawConfiguration(target, configuration);
+                this.applyBitmap(target, element, 'video');
+                state.currentFrame = frame;
+                state.videoAssetId = video.assetId;
+                state.displayedFrame = frame;
+                state.displayedVideoAssetId = video.assetId;
+                this.finishObjectDraw(target, configuration, source);
+                continue;
+            }
+
+            const render = this.performObjectDraw(target, configuration);
+            if (render && typeof render.then === 'function') await render;
+        }
+    }
+
+    async prepareObjectVideoElement (state, video) {
+        if (state.objectVideo && state.objectVideoAssetId === video.assetId) return state.objectVideo;
+        if (state.objectVideo) {
+            state.objectVideo.removeAttribute('src');
+            state.objectVideo.load();
+        }
+        const element = document.createElement('video');
+        element.muted = true;
+        element.preload = 'auto';
+        element.src = video.url;
+        if (element.readyState < 1) await once(element, 'loadedmetadata');
+        element.width = element.videoWidth;
+        element.height = element.videoHeight;
+        this.commitObjectVideoElement(state, element, video.assetId);
+        return element;
+    }
+
+    commitObjectVideoElement (state, element, assetId) {
+        state.objectVideo = element;
+        state.objectVideoAssetId = assetId;
+    }
+
+    async decodeObjectVideoFrame (state, video, frame) {
+        const element = await this.prepareObjectVideoElement(state, video);
+        const time = video.duration > 0 ?
+            clamp((frame - 1) / video.frameRate, 0, Math.max(0, video.duration - 0.001)) : 0;
+        if (element.readyState < 2) await once(element, 'loadeddata');
+        if (Math.abs(element.currentTime - time) > 0.0001) {
+            const seeked = once(element, 'seeked');
+            element.currentTime = time;
+            await seeked;
+        }
+        return element;
+    }
+
+    performObjectDraw (target, configuration) {
+        this.applyObjectDrawConfiguration(target, configuration);
         const source = String(configuration.source || 'costume').toLowerCase();
         let render;
         if (source === 'costume') {
@@ -2132,28 +2571,75 @@ class MovieAssetManager extends EventEmitter {
                 target.getCostumeIndexByName(String(configuration.asset)) : -1;
             if (costumeIndex < 0 || typeof target.setCostume !== 'function') return;
             target.setCostume(costumeIndex);
-        } else if (source === 'video') {
-            if (!this.getVideoByName(target, configuration.asset)) return;
-            render = this.switchVideo(target, configuration.asset);
         } else if (source === 'text') {
             this.setText(target, configuration.asset, configuration.text);
+            const state = this.getTargetState(target);
+            render = state.textRenderPromise;
         } else if (source === 'model') {
             if (!this.getModelByName(target, configuration.asset)) return;
+            const state = this.getTargetState(target);
+            const frame = Number(configuration.frame);
+            state.modelFrame = Number.isFinite(frame) ? Math.max(1, frame) : 1;
             render = this.replaceModelScene(target, configuration.asset);
         } else {
             return;
         }
 
-        const finishDraw = () => {
-            // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
-            // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
-            // the corresponding Motion and Looks blocks, including Z perspective.
-            this.applyProjection(target);
-            this.stampTarget(target);
-            if (source !== 'model') this.publishFlatZBuffer(target);
-        };
+        const finishDraw = () => this.finishObjectDraw(
+            target,
+            configuration,
+            source,
+            Boolean(render && typeof render.then === 'function')
+        );
         if (render && typeof render.then === 'function') return render.then(finishDraw);
         finishDraw();
+    }
+
+    drawObject (target, configuration = {}) {
+        if (!target || target.isStage) return;
+        const source = String(configuration.source || 'costume').toLowerCase();
+        if (!['costume', 'video', 'text', 'model'].includes(source)) return;
+        const playsVideo = source === 'video' && String(configuration.videoMode || '').toLowerCase() === 'video';
+        let drawConfiguration = configuration;
+        if (playsVideo) {
+            const video = this.getVideoByName(target, configuration.asset);
+            if (!video) {
+                this.stopObjectVideoAudio(target, configuration);
+                return;
+            }
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const playback = this.getObjectVideoPlayback(video, configuration, currentTime);
+            if (!playback || !playback.active) {
+                this.stopObjectVideoAudio(target, configuration);
+                return;
+            }
+            this.syncObjectVideoAudio(target, video, configuration, playback, currentTime);
+            drawConfiguration = {...configuration, frame: playback.frame};
+        } else {
+            this.stopObjectVideoAudio(target, configuration);
+        }
+        if (drawConfiguration.time && !playsVideo) {
+            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
+            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            if (currentTime < startTime || currentTime > endTime) return;
+        }
+        if (source === 'video') {
+            const video = this.getVideoByName(target, drawConfiguration.asset);
+            if (!video) return;
+            const state = this.getTargetState(target);
+            const frame = this.getVideoFrameNumber(video, drawConfiguration.frame);
+            if (!state.objectDrawPromise && this.hasDisplayedObjectVideoFrame(state, video, frame)) {
+                this.applyObjectDrawConfiguration(target, drawConfiguration);
+                this.finishObjectDraw(target, drawConfiguration, source);
+                return;
+            }
+            return this.queueObjectDraw(target, drawConfiguration);
+        }
+        const state = this.getTargetState(target);
+        if (state.objectDrawPromise) return this.queueObjectDraw(target, drawConfiguration);
+        if (source === 'model') return this.queueObjectDraw(target, drawConfiguration);
+        return this.performObjectDraw(target, drawConfiguration);
     }
 
     replaceModelScene (target, requestedModel) {
@@ -2609,6 +3095,11 @@ class MovieAssetManager extends EventEmitter {
                 modelScene: [],
                 modelRenderPromise: null,
                 modelRenderVersion: 0,
+                objectDrawPromise: null,
+                objectDrawQueue: [],
+                objectDrawVersion: 0,
+                objectVideo: null,
+                objectVideoAssetId: null,
                 pendingVideoFrame: null,
                 renderVersion: 0,
                 rotation: {x: 0, y: 0, z: 90 - (target.direction || 90)},
@@ -3208,14 +3699,25 @@ class MovieAssetManager extends EventEmitter {
     destroyTargetState (target) {
         const state = this.targetStates.get(target.id);
         if (!state) return;
+        if (this.objectVideoAudio instanceof Map) {
+            for (const [key, playback] of this.objectVideoAudio) {
+                if (playback.targetId === target.id) this.stopObjectVideoAudioEntry(key, playback);
+            }
+        }
         state.renderVersion++;
         state.requestedMode = 'costume';
         state.textQueue.length = 0;
         state.pendingVideoFrame = null;
+        state.objectDrawQueue.length = 0;
+        state.objectDrawVersion++;
         state.modelRenderVersion++;
         if (state.video) {
             state.video.removeAttribute('src');
             state.video.load();
+        }
+        if (state.objectVideo) {
+            state.objectVideo.removeAttribute('src');
+            state.objectVideo.load();
         }
         if (state.skinId !== null && this.runtime.renderer) {
             this.runtime.renderer.destroySkin(state.skinId);

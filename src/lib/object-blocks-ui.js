@@ -131,6 +131,39 @@ const getAssetOptions = vm => [
     ...getAssetItems(vm).map(item => [`${item.label}: ${item.name}`, item.value])
 ];
 
+const modelHasFrames = model => {
+    if (!model) return false;
+    return (Array.isArray(model.motions) &&
+        model.motions.some(motion => Number(motion && motion.frameCount) > 0)) ||
+        Number(model.animationCount) > 0;
+};
+
+const normalizeVideoMode = mode => (
+    String(mode || '').toLowerCase() === 'video' ? 'video' : 'sequence'
+);
+
+const drawSelectionUsesFrame = (vm, source, asset, videoMode = 'sequence') => {
+    if (source === 'video') return normalizeVideoMode(videoMode) === 'sequence';
+    if (source !== 'model') return false;
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    const target = vm.editingTarget;
+    if (!manager || !target || typeof manager.getModels !== 'function') return false;
+    return modelHasFrames(manager.getModels(target).find(model => model.name === asset));
+};
+
+const getDrawInputVisibility = (vm, source, asset, videoMode) => {
+    const isVideo = source === 'video';
+    const normalizedMode = normalizeVideoMode(videoMode);
+    const playsVideo = isVideo && normalizedMode === 'video';
+    return {
+        frame: drawSelectionUsesFrame(vm, source, asset, normalizedMode),
+        speed: playsVideo,
+        text: source === 'text',
+        videoMode: isVideo,
+        volume: playsVideo
+    };
+};
+
 const deleteAsset = (vm, item) => {
     if (!item || !item.deletable) return false;
     const target = vm.editingTarget;
@@ -703,14 +736,33 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 return value;
             };
             const MediaField = createMediaField(ScratchBlocks, vm, assetOptions, assetValidator);
+            const videoModeValidator = function (value) {
+                // ScratchBlocks binds dropdown callbacks to the field instance.
+                // eslint-disable-next-line no-invalid-this
+                const block = getFieldSourceBlock(this);
+                const mode = normalizeVideoMode(value);
+                if (block) {
+                    block.objectDrawVideoMode_ = mode;
+                    block.syncDrawOptionalInputs_();
+                }
+                return mode;
+            };
             const SourceField = ScratchBlocks.FieldLabelSerializable || ScratchBlocks.FieldLabel;
             this.appendDummyInput('DRAW')
                 .appendField('draw')
                 .appendField(new MediaField(), 'ASSET');
+            this.appendDummyInput('VIDEO_MODE_INPUT')
+                .appendField(new ScratchBlocks.FieldDropdown([
+                    ['sequence', 'sequence'],
+                    ['video', 'video']
+                ], videoModeValidator), 'VIDEO_MODE');
             this.appendDummyInput('LEGACY_SOURCE')
                 .appendField(new SourceField('costume'), 'SOURCE');
             this.getInput('LEGACY_SOURCE').setVisible(false);
             this.appendValueInput('TEXT').appendField('text:');
+            this.appendValueInput('FRAME').appendField('frame:');
+            this.appendValueInput('SPEED').appendField('speed:');
+            this.appendValueInput('VOLUME').appendField('volume:');
             const position = this.appendValueInput('PX').appendField('position x:');
             position.objectStartRow_ = true;
             this.appendValueInput('PY').appendField('y:');
@@ -742,7 +794,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 // ScratchBlocks binds onchange handlers to the block instance.
                 // eslint-disable-next-line no-invalid-this
                 const block = this;
-                block.syncDrawTextVisibility_();
+                block.syncDrawOptionalInputs_();
                 const value = block.getFieldValue('ASSET');
                 if (value && value !== IMPORT_VALUE) {
                     const selection = decodeDrawAsset(
@@ -754,6 +806,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 }
             });
             this.objectDrawSource_ = this.getFieldValue('SOURCE') || 'costume';
+            this.objectDrawVideoMode_ = normalizeVideoMode(this.getFieldValue('VIDEO_MODE'));
             this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
         },
         updateDrawSelection_: function (requestedValue) {
@@ -762,9 +815,10 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 this.getFieldValue('SOURCE') || this.objectDrawSource_ || 'costume'
             );
             this.objectDrawSource_ = selection.source;
+            this.objectDrawAsset_ = selection.asset;
             const sourceField = this.getField('SOURCE');
             if (sourceField) sourceField.setValue(selection.source);
-            this.syncDrawTextVisibility_();
+            this.syncDrawOptionalInputs_();
         },
         setDrawAsset_: function (source, asset) {
             this.updateDrawSelection_(encodeDrawAsset(source, asset));
@@ -775,21 +829,37 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             }
             if (this.rendered) this.render();
         },
-        syncDrawTextVisibility_: function () {
-            const textInput = this.getInput('TEXT');
-            if (!textInput) return;
-            const visible = this.objectDrawSource_ === 'text';
-            const renderList = textInput.setVisible(visible);
-            if (!visible && textInput.connection) {
-                textInput.connection.hideAll();
-                const textBlock = textInput.connection.targetBlock();
-                if (textBlock && textBlock.getSvgRoot()) {
-                    textBlock.getSvgRoot().style.display = 'none';
-                    textBlock.rendered = false;
+        syncDrawOptionalInputs_: function () {
+            const syncVisibility = (inputName, visible) => {
+                const input = this.getInput(inputName);
+                if (!input) return;
+                const renderList = input.setVisible(visible);
+                if (!visible && input.connection) {
+                    input.connection.hideAll();
+                    const childBlock = input.connection.targetBlock();
+                    if (childBlock && childBlock.getSvgRoot()) {
+                        childBlock.getSvgRoot().style.display = 'none';
+                        childBlock.rendered = false;
+                    }
+                } else if (visible && this.rendered) {
+                    for (const block of renderList) block.render();
                 }
-            } else if (visible && this.rendered) {
-                for (const block of renderList) block.render();
-            }
+            };
+            const videoMode = normalizeVideoMode(
+                this.getFieldValue('VIDEO_MODE') || this.objectDrawVideoMode_
+            );
+            this.objectDrawVideoMode_ = videoMode;
+            const visibility = getDrawInputVisibility(
+                vm,
+                this.objectDrawSource_,
+                this.objectDrawAsset_,
+                videoMode
+            );
+            syncVisibility('TEXT', visibility.text);
+            syncVisibility('VIDEO_MODE_INPUT', visibility.videoMode);
+            syncVisibility('FRAME', visibility.frame);
+            syncVisibility('SPEED', visibility.speed);
+            syncVisibility('VOLUME', visibility.volume);
         },
         mutationToDom: function () {
             const mutation = document.createElement('mutation');
@@ -826,8 +896,12 @@ export {
     getFieldSourceBlock,
     getLiveBlock,
     IMPORT_VALUE,
+    drawSelectionUsesFrame,
+    getDrawInputVisibility,
     getAssetItems,
     getAssetOptions,
+    modelHasFrames,
+    normalizeVideoMode,
     deleteAsset,
     openImportPicker,
     persistDrawAsset

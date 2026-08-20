@@ -7,6 +7,9 @@ describe('Movie toolbox categories', () => {
 
         expect(toolbox).toContain('<category name="Objects" id="objects"');
         expect(toolbox).toContain('<block type="objects_draw">');
+        expect(toolbox).toContain('<value name="FRAME"><shadow type="math_number"><field name="NUM">1</field>');
+        expect(toolbox).toContain('<value name="SPEED"><shadow type="math_number"><field name="NUM">1</field>');
+        expect(toolbox).toContain('<value name="VOLUME"><shadow type="math_number"><field name="NUM">100</field>');
         expect(toolbox).not.toContain('<statement name="SUBSTACK">');
         expect(toolbox).toContain('<value name="TEXT"><shadow type="text">');
         expect(toolbox).not.toContain('type="objects_position"');

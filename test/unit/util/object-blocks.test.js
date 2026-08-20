@@ -9,8 +9,12 @@ import installObjectBlocks, {
 } from '../../../src/lib/object-blocks';
 import {
     deleteAsset,
+    drawSelectionUsesFrame,
+    getDrawInputVisibility,
     getAssetItems,
     getFieldSourceBlock,
+    modelHasFrames,
+    normalizeVideoMode,
     openImportPicker
 } from '../../../src/lib/object-blocks-ui';
 
@@ -18,7 +22,7 @@ const makeUtil = () => ({
     stackFrame: {},
     startBranch: jest.fn(),
     target: {id: 'sprite'},
-    thread: {}
+    thread: {peekStack: jest.fn(() => 'draw-block')}
 });
 
 const makeGroupingHarness = onStep => {
@@ -207,6 +211,40 @@ describe('Objects blocks', () => {
         });
     });
 
+    test('switches video controls between silent sequence frames and timed playback', () => {
+        const target = {id: 'sprite'};
+        const models = [
+            {animationCount: 0, motions: [], name: 'Still'},
+            {animationCount: 1, motions: [{frameCount: 48, name: 'Walk'}], name: 'Animated'}
+        ];
+        const vm = {
+            editingTarget: target,
+            runtime: {movieAssetManager: {getModels: jest.fn(() => models)}}
+        };
+
+        expect(drawSelectionUsesFrame(vm, 'video', 'clip')).toBe(true);
+        expect(drawSelectionUsesFrame(vm, 'video', 'clip', 'video')).toBe(false);
+        expect(drawSelectionUsesFrame(vm, 'model', 'Still')).toBe(false);
+        expect(drawSelectionUsesFrame(vm, 'model', 'Animated')).toBe(true);
+        expect(drawSelectionUsesFrame(vm, 'costume', 'image')).toBe(false);
+        expect(getDrawInputVisibility(vm, 'video', 'clip', 'sequence')).toEqual({
+            frame: true,
+            speed: false,
+            text: false,
+            videoMode: true,
+            volume: false
+        });
+        expect(getDrawInputVisibility(vm, 'video', 'clip', 'video')).toEqual({
+            frame: false,
+            speed: true,
+            text: false,
+            videoMode: true,
+            volume: true
+        });
+        expect(normalizeVideoMode('anything else')).toBe('sequence');
+        expect(modelHasFrames({animationCount: 1})).toBe(true);
+    });
+
     test('exposes one draw command instead of separate transform commands', () => {
         const vm = {runtime: {}};
         const ObjectBlocks = createObjectBlocksClass(vm);
@@ -215,7 +253,7 @@ describe('Objects blocks', () => {
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual(['draw', 'grouping']);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
-            'SOURCE', 'ASSET', 'TEXT',
+            'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
@@ -239,6 +277,10 @@ describe('Objects blocks', () => {
             SOURCE: 'text',
             ASSET: 'Movie Sans',
             TEXT: 'Title',
+            VIDEO_MODE: 'sequence',
+            FRAME: 12,
+            SPEED: 1,
+            VOLUME: 100,
             PX: 10,
             PY: 20,
             PZ: 30,
@@ -257,18 +299,68 @@ describe('Objects blocks', () => {
 
         expect(manager.drawObject).toHaveBeenCalledWith(util.target, {
             asset: 'Movie Sans',
+            frame: 12,
             height: 80,
+            playbackId: 'draw-block',
             position: {x: 10, y: 20, z: 30},
             rotation: {x: 1, y: 2, z: 3},
             scale: {x: 2, y: 3, z: 4},
             size: 75,
             source: 'text',
+            speed: 1,
             text: 'Title',
             time: {start: 1.5, end: 4.5},
+            videoMode: 'sequence',
+            volume: 100,
             width: 125
         });
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
         expect(util.startBranch).not.toHaveBeenCalled();
+    });
+
+    test('starts asynchronous Objects video playback without returning a promise to the VM', () => {
+        const pending = new Promise(() => {});
+        const manager = {
+            drawObject: jest.fn(() => pending),
+            runWithoutWaiting: jest.fn()
+        };
+        const vm = {runtime: {movieAssetManager: manager}};
+        const ObjectBlocks = createObjectBlocksClass(vm);
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks.draw({
+            ASSET: 'video:clip',
+            FRAME: 1,
+            HEIGHT: 100,
+            PX: 0,
+            PY: 0,
+            PZ: 480,
+            RX: 0,
+            RY: 0,
+            RZ: 0,
+            SIZE: 100,
+            SOURCE: 'video',
+            SPEED: 2,
+            SX: 1,
+            SY: 1,
+            SZ: 1,
+            T1: 3,
+            T2: 8,
+            TEXT: '',
+            VIDEO_MODE: 'video',
+            VOLUME: 60,
+            WIDTH: 100
+        }, util)).toBeUndefined();
+
+        expect(manager.drawObject).toHaveBeenCalledWith(util.target, expect.objectContaining({
+            asset: 'clip',
+            playbackId: 'draw-block',
+            speed: 2,
+            videoMode: 'video',
+            volume: 60
+        }));
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });
 
     test('runs both grouping branches atomically and scopes Pen FX without returning a promise', () => {

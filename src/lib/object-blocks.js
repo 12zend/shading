@@ -93,6 +93,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         SOURCE: {type: ArgumentType.STRING, defaultValue: 'costume'},
                         ASSET: {type: ArgumentType.STRING, defaultValue: ''},
                         TEXT: {type: ArgumentType.STRING, defaultValue: 'Hello!'},
+                        VIDEO_MODE: {type: ArgumentType.STRING, defaultValue: 'sequence'},
+                        FRAME: numberArgument(1),
+                        SPEED: numberArgument(1),
+                        VOLUME: numberArgument(100),
                         PX: numberArgument(0),
                         PY: numberArgument(0),
                         PZ: numberArgument(480),
@@ -121,15 +125,22 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     draw (args, util) {
         const selection = decodeDrawAsset(args.ASSET, args.SOURCE);
+        const playbackId = util && util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : '';
         const context = {
             asset: selection.asset,
+            frame: args.FRAME,
             height: args.HEIGHT,
+            playbackId,
             position: {x: args.PX, y: args.PY, z: args.PZ},
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ},
             size: args.SIZE,
             source: selection.source,
+            speed: args.SPEED,
             text: args.TEXT,
+            videoMode: args.VIDEO_MODE,
+            volume: args.VOLUME,
             width: args.WIDTH
         };
         if (Object.prototype.hasOwnProperty.call(args, 'T1') ||

@@ -1515,6 +1515,241 @@ describe('MovieAssetManager rendering performance', () => {
         );
     });
 
+    test('decodes and stamps every layered video draw with its own frame and size', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.setSize = jest.fn();
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.publishFlatZBuffer = jest.fn();
+        manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const video = {assetId: 'video', duration: 10, frameRate: 30, name: 'clip'};
+        const frames = [{name: 'frame 4'}, {name: 'frame 8'}];
+        manager.videos.set(target.id, [video]);
+        manager.decodeObjectVideoFrame = jest.fn()
+            .mockResolvedValueOnce(frames[0])
+            .mockResolvedValueOnce(frames[1]);
+
+        const first = manager.drawObject(target, {
+            asset: 'clip',
+            frame: 4,
+            height: 100,
+            position: {x: 0, y: 0, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            size: 100,
+            source: 'video',
+            width: 100
+        });
+        const second = manager.drawObject(target, {
+            asset: 'clip',
+            frame: 8,
+            height: 50,
+            position: {x: 20, y: 10, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            size: 50,
+            source: 'video',
+            width: 50
+        });
+
+        expect(second).toBe(first);
+        await first;
+
+        expect(manager.decodeObjectVideoFrame.mock.calls.map(call => call[2])).toEqual([4, 8]);
+        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenNthCalledWith(1, frames[0], 2);
+        expect(manager.runtime.renderer.updateBitmapSkin).toHaveBeenNthCalledWith(1, 1, frames[1], 2);
+        expect(manager.runtime.graphicEffectsManager.setScale.mock.calls
+            .filter(call => call[1] === 'width').map(call => call[2])).toEqual([100, 50]);
+        expect(target.setSize.mock.calls.map(call => call[0])).toEqual([100, 50]);
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(2);
+    });
+
+    test('maps Objects video time to a speed-adjusted frame and maximum duration', () => {
+        const manager = makeManager();
+        const video = {duration: 6, frameRate: 30};
+        const configuration = {
+            speed: 2,
+            time: {start: 1, end: 10},
+            videoMode: 'video',
+            volume: 60
+        };
+
+        expect(manager.getObjectVideoPlayback(video, configuration, 3)).toEqual({
+            active: true,
+            end: 4,
+            frame: 121,
+            mediaTime: 4,
+            speed: 2,
+            start: 1,
+            volume: 60
+        });
+        expect(manager.getObjectVideoPlayback(video, configuration, 4).active).toBe(false);
+        expect(manager.getObjectVideoPlayback(video, {
+            ...configuration,
+            speed: 0.5,
+            time: {start: 1, end: 5}
+        }, 4).end).toBe(5);
+    });
+
+    test('draws the timeline-derived Objects video frame and stops exactly at the playback end', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const video = {assetId: 'video', duration: 6, frameRate: 30, name: 'clip'};
+        const pending = Promise.resolve();
+        manager.timeline = {currentTime: 2, playing: true, recording: false};
+        manager.videos.set(target.id, [video]);
+        manager.queueObjectDraw = jest.fn(() => pending);
+        manager.syncObjectVideoAudio = jest.fn();
+        manager.stopObjectVideoAudio = jest.fn();
+        const configuration = {
+            asset: 'clip',
+            playbackId: 'draw-video',
+            source: 'video',
+            speed: 2,
+            time: {start: 1, end: 10},
+            videoMode: 'video',
+            volume: 60
+        };
+
+        expect(manager.drawObject(target, configuration)).toBe(pending);
+        expect(manager.queueObjectDraw).toHaveBeenCalledWith(target, expect.objectContaining({frame: 61}));
+        expect(manager.syncObjectVideoAudio).toHaveBeenCalledWith(
+            target,
+            video,
+            configuration,
+            expect.objectContaining({mediaTime: 2, speed: 2}),
+            2
+        );
+
+        manager.timeline.currentTime = 4;
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(manager.queueObjectDraw).toHaveBeenCalledTimes(1);
+        expect(manager.stopObjectVideoAudio).toHaveBeenCalledWith(target, configuration);
+    });
+
+    test('plays Objects video audio with speed-linked pitch, block volume, and addon project volume', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const element = {
+            currentTime: 0,
+            duration: 8,
+            load: jest.fn(),
+            muted: true,
+            pause: jest.fn(),
+            paused: true,
+            play: jest.fn(() => {
+                element.paused = false;
+                return Promise.resolve();
+            }),
+            playbackRate: 1,
+            preservesPitch: true,
+            readyState: 1,
+            removeAttribute: jest.fn(),
+            volume: 1
+        };
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => element)};
+        manager.runtime.audioEngine = {inputNode: {gain: {value: 0.5}}};
+        manager.timeline = {playing: true, recording: false};
+        try {
+            manager.syncObjectVideoAudio(target, {
+                assetId: 'video',
+                url: 'blob:video'
+            }, {
+                asset: 'clip',
+                playbackId: 'draw-video'
+            }, {
+                mediaTime: 2,
+                speed: 2,
+                volume: 60
+            }, 2);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(global.document.createElement).toHaveBeenCalledWith('audio');
+            expect(element.currentTime).toBe(2);
+            expect(element.playbackRate).toBe(2);
+            expect(element.preservesPitch).toBe(false);
+            expect(element.volume).toBe(0.3);
+            expect(element.play).toHaveBeenCalledTimes(1);
+        } finally {
+            manager.stopAllObjectVideoAudio();
+            global.document = originalDocument;
+        }
+    });
+
+    test('records Objects video audio once with project volume and a forced export end', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const video = {assetId: 'video', duration: 6};
+        const buffer = {duration: 6};
+        manager.timeline = {recording: true, renderFrameIndex: 30};
+        manager.runtime.audioEngine = {inputNode: {gain: {value: 0.5}}};
+        manager.renderingSoundEvents = [];
+        manager.playedTimelineSoundBlocks = new Set();
+        const configuration = {asset: 'clip', playbackId: 'draw-video'};
+        const playback = {end: 2.5, mediaTime: 0, speed: 2, volume: 60};
+
+        manager.recordObjectVideoAudio(target, video, configuration, playback, 1);
+        manager.recordObjectVideoAudio(target, video, configuration, playback, 1);
+
+        expect(manager.renderingSoundEvents).toEqual([{
+            duration: 1.5,
+            frame: 30,
+            offset: 0,
+            playbackRate: 2,
+            video,
+            volume: 30
+        }]);
+
+        manager.decodeRenderingVideoAudio = jest.fn(() => Promise.resolve({
+            buffer,
+            context: {},
+            ownsContext: false
+        }));
+        const audio = await manager.decodeRenderingAudio(null, '', 30);
+        expect(audio.clips).toEqual([{
+            buffer,
+            duration: 1.5,
+            offset: 0,
+            pan: 0,
+            playbackRate: 2,
+            startTime: 1,
+            volume: 0.3
+        }]);
+    });
+
+    test('uses the draw frame for an animated model', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.setSize = jest.fn();
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        manager.models.set(target.id, [{assetId: 'model', name: 'Hero'}]);
+        manager.replaceModelScene = jest.fn(() => Promise.resolve());
+
+        const draw = manager.drawObject(target, {
+            asset: 'Hero',
+            frame: 17,
+            position: {},
+            rotation: {},
+            scale: {},
+            source: 'model'
+        });
+        await draw;
+
+        expect(manager.getTargetState(target).modelFrame).toBe(17);
+        expect(manager.replaceModelScene).toHaveBeenCalledWith(target, 'Hero');
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(1);
+    });
+
     test('waits for an exact video frame before a following stamp can run', () => {
         const manager = makeManager();
         const target = makeTarget();
@@ -1556,6 +1791,34 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
         expect(manager.timeline.renderFrameIndex).toBe(1);
     });
+
+    test.each(['interpreter', 'compiled'])(
+        'commits an atomic Pen frame after %s erase-all execution',
+        executionPath => {
+            const manager = makeTimelineManager();
+            const penFX = {
+                beginFrame: jest.fn(() => true),
+                cancelFrame: jest.fn(),
+                commitFrame: jest.fn()
+            };
+            manager.runtime.ext_pen = {clear: jest.fn()};
+            manager.runtime._primitives.pen_clear = jest.fn();
+            manager.attachPenFrameTransactions(penFX);
+            manager.timeline.renderedThisStep = true;
+
+            const result = executionPath === 'interpreter' ?
+                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.ext_pen.clear();
+
+            expect(result).toBeUndefined();
+            expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
+            expect(penFX.commitFrame).not.toHaveBeenCalled();
+
+            manager.handleTimelineAfterExecute();
+
+            expect(penFX.commitFrame).toHaveBeenCalledTimes(1);
+            expect(penFX.cancelFrame).not.toHaveBeenCalled();
+        }
+    );
 
     test('renders the requested video and frame as one operation', () => {
         const manager = makeManager();

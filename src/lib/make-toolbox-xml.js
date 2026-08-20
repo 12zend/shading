@@ -672,6 +672,8 @@ const objects = function (costumeName) {
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
             <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
+            ${number('FRAME', 1)}
+            ${number('SPEED', 1)}${number('VOLUME', 100)}
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
             ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}

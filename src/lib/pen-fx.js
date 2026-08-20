@@ -1545,6 +1545,7 @@ const createPenFXClass = vm => {
       this.framebuffers = [];
       this.bufferStack = [];
       this.groupStack = [];
+      this.frameTransaction = null;
       this.blendOpacity = 1;
       this.uniformCache = new WeakMap();
       this.positionCache = new WeakMap();
@@ -1721,9 +1722,21 @@ const createPenFXClass = vm => {
     _restoreGLState() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.activeTexture(gl.TEXTURE0);
+      gl.colorMask(true, true, true, true);
+      gl.disable(gl.STENCIL_TEST);
       gl.enable(gl.BLEND);
       gl.blendEquation(gl.FUNC_ADD);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    }
+
+    _clearTransparent(framebuffer) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.STENCIL_TEST);
+      gl.colorMask(true, true, true, true);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
     _createBufferTexture() {
@@ -1782,9 +1795,9 @@ const createPenFXClass = vm => {
       this._render(this._program('copy'), baseline.framebuffer, [{name: 'u_image', texture: skin._texture}], {}, []);
       this.groupStack.push(baseline);
       const target = skin._framebuffer.framebuffer || skin._framebuffer;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, target);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      // Scratch's renderer can leave write masks or stencil state configured after a draw. Reset them before
+      // clearing so the isolated group always starts with RGBA (0, 0, 0, 0), never the white stage background.
+      this._clearTransparent(target);
       this._restoreGLState();
     }
 
@@ -1802,6 +1815,78 @@ const createPenFXClass = vm => {
       gl.deleteFramebuffer(baseline.framebuffer);
       gl.deleteTexture(baseline.texture);
       this._markSkinChanged(skin);
+    }
+
+    beginFrame() {
+      if (this.frameTransaction) return false;
+      const skin = this._penSkin();
+      if (!skin || !skin._texture || !skin._framebuffer || !skin._size) return false;
+      if (typeof renderer._doExitDrawRegion === 'function') renderer._doExitDrawRegion();
+      this._resize(skin._size[0], skin._size[1]);
+      const staging = this._createBufferTexture();
+      gl.bindTexture(gl.TEXTURE_2D, staging.texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      const hadOwnGetTexture = Object.prototype.hasOwnProperty.call(skin, 'getTexture');
+      const originalGetTexture = skin.getTexture;
+      const baselineTexture = skin._texture;
+      this.frameTransaction = {
+        baselineFramebuffer: skin._framebuffer,
+        baselineTexture,
+        hadOwnGetTexture,
+        originalGetTexture,
+        skin,
+        stagingFramebuffer: staging.framebuffer,
+        stagingTexture: staging.texture
+      };
+      skin._texture = staging.texture;
+      skin._framebuffer = {
+        attachments: [staging.texture],
+        framebuffer: staging.framebuffer,
+        height: this.height,
+        width: this.width
+      };
+      // Pen operations use _texture/_framebuffer, while stage drawing asks getTexture(). Keep the completed
+      // previous frame visible until the staged pen texture is committed.
+      skin.getTexture = () => baselineTexture;
+      this._clearTransparent(staging.framebuffer);
+      this._restoreGLState();
+      return true;
+    }
+
+    restoreFrameTextureGetter(transaction) {
+      if (transaction.hadOwnGetTexture) {
+        transaction.skin.getTexture = transaction.originalGetTexture;
+      } else {
+        delete transaction.skin.getTexture;
+      }
+    }
+
+    commitFrame() {
+      const transaction = this.frameTransaction;
+      if (!transaction) return false;
+      if (typeof renderer._doExitDrawRegion === 'function') renderer._doExitDrawRegion();
+      this.frameTransaction = null;
+      this.restoreFrameTextureGetter(transaction);
+      const baselineFramebuffer = transaction.baselineFramebuffer.framebuffer || transaction.baselineFramebuffer;
+      gl.deleteFramebuffer(baselineFramebuffer);
+      gl.deleteTexture(transaction.baselineTexture);
+      this._markSkinChanged(transaction.skin);
+      return true;
+    }
+
+    cancelFrame() {
+      const transaction = this.frameTransaction;
+      if (!transaction) return false;
+      if (typeof renderer._doExitDrawRegion === 'function') renderer._doExitDrawRegion();
+      this.frameTransaction = null;
+      gl.deleteFramebuffer(transaction.stagingFramebuffer);
+      gl.deleteTexture(transaction.stagingTexture);
+      transaction.skin._texture = transaction.baselineTexture;
+      transaction.skin._framebuffer = transaction.baselineFramebuffer;
+      this.restoreFrameTextureGetter(transaction);
+      this._restoreGLState();
+      return true;
     }
 
     clearGroupStack() {
@@ -2644,6 +2729,10 @@ const createPenFXClass = vm => {
       this.warned = false;
       this.effectCaptureStack = [];
       vm.runtime.penFX = this;
+      const movieAssetManager = vm.runtime.movieAssetManager;
+      if (movieAssetManager && typeof movieAssetManager.attachPenFrameTransactions === 'function') {
+        movieAssetManager.attachPenFrameTransactions(this);
+      }
     }
 
     getInfo() {
@@ -3116,6 +3205,33 @@ const createPenFXClass = vm => {
 
     endGroup() {
       this._safe(engine => engine.endGroup());
+    }
+
+    beginFrame() {
+      try {
+        return this._getEngine().beginFrame();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
+    }
+
+    commitFrame() {
+      try {
+        return this._getEngine().commitFrame();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
+    }
+
+    cancelFrame() {
+      try {
+        return this._getEngine().cancelFrame();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
     }
 
     setBlendMode(args) {
