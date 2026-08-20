@@ -7,6 +7,11 @@ import {
     isShareableBlocklyEvent,
     serializeBlocklyEvent
 } from './collaboration-events';
+import {
+    describeCollaborationTarget,
+    getOriginalTargets,
+    resolveCollaborationTarget
+} from './collaboration-targets';
 import {ensureTeamId, getTeamPath, wasTeamCreatedInSession} from './team-route';
 
 const IDENTITY_PREFIX = 'movie:collaboration:identity:';
@@ -15,6 +20,7 @@ const ROLE_PREFIX = 'movie:collaboration:role:';
 const CLAIM_PREFIX = 'movie:team-claim:';
 const SESSION_IDENTITY_PREFIX = 'movie:collaboration:session-identity:';
 const MAX_ENTRY_LENGTH = 4000;
+const MEDIA_SYNC_DEBOUNCE_MS = 100;
 
 const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -103,6 +109,12 @@ const base64ToArrayBuffer = base64 => {
     return bytes.buffer;
 };
 
+const getAssetFingerprint = asset => ({
+    assetId: String((asset && asset.assetId) || ''),
+    dataFormat: String((asset && asset.dataFormat) || ''),
+    name: String((asset && asset.name) || '')
+});
+
 const getWebSocketURL = teamId => {
     const configured = process.env.COLLABORATION_WS_URL || '';
     if (configured) {
@@ -125,6 +137,10 @@ class CollaborationManager extends EventEmitter {
         this.pendingOperationIds = new Set();
         this.snapshotChunks = null;
         this.applyingRemote = false;
+        this.projectLoadInProgress = false;
+        this.projectLoadOperations = [];
+        this.mediaSyncPending = false;
+        this.projectSyncRequestPending = false;
         this.reconnectAttempts = 0;
         const initialRole = getInitialRole(this.teamId, this.sessionScopedIdentity);
         this.state = {
@@ -147,8 +163,11 @@ class CollaborationManager extends EventEmitter {
 
         this.handleWorkspaceEvent = this.handleWorkspaceEvent.bind(this);
         this.handleTargetsUpdate = this.handleTargetsUpdate.bind(this);
+        this.handleProjectChanged = this.handleProjectChanged.bind(this);
+        this.mediaFingerprint = this.getMediaFingerprint();
         this.connect();
         this.vm.on('targetsUpdate', this.handleTargetsUpdate);
+        this.vm.on('PROJECT_CHANGED', this.handleProjectChanged);
     }
 
     getState () {
@@ -294,13 +313,16 @@ class CollaborationManager extends EventEmitter {
             if (this.state.me.role === 'admin') this.sendSnapshot(message.baseSequence);
             break;
         case 'snapshot_manifest':
-            this.snapshotChunks = new Array(message.chunkCount);
-            this.snapshotSequence = message.sequence || 0;
-            this.bootstrapOperations = message.operations || [];
-            this.updateState({synchronizing: true, syncMessage: null});
+            this.prepareSnapshot(message, false);
+            break;
+        case 'project_snapshot_manifest':
+            this.prepareSnapshot(message, true);
             break;
         case 'snapshot_chunk':
             this.receiveSnapshotChunk(message);
+            break;
+        case 'project_sync_needed':
+            this.sendProjectSnapshot(message.requestId, message.baseSequence);
             break;
         case 'snapshot_waiting':
             this.updateState({synchronizing: true, syncMessage: message.message || null});
@@ -343,11 +365,15 @@ class CollaborationManager extends EventEmitter {
             this.pendingOperationIds.delete(operation.clientOperationId);
             return;
         }
+        if (this.projectLoadInProgress) {
+            this.projectLoadOperations.push(operation);
+            return;
+        }
         if (this.snapshotInProgress && operation.sequence > this.snapshotBaseSequence) {
             this.snapshotCaptureOperations.push(operation);
             return;
         }
-        this.applyEventPayload(operation.forward, operation.targetId);
+        this.applyOperation(operation);
     }
 
     receiveAwareness (message) {
@@ -358,21 +384,43 @@ class CollaborationManager extends EventEmitter {
         this.updateState({awareness});
     }
 
+    prepareSnapshot (message, projectUpdate) {
+        const chunkCount = Number(message.chunkCount);
+        if (!Number.isInteger(chunkCount) || chunkCount < 1) return;
+        this.snapshotChunks = new Array(chunkCount);
+        this.snapshotSequence = message.sequence || 0;
+        this.snapshotId = message.syncId || null;
+        this.snapshotIsProjectUpdate = projectUpdate;
+        this.bootstrapOperations = message.operations || [];
+        this.projectLoadInProgress = true;
+        this.projectLoadOperations = [];
+        this.updateState({synchronizing: true, syncMessage: null});
+    }
+
     receiveSnapshotChunk (message) {
         if (!this.snapshotChunks || message.index >= this.snapshotChunks.length) return;
+        if ((message.syncId || null) !== this.snapshotId) return;
         this.snapshotChunks[message.index] = message.data;
         if (this.snapshotChunks.some(chunk => typeof chunk !== 'string')) return;
         const snapshot = this.snapshotChunks.join('');
         const operations = this.bootstrapOperations || [];
+        const projectUpdate = this.snapshotIsProjectUpdate;
         this.snapshotChunks = null;
         this.bootstrapOperations = [];
         this.applyingRemote = true;
         this.vm.loadProject(base64ToArrayBuffer(snapshot))
             .then(() => {
-                for (const operation of operations) {
-                    this.applyEventPayload(operation.forward, operation.targetId);
+                const replayById = new Map();
+                for (const operation of operations.concat(this.projectLoadOperations)) {
+                    replayById.set(operation.id || operation.clientOperationId, operation);
                 }
-                this.send({type: 'snapshot_applied', sequence: this.snapshotSequence});
+                const replayOperations = Array.from(replayById.values())
+                    .sort((a, b) => a.sequence - b.sequence);
+                for (const operation of replayOperations) {
+                    this.applyOperation(operation);
+                }
+                if (!projectUpdate) this.send({type: 'snapshot_applied', sequence: this.snapshotSequence});
+                this.mediaFingerprint = this.getMediaFingerprint();
                 this.updateState({synchronizing: false, error: null, syncMessage: null});
                 this.emit('snapshotApplied');
             })
@@ -380,6 +428,8 @@ class CollaborationManager extends EventEmitter {
                 this.updateState({error: 'チームのプロジェクトを読み込めませんでした。再接続してください。'});
             })
             .then(() => {
+                this.projectLoadInProgress = false;
+                this.projectLoadOperations = [];
                 this.applyingRemote = false;
             });
     }
@@ -401,12 +451,53 @@ class CollaborationManager extends EventEmitter {
             .then(() => {
                 const operations = this.snapshotCaptureOperations.sort((a, b) => a.sequence - b.sequence);
                 for (const operation of operations) {
-                    this.applyEventPayload(operation.forward, operation.targetId);
+                    this.applyOperation(operation);
                 }
                 this.snapshotCaptureOperations = [];
                 this.snapshotInProgress = false;
                 this.snapshotBaseSequence = null;
                 this.snapshotPromise = null;
+                if (this.mediaSyncPending) this.scheduleMediaSync();
+            });
+    }
+
+    sendProjectSnapshot (requestId, baseSequence) {
+        if (this.snapshotInProgress) {
+            this.projectSyncRequestPending = false;
+            this.mediaSyncPending = true;
+            return;
+        }
+        if (this.state.me.role === 'viewer') {
+            this.projectSyncRequestPending = false;
+            return;
+        }
+        const normalizedSequence = Number(baseSequence);
+        if (!requestId || !Number.isInteger(normalizedSequence) || normalizedSequence < 0) return;
+        this.snapshotInProgress = true;
+        this.snapshotBaseSequence = normalizedSequence;
+        this.snapshotCaptureOperations = [];
+        this.snapshotPromise = this.vm.saveProjectSb3('base64')
+            .then(snapshot => {
+                this.send({
+                    type: 'project_sync',
+                    requestId,
+                    baseSequence: normalizedSequence,
+                    data: snapshot
+                });
+            })
+            .catch(() => {
+                this.updateState({error: 'メディアの同期用コピーを作成できませんでした。'});
+            })
+            .then(() => {
+                const operations = this.snapshotCaptureOperations.sort((a, b) => a.sequence - b.sequence);
+                for (const operation of operations) this.applyOperation(operation);
+                this.snapshotCaptureOperations = [];
+                this.snapshotInProgress = false;
+                this.snapshotBaseSequence = null;
+                this.snapshotPromise = null;
+                this.mediaFingerprint = this.getMediaFingerprint();
+                this.projectSyncRequestPending = false;
+                if (this.mediaSyncPending) this.scheduleMediaSync();
             });
     }
 
@@ -435,10 +526,12 @@ class CollaborationManager extends EventEmitter {
         const forward = serializeBlocklyEvent(event, this.ScratchBlocks);
         const inverse = invertBlocklyEvent(forward);
         if (!forward || !inverse) return;
-        const targetId = this.vm.editingTarget && this.vm.editingTarget.id;
+        const editingTarget = this.vm.editingTarget;
+        const targetId = editingTarget && editingTarget.id;
+        const target = describeCollaborationTarget(this.vm.runtime, editingTarget);
 
         if (this.state.me.role === 'viewer' || this.state.synchronizing || this.snapshotInProgress) {
-            this.applyEventPayload(inverse, targetId);
+            this.applyEventPayload(inverse, targetId, target);
             this.updateState({
                 error: this.snapshotInProgress ? '最新プロジェクトの共有中はブロックを編集できません。' :
                     (this.state.synchronizing ? 'プロジェクトの同期が終わるまで編集できません。' :
@@ -453,6 +546,7 @@ class CollaborationManager extends EventEmitter {
             type: 'operation',
             clientOperationId,
             targetId,
+            target,
             forward,
             inverse,
             summary: describeBlocklyEvent(forward)
@@ -468,15 +562,21 @@ class CollaborationManager extends EventEmitter {
                 inverse,
                 sequence: Date.now(),
                 summary: describeBlocklyEvent(forward),
-                targetId
+                targetId,
+                target
             };
             this.receiveOperation(localOperation);
         }
     }
 
-    applyEventPayload (payload, targetId) {
+    applyOperation (operation) {
+        if (!operation) return false;
+        return this.applyEventPayload(operation.forward, operation.targetId, operation.target);
+    }
+
+    applyEventPayload (payload, targetId, targetDescriptor) {
         if (!payload || !this.ScratchBlocks || !this.workspace) return false;
-        const target = this.vm.runtime.getTargetById(targetId);
+        const target = resolveCollaborationTarget(this.vm.runtime, targetDescriptor, targetId);
         if (!target) return false;
         let restoredEvent;
         try {
@@ -487,7 +587,7 @@ class CollaborationManager extends EventEmitter {
 
         this.applyingRemote = true;
         try {
-            if (this.vm.editingTarget && this.vm.editingTarget.id === targetId) {
+            if (this.vm.editingTarget && this.vm.editingTarget.id === target.id) {
                 this.ScratchBlocks.Events.disable();
                 try {
                     restoredEvent.run(true);
@@ -500,6 +600,56 @@ class CollaborationManager extends EventEmitter {
             this.applyingRemote = false;
         }
         return true;
+    }
+
+    getMediaFingerprint () {
+        const runtime = this.vm && this.vm.runtime;
+        if (!runtime) return '';
+        const manager = installMovieAssetManager(this.vm);
+        const targets = getOriginalTargets(runtime);
+        const media = targets.map(target => ({
+            costumes: (typeof target.getCostumes === 'function' ? target.getCostumes() : [])
+                .map(getAssetFingerprint),
+            isStage: target.isStage === true,
+            models: manager.getModels(target).map(getAssetFingerprint),
+            name: typeof target.getName === 'function' ? target.getName() : '',
+            sounds: (typeof target.getSounds === 'function' ? target.getSounds() : [])
+                .map(getAssetFingerprint),
+            videos: manager.getVideos(target).map(getAssetFingerprint)
+        }));
+        const fontManager = runtime.fontManager;
+        const fonts = fontManager && typeof fontManager.getFonts === 'function' ?
+            fontManager.getFonts().map(font => ({
+                assetId: String((font.asset && font.asset.assetId) || ''),
+                family: String(font.family || ''),
+                name: String(font.name || '')
+            })) : [];
+        return JSON.stringify({fonts, media});
+    }
+
+    handleProjectChanged () {
+        const fingerprint = this.getMediaFingerprint();
+        if (fingerprint === this.mediaFingerprint) return;
+        this.mediaFingerprint = fingerprint;
+        if (this.applyingRemote || this.projectLoadInProgress || this.state.me.role === 'viewer') return;
+        this.mediaSyncPending = true;
+        this.scheduleMediaSync();
+    }
+
+    scheduleMediaSync () {
+        clearTimeout(this.mediaSyncTimer);
+        this.mediaSyncTimer = setTimeout(() => {
+            if (this.destroyed || this.applyingRemote || this.projectLoadInProgress ||
+                this.state.synchronizing || this.snapshotInProgress || this.projectSyncRequestPending ||
+                !this.mediaSyncPending) return;
+            const requestId = generateId();
+            if (this.send({type: 'project_sync_request', requestId})) {
+                this.mediaSyncPending = false;
+                this.projectSyncRequestPending = true;
+            } else {
+                this.updateState({error: 'メディアの変更を共有できません。共同編集サービスへ再接続してください。'});
+            }
+        }, MEDIA_SYNC_DEBOUNCE_MS);
     }
 
     handleTargetsUpdate () {
@@ -651,8 +801,10 @@ class CollaborationManager extends EventEmitter {
     destroy () {
         this.destroyed = true;
         clearTimeout(this.reconnectTimer);
+        clearTimeout(this.mediaSyncTimer);
         this.detachWorkspace();
         this.vm.removeListener('targetsUpdate', this.handleTargetsUpdate);
+        this.vm.removeListener('PROJECT_CHANGED', this.handleProjectChanged);
         if (this.socket) this.socket.close(1000, 'Editor closed');
         for (const request of this.inviteRequests.values()) {
             request.reject(new Error('共同編集を終了しました。'));

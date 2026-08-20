@@ -75,6 +75,17 @@ const normalizeAttachment = value => {
     };
 };
 
+const normalizeTarget = (value, legacyId) => {
+    const target = value && typeof value === 'object' ? value : {};
+    const index = Number(target.index);
+    return {
+        id: String(target.id || legacyId || '').slice(0, 200),
+        index: Number.isInteger(index) && index >= 0 ? index : null,
+        isStage: target.isStage === true,
+        name: String(target.name || '').slice(0, 120)
+    };
+};
+
 const createSecret = () => {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
@@ -273,7 +284,8 @@ export class TeamRoom extends DurableObject {
             return;
         }
 
-        if (message.type === 'hello' || message.type === 'snapshot') {
+        if (message.type === 'hello' || message.type === 'snapshot' ||
+            message.type === 'project_sync_request' || message.type === 'project_sync') {
             await runSerializedRoomMutation(this.ctx, async () => {
                 const mutationState = await this.getRoomState();
                 if (message.type === 'hello') {
@@ -285,7 +297,13 @@ export class TeamRoom extends DurableObject {
                     this.sendError(socket, '先にチームへ参加してください。');
                     return;
                 }
-                await this.handleSnapshot(socket, mutationMember, message, mutationState);
+                if (message.type === 'snapshot') {
+                    await this.handleSnapshot(socket, mutationMember, message, mutationState);
+                } else if (message.type === 'project_sync_request') {
+                    this.handleProjectSyncRequest(socket, mutationMember, message, mutationState);
+                } else {
+                    await this.handleProjectSync(socket, mutationMember, message, mutationState);
+                }
             });
             return;
         }
@@ -557,7 +575,8 @@ export class TeamRoom extends DurableObject {
         const forward = message.forward;
         const inverse = message.inverse;
         const serializedSize = JSON.stringify({forward, inverse}).length;
-        if (!isValidOperationPair(forward, inverse) || serializedSize > MAX_OPERATION_SIZE || !message.targetId) {
+        const target = normalizeTarget(message.target, message.targetId);
+        if (!isValidOperationPair(forward, inverse) || serializedSize > MAX_OPERATION_SIZE || !target.id) {
             this.sendError(socket, '変更データが大きすぎるか、形式が正しくありません。');
             return;
         }
@@ -573,7 +592,8 @@ export class TeamRoom extends DurableObject {
             revertedBy: null,
             sequence: state.sequence,
             summary: describeOperation(forward),
-            targetId: String(message.targetId || '').slice(0, 200)
+            targetId: target.id,
+            target
         };
         const key = `history:${padSequence(operation.sequence)}`;
         await this.ctx.storage.put({
@@ -621,7 +641,8 @@ export class TeamRoom extends DurableObject {
             revertedBy: null,
             sequence: state.sequence,
             summary: `${result.operation.summary}を元に戻す`,
-            targetId: result.operation.targetId
+            targetId: result.operation.targetId,
+            target: result.operation.target
         };
         const revertKey = `history:${padSequence(revertOperation.sequence)}`;
         await this.ctx.storage.put({
@@ -740,6 +761,87 @@ export class TeamRoom extends DurableObject {
             deliveredFreshSnapshot = true;
         }
         if (deliveredFreshSnapshot) await this.putRoomState(state);
+    }
+
+    handleProjectSyncRequest (socket, member, message, state) {
+        if (!EDITABLE_ROLES.has(member.role)) {
+            this.sendError(socket, '閲覧者はメディアを編集できません。');
+            return;
+        }
+        if (member.pendingFreshSnapshot) {
+            this.sendError(socket, '管理者の最新プロジェクトを同期してからメディアを編集してください。');
+            return;
+        }
+        const requestId = String(message.requestId || '').slice(0, 100);
+        if (!requestId) return;
+        safeSend(socket, {
+            type: 'project_sync_needed',
+            requestId,
+            baseSequence: state.sequence
+        });
+    }
+
+    async handleProjectSync (socket, member, message, state) {
+        if (!EDITABLE_ROLES.has(member.role)) {
+            this.sendError(socket, '閲覧者はメディアを編集できません。');
+            return;
+        }
+        if (member.pendingFreshSnapshot) {
+            this.sendError(socket, '管理者の最新プロジェクトを同期してからメディアを編集してください。');
+            return;
+        }
+        const requestId = String(message.requestId || '').slice(0, 100);
+        const data = typeof message.data === 'string' ? message.data : '';
+        const baseSequence = normalizeSnapshotBaseSequence(message.baseSequence, state.sequence);
+        if (!requestId || !data || data.length > MAX_SNAPSHOT_SIZE || baseSequence === null) {
+            this.sendError(socket, 'メディアの同期データが大きすぎるか、形式が正しくありません。');
+            return;
+        }
+
+        const allHistory = await this.listValues('history:', {limit: 1000});
+        const replayOperations = selectSnapshotReplayOperations(allHistory, baseSequence);
+        const existing = await this.ctx.storage.list({prefix: 'snapshot:'});
+        if (existing.size) await this.ctx.storage.delete(Array.from(existing.keys()));
+        const chunks = [];
+        for (let offset = 0; offset < data.length; offset += SNAPSHOT_CHUNK_SIZE) {
+            chunks.push(data.slice(offset, offset + SNAPSHOT_CHUNK_SIZE));
+        }
+        const values = {};
+        chunks.forEach((chunk, index) => {
+            values[`snapshot:${padSequence(index)}`] = chunk;
+        });
+        // Project sync messages are serialized by runSerializedRoomMutation.
+        // eslint-disable-next-line require-atomic-updates
+        state.snapshotChunkCount = chunks.length;
+        // eslint-disable-next-line require-atomic-updates
+        state.snapshotSequence = baseSequence;
+        values[ROOM_STATE_KEY] = state;
+        await this.ctx.storage.put(values);
+
+        let stateChanged = false;
+        for (const [recipient, session] of this.sessions.entries()) {
+            if (recipient === socket || !session.memberId) continue;
+            const recipientMember = state.members[session.memberId];
+            if (!recipientMember) continue;
+            if (session.awaitingFreshSnapshot && recipientMember.pendingFreshSnapshot) {
+                session.awaitingFreshSnapshot = false;
+                recipientMember.pendingFreshSnapshot = false;
+                recipient.serializeAttachment(session);
+                this.sessions.set(recipient, session);
+                stateChanged = true;
+            }
+            safeSend(recipient, {
+                type: 'project_snapshot_manifest',
+                syncId: requestId,
+                chunkCount: chunks.length,
+                operations: replayOperations,
+                sequence: state.snapshotSequence
+            });
+            chunks.forEach((chunk, index) => {
+                safeSend(recipient, {type: 'snapshot_chunk', syncId: requestId, index, data: chunk});
+            });
+        }
+        if (stateChanged) await this.putRoomState(state);
     }
 
     async webSocketClose (socket, code, reason) {
