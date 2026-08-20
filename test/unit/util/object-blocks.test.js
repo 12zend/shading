@@ -200,6 +200,34 @@ describe('Objects blocks', () => {
         }
     });
 
+    test('imports pasted files without opening the system file picker', async () => {
+        const pastedFile = {name: 'pasted-image.png'};
+        const liveBlock = {id: 'draw-block', setDrawAsset_: jest.fn()};
+        const workspace = {getBlockById: jest.fn(() => null)};
+        const ScratchBlocks = {
+            getMainWorkspace: jest.fn(() => ({getBlockById: jest.fn(() => liveBlock)}))
+        };
+        const block = {
+            getFieldValue: jest.fn(name => (name === 'ASSET' ? 'costume:old' : 'costume')),
+            id: 'draw-block',
+            workspace
+        };
+        const manager = {
+            importFiles: jest.fn(() => Promise.resolve([{name: 'pasted-image', source: 'costume'}]))
+        };
+        const vm = {
+            editingTarget: {id: 'sprite'},
+            runtime: {movieAssetManager: manager}
+        };
+
+        openImportPicker(vm, block, ScratchBlocks, [pastedFile]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(manager.importFiles).toHaveBeenCalledWith('sprite', [pastedFile], {modelName: ''});
+        expect(liveBlock.setDrawAsset_).toHaveBeenCalledWith('costume', 'pasted-image');
+    });
+
     test('encodes the combined draw asset selection while keeping legacy source fields readable', () => {
         expect(decodeDrawAsset(encodeDrawAsset('model', 'Hero:Idle'), 'costume')).toEqual({
             asset: 'Hero:Idle',

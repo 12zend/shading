@@ -246,14 +246,15 @@ const showImportError = (block, error) => {
     log.error(error);
 };
 
-const openImportPicker = (vm, block, ScratchBlocks) => {
-    if (typeof document === 'undefined' || !document.body) return;
+const importDrawFiles = (vm, block, ScratchBlocks, files) => {
     const manager = vm.runtime && vm.runtime.movieAssetManager;
     const target = vm.editingTarget;
     if (!manager || typeof manager.importFiles !== 'function' || !target) {
         showImportError(block, new Error('Select an object before importing an asset.'));
         return;
     }
+    const importedFiles = Array.from(files || []);
+    if (!importedFiles.length) return;
 
     const selection = decodeDrawAsset(
         block.getFieldValue('ASSET'),
@@ -262,6 +263,51 @@ const openImportPicker = (vm, block, ScratchBlocks) => {
     // Importing an asset refreshes Blockly before this promise resolves. Keep
     // the workspace reference so we can find the replacement block by its ID.
     const workspace = block.workspace;
+    const currentBlock = getImportedBlock(ScratchBlocks, block, workspace);
+    if (currentBlock) {
+        currentBlock.objectDrawImportError_ = null;
+        if (typeof currentBlock.setWarningText === 'function') currentBlock.setWarningText(null);
+    }
+    manager.importFiles(target.id, importedFiles, {
+        modelName: selection.source === 'model' ? selection.asset : ''
+    }).then(imported => {
+        const drawable = imported.slice().reverse()
+            .find(asset => DRAW_SOURCES.includes(asset.source));
+        if (drawable) {
+            persistDrawAsset(
+                vm,
+                getImportedBlock(ScratchBlocks, block, workspace),
+                drawable.source,
+                drawable.name
+            );
+        }
+    }, error => showImportError(block, error));
+};
+
+const getClipboardFiles = clipboardData => {
+    if (!clipboardData) return [];
+    const files = Array.from(clipboardData.files || []);
+    if (files.length) return files;
+    return Array.from(clipboardData.items || [])
+        .filter(item => item && item.kind === 'file' && typeof item.getAsFile === 'function')
+        .map(item => item.getAsFile())
+        .filter(Boolean);
+};
+
+const openImportPicker = (vm, block, ScratchBlocks, files = []) => {
+    const importedFiles = Array.from(files || []);
+    if (importedFiles.length) {
+        importDrawFiles(vm, block, ScratchBlocks, importedFiles);
+        return;
+    }
+    if (typeof document === 'undefined' || !document.body) return;
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    const target = vm.editingTarget;
+    if (!manager || typeof manager.importFiles !== 'function' || !target) {
+        showImportError(block, new Error('Select an object before importing an asset.'));
+        return;
+    }
+
     const input = document.createElement('input');
     input.accept = IMPORT_ACCEPT;
     input.multiple = true;
@@ -272,28 +318,10 @@ const openImportPicker = (vm, block, ScratchBlocks) => {
     };
     input.addEventListener('cancel', cleanup);
     input.addEventListener('change', () => {
-        const files = Array.from(input.files || []);
+        const selectedFiles = Array.from(input.files || []);
         cleanup();
-        if (!files.length) return;
-        const currentBlock = getImportedBlock(ScratchBlocks, block, workspace);
-        if (currentBlock) {
-            currentBlock.objectDrawImportError_ = null;
-            if (typeof currentBlock.setWarningText === 'function') currentBlock.setWarningText(null);
-        }
-        manager.importFiles(target.id, files, {
-            modelName: selection.source === 'model' ? selection.asset : ''
-        }).then(imported => {
-            const drawable = imported.slice().reverse()
-                .find(asset => DRAW_SOURCES.includes(asset.source));
-            if (drawable) {
-                persistDrawAsset(
-                    vm,
-                    getImportedBlock(ScratchBlocks, block, workspace),
-                    drawable.source,
-                    drawable.name
-                );
-            }
-        }, error => showImportError(block, error));
+        if (!selectedFiles.length) return;
+        importDrawFiles(vm, block, ScratchBlocks, selectedFiles);
     });
     document.body.appendChild(input);
     input.click();
@@ -356,7 +384,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             heading.textContent = 'Choose media';
             const helper = document.createElement('p');
             helper.className = styles.mediaHelper;
-            helper.textContent = 'Preview an asset, then select it for this draw block.';
+            helper.textContent = 'Import a file or paste it with ⌘V / Ctrl+V, then select it.';
             headingGroup.appendChild(heading);
             headingGroup.appendChild(helper);
             const importButton = document.createElement('button');
@@ -585,6 +613,14 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
 
             picker.addEventListener('keydown', event => {
                 if (event.key === 'Escape') ScratchBlocks.DropDownDiv.hide();
+            });
+            picker.addEventListener('paste', event => {
+                const files = getClipboardFiles(event.clipboardData);
+                if (!files.length) return;
+                event.preventDefault();
+                event.stopPropagation();
+                ScratchBlocks.DropDownDiv.hideWithoutAnimation();
+                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
             });
             renderGrid();
 
