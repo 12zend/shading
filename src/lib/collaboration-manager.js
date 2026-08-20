@@ -26,6 +26,11 @@ const SESSION_IDENTITY_PREFIX = 'movie:collaboration:session-identity:';
 const MAX_ENTRY_LENGTH = 4000;
 const PROJECT_SYNC_DEBOUNCE_MS = 750;
 
+const hasLoadedProject = vm => Boolean(
+    vm && vm.runtime && Array.isArray(vm.runtime.targets) &&
+    vm.runtime.targets.some(target => target && target.isOriginal && target.isStage)
+);
+
 const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return `local-${Date.now().toString(36)}-${Math.random().toString(36)
@@ -160,11 +165,16 @@ class CollaborationManager extends EventEmitter {
         this.handleWorkspaceEvent = this.handleWorkspaceEvent.bind(this);
         this.handleTargetsUpdate = this.handleTargetsUpdate.bind(this);
         this.handleProjectChanged = this.handleProjectChanged.bind(this);
+        this.handleProjectLoaded = this.handleProjectLoaded.bind(this);
         this.handleTimelineSettingsChanged = this.handleTimelineSettingsChanged.bind(this);
-        this.connect();
         this.vm.on('targetsUpdate', this.handleTargetsUpdate);
         this.vm.on('PROJECT_CHANGED', this.handleProjectChanged);
+        this.vm.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         this.movieAssetManager.on('timelineSettingsChanged', this.handleTimelineSettingsChanged);
+        // The collaboration panel mounts before the GUI starts its initial VM load. Connecting sooner can publish
+        // an empty project, or let that initial load overwrite a project received through an invitation.
+        this.projectReady = hasLoadedProject(this.vm);
+        if (this.projectReady) this.connect();
     }
 
     getState () {
@@ -462,7 +472,7 @@ class CollaborationManager extends EventEmitter {
         this.projectLoadInProgress = true;
         this.applyingRemote = true;
         const currentFiles = this.vm.saveProjectSb3DontZip();
-        decodeProjectJSON({
+        this.projectApplyPromise = decodeProjectJSON({
             data: incoming.projectChunks.join(''),
             encoding: incoming.projectEncoding
         })
@@ -506,6 +516,7 @@ class CollaborationManager extends EventEmitter {
                 this.tryApplyIncomingProject();
                 if (!this.incomingProjects.size && this.projectUpdateQueued) this.scheduleProjectSync();
             });
+        return this.projectApplyPromise;
     }
 
     sendProjectUpdate (force = false) {
@@ -621,6 +632,16 @@ class CollaborationManager extends EventEmitter {
 
     handleProjectChanged () {
         if (this.applyingRemote || this.projectLoadInProgress || this.state.me.role === 'viewer') return;
+        this.scheduleProjectSync();
+    }
+
+    handleProjectLoaded () {
+        if (!this.projectReady) {
+            this.projectReady = true;
+            this.connect();
+            return;
+        }
+        if (this.applyingRemote || this.projectLoadInProgress) return;
         this.scheduleProjectSync();
     }
 
@@ -783,6 +804,7 @@ class CollaborationManager extends EventEmitter {
         this.detachWorkspace();
         this.vm.removeListener('targetsUpdate', this.handleTargetsUpdate);
         this.vm.removeListener('PROJECT_CHANGED', this.handleProjectChanged);
+        this.vm.runtime.removeListener('PROJECT_LOADED', this.handleProjectLoaded);
         this.movieAssetManager.removeListener('timelineSettingsChanged', this.handleTimelineSettingsChanged);
         if (this.socket) this.socket.close(1000, 'Editor closed');
         for (const request of this.inviteRequests.values()) {
