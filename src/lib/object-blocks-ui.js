@@ -356,7 +356,14 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             this.previewRenderers_ = [];
         }
 
+        removeOutsideCloseListener_ () {
+            if (!this.outsideCloseListener_ || typeof document === 'undefined') return;
+            document.removeEventListener('pointerdown', this.outsideCloseListener_, true);
+            this.outsideCloseListener_ = null;
+        }
+
         onHide () {
+            this.removeOutsideCloseListener_();
             this.disposePreviews_();
             super.onHide();
         }
@@ -396,8 +403,19 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
                 openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks);
             });
+            const headerActions = document.createElement('div');
+            headerActions.className = styles.mediaActions;
+            const closeButton = document.createElement('button');
+            closeButton.className = styles.closeButton;
+            closeButton.type = 'button';
+            closeButton.title = 'Close';
+            closeButton.setAttribute('aria-label', 'Close media picker');
+            closeButton.appendChild(createSvgIcon('M6 6l12 12M18 6 6 18', styles.closeIcon));
+            closeButton.addEventListener('click', () => ScratchBlocks.DropDownDiv.hide());
+            headerActions.appendChild(importButton);
+            headerActions.appendChild(closeButton);
             header.appendChild(headingGroup);
-            header.appendChild(importButton);
+            header.appendChild(headerActions);
             picker.appendChild(header);
 
             const sourceBlock = getLiveBlock(this.sourceBlock_);
@@ -438,8 +456,25 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     this.setValue(value);
                     this.refreshDisplay_();
                 }
-                ScratchBlocks.DropDownDiv.hide();
                 ScratchBlocks.Events.setGroup(false);
+            };
+
+            const syncRenderedSelection = () => {
+                renderedButtons.forEach(button => {
+                    const selected = button.objectDrawValue_ === this.getValue();
+                    button.setAttribute('aria-selected', String(selected));
+                    button.parentNode.classList.toggle(styles.mediaItemSelected, selected);
+                    if (selected && !button.objectDrawSelectedCheck_) {
+                        const check = document.createElement('span');
+                        check.className = styles.selectedCheck;
+                        check.appendChild(createSvgIcon('m5 12 4 4L19 6', styles.checkIcon));
+                        button.appendChild(check);
+                        button.objectDrawSelectedCheck_ = check;
+                    } else if (!selected && button.objectDrawSelectedCheck_) {
+                        button.removeChild(button.objectDrawSelectedCheck_);
+                        button.objectDrawSelectedCheck_ = null;
+                    }
+                });
             };
 
             const renderPreview = (item, preview) => {
@@ -526,6 +561,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     selectButton.setAttribute('aria-label', `${item.label}: ${item.name}`);
                     selectButton.setAttribute('aria-selected', String(selected));
                     selectButton.setAttribute('role', 'option');
+                    selectButton.objectDrawValue_ = item.value;
                     const preview = document.createElement('span');
                     preview.className = `${styles.mediaPreview} ${styles[`preview${item.source}`] || ''}`;
                     renderPreview(item, preview);
@@ -546,8 +582,13 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         check.className = styles.selectedCheck;
                         check.appendChild(createSvgIcon('m5 12 4 4L19 6', styles.checkIcon));
                         selectButton.appendChild(check);
+                        selectButton.objectDrawSelectedCheck_ = check;
                     }
-                    selectButton.addEventListener('click', () => selectItem(item));
+                    selectButton.addEventListener('click', () => {
+                        selectItem(item);
+                        syncRenderedSelection();
+                        selectButton.focus();
+                    });
                     card.appendChild(selectButton);
                     if (item.deletable) {
                         const deleteButton = document.createElement('button');
@@ -628,6 +669,10 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             ScratchBlocks.DropDownDiv.setCategory(this.sourceBlock_.getCategory());
             ScratchBlocks.DropDownDiv.setBoundsElement(boundsElement);
             ScratchBlocks.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_, this.onHide.bind(this));
+            this.outsideCloseListener_ = event => {
+                if (!picker.contains(event.target)) ScratchBlocks.DropDownDiv.hide();
+            };
+            document.addEventListener('pointerdown', this.outsideCloseListener_, true);
 
             const selectedButton = renderedButtons.find(button => button.getAttribute('aria-selected') === 'true');
             (selectedButton || renderedButtons[0] || importButton).focus();
@@ -968,6 +1013,7 @@ export {
     getFieldSourceBlock,
     getLiveBlock,
     IMPORT_VALUE,
+    createMediaField,
     drawSelectionUsesFrame,
     getDrawInputVisibility,
     getAssetItems,
