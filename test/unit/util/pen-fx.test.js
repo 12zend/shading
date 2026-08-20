@@ -340,7 +340,7 @@ describe('built-in Pen FX category', () => {
         expect(vm.runtime.penFX).toBe(penFX);
     });
 
-    test('clears an Objects group to fully transparent regardless of prior WebGL masks', () => {
+    test('stages an Objects group on a transparent layer without touching the visible pen frame', () => {
         const gl = {
             ARRAY_BUFFER: 1,
             BLEND: 2,
@@ -367,13 +367,16 @@ describe('built-in Pen FX category', () => {
             compileShader: jest.fn(),
             createBuffer: jest.fn(() => ({})),
             createShader: jest.fn(() => ({})),
+            deleteFramebuffer: jest.fn(),
+            deleteTexture: jest.fn(),
             disable: jest.fn(),
             enable: jest.fn(),
             getShaderParameter: jest.fn(() => true),
             shaderSource: jest.fn()
         };
+        const penFramebuffer = {framebuffer: 'pen-framebuffer'};
         const skin = {
-            _framebuffer: {framebuffer: 'pen-framebuffer'},
+            _framebuffer: penFramebuffer,
             _size: [480, 360],
             _texture: 'pen-texture'
         };
@@ -387,7 +390,7 @@ describe('built-in Pen FX category', () => {
         const engine = new PenFX()._getEngine();
         engine.width = 480;
         engine.height = 360;
-        engine._createBufferTexture = jest.fn(() => ({framebuffer: 'baseline-framebuffer', texture: 'baseline'}));
+        engine._createBufferTexture = jest.fn(() => ({framebuffer: 'group-framebuffer', texture: 'group-staging'}));
         engine._program = jest.fn(() => 'copy-program');
         engine._render = jest.fn();
 
@@ -397,7 +400,98 @@ describe('built-in Pen FX category', () => {
         expect(gl.colorMask).toHaveBeenCalledWith(true, true, true, true);
         expect(gl.clearColor).toHaveBeenCalledWith(0, 0, 0, 0);
         expect(gl.clear).toHaveBeenCalledWith(gl.COLOR_BUFFER_BIT);
-        expect(engine.groupStack).toEqual([{framebuffer: 'baseline-framebuffer', texture: 'baseline'}]);
+        expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, 'group-framebuffer');
+        expect(skin._texture).toBe('group-staging');
+        expect(skin._framebuffer).toEqual({
+            attachments: ['group-staging'],
+            framebuffer: 'group-framebuffer',
+            height: 360,
+            width: 480
+        });
+        expect(skin.getTexture()).toBe('pen-texture');
+        expect(engine.groupStack).toEqual([{
+            baselineFramebuffer: penFramebuffer,
+            baselineTexture: 'pen-texture',
+            framebuffer: 'group-framebuffer',
+            hadOwnGetTexture: false,
+            originalGetTexture: undefined,
+            skin,
+            texture: 'group-staging'
+        }]);
+    });
+
+    test('composites a finished Objects group over the untouched baseline', () => {
+        const gl = {
+            ARRAY_BUFFER: 1,
+            BLEND: 2,
+            COLOR_BUFFER_BIT: 4,
+            DEPTH_TEST: 5,
+            FRAMEBUFFER: 6,
+            FUNC_ADD: 7,
+            ONE: 8,
+            ONE_MINUS_SRC_ALPHA: 9,
+            SCISSOR_TEST: 10,
+            STATIC_DRAW: 11,
+            STENCIL_TEST: 12,
+            TEXTURE0: 13,
+            VERTEX_SHADER: 14,
+            activeTexture: jest.fn(),
+            bindBuffer: jest.fn(),
+            bindFramebuffer: jest.fn(),
+            blendEquation: jest.fn(),
+            blendFunc: jest.fn(),
+            bufferData: jest.fn(),
+            clear: jest.fn(),
+            clearColor: jest.fn(),
+            colorMask: jest.fn(),
+            compileShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            createShader: jest.fn(() => ({})),
+            deleteFramebuffer: jest.fn(),
+            deleteTexture: jest.fn(),
+            disable: jest.fn(),
+            enable: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            shaderSource: jest.fn()
+        };
+        const penFramebuffer = {framebuffer: 'pen-framebuffer'};
+        const skin = {
+            _framebuffer: penFramebuffer,
+            _size: [480, 360],
+            _texture: 'pen-texture'
+        };
+        const renderer = {
+            _allSkins: {1: skin},
+            _doExitDrawRegion: jest.fn(),
+            _gl: gl,
+            _penSkinId: 1
+        };
+        const PenFX = createPenFXClass({runtime: {renderer}});
+        const engine = new PenFX()._getEngine();
+        engine.width = 480;
+        engine.height = 360;
+        engine.framebuffers = ['engine-framebuffer'];
+        engine.textures = ['engine-texture'];
+        engine._createBufferTexture = jest.fn(() => ({framebuffer: 'group-framebuffer', texture: 'group-staging'}));
+        engine._program = jest.fn(() => 'group-over-program');
+        engine._render = jest.fn();
+        engine._replaceSkin = jest.fn();
+
+        engine.beginGroup();
+        expect(engine.groupStack.length).toBe(1);
+        engine.endGroup();
+
+        expect(engine._render).toHaveBeenCalledWith('group-over-program', 'engine-framebuffer', [
+            {name: 'u_base', texture: 'pen-texture'},
+            {name: 'u_effect', texture: 'group-staging'}
+        ], {}, []);
+        expect(engine._replaceSkin).toHaveBeenCalledWith(skin, 'engine-texture');
+        expect(skin._texture).toBe('pen-texture');
+        expect(skin._framebuffer).toBe(penFramebuffer);
+        expect(Object.prototype.hasOwnProperty.call(skin, 'getTexture')).toBe(false);
+        expect(gl.deleteFramebuffer).toHaveBeenCalledWith('group-framebuffer');
+        expect(gl.deleteTexture).toHaveBeenCalledWith('group-staging');
+        expect(engine.groupStack).toEqual([]);
     });
 
     test('exposes Pen frame transaction boundaries to timeline rendering', () => {

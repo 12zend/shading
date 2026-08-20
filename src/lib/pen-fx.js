@@ -1462,6 +1462,23 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const GROUP_OVER_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_base;
+    uniform sampler2D u_effect;
+
+    void main() {
+      vec4 basePixel = texture2D(u_base, v_uv);
+      vec4 effectPixel = texture2D(u_effect, v_uv);
+      float inverseAlpha = 1.0 - effectPixel.a;
+      gl_FragColor = vec4(
+        effectPixel.rgb + basePixel.rgb * inverseAlpha,
+        effectPixel.a + basePixel.a * inverseAlpha
+      );
+    }
+  `;
+
   const STACK_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -1529,6 +1546,7 @@ const createPenFXClass = vm => {
         acerolaColor: ACEROLA_COLOR_SHADER,
         acerolaSpatial: ACEROLA_SPATIAL_SHADER,
         composite: COMPOSITE_SHADER,
+        groupOver: GROUP_OVER_SHADER,
         stack: STACK_SHADER
       };
       this.programs = Object.create(null);
@@ -1807,30 +1825,59 @@ const createPenFXClass = vm => {
     beginGroup() {
       const skin = this._prepare(false, false);
       if (!skin) return;
-      const baseline = this._createBufferTexture();
-      this._render(this._program('copy'), baseline.framebuffer, [{name: 'u_image', texture: skin._texture}], {}, []);
-      this.groupStack.push(baseline);
-      const target = skin._framebuffer.framebuffer || skin._framebuffer;
+      const staging = this._createBufferTexture();
+      const hadOwnGetTexture = Object.prototype.hasOwnProperty.call(skin, 'getTexture');
+      const originalGetTexture = skin.getTexture;
+      const baselineTexture = skin._texture;
+      this.groupStack.push({
+        baselineFramebuffer: skin._framebuffer,
+        baselineTexture,
+        framebuffer: staging.framebuffer,
+        hadOwnGetTexture,
+        originalGetTexture,
+        skin,
+        texture: staging.texture
+      });
+      skin._texture = staging.texture;
+      skin._framebuffer = {
+        attachments: [staging.texture],
+        framebuffer: staging.framebuffer,
+        height: this.height,
+        width: this.width
+      };
+      // Pen stamps and lines write to _texture/_framebuffer, while the stage samples getTexture(). Keep
+      // the pre-group frame visible until endGroup composites so grouped draws never expose an
+      // intermediate transparent (black) frame, even while asynchronous Object draws are pending.
+      if (!hadOwnGetTexture) skin.getTexture = () => baselineTexture;
       // Scratch's renderer can leave write masks or stencil state configured after a draw. Reset them before
-      // clearing so the isolated group always starts with RGBA (0, 0, 0, 0), never the white stage background.
-      this._clearTransparent(target);
+      // clearing so the isolated group layer always starts with RGBA (0, 0, 0, 0).
+      this._clearTransparent(staging.framebuffer);
       this._restoreGLState();
     }
 
     endGroup() {
       if (!this.groupStack.length) return;
-      const skin = this._prepare(false, false);
-      if (!skin) return;
-      const baseline = this.groupStack.pop();
-      this._render(this._program('copy'), this.framebuffers[0], [{name: 'u_image', texture: skin._texture}], {}, []);
-      const target = skin._framebuffer.framebuffer || skin._framebuffer;
-      this._render(this._program('composite'), target, [
-        {name: 'u_base', texture: baseline.texture},
-        {name: 'u_effect', texture: this.textures[0]}
-      ], {u_blend: 0, u_opacity: 1}, ['u_blend']);
-      gl.deleteFramebuffer(baseline.framebuffer);
-      gl.deleteTexture(baseline.texture);
-      this._markSkinChanged(skin);
+      const entry = this.groupStack.pop();
+      const skin = entry.skin;
+      // The pen skin may have been resized or replaced while the group was open. Only composite when the
+      // staged texture is still installed so we never render into a stale framebuffer.
+      const stillStaged = Boolean(skin) && skin._texture === entry.texture;
+      if (stillStaged) {
+        skin._texture = entry.baselineTexture;
+        skin._framebuffer = entry.baselineFramebuffer;
+        this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+        if (this._prepare(false, false) === skin) {
+          // Composite the isolated group content over the untouched baseline instead of replacing it, so
+          // the default pen backdrop and earlier drawings survive every group.
+          this._render(this._program('groupOver'), this.framebuffers[0], [
+            {name: 'u_base', texture: entry.baselineTexture},
+            {name: 'u_effect', texture: entry.texture}
+          ], {}, []);
+          this._replaceSkin(skin, this.textures[0]);
+        }
+      }
+      gl.deleteFramebuffer(entry.framebuffer);
+      gl.deleteTexture(entry.texture);
     }
 
     beginFrame() {
@@ -1871,10 +1918,14 @@ const createPenFXClass = vm => {
     }
 
     restoreFrameTextureGetter(transaction) {
-      if (transaction.hadOwnGetTexture) {
-        transaction.skin.getTexture = transaction.originalGetTexture;
+      this._restoreTextureGetter(transaction.skin, transaction.hadOwnGetTexture, transaction.originalGetTexture);
+    }
+
+    _restoreTextureGetter(skin, hadOwnGetTexture, originalGetTexture) {
+      if (hadOwnGetTexture) {
+        skin.getTexture = originalGetTexture;
       } else {
-        delete transaction.skin.getTexture;
+        delete skin.getTexture;
       }
     }
 
@@ -1907,7 +1958,14 @@ const createPenFXClass = vm => {
 
     clearGroupStack() {
       if (!this.groupStack) return;
-      for (const entry of this.groupStack) {
+      for (let i = this.groupStack.length - 1; i >= 0; i--) {
+        const entry = this.groupStack[i];
+        const skin = entry.skin;
+        if (skin && skin._texture === entry.texture) {
+          skin._texture = entry.baselineTexture;
+          skin._framebuffer = entry.baselineFramebuffer;
+          this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+        }
         gl.deleteFramebuffer(entry.framebuffer);
         gl.deleteTexture(entry.texture);
       }
