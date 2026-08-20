@@ -13,6 +13,7 @@ npm-*
 /dist
 /build
 /.opt-in
+/cloudflare/.wrangler
 
 # Generated translation files
 /translations

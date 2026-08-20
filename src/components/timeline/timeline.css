@@ -125,6 +125,12 @@
     color: $text-primary;
 }
 
+.icon-button svg,
+.play-button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
 .play-button:active,
 .stop-button:active,
 .icon-button:active {
@@ -138,7 +144,57 @@
 }
 
 .scrubber {
+    position: relative;
     margin-top: 0.625rem;
+}
+
+.markers {
+    position: absolute;
+    z-index: 1;
+    right: 0.4375rem;
+    bottom: calc(100% + 0.15rem);
+    left: 0.4375rem;
+    height: 0.75rem;
+    pointer-events: none;
+}
+
+.marker {
+    position: absolute;
+    bottom: 0;
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-left: -0.375rem;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: $looks-secondary;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.marker span {
+    display: block;
+    width: 0.625rem;
+    height: 0.625rem;
+    border: 2px solid $ui-white;
+    border-radius: 50% 50% 50% 0.125rem;
+    background: currentColor;
+    box-shadow: 0 0.125rem 0.25rem $shadow;
+    transform: rotate(-45deg);
+}
+
+.marker.note {
+    color: $sound-primary;
+}
+
+.marker:hover span,
+.marker:focus-visible span {
+    transform: rotate(-45deg) scale(1.2);
+}
+
+.marker:focus-visible {
+    outline: 2px solid $looks-secondary;
+    outline-offset: 2px;
 }
 
 .scrubber input {
@@ -184,10 +240,6 @@
 .transport {
     gap: 0.375rem;
     margin-top: 0.5rem;
-}
-
-.play-button {
-    font-size: 0.75rem;
 }
 
 .stop-button span {

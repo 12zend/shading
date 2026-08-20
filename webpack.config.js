@@ -43,12 +43,10 @@ const base = {
             rewrites: [
                 {from: /^\/editor\/?$/, to: '/index.html'},
                 {from: /^\/player\/?$/, to: '/player.html'},
-                {from: /^\/\d+\/?$/, to: '/index.html'},
-                {from: /^\/\d+\/fullscreen\/?$/, to: '/fullscreen.html'},
-                {from: /^\/\d+\/editor\/?$/, to: '/index.html'},
-                {from: /^\/\d+\/player\/?$/, to: '/player.html'},
-                {from: /^\/\d+\/embed\/?$/, to: '/embed.html'},
-                {from: /^\/addons\/?$/, to: '/addons.html'}
+                {from: /^\/addons\/?$/, to: '/addons.html'},
+                {from: /^\/[a-z0-9-]{6,48}\/?$/, to: '/index.html'},
+                {from: /^\/[a-z0-9-]{6,48}\/fullscreen\/?$/, to: '/fullscreen.html'},
+                {from: /^\/[a-z0-9-]{6,48}\/player\/?$/, to: '/player.html'}
             ]
         }
     },
@@ -187,15 +185,16 @@ module.exports = [
                 'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
+                'process.env.COLLABORATION_WS_URL': JSON.stringify(process.env.COLLABORATION_WS_URL || ''),
                 'process.env.ROOT': JSON.stringify(root),
-                'process.env.ROUTING_STYLE': JSON.stringify(process.env.ROUTING_STYLE || 'filehash'),
+                'process.env.ROUTING_STYLE': JSON.stringify('team'),
                 'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
             }),
             new HtmlWebpackPlugin({
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'index.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
+                title: `${APP_NAME} - Collaborative movie editor`,
                 isEditor: true,
                 ...htmlWebpackPluginCommon
             }),
@@ -203,7 +202,7 @@ module.exports = [
                 chunks: ['player'],
                 template: 'src/playground/index.ejs',
                 filename: 'player.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
+                title: `${APP_NAME} - Collaborative movie editor`,
                 ...htmlWebpackPluginCommon
             }),
             // Keep old editor.html links working while the editor's canonical entry point is the site root.
@@ -211,7 +210,7 @@ module.exports = [
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'editor.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
+                title: `${APP_NAME} - Collaborative movie editor`,
                 isEditor: true,
                 ...htmlWebpackPluginCommon
             }),
@@ -219,7 +218,7 @@ module.exports = [
                 chunks: ['fullscreen'],
                 template: 'src/playground/index.ejs',
                 filename: 'fullscreen.html',
-                title: `${APP_NAME} - Run Scratch projects faster`,
+                title: `${APP_NAME} - Collaborative movie editor`,
                 ...htmlWebpackPluginCommon
             }),
             new HtmlWebpackPlugin({

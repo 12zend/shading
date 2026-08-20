@@ -3,6 +3,7 @@
 @import "../../css/z-index.css";
 
 .page-wrapper {
+    position: relative;
     height: 100%;
     display: flex;
     flex-direction: column;

@@ -1,0 +1,899 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+@import "../../css/z-index.css";
+
+.root {
+    position: static;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.launcher {
+    position: fixed;
+    z-index: calc($z-index-menu-bar + 1);
+    top: 3.75rem;
+    right: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 50%;
+    background: $looks-secondary;
+    color: $ui-white;
+    box-shadow: 0 0.25rem 0.75rem $shadow;
+    cursor: pointer;
+}
+
+.launcher:hover,
+.launcher:focus-visible {
+    background: $looks-secondary-dark;
+}
+
+.launcher:focus-visible,
+.icon-button:focus-visible,
+.compact-button:focus-visible,
+.tabs button:focus-visible,
+.composer button:focus-visible,
+.composer input:focus-visible,
+.composer textarea:focus-visible,
+.entry button:focus-visible,
+.person button:focus-visible,
+.person select:focus-visible,
+.history-item button:focus-visible {
+    outline: 2px solid $looks-secondary;
+    outline-offset: 2px;
+}
+
+.panel:focus-visible,
+.panel-header:focus-visible {
+    outline: 3px solid $looks-secondary;
+    outline-offset: -3px;
+}
+
+.launcher > span {
+    position: absolute;
+    right: -0.25rem;
+    bottom: -0.2rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid $ui-primary;
+    border-radius: 0.625rem;
+    padding: 0 0.25rem;
+    background: $control-primary;
+    color: $ui-white;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1rem;
+}
+
+.launcher-open {
+    visibility: hidden;
+}
+
+.panel {
+    position: fixed;
+    z-index: calc($z-index-menu-bar + 2);
+    display: flex;
+    flex-direction: column;
+    width: min(24rem, calc(100vw - 1.5rem));
+    height: min(42rem, calc(100vh - 4.5rem));
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: $ui-white;
+    color: $text-primary;
+    box-shadow: 0 0.5rem 2rem $shadow;
+    transform-origin: top right;
+    animation: panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel[hidden] {
+    display: none;
+}
+
+@keyframes panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(-0.5rem) scale(0.98);
+    }
+}
+
+.panel-header,
+.team-header,
+.team-identity,
+.entry-header,
+.entry-links,
+.entry-actions,
+.context-row,
+.attachment-preview,
+.person,
+.role-controls,
+.history-item {
+    display: flex;
+    align-items: center;
+}
+
+.panel-header {
+    justify-content: space-between;
+    min-height: 3.5rem;
+    padding: 0.75rem 0.875rem;
+    background: $looks-secondary;
+    color: $ui-white;
+    cursor: move;
+    touch-action: none;
+}
+
+.panel-header > div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.panel-header strong {
+    font-size: 1rem;
+}
+
+.panel-header span {
+    color: $ui-white-dim;
+    font-size: 0.6875rem;
+}
+
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    border-radius: $form-radius;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.icon-button:hover {
+    background: $ui-white-transparent;
+}
+
+.team-header {
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    background: $ui-secondary;
+}
+
+.team-identity {
+    gap: 0.375rem;
+}
+
+.team-identity strong,
+.compact-button,
+.role-badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+}
+
+.status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: $text-primary-transparent;
+}
+
+.status-dot.connected {
+    background: $control-primary;
+}
+
+.status-dot.connecting {
+    background: $sound-primary;
+}
+
+.team-id {
+    display: block;
+    max-width: 12rem;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.role-badge {
+    border-radius: 0.65rem;
+    padding: 0.2rem 0.45rem;
+    background: $looks-light-transparent;
+    color: $text-primary;
+    white-space: nowrap;
+}
+
+.compact-button,
+.context-row button,
+.entry-links button,
+.entry-actions button,
+.inline-edit button,
+.role-controls button {
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    color: $text-primary;
+    cursor: pointer;
+}
+
+.compact-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 2rem;
+    padding: 0 0.55rem;
+}
+
+.compact-button svg,
+.context-row svg,
+.entry-links svg,
+.attachment-preview svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.connection-error,
+.sync-notice,
+.compose-error {
+    color: $error-primary;
+    font-size: 0.6875rem;
+    line-height: 1.4;
+}
+
+.connection-error {
+    padding: 0.5rem 0.875rem;
+    background: $error-light;
+}
+
+.sync-notice {
+    padding: 0.5rem 0.875rem;
+    background: $sound-tertiary;
+    color: $text-primary;
+}
+
+.tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-bottom: 1px solid $ui-black-transparent;
+    background: $ui-white;
+}
+
+.tabs button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    min-height: 3.5rem;
+    border: 0;
+    background: transparent;
+    color: $text-primary-transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+.tabs button:hover {
+    background: $ui-secondary;
+    color: $text-primary;
+}
+
+.tabs button.active {
+    color: $looks-secondary;
+}
+
+.tabs button.active:after {
+    position: absolute;
+    right: 20%;
+    bottom: 0;
+    left: 20%;
+    height: 0.1875rem;
+    border-radius: 0.1rem 0.1rem 0 0;
+    background: $looks-secondary;
+    content: "";
+}
+
+.tabs svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: $ui-primary;
+}
+
+.entry-list,
+.people-list,
+.history-list {
+    padding: 0.75rem;
+}
+
+.invite-actions {
+    display: flex;
+    gap: 0.4rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid $ui-black-transparent;
+}
+
+.invite-actions button {
+    display: inline-flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 2rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.65rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.invite-actions button:hover {
+    background: $ui-secondary;
+}
+
+.invite-actions svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.entry {
+    margin-bottom: 0.625rem;
+    border-radius: 0.75rem;
+    padding: 0.7rem 0.75rem;
+    background: $ui-white;
+    box-shadow: 0 0.125rem 0.35rem $shadow;
+}
+
+.entry.note {
+    background: $sound-tertiary;
+}
+
+.entry.deleted {
+    box-shadow: none;
+    opacity: 0.7;
+}
+
+.entry-header {
+    gap: 0.4rem;
+}
+
+.avatar {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: $looks-secondary;
+    color: $ui-white;
+    font-size: 0.6875rem;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.entry-header strong {
+    overflow: hidden;
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entry-header time {
+    margin-left: auto;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+}
+
+.entry > p {
+    margin: 0.55rem 0 0;
+    color: $text-primary;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.entry-links {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.6rem;
+}
+
+.entry-links button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    max-width: 100%;
+    min-height: 1.75rem;
+    padding: 0.2rem 0.45rem;
+    overflow: hidden;
+    color: $looks-secondary;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entry-actions {
+    justify-content: flex-end;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+}
+
+.entry-actions button,
+.inline-edit button {
+    border: 0;
+    background: transparent;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+}
+
+.entry-actions button:hover,
+.inline-edit button:hover {
+    color: $looks-secondary;
+}
+
+.inline-edit textarea {
+    width: 100%;
+    min-height: 4.5rem;
+    margin-top: 0.5rem;
+    resize: vertical;
+}
+
+.inline-edit > div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.25rem;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 15rem;
+    padding: 2rem;
+    color: $text-primary-transparent;
+    text-align: center;
+}
+
+.empty-state > svg {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-bottom: 0.65rem;
+    color: $looks-secondary;
+}
+
+.empty-state strong {
+    color: $text-primary;
+    font-size: 0.8125rem;
+}
+
+.empty-state span {
+    max-width: 17rem;
+    margin-top: 0.3rem;
+    font-size: 0.6875rem;
+    line-height: 1.45;
+}
+
+.composer {
+    border-top: 1px solid $ui-black-transparent;
+    padding: 0.75rem;
+    background: $ui-white;
+}
+
+.composer textarea,
+.inline-edit textarea {
+    display: block;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.625rem;
+    padding: 0.625rem;
+    background: $input-background;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.composer textarea {
+    width: 100%;
+    min-height: 4.75rem;
+    resize: none;
+}
+
+.composer textarea:disabled,
+.composer input:disabled,
+.composer button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.context-row {
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.context-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    width: 5.75rem;
+    height: 2rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    padding: 0 0.35rem;
+    background: $input-background;
+    color: $text-primary-transparent;
+}
+
+.context-row input {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.6875rem;
+}
+
+.context-row button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    font: inherit;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.context-row button:last-child {
+    margin-left: auto;
+}
+
+.attachment-preview {
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+    border-radius: $form-radius;
+    padding: 0.35rem 0.5rem;
+    background: $looks-light-transparent;
+    color: $looks-secondary;
+    font-size: 0.65rem;
+}
+
+.attachment-preview span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attachment-preview button {
+    display: inline-flex;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.compose-error {
+    margin: 0.45rem 0 0;
+}
+
+.send-button {
+    display: block;
+    min-width: 5rem;
+    height: 2rem;
+    margin: 0.55rem 0 0 auto;
+    border: 0;
+    border-radius: $form-radius;
+    padding: 0 0.75rem;
+    background: $looks-secondary;
+    color: $ui-white;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.person {
+    gap: 0.6rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid $ui-black-transparent;
+}
+
+.person:last-child {
+    border-bottom: 0;
+}
+
+.avatar i {
+    position: absolute;
+    right: -0.05rem;
+    bottom: -0.05rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    border: 2px solid $ui-primary;
+    border-radius: 50%;
+    background: $text-primary-transparent;
+}
+
+.avatar i.online {
+    background: $control-primary;
+}
+
+.person-details {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.person-details strong {
+    font-size: 0.75rem;
+}
+
+.person-details span {
+    overflow: hidden;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.role-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+}
+
+.role-controls select,
+.role-controls button {
+    height: 1.75rem;
+    font: inherit;
+    font-size: 0.625rem;
+}
+
+.role-controls select {
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $input-background;
+    color: $text-primary;
+}
+
+.history-list {
+    padding-left: 1rem;
+}
+
+.history-item {
+    position: relative;
+    gap: 0.6rem;
+    min-height: 3.5rem;
+}
+
+.history-item:not(:last-child):before {
+    position: absolute;
+    top: 2rem;
+    bottom: -0.6rem;
+    left: 0.9rem;
+    width: 1px;
+    background: $ui-black-transparent;
+    content: "";
+}
+
+.history-mark {
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 50%;
+    background: $looks-light-transparent;
+    color: $looks-secondary;
+}
+
+.history-mark svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.history-item > div {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.history-item strong {
+    font-size: 0.72rem;
+}
+
+.history-item span,
+.history-item em {
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    font-style: normal;
+}
+
+.history-item em {
+    color: $looks-secondary;
+}
+
+.history-item > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    color: $text-primary;
+    cursor: pointer;
+}
+
+.history-item > button:hover,
+.compact-button:hover,
+.context-row button:hover,
+.role-controls button:hover {
+    background: $ui-secondary;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.resize-handle {
+    position: absolute;
+    z-index: 3;
+    display: block;
+    border: 0;
+    border-radius: 0.25rem;
+    padding: 0;
+    background: transparent;
+    touch-action: none;
+}
+
+.resize-handle:focus-visible {
+    outline: 0;
+    background: $looks-light-transparent;
+    box-shadow: inset 0 0 0 2px $looks-secondary;
+}
+
+.resize-north,
+.resize-south {
+    right: 0.75rem;
+    left: 0.75rem;
+    height: 0.5rem;
+    cursor: ns-resize;
+}
+
+.resize-north {
+    top: 0;
+}
+
+.resize-south {
+    bottom: 0;
+}
+
+.resize-east,
+.resize-west {
+    top: 0.75rem;
+    bottom: 0.75rem;
+    width: 0.5rem;
+    cursor: ew-resize;
+}
+
+.resize-east {
+    right: 0;
+}
+
+.resize-west {
+    left: 0;
+}
+
+.resize-north-east,
+.resize-north-west,
+.resize-south-east,
+.resize-south-west {
+    width: 0.85rem;
+    height: 0.85rem;
+}
+
+.resize-north-east,
+.resize-south-west {
+    cursor: nesw-resize;
+}
+
+.resize-north-west,
+.resize-south-east {
+    cursor: nwse-resize;
+}
+
+.resize-north-east {
+    top: 0;
+    right: 0;
+}
+
+.resize-south-east {
+    right: 0;
+    bottom: 0;
+}
+
+.resize-south-west {
+    bottom: 0;
+    left: 0;
+}
+
+.resize-north-west {
+    top: 0;
+    left: 0;
+}
+
+@media (max-width: 700px), (max-height: 560px) {
+    .root {
+        right: 0.5rem;
+    }
+
+    .panel {
+        position: fixed;
+        top: 0 !important;
+        right: 0;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: none;
+        border-radius: 0;
+    }
+
+    .panel-header {
+        padding-top: calc(0.75rem + env(safe-area-inset-top));
+        padding-right: calc(0.875rem + env(safe-area-inset-right));
+        padding-left: calc(0.875rem + env(safe-area-inset-left));
+        cursor: default;
+    }
+
+    .composer {
+        padding-right: calc(0.75rem + env(safe-area-inset-right));
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+        padding-left: calc(0.75rem + env(safe-area-inset-left));
+    }
+
+    .resize-handle {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel {
+        animation: none;
+    }
+}

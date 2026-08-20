@@ -20,6 +20,7 @@ import {
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
 import {defaultStageSize} from '../reducers/custom-stage-size';
+import {ensureTeamId, getTeamIdFromPath, getTeamPath} from './team-route';
 
 /* eslint-disable no-alert */
 
@@ -238,11 +239,54 @@ class WildcardRouter extends Router {
     }
 }
 
+class TeamRouter extends Router {
+    constructor (callbacks) {
+        super(callbacks);
+        this.teamId = getTeamIdFromPath() || ensureTeamId();
+    }
+
+    onhashchange () {
+        this.onSetProjectId(defaultProjectId);
+        this.parsePageType();
+    }
+
+    onpathchange () {
+        this.teamId = getTeamIdFromPath() || this.teamId;
+        this.onSetProjectId(defaultProjectId);
+        this.parsePageType();
+    }
+
+    parsePageType () {
+        const parts = location.pathname.split('/').filter(Boolean);
+        const teamIndex = parts.indexOf(this.teamId);
+        const pageType = teamIndex === -1 ? '' : parts[teamIndex + 1];
+        if (pageType === 'fullscreen') {
+            this.onSetIsFullScreen(true);
+            this.onSetIsPlayerOnly(false);
+        } else if (pageType === 'player') {
+            this.onSetIsPlayerOnly(true);
+            this.onSetIsFullScreen(false);
+        } else {
+            this.onSetIsPlayerOnly(false);
+            this.onSetIsFullScreen(false);
+        }
+    }
+
+    generateURL ({isPlayerOnly, isFullScreen}) {
+        let path = getTeamPath(this.teamId);
+        if (isFullScreen) path += '/fullscreen';
+        else if (isPlayerOnly) path += '/player';
+        getCanonicalLinkElement().href = `${location.origin}${getTeamPath(this.teamId)}`;
+        return `${path}${location.search}${location.hash}`;
+    }
+}
+
 const routers = {
     none: Router,
     hash: HashRouter,
     filehash: FileHashRouter,
-    wildcard: WildcardRouter
+    wildcard: WildcardRouter,
+    team: TeamRouter
 };
 
 /**
@@ -252,7 +296,7 @@ const routers = {
  * @returns {Router} The optimal router for the current environment
  */
 const createRouter = (style, callbacks) => {
-    const supportedStyles = ['none', 'hash'];
+    const supportedStyles = ['none', 'hash', 'team'];
 
     // FileHashRouter is not supported on non-http(s) protocols.
     const isHTTP = location.protocol === 'http:' || location.protocol === 'https:';
@@ -582,7 +626,7 @@ const TWStateManager = function (WrappedComponent) {
         vm: PropTypes.instanceOf(VM)
     };
     StateManagerComponent.defaultProps = {
-        routingStyle: process.env.ROUTING_STYLE
+        routingStyle: 'team'
     };
     const mapStateToProps = state => ({
         customStageSize: state.scratchGui.customStageSize,

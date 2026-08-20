@@ -4,7 +4,9 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
+import installCollaborationManager from '../../lib/collaboration-manager';
 
+import {GearIcon, PauseIcon, PlayIcon} from './icons.jsx';
 import styles from './timeline.css';
 
 const formatTime = seconds => {
@@ -22,6 +24,7 @@ class Timeline extends React.Component {
         this.state = {
             draft: null,
             exporting: false,
+            markers: [],
             settingsOpen: false,
             timeline: {
                 currentTime: 0,
@@ -36,6 +39,7 @@ class Timeline extends React.Component {
         };
         this.handleTimelineChanged = this.handleTimelineChanged.bind(this);
         this.handleRenderingFramesChanged = this.handleRenderingFramesChanged.bind(this);
+        this.handleCollaborationChanged = this.handleCollaborationChanged.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handlePlayPause = this.handlePlayPause.bind(this);
         this.handleStepFrame = this.handleStepFrame.bind(this);
@@ -45,6 +49,7 @@ class Timeline extends React.Component {
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
         this.handleExport = this.handleExport.bind(this);
+        this.handleMarkerClick = this.handleMarkerClick.bind(this);
     }
 
     componentDidMount () {
@@ -52,8 +57,11 @@ class Timeline extends React.Component {
         this.manager = installMovieAssetManager(this.props.vm);
         this.manager.on('timelineChanged', this.handleTimelineChanged);
         this.manager.on('renderingFramesChanged', this.handleRenderingFramesChanged);
+        this.collaborationManager = installCollaborationManager(this.props.vm);
+        this.collaborationManager.on('stateChanged', this.handleCollaborationChanged);
         document.addEventListener('keydown', this.handleKeyDown);
         this.handleTimelineChanged(this.manager.getTimelineState());
+        this.handleCollaborationChanged(this.collaborationManager.getState());
     }
 
     componentWillUnmount () {
@@ -61,6 +69,9 @@ class Timeline extends React.Component {
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
+        if (this.collaborationManager) {
+            this.collaborationManager.removeListener('stateChanged', this.handleCollaborationChanged);
+        }
         document.removeEventListener('keydown', this.handleKeyDown);
     }
 
@@ -72,6 +83,13 @@ class Timeline extends React.Component {
         this.setState(state => ({
             timeline: Object.assign({}, state.timeline, {frameCount})
         }));
+    }
+
+    handleCollaborationChanged (collaborationState) {
+        const markers = (collaborationState.entries || []).filter(entry => (
+            !entry.deleted && entry.seconds !== null && Number.isFinite(Number(entry.seconds))
+        ));
+        this.setState({markers});
     }
 
     handleKeyDown (event) {
@@ -127,6 +145,10 @@ class Timeline extends React.Component {
 
     handleSeek (event) {
         this.manager.seekTimeline(Number(event.target.value));
+    }
+
+    handleMarkerClick (event) {
+        this.manager.seekTimeline(Number(event.currentTarget.value));
     }
 
     handleToggleSettings () {
@@ -301,10 +323,31 @@ class Timeline extends React.Component {
                             title="Rendering settings"
                             type="button"
                             onClick={this.handleToggleSettings}
-                        >{'⚙'}</button>
+                        ><GearIcon /></button>
                     </div>
                 </div>
                 <div className={styles.scrubber}>
+                    <div className={styles.markers}>
+                        {this.state.markers.map(marker => {
+                            const markerKind = marker.kind === 'note' ? 'メモ' : 'チャット';
+                            const markerLabel = `${marker.authorName}の${markerKind}、${formatTime(marker.seconds)}`;
+                            const markerTitle = `${marker.authorName}: ${marker.text}`;
+                            const markerPosition = timeline.duration ?
+                                (marker.seconds / timeline.duration) * 100 : 0;
+                            return (
+                                <button
+                                    aria-label={markerLabel}
+                                    className={classNames(styles.marker, styles[marker.kind])}
+                                    key={marker.id}
+                                    style={{left: `${markerPosition}%`}}
+                                    title={markerTitle}
+                                    type="button"
+                                    value={marker.seconds}
+                                    onClick={this.handleMarkerClick}
+                                ><span /></button>
+                            );
+                        })}
+                    </div>
                     <input
                         aria-label="Current timeline position"
                         max={timeline.duration}
@@ -335,7 +378,7 @@ class Timeline extends React.Component {
                         title={timeline.playing ? 'Pause (Space)' : 'Play (Space)'}
                         type="button"
                         onClick={this.handlePlayPause}
-                    >{timeline.playing ? 'Ⅱ' : '▶'}</button>
+                    >{timeline.playing ? <PauseIcon /> : <PlayIcon />}</button>
                     <button
                         aria-label="Stop and return to start"
                         className={styles.stopButton}

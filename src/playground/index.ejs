@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="google" value="notranslate">
-    <meta name="description" content="<%= htmlWebpackPlugin.options.APP_NAME %> is a Scratch mod with a compiler to run projects faster, dark mode for your eyes, a bunch of addons to improve the editor, and more." />
+    <meta name="description" content="<%= htmlWebpackPlugin.options.APP_NAME %> is a collaborative block-based editor for animation and video." />
     <title><%= htmlWebpackPlugin.options.title %></title>
     <link rel="apple-touch-icon" href="<%= htmlWebpackPlugin.options.root %>images/apple-touch-icon.png">
     <% if (htmlWebpackPlugin.options.root === "/" || htmlWebpackPlugin.options.root === "") { %>
@@ -75,7 +75,10 @@
       }
     </style>
   </head>
-  <body>
+  <body
+    data-splash-editor="<%= Boolean(htmlWebpackPlugin.options.isEditor) %>"
+    data-splash-root="<%= htmlWebpackPlugin.options.root %>"
+  >
     <noscript>
       <div class="splash-screen">
         <div>
@@ -93,98 +96,7 @@
       <button class="splash-reset" hidden>Click here to reset caches (can fix some errors)</button>
     </div>
 
-    <script>
-      (function () {
-        'use strict';
-
-        var theme = '';
-        var accent = '#ff4c4c';
-
-        try {
-          var themeSetting = localStorage.getItem('tw:theme');
-        } catch (e) {
-          // ignore
-        }
-        if (themeSetting === 'light') {
-          theme = 'light';
-        } else if (themeSetting === 'dark') {
-          theme = 'dark';
-        } else if (themeSetting) {
-          try {
-            var parsed = JSON.parse(themeSetting);
-            if (parsed.accent === 'purple') {
-              accent = '#855cd6';
-            } else if (parsed.accent === 'blue') {
-              accent = '#4c97ff';
-            }
-            if (parsed.gui === 'dark' || parsed.gui === 'light') {
-              theme = parsed.gui;
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-
-        if (!theme) {
-          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-
-        var splash = document.querySelector('.spash-waiting-for-js');
-        splash.setAttribute('data-theme', theme);
-        if (theme !== 'dark') {
-          <% if (htmlWebpackPlugin.options.isEditor) { %>
-            splash.style.backgroundColor = accent;
-            splash.style.color = 'white';
-          <% } else { %>
-            splash.style.color = accent;
-          <% } %>
-        }
-        splash.hidden = false;
-
-        var splashErrorTitle = document.querySelector('.splash-error-title');
-        var splashError = document.querySelector('.splash-errors');
-        var splashReset = document.querySelector('.splash-reset');
-
-        var totalErrors = 0;
-        window.onerror = function (event, source, line, col, err) {
-          if (++totalErrors > 5) return; // dont bother logging more
-          splashErrorTitle.hidden = splashError.hidden = splashReset.hidden = false;
-          var el = document.createElement('div');
-          el.textContent = 'Error (splash) in ' + source + ' (' + line + ':' + col + '): ' + err;
-          splashError.appendChild(el);
-        };
-
-        splashReset.onclick = function () {
-          splashReset.disabled = true;
-          function hardRefresh() {
-            var search = location.search.replace(/[?&]nocache=[\d.]+(?=$|&)/, '');
-            // This is a functional cookie used so that we respond with Clear-Site-Data just once. No tracking.
-            // Can't use nocache parameter to trigger this because people might accidentally bookmark that, and
-            // then we would be clearing their cache on every visit.
-            document.cookie = 'tw_clear_cache_once=1; max-age=60; path=/; samesite=strict; secure';
-            location.replace(location.pathname + search + (search ? '&' : '?') + 'nocache=' + Math.floor(Math.random() * 10000000));
-          }
-          if ('serviceWorker' in navigator) {
-            setTimeout(hardRefresh, 5000);
-            navigator.serviceWorker.getRegistration(<%= JSON.stringify(htmlWebpackPlugin.options.root) %>)
-              .then(function(registration) {
-                if (registration) {
-                  return registration.unregister();
-                }
-              })
-              .then(hardRefresh)
-              .catch(hardRefresh);
-          } else {
-            hardRefresh();
-          }
-        };
-
-        window.SplashEnd = () => {
-          splash.hidden = true;
-          window.onerror = null;
-        };
-      })();
-    </script>
+    <script src="<%= htmlWebpackPlugin.options.root %>splash.js"></script>
 
     <div id="app"></div>
   </body>

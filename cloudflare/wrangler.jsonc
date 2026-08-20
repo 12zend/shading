@@ -1,0 +1,37 @@
+{
+  "name": "shading-app",
+  "main": "./collaboration-worker.mjs",
+  "compatibility_date": "2026-08-11",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "shading.app/*",
+      "zone_name": "shading.app"
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://shading.app"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TEAM_ROOMS",
+        "class_name": "TeamRoom"
+      }
+    ]
+  },
+  "exports": {
+    "TeamRoom": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "assets": {
+    "directory": "../build",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  }
+}

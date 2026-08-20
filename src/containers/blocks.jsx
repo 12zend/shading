@@ -49,6 +49,7 @@ import {
 } from '../lib/my-blocks-shader-blocks';
 import installObjectBlockDefinitions from '../lib/object-blocks-ui';
 import {SHADER_MARKER} from '../lib/my-blocks-shader';
+import installCollaborationManager from '../lib/collaboration-manager';
 
 // TW: Strings we add to scratch-blocks are localized here
 const messages = defineMessages({
@@ -174,6 +175,8 @@ class Blocks extends React.Component {
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
         registerMyBlocksShaderCategory(this.ScratchBlocks, this.workspace);
         AddonHooks.blocklyWorkspace = this.workspace;
+        this.collaborationManager = installCollaborationManager(this.props.vm);
+        this.collaborationManager.attachWorkspace(this.workspace, this.ScratchBlocks);
 
         // Register buttons under new callback keys for creating variables,
         // lists, and procedures from extensions.
@@ -295,6 +298,9 @@ class Blocks extends React.Component {
     componentWillUnmount () {
         this.detachVM();
         this.unmounted = true;
+        if (this.collaborationManager && this.collaborationManager.workspace === this.workspace) {
+            this.collaborationManager.detachWorkspace();
+        }
         this.workspace.dispose();
         clearTimeout(this.toolboxUpdateTimeout);
 

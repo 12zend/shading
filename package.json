@@ -12,13 +12,16 @@
   "main": "./dist/scratch-gui.js",
   "scripts": {
     "build": "npm run clean && webpack --colors --bail",
+    "build:cloudflare": "NODE_ENV=production npm run build",
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
+    "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc",
     "prepublish": "node scripts/prepublish.mjs",
     "prune": "./prune-gh-pages.sh",
     "i18n:push": "tx-push-src scratch-editor interface translations/en.json",
     "i18n:src": "rimraf ./translations/messages/src && babel src > tmp.js && rimraf tmp.js && build-i18n-src ./translations/messages/src ./translations/",
     "start": "webpack-dev-server",
+    "start:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 dev --config cloudflare/wrangler.jsonc --port 8601 --var ALLOWED_ORIGINS:http://shading.app",
     "test": "npm run test:lint && npm run test:unit && npm run build && npm run test:integration",
     "test:integration": "jest --maxWorkers=4 test[\\\\/]integration",
     "test:lint": "eslint . --ext .js,.jsx",
@@ -142,6 +145,7 @@
     "webpack": "4.47.0",
     "webpack-cli": "3.3.12",
     "webpack-dev-server": "3.11.2",
+    "wrangler": "4.121.0",
     "yauzl": "2.10.0"
   },
   "jest": {

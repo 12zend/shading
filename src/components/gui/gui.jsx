@@ -14,6 +14,7 @@ import Box from '../box/box.jsx';
 import MenuBar from '../menu-bar/menu-bar.jsx';
 import Watermark from '../../containers/watermark.jsx';
 import Timeline from '../timeline/timeline.jsx';
+import CollaborationPanel from '../collaboration-panel/collaboration-panel.jsx';
 
 import Backpack from '../../containers/backpack.jsx';
 import BrowserModal from '../browser-modal/browser-modal.jsx';
@@ -85,6 +86,7 @@ const GUIComponent = props => {
         canShare,
         canUseCloud,
         children,
+        collaborationUsername,
         connectionModalVisible,
         framerate,
         customStageSize,
@@ -284,6 +286,10 @@ const GUIComponent = props => {
                     onStartSelectingFileUpload={onStartSelectingFileUpload}
                     onToggleLoginOpen={onToggleLoginOpen}
                 />
+                <CollaborationPanel
+                    username={collaborationUsername}
+                    vm={vm}
+                />
                 <Box className={styles.bodyWrapper}>
                     <Box className={styles.flexWrapper}>
                         <Box className={styles.editorWrapper}>
@@ -367,6 +373,7 @@ GUIComponent.propTypes = {
     canUseCloud: PropTypes.bool,
     cardsVisible: PropTypes.bool,
     children: PropTypes.node,
+    collaborationUsername: PropTypes.string,
     framerate: PropTypes.number.isRequired,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
@@ -447,6 +454,7 @@ GUIComponent.defaultProps = {
 };
 
 const mapStateToProps = state => ({
+    collaborationUsername: state.scratchGui.tw.username,
     customStageSize: state.scratchGui.customStageSize,
     framerate: state.scratchGui.tw.framerate,
     isWindowFullScreen: state.scratchGui.tw.isWindowFullScreen,
