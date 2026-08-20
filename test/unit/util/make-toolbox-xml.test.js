@@ -123,15 +123,15 @@ describe('Movie toolbox categories', () => {
         );
     });
 
-    test('offers one atomic video-frame render block for reliable stamping', () => {
+    test('offers the atomic video-frame render block plus the legacy video controls', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
         expect(toolbox).toContain('type="looks_rendervideo"');
         expect(toolbox).toContain('<value name="VIDEO">');
         expect(toolbox).toContain('<value name="FRAME">');
-        expect(toolbox).not.toContain('type="looks_switchvideoto"');
-        expect(toolbox).not.toContain('type="looks_setvideoframeto"');
-        expect(toolbox).not.toContain('type="looks_changevideoframeby"');
+        expect(toolbox).toContain('type="looks_switchvideoto"');
+        expect(toolbox).toContain('type="looks_setvideoframeto"');
+        expect(toolbox).toContain('type="looks_changevideoframeby"');
     });
 
     test('offers both camera-aware and camera-independent 3D go-to blocks', () => {
@@ -148,20 +148,81 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<field name="NUM">1</field>');
     });
 
-    test('moves rendering controls out of Looks and offers time-based real-time sound', () => {
+    test('shows every VM-executable block including legacy rendering and event blocks', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 
-        expect(toolbox).not.toContain('type="looks_addrenderingframe"');
-        expect(toolbox).not.toContain('type="looks_clearrenderingframe"');
-        expect(toolbox).not.toContain('type="looks_exportrenderingmp4"');
-        expect(toolbox).not.toContain('type="event_whenflagclicked"');
+        expect(toolbox).toContain('type="looks_addrenderingframe"');
+        expect(toolbox).toContain('type="looks_clearrenderingframe"');
+        expect(toolbox).toContain('type="looks_exportrenderingmp4"');
+        expect(toolbox).toContain('type="event_whenflagclicked"');
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
         expect(toolbox).toContain('type="sound_playattime"');
-        expect(toolbox).not.toContain('type="sound_playatframe"');
+        expect(toolbox).toContain('type="sound_playatframe"');
         expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
         expect(toolbox.indexOf('type="sound_play"')).toBeLessThan(
             toolbox.indexOf('type="sound_playattime"')
         );
+    });
+
+    test('offers all core VM blocks that are hidden from the curated palette', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        // Motion: classic 2D blocks and legacy no-ops.
+        expect(toolbox).toContain('type="motion_gotoxy"');
+        expect(toolbox).toContain('type="motion_movesteps"');
+        expect(toolbox).toContain('type="motion_glidesecstoxy"');
+        expect(toolbox).toContain('type="motion_ifonedgebounce"');
+        expect(toolbox).toContain('type="motion_changezby"');
+        expect(toolbox).toContain('type="motion_changerotationby"');
+        expect(toolbox).toContain('type="motion_setcamerax"');
+        expect(toolbox).toContain('type="motion_changecamerazby"');
+        expect(toolbox).toContain('type="motion_changecamerarotationby"');
+        expect(toolbox).toContain('type="motion_xscroll"');
+        // Looks: speech, size, and graphic effect filters.
+        expect(toolbox).toContain('type="looks_say"');
+        expect(toolbox).toContain('type="looks_thinkforsecs"');
+        expect(toolbox).toContain('type="looks_nextcostume"');
+        expect(toolbox).toContain('type="looks_changesizeby"');
+        expect(toolbox).toContain('type="looks_turbulentdisplace"');
+        expect(toolbox).toContain('type="looks_bloom"');
+        expect(toolbox).toContain('type="looks_effectweight"');
+        expect(toolbox).toContain('type="looks_hideallsprites"');
+        // Sound.
+        expect(toolbox).toContain('type="sound_play"');
+        expect(toolbox).toContain('type="sound_stopallsounds"');
+        expect(toolbox).toContain('type="sound_seteffectto"');
+        expect(toolbox).toContain('type="sound_cleareffects"');
+        // Events.
+        expect(toolbox).toContain('type="event_whenkeypressed"');
+        expect(toolbox).toContain('type="event_whenthisspriteclicked"');
+        expect(toolbox).toContain('type="event_whentouchingobject"');
+        expect(toolbox).toContain('type="event_whenbackdropswitchesto"');
+        expect(toolbox).toContain('type="event_whengreaterthan"');
+        // Control.
+        expect(toolbox).toContain('type="control_wait"');
+        expect(toolbox).toContain('type="control_for_each"');
+        expect(toolbox).toContain('type="control_all_at_once"');
+        expect(toolbox).toContain('type="control_get_counter"');
+        expect(toolbox).toContain('type="control_incr_counter"');
+        expect(toolbox).toContain('type="control_clear_counter"');
+        expect(toolbox).toContain('type="control_start_as_clone"');
+        expect(toolbox).toContain('type="control_create_clone_of"');
+        expect(toolbox).toContain('type="control_delete_this_clone"');
+        // Sensing.
+        expect(toolbox).toContain('type="sensing_touchingobject"');
+        expect(toolbox).toContain('type="sensing_coloristouchingcolor"');
+        expect(toolbox).toContain('type="sensing_distanceto"');
+        expect(toolbox).toContain('type="sensing_keypressed"');
+        expect(toolbox).toContain('type="sensing_askandwait"');
+        expect(toolbox).toContain('type="sensing_answer"');
+        expect(toolbox).toContain('type="sensing_of"');
+        expect(toolbox).toContain('type="sensing_current"');
+        expect(toolbox).toContain('type="sensing_dayssince2000"');
+        expect(toolbox).toContain('type="sensing_username"');
+        expect(toolbox).toContain('type="sensing_online"');
+        expect(toolbox).toContain('type="sensing_userid"');
+        // The legacy switch-model alias shares the render-model block definition and stays deduplicated.
+        expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });
 });
