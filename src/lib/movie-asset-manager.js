@@ -695,6 +695,15 @@ class MovieAssetManager extends EventEmitter {
         };
     }
 
+    getTimelineSettings () {
+        return {
+            duration: this.timeline.duration,
+            framerate: this.timeline.framerate,
+            height: this.timeline.height,
+            width: this.timeline.width
+        };
+    }
+
     restoreTimeline (descriptor) {
         const [stageWidth, stageHeight] = this.getStageSize();
         const hasSettings = descriptor && typeof descriptor === 'object';
@@ -834,7 +843,8 @@ class MovieAssetManager extends EventEmitter {
         }, 0);
     }
 
-    updateTimelineSettings (settings) {
+    updateTimelineSettings (settings, options = {}) {
+        const previousSettings = this.getTimelineSettings();
         const previousDuration = this.timeline.duration;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
         this.timeline.framerate = this.normalizeRenderingFramerate(settings.framerate);
@@ -849,6 +859,13 @@ class MovieAssetManager extends EventEmitter {
         } else {
             this.timeline.pendingFrame = true;
             this.emitTimelineChanged();
+        }
+        const nextSettings = this.getTimelineSettings();
+        if (JSON.stringify(previousSettings) !== JSON.stringify(nextSettings)) {
+            this.emit('timelineSettingsChanged', nextSettings, {
+                previousSettings,
+                remote: options.remote === true
+            });
         }
         this.runtime.emitProjectChanged();
     }

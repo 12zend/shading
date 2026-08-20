@@ -77,6 +77,11 @@ const ensureTeamId = () => {
     return teamId;
 };
 
+const startAfterTeamRouteReady = (callback, ready = window.ShadingTeamReady) => {
+    if (ready && typeof ready.then === 'function') return ready.then(callback, callback);
+    return callback();
+};
+
 export {
     RESERVED_PATHS,
     TEAM_ID_PATTERN,
@@ -85,5 +90,6 @@ export {
     getTeamPath,
     normalizeTeamId,
     randomTeamId,
+    startAfterTeamRouteReady,
     wasTeamCreatedInSession
 };

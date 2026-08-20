@@ -18,7 +18,9 @@ import './import-first';
 
 import React from 'react';
 
+import {startAfterTeamRouteReady} from '../lib/team-route';
 import Interface from './render-interface.jsx';
 import render from './app-target';
 
-render(<Interface />);
+const startEditor = () => render(<Interface />);
+startAfterTeamRouteReady(startEditor);

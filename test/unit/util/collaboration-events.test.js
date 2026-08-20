@@ -6,16 +6,25 @@ import {
 } from '../../../src/lib/collaboration-events';
 
 describe('collaboration block events', () => {
-    test('does not share a block position-only move', () => {
+    test('shares a block position-only move and preserves both coordinates', () => {
         const event = {
+            blockId: 'block',
             newCoordinate: {x: 30, y: 40},
             oldCoordinate: {x: 10, y: 20},
+            recordUndo: true,
+            toJson: () => ({blockId: 'block', type: 'move'}),
             type: 'move'
         };
 
         expect(isPureCoordinateMove(event)).toBe(true);
-        expect(isShareableBlocklyEvent(event)).toBe(false);
-        expect(serializeBlocklyEvent(event)).toBe(null);
+        expect(isShareableBlocklyEvent(event)).toBe(true);
+        const serialized = serializeBlocklyEvent(event);
+        expect(serialized.oldCoordinate).toBe('10, 20');
+        expect(serialized.newCoordinate).toBe('30, 40');
+        expect(invertBlocklyEvent(serialized)).toMatchObject({
+            newCoordinate: '10, 20',
+            oldCoordinate: '30, 40'
+        });
     });
 
     test('shares a structural block connection move', () => {

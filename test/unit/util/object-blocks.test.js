@@ -7,7 +7,7 @@ import installObjectBlocks, {
     decodeDrawAsset,
     encodeDrawAsset
 } from '../../../src/lib/object-blocks';
-import {
+import installObjectBlockDefinitions, {
     deleteAsset,
     drawSelectionUsesFrame,
     getDrawInputVisibility,
@@ -59,6 +59,78 @@ const makeGroupingHarness = onStep => {
 };
 
 describe('Objects blocks', () => {
+    test('persists and restores the dynamic text input for duplicated and shared font draw blocks', () => {
+        const originalDocument = global.document;
+        global.document = {
+            createElement: name => {
+                const attributes = new Map();
+                return {
+                    getAttribute: key => attributes.has(key) ? attributes.get(key) : null,
+                    nodeName: name,
+                    setAttribute: (key, value) => attributes.set(key, String(value))
+                };
+            }
+        };
+        const ScratchBlocks = {
+            Blocks: {},
+            Events: {isEnabled: () => false},
+            FieldDropdown: class {},
+            FieldLabel: class {},
+            Xml: {domToText: element => element.outerHTML}
+        };
+        const vm = {runtime: {}};
+        installObjectBlockDefinitions(ScratchBlocks, vm);
+        const definition = ScratchBlocks.Blocks.objects_draw;
+        const makeBlock = (initialSource, initialAsset) => {
+            let source = initialSource;
+            const visibility = {};
+            const fields = {
+                ASSET: {setValue: jest.fn()},
+                SOURCE: {
+                    setValue: jest.fn(value => {
+                        source = value;
+                    })
+                }
+            };
+            return Object.assign({
+                getField: name => fields[name],
+                getFieldValue: name => {
+                    if (name === 'ASSET') return encodeDrawAsset(source, initialAsset);
+                    if (name === 'SOURCE') return source;
+                    if (name === 'VIDEO_MODE') return 'sequence';
+                    return '';
+                },
+                getInput: name => ({
+                    connection: null,
+                    setVisible: value => {
+                        visibility[name] = value;
+                        return [];
+                    }
+                }),
+                objectDrawAsset_: initialAsset,
+                objectDrawSource_: source,
+                objectDrawVideoMode_: 'sequence',
+                rendered: false,
+                visibility
+            }, definition);
+        };
+        try {
+            const original = makeBlock('text', 'sans-serif');
+            const mutation = original.mutationToDom();
+            const restored = makeBlock('costume', 'costume1');
+
+            restored.domToMutation(mutation);
+
+            expect(mutation.getAttribute('source')).toBe('text');
+            expect(mutation.getAttribute('asset')).toBe('sans-serif');
+            expect(restored.objectDrawSource_).toBe('text');
+            expect(restored.objectDrawAsset_).toBe('sans-serif');
+            expect(restored.visibility.TEXT).toBe(true);
+        } finally {
+            global.document = originalDocument;
+        }
+    });
+
     test('supports the legacy ScratchBlocks field source API', () => {
         const sourceBlock = {};
 

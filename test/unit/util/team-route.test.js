@@ -5,6 +5,7 @@ import {
     getTeamPath,
     normalizeTeamId,
     randomTeamId,
+    startAfterTeamRouteReady,
     wasTeamCreatedInSession
 } from '../../../src/lib/team-route';
 
@@ -76,5 +77,19 @@ describe('team route', () => {
 
         expect(ids.size).toBe(100);
         for (const id of ids) expect(id).toMatch(/^[a-z2-9]{20}$/);
+    });
+
+    test('waits for the creator claim before starting the editor', async () => {
+        let finishTeamRoute;
+        const ready = new Promise(resolve => {
+            finishTeamRoute = resolve;
+        });
+        const startEditor = jest.fn();
+
+        const started = startAfterTeamRouteReady(startEditor, ready);
+        expect(startEditor).not.toHaveBeenCalled();
+        finishTeamRoute();
+        await started;
+        expect(startEditor).toHaveBeenCalledTimes(1);
     });
 });

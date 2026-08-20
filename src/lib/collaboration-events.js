@@ -21,7 +21,6 @@ const isPureCoordinateMove = event => (
 const isShareableBlocklyEvent = event => (
     Boolean(event) &&
     SHAREABLE_EVENT_TYPES.has(event.type) &&
-    !isPureCoordinateMove(event) &&
     event.recordUndo !== false
 );
 

@@ -846,6 +846,8 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
         },
         updateDrawSelection_: function (requestedValue) {
+            const oldMutation = this.objectDrawSource_ && ScratchBlocks.Events.isEnabled() ?
+                ScratchBlocks.Xml.domToText(this.mutationToDom()) : null;
             const selection = decodeDrawAsset(
                 requestedValue === IMPORT_VALUE ? '' : requestedValue,
                 this.getFieldValue('SOURCE') || this.objectDrawSource_ || 'costume'
@@ -855,6 +857,14 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             const sourceField = this.getField('SOURCE');
             if (sourceField) sourceField.setValue(selection.source);
             this.syncDrawOptionalInputs_();
+            if (oldMutation !== null && !this.objectRestoringDrawMutation_) {
+                const newMutation = ScratchBlocks.Xml.domToText(this.mutationToDom());
+                if (oldMutation !== newMutation) {
+                    ScratchBlocks.Events.fire(new ScratchBlocks.Events.Change(
+                        this, 'mutation', null, oldMutation, newMutation
+                    ));
+                }
+            }
         },
         setDrawAsset_: function (source, asset) {
             this.updateDrawSelection_(encodeDrawAsset(source, asset));
@@ -899,13 +909,39 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
         },
         mutationToDom: function () {
             const mutation = document.createElement('mutation');
-            mutation.setAttribute('source', this.objectDrawSource_ || 'costume');
+            const fieldSelection = decodeDrawAsset(
+                this.getFieldValue('ASSET'),
+                this.objectDrawSource_ || this.getFieldValue('SOURCE') || 'costume'
+            );
+            const selection = {
+                asset: typeof this.objectDrawAsset_ === 'string' ? this.objectDrawAsset_ : fieldSelection.asset,
+                source: this.objectDrawSource_ || fieldSelection.source
+            };
+            mutation.setAttribute('source', selection.source);
+            mutation.setAttribute('asset', selection.asset);
+            mutation.setAttribute('video-mode', normalizeVideoMode(
+                this.getFieldValue('VIDEO_MODE') || this.objectDrawVideoMode_
+            ));
             return mutation;
         },
         domToMutation: function (mutation) {
             const source = mutation.getAttribute('source') || 'costume';
+            const asset = mutation.getAttribute('asset');
+            const videoMode = mutation.getAttribute('video-mode');
+            this.objectRestoringDrawMutation_ = true;
             this.objectDrawSource_ = source;
-            this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
+            if (videoMode !== null) this.objectDrawVideoMode_ = normalizeVideoMode(videoMode);
+            const sourceField = this.getField('SOURCE');
+            if (sourceField) sourceField.setValue(source);
+            if (asset === null) {
+                // Older projects only stored the source. Fields are restored after
+                // the mutation, so do not let the temporary default ASSET value
+                // change a text block back into a costume block here.
+                this.syncDrawOptionalInputs_();
+            } else {
+                this.updateDrawSelection_(encodeDrawAsset(source, asset));
+            }
+            this.objectRestoringDrawMutation_ = false;
         }
     };
 

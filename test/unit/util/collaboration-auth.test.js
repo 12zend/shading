@@ -1,6 +1,8 @@
 import {
     canAdminister,
+    canCompleteFreshSnapshot,
     canManageEntry,
+    canPromoteAdmin,
     canRevertOperation,
     canTransferAdmin,
     consumeInviteRecord,
@@ -30,14 +32,16 @@ describe('collaboration authorization', () => {
         expect(canRevertOperation(admin, operation)).toBe(true);
     });
 
-    test('administrator transfer only targets another member', () => {
+    test('administrator promotion only targets another member and keeps the compatibility API', () => {
+        expect(canPromoteAdmin(admin, member)).toBe(true);
         expect(canTransferAdmin(admin, member)).toBe(true);
         expect(canTransferAdmin(admin, viewer)).toBe(false);
         expect(canTransferAdmin(member, otherMember)).toBe(false);
         expect(canTransferAdmin(admin, admin)).toBe(false);
+        expect(canPromoteAdmin(admin, {...member, pendingFreshSnapshot: true})).toBe(false);
     });
 
-    test('member and viewer invites keep their server-side role and are single-use', () => {
+    test('member and viewer invites keep their server-side role and remain reusable until expiry', () => {
         const future = new Date(2000).toISOString();
         const invites = {
             memberToken: {expiresAt: future, role: 'member'},
@@ -45,7 +49,7 @@ describe('collaboration authorization', () => {
         };
         expect(consumeInviteRecord(invites, 'memberToken', 1000)).toEqual({expiresAt: future, role: 'member'});
         expect(consumeInviteRecord(invites, 'viewerToken', 1000)).toEqual({expiresAt: future, role: 'viewer'});
-        expect(consumeInviteRecord(invites, 'memberToken', 1000)).toBeNull();
+        expect(consumeInviteRecord(invites, 'memberToken', 1000)).toEqual({expiresAt: future, role: 'member'});
         expect(consumeInviteRecord(invites, 'memberToken2', 1000)).toBeNull();
     });
 
@@ -59,5 +63,14 @@ describe('collaboration authorization', () => {
         expect(requiresFreshSnapshot({pendingFreshSnapshot: true})).toBe(true);
         expect(requiresFreshSnapshot({pendingFreshSnapshot: false})).toBe(false);
         expect(requiresFreshSnapshot({})).toBe(false);
+    });
+
+    test('keeps an invited participant read-only until the loaded snapshot is acknowledged', () => {
+        const pendingMember = {pendingFreshSnapshot: true};
+        const deliveredSession = {snapshotDelivered: true, snapshotDeliveredSequence: 12};
+        expect(canCompleteFreshSnapshot(pendingMember, deliveredSession, 12)).toBe(true);
+        expect(canCompleteFreshSnapshot(pendingMember, deliveredSession, 11)).toBe(false);
+        expect(canCompleteFreshSnapshot(pendingMember, {snapshotDelivered: false}, 12)).toBe(false);
+        expect(canCompleteFreshSnapshot({pendingFreshSnapshot: false}, deliveredSession, 12)).toBe(false);
     });
 });

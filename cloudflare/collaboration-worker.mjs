@@ -3,14 +3,19 @@ import {DurableObject} from 'cloudflare:workers';
 
 import {
     canAdminister,
+    canCompleteFreshSnapshot,
     canManageEntry,
+    canPromoteAdmin,
     canRevertOperation,
-    canTransferAdmin,
     consumeInviteRecord,
     requiresFreshSnapshot
 } from './collaboration-auth.js';
 import {
+    findConflictingLock,
+    getOperationBlockIds,
     normalizeSnapshotBaseSequence,
+    normalizeLockBlockIds,
+    normalizeTimelineSettings,
     runSerializedRoomMutation,
     selectSnapshotReplayOperations
 } from './collaboration-protocol.js';
@@ -25,6 +30,7 @@ const EDITABLE_ROLES = new Set(['admin', 'member']);
 const OPERATION_TYPES = new Set(['create', 'delete', 'change', 'move']);
 const RATE_LIMIT_WINDOW_MS = 60000;
 const RATE_LIMIT_MESSAGES = 240;
+const EDIT_LOCK_LEASE_MS = 5000;
 
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
     status,
@@ -126,7 +132,9 @@ const isValidOperationPair = (forward, inverse) => {
         if (inverse.type !== 'move') return false;
         const structural = forward.oldParentId || forward.newParentId ||
             inverse.oldParentId || inverse.newParentId;
-        if (!structural) return false;
+        const positional = forward.oldCoordinate || forward.newCoordinate ||
+            inverse.oldCoordinate || inverse.newCoordinate;
+        if (!structural && !positional) return false;
     }
     return true;
 };
@@ -143,7 +151,7 @@ const allowedOrigin = (request, env) => {
     const localOrigin = originURL.protocol === 'http:' &&
         (originURL.hostname === 'localhost' || originURL.hostname === '127.0.0.1');
     // Browsers prevent remote sites from claiming a localhost Origin; authentication
-    // still requires the room claim or a valid single-use invite token.
+    // still requires the room claim or a valid unexpired invite token.
     if (localOrigin) return true;
     const configured = String(env.ALLOWED_ORIGINS || 'https://shading.app')
         .split(',')
@@ -173,9 +181,13 @@ export class TeamRoom extends DurableObject {
     constructor (ctx, env) {
         super(ctx, env);
         this.sessions = new Map();
+        this.editLocks = new Map();
         for (const socket of this.ctx.getWebSockets()) {
             const attachment = socket.deserializeAttachment();
             this.sessions.set(socket, attachment || {});
+            if (attachment && attachment.editLock && attachment.editLock.expiresAt > Date.now()) {
+                this.editLocks.set(attachment.editLock.id, attachment.editLock);
+            }
         }
         this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     }
@@ -204,10 +216,14 @@ export class TeamRoom extends DurableObject {
                 invites: {},
                 sequence: 0,
                 snapshotChunkCount: 0,
-                snapshotSequence: 0
+                snapshotSequence: 0,
+                timelineSettings: null,
+                timelineSettingsVersion: 0
             };
             await this.ctx.storage.put(ROOM_STATE_KEY, state);
         }
+        if (!Number.isInteger(state.timelineSettingsVersion)) state.timelineSettingsVersion = 0;
+        if (!Object.prototype.hasOwnProperty.call(state, 'timelineSettings')) state.timelineSettings = null;
         return state;
     }
 
@@ -236,6 +252,64 @@ export class TeamRoom extends DurableObject {
 
     hasPendingFreshSnapshot (state) {
         return Object.values(state.members).some(requiresFreshSnapshot);
+    }
+
+    findAdminSocket (state) {
+        const onlineAdmins = Array.from(this.sessions.entries())
+            .filter(([, session]) => session.memberId &&
+                state.members[session.memberId] && state.members[session.memberId].role === 'admin' &&
+                !requiresFreshSnapshot(state.members[session.memberId]));
+        return onlineAdmins.find(([, session]) => session.memberId === state.adminId) || onlineAdmins[0] || null;
+    }
+
+    pruneEditLocks (now = Date.now()) {
+        let changed = false;
+        for (const [lockId, lock] of this.editLocks.entries()) {
+            if (lock.expiresAt <= now) {
+                this.editLocks.delete(lockId);
+                changed = true;
+            }
+        }
+        for (const [socket, session] of this.sessions.entries()) {
+            if (!session.editLock || session.editLock.expiresAt > now) continue;
+            session.editLock = null;
+            socket.serializeAttachment(session);
+            this.sessions.set(socket, session);
+        }
+        return changed;
+    }
+
+    publicEditLocks () {
+        this.pruneEditLocks();
+        return Array.from(this.editLocks.values()).map(lock => ({
+            blockIds: lock.blockIds,
+            expiresAt: lock.expiresAt,
+            id: lock.id,
+            memberId: lock.memberId,
+            memberName: lock.memberName,
+            target: lock.target
+        }));
+    }
+
+    broadcastEditLocks () {
+        this.broadcast({type: 'locks', locks: this.publicEditLocks()});
+    }
+
+    releaseMemberLocks (memberId) {
+        let changed = false;
+        for (const [lockId, lock] of this.editLocks.entries()) {
+            if (lock.memberId === memberId) {
+                this.editLocks.delete(lockId);
+                changed = true;
+            }
+        }
+        for (const [socket, session] of this.sessions.entries()) {
+            if (session.memberId !== memberId || !session.editLock) continue;
+            session.editLock = null;
+            socket.serializeAttachment(session);
+            this.sessions.set(socket, session);
+        }
+        return changed;
     }
 
     broadcast (message, exceptSocket = null) {
@@ -284,79 +358,85 @@ export class TeamRoom extends DurableObject {
             return;
         }
 
-        if (message.type === 'hello' || message.type === 'snapshot' ||
-            message.type === 'project_sync_request' || message.type === 'project_sync') {
-            await runSerializedRoomMutation(this.ctx, async () => {
-                const mutationState = await this.getRoomState();
-                if (message.type === 'hello') {
-                    await this.handleHello(socket, message, mutationState);
-                    return;
-                }
-                const mutationMember = this.getMember(mutationState, socket);
-                if (!mutationMember) {
-                    this.sendError(socket, '先にチームへ参加してください。');
-                    return;
-                }
-                if (message.type === 'snapshot') {
-                    await this.handleSnapshot(socket, mutationMember, message, mutationState);
-                } else if (message.type === 'project_sync_request') {
-                    this.handleProjectSyncRequest(socket, mutationMember, message, mutationState);
-                } else {
-                    await this.handleProjectSync(socket, mutationMember, message, mutationState);
-                }
-            });
-            return;
-        }
-        const state = await this.getRoomState();
-        const member = this.getMember(state, socket);
-        if (!member) {
-            this.sendError(socket, '先にチームへ参加してください。');
-            return;
-        }
-
-        switch (message.type) {
-        case 'profile':
-            member.name = normalizeName(message.name);
-            state.members[member.id] = member;
-            await this.putRoomState(state);
-            this.broadcastState(state);
-            break;
-        case 'awareness':
-            this.handleAwareness(socket, member, message);
-            break;
-        case 'entry_add':
-            await this.handleEntryAdd(socket, member, message, state);
-            break;
-        case 'entry_edit':
-            await this.handleEntryEdit(socket, member, message, state);
-            break;
-        case 'entry_delete':
-            await this.handleEntryDelete(socket, member, message, state);
-            break;
-        case 'operation':
-            await this.handleOperation(socket, member, message, state);
-            break;
-        case 'revert':
-            await this.handleRevert(socket, member, message, state);
-            break;
-        case 'role_change':
-            await this.handleRoleChange(socket, member, message, state);
-            break;
-        case 'transfer_admin':
-            await this.handleTransferAdmin(socket, member, message, state);
-            break;
-        case 'invite_create':
-            await this.handleInviteCreate(socket, member, message, state);
-            break;
-        case 'snapshot_applied':
-            if (member.role === 'admin' && (this.hasPendingFreshSnapshot(state) ||
-                state.sequence - state.snapshotSequence >= 100)) {
-                this.requestSnapshot(socket, state);
+        // Durable Object messages can overlap while storage I/O is pending. Run
+        // every room mutation in one transaction so sequence numbers, locks,
+        // roles, snapshots, and invite validation cannot race each other.
+        await runSerializedRoomMutation(this.ctx, async () => {
+            const state = await this.getRoomState();
+            if (message.type === 'hello') {
+                await this.handleHello(socket, message, state);
+                return;
             }
-            break;
-        default:
-            this.sendError(socket, '未対応の共同編集操作です。');
-        }
+            const member = this.getMember(state, socket);
+            if (!member) {
+                this.sendError(socket, '先にチームへ参加してください。');
+                return;
+            }
+
+            switch (message.type) {
+            case 'profile':
+                member.name = normalizeName(message.name);
+                state.members[member.id] = member;
+                await this.putRoomState(state);
+                this.broadcastState(state);
+                break;
+            case 'awareness':
+                this.handleAwareness(socket, member, message);
+                break;
+            case 'lock_acquire':
+                this.handleLockAcquire(socket, member, message);
+                break;
+            case 'lock_release':
+                this.handleLockRelease(socket, member, message);
+                break;
+            case 'entry_add':
+                await this.handleEntryAdd(socket, member, message, state);
+                break;
+            case 'entry_edit':
+                await this.handleEntryEdit(socket, member, message, state);
+                break;
+            case 'entry_delete':
+                await this.handleEntryDelete(socket, member, message, state);
+                break;
+            case 'operation':
+                await this.handleOperation(socket, member, message, state);
+                break;
+            case 'timeline_settings':
+                await this.handleTimelineSettings(socket, member, message, state);
+                break;
+            case 'revert':
+                await this.handleRevert(socket, member, message, state);
+                break;
+            case 'role_change':
+                await this.handleRoleChange(socket, member, message, state);
+                break;
+            case 'admin_add':
+            case 'transfer_admin':
+                await this.handleAddAdmin(socket, member, message, state);
+                break;
+            case 'invite_create':
+                await this.handleInviteCreate(socket, member, message, state);
+                break;
+            case 'snapshot':
+                await this.handleSnapshot(socket, member, message, state);
+                break;
+            case 'project_sync_request':
+                this.handleProjectSyncRequest(socket, member, message, state);
+                break;
+            case 'project_sync':
+                await this.handleProjectSync(socket, member, message, state);
+                break;
+            case 'snapshot_applied':
+                await this.handleSnapshotApplied(socket, member, message, state);
+                if (member.role === 'admin' && (this.hasPendingFreshSnapshot(state) ||
+                    state.sequence - state.snapshotSequence >= 100)) {
+                    this.requestSnapshot(socket, state);
+                }
+                break;
+            default:
+                this.sendError(socket, '未対応の共同編集操作です。');
+            }
+        });
     }
 
     checkRateLimit (socket, messageLength) {
@@ -455,15 +535,22 @@ export class TeamRoom extends DurableObject {
             me: publicMember(member),
             memberToken,
             members: this.publicMembers(state),
+            locks: this.publicEditLocks(),
             onlineUserIds: this.onlineUserIds(),
-            synchronizing: requiresFreshSnapshot(member)
+            sequence: state.sequence,
+            synchronizing: requiresFreshSnapshot(member) || state.snapshotChunkCount > 0,
+            timelineSettings: state.timelineSettings,
+            timelineSettingsVersion: state.timelineSettingsVersion
         });
         this.broadcastState(state);
 
-        const adminSocket = Array.from(this.sessions.entries())
-            .find(([, sessionValue]) => sessionValue.memberId === state.adminId);
+        const adminSocket = this.findAdminSocket(state);
         if (member.pendingFreshSnapshot) {
-            const waitingSession = Object.assign({}, this.getSession(socket), {awaitingFreshSnapshot: true});
+            const waitingSession = Object.assign({}, this.getSession(socket), {
+                awaitingFreshSnapshot: true,
+                snapshotDelivered: false,
+                snapshotDeliveredSequence: null
+            });
             socket.serializeAttachment(waitingSession);
             this.sessions.set(socket, waitingSession);
             safeSend(socket, {
@@ -485,9 +572,16 @@ export class TeamRoom extends DurableObject {
                 const data = await this.ctx.storage.get(`snapshot:${padSequence(index)}`);
                 safeSend(socket, {type: 'snapshot_chunk', index, data});
             }
-        } else if (member.role === 'admin') {
-            this.requestSnapshot(socket, state);
-        } else if (adminSocket) this.requestSnapshot(adminSocket[0], state);
+        } else {
+            const lastSequence = Number(message.lastSequence);
+            const recoverySequence = Number.isInteger(lastSequence) && lastSequence >= 0 ? lastSequence : 0;
+            const allHistory = await this.listValues('history:', {limit: 1000});
+            const operations = allHistory.filter(operation => operation.sequence > recoverySequence)
+                .sort((a, b) => a.sequence - b.sequence);
+            if (operations.length) safeSend(socket, {type: 'operation_batch', operations});
+            if (member.role === 'admin') this.requestSnapshot(socket, state);
+            else if (adminSocket) this.requestSnapshot(adminSocket[0], state);
+        }
     }
 
     handleAwareness (socket, member, message) {
@@ -498,6 +592,65 @@ export class TeamRoom extends DurableObject {
             targetName: String(message.awareness.targetName || '').slice(0, 120) || null
         } : {};
         this.broadcast({type: 'awareness', memberId: member.id, awareness}, socket);
+    }
+
+    handleLockAcquire (socket, member, message) {
+        if (!EDITABLE_ROLES.has(member.role) || member.pendingFreshSnapshot) {
+            safeSend(socket, {
+                type: 'lock_denied',
+                message: member.role === 'viewer' ? '閲覧者はブロックを操作できません。' :
+                    '最新プロジェクトの同期が終わるまで操作できません。',
+                requestId: String(message.requestId || '').slice(0, 100)
+            });
+            return;
+        }
+        const requestId = String(message.requestId || '').slice(0, 100);
+        const target = normalizeTarget(message.target, message.targetId);
+        const blockIds = normalizeLockBlockIds(message.blockIds);
+        if (!requestId || !target.id || !blockIds.length) return;
+        const now = Date.now();
+        const pruned = this.pruneEditLocks(now);
+        const conflict = findConflictingLock(this.editLocks.values(), member.id, target, blockIds, now);
+        if (conflict) {
+            safeSend(socket, {
+                type: 'lock_denied',
+                memberId: conflict.memberId,
+                memberName: conflict.memberName,
+                message: `${conflict.memberName}がこのブロックを操作中です。`,
+                requestId
+            });
+            if (pruned) this.broadcastEditLocks();
+            return;
+        }
+        this.releaseMemberLocks(member.id);
+        const lock = {
+            blockIds,
+            expiresAt: now + EDIT_LOCK_LEASE_MS,
+            id: requestId,
+            memberId: member.id,
+            memberName: member.name,
+            target
+        };
+        this.editLocks.set(requestId, lock);
+        const session = Object.assign({}, this.getSession(socket), {editLock: lock});
+        socket.serializeAttachment(session);
+        this.sessions.set(socket, session);
+        safeSend(socket, {type: 'lock_granted', expiresAt: now + EDIT_LOCK_LEASE_MS, requestId});
+        this.broadcastEditLocks();
+    }
+
+    handleLockRelease (socket, member, message) {
+        const lockId = String(message.lockId || '').slice(0, 100);
+        const lock = this.editLocks.get(lockId);
+        if (!lock || lock.memberId !== member.id) return;
+        this.editLocks.delete(lockId);
+        const session = this.getSession(socket);
+        if (session.editLock && session.editLock.id === lockId) {
+            session.editLock = null;
+            socket.serializeAttachment(session);
+            this.sessions.set(socket, session);
+        }
+        this.broadcastEditLocks();
     }
 
     async handleEntryAdd (socket, member, message, state) {
@@ -564,12 +717,20 @@ export class TeamRoom extends DurableObject {
     }
 
     async handleOperation (socket, member, message, state) {
+        const clientOperationId = String(message.clientOperationId || '').slice(0, 100);
+        const reject = errorMessage => {
+            safeSend(socket, {
+                type: 'operation_rejected',
+                clientOperationId,
+                message: errorMessage
+            });
+        };
         if (!EDITABLE_ROLES.has(member.role)) {
-            this.sendError(socket, '閲覧者はブロックを編集できません。');
+            reject('閲覧者はブロックを編集できません。');
             return;
         }
         if (member.pendingFreshSnapshot) {
-            this.sendError(socket, '管理者の最新プロジェクトを同期してから編集してください。');
+            reject('管理者の最新プロジェクトを同期してから編集してください。');
             return;
         }
         const forward = message.forward;
@@ -577,14 +738,22 @@ export class TeamRoom extends DurableObject {
         const serializedSize = JSON.stringify({forward, inverse}).length;
         const target = normalizeTarget(message.target, message.targetId);
         if (!isValidOperationPair(forward, inverse) || serializedSize > MAX_OPERATION_SIZE || !target.id) {
-            this.sendError(socket, '変更データが大きすぎるか、形式が正しくありません。');
+            reject('変更データが大きすぎるか、形式が正しくありません。');
+            return;
+        }
+        const blockIds = getOperationBlockIds(forward).concat(getOperationBlockIds(inverse));
+        const pruned = this.pruneEditLocks();
+        const conflict = findConflictingLock(this.editLocks.values(), member.id, target, blockIds);
+        if (pruned) this.broadcastEditLocks();
+        if (conflict) {
+            reject(`${conflict.memberName}がこのブロックを操作中のため、変更を取り消しました。`);
             return;
         }
         state.sequence += 1;
         const operation = {
             authorId: member.id,
             authorName: member.name,
-            clientOperationId: String(message.clientOperationId || '').slice(0, 100),
+            clientOperationId,
             createdAt: new Date().toISOString(),
             forward,
             id: crypto.randomUUID(),
@@ -603,8 +772,7 @@ export class TeamRoom extends DurableObject {
         });
         this.broadcast({type: 'operation', operation});
         if (state.sequence - state.snapshotSequence >= 100) {
-            const adminSocket = Array.from(this.sessions.entries())
-                .find(([, session]) => session.memberId === state.adminId);
+            const adminSocket = this.findAdminSocket(state);
             if (adminSocket) this.requestSnapshot(adminSocket[0], state);
         }
     }
@@ -616,6 +784,47 @@ export class TeamRoom extends DurableObject {
         return operation ? {key, operation} : null;
     }
 
+    async handleTimelineSettings (socket, member, message, state) {
+        const clientOperationId = String(message.clientOperationId || '').slice(0, 100);
+        const reject = errorMessage => safeSend(socket, {
+            type: 'timeline_settings_rejected',
+            clientOperationId,
+            message: errorMessage,
+            settings: state.timelineSettings,
+            version: state.timelineSettingsVersion
+        });
+        if (!EDITABLE_ROLES.has(member.role)) {
+            reject('閲覧者はレンダリング設定を変更できません。');
+            return;
+        }
+        if (member.pendingFreshSnapshot) {
+            reject('管理者の最新プロジェクトを同期してからレンダリング設定を変更してください。');
+            return;
+        }
+        const baseVersion = Number(message.baseVersion);
+        if (!Number.isInteger(baseVersion) || baseVersion !== state.timelineSettingsVersion) {
+            reject('別の参加者が先にレンダリング設定を変更したため、最新の設定を読み直しました。');
+            return;
+        }
+        const settings = normalizeTimelineSettings(message.settings);
+        if (!settings) {
+            reject('レンダリング設定の形式が正しくありません。');
+            return;
+        }
+        state.sequence += 1;
+        state.timelineSettings = settings;
+        state.timelineSettingsVersion += 1;
+        await this.putRoomState(state);
+        this.broadcast({
+            type: 'timeline_settings',
+            authorId: member.id,
+            clientOperationId,
+            sequence: state.sequence,
+            settings,
+            version: state.timelineSettingsVersion
+        });
+    }
+
     async handleRevert (socket, member, message, state) {
         const result = await this.getOperation(String(message.operationId || ''));
         if (!result || result.operation.revertedBy) {
@@ -624,6 +833,16 @@ export class TeamRoom extends DurableObject {
         }
         if (!canRevertOperation(member, result.operation)) {
             this.sendError(socket, '他のユーザーの変更を戻せるのは管理者だけです。');
+            return;
+        }
+        const conflict = findConflictingLock(
+            this.editLocks.values(),
+            member.id,
+            result.operation.target,
+            getOperationBlockIds(result.operation.forward).concat(getOperationBlockIds(result.operation.inverse))
+        );
+        if (conflict) {
+            this.sendError(socket, `${conflict.memberName}がこのブロックを操作中のため、元に戻せません。`);
             return;
         }
         result.operation.revertedBy = member.id;
@@ -662,21 +881,21 @@ export class TeamRoom extends DurableObject {
         }
         const target = state.members[String(message.memberId || '')];
         const role = String(message.role || '');
-        if (!target || target.id === member.id || !ALLOWED_ROLES.has(role) || role === 'admin') return;
+        if (!target || target.id === member.id || target.role === 'admin' ||
+            !ALLOWED_ROLES.has(role) || role === 'admin') return;
         target.role = role;
         await this.putRoomState(state);
         this.broadcastState(state);
     }
 
-    async handleTransferAdmin (socket, member, message, state) {
+    async handleAddAdmin (socket, member, message, state) {
         const target = state.members[String(message.memberId || '')];
-        if (!canTransferAdmin(member, target)) {
-            this.sendError(socket, '管理者はメンバーにだけ渡せます。');
+        if (!canPromoteAdmin(member, target)) {
+            this.sendError(socket, '管理者に追加できるのは同期済みのメンバーだけです。');
             return;
         }
-        member.role = 'member';
         target.role = 'admin';
-        state.adminId = target.id;
+        if (!state.adminId) state.adminId = member.id;
         await this.putRoomState(state);
         this.broadcastState(state);
     }
@@ -744,8 +963,9 @@ export class TeamRoom extends DurableObject {
         for (const [waitingSocket, session] of this.sessions.entries()) {
             const waitingMember = session.memberId && state.members[session.memberId];
             if (!session.awaitingFreshSnapshot || !waitingMember || !waitingMember.pendingFreshSnapshot) continue;
-            waitingMember.pendingFreshSnapshot = false;
             session.awaitingFreshSnapshot = false;
+            session.snapshotDelivered = true;
+            session.snapshotDeliveredSequence = state.snapshotSequence;
             waitingSocket.serializeAttachment(session);
             this.sessions.set(waitingSocket, session);
             safeSend(waitingSocket, {
@@ -760,7 +980,20 @@ export class TeamRoom extends DurableObject {
             });
             deliveredFreshSnapshot = true;
         }
-        if (deliveredFreshSnapshot) await this.putRoomState(state);
+        if (deliveredFreshSnapshot) this.broadcastState(state);
+    }
+
+    async handleSnapshotApplied (socket, member, message, state) {
+        const session = this.getSession(socket);
+        const sequence = Number(message.sequence);
+        if (!canCompleteFreshSnapshot(member, session, sequence)) return;
+        member.pendingFreshSnapshot = false;
+        session.snapshotDelivered = false;
+        session.snapshotDeliveredSequence = null;
+        socket.serializeAttachment(session);
+        this.sessions.set(socket, session);
+        await this.putRoomState(state);
+        this.broadcastState(state);
     }
 
     handleProjectSyncRequest (socket, member, message, state) {
@@ -818,34 +1051,48 @@ export class TeamRoom extends DurableObject {
         values[ROOM_STATE_KEY] = state;
         await this.ctx.storage.put(values);
 
-        let stateChanged = false;
         for (const [recipient, session] of this.sessions.entries()) {
             if (recipient === socket || !session.memberId) continue;
             const recipientMember = state.members[session.memberId];
             if (!recipientMember) continue;
-            if (session.awaitingFreshSnapshot && recipientMember.pendingFreshSnapshot) {
+            const freshSnapshot = session.awaitingFreshSnapshot && recipientMember.pendingFreshSnapshot;
+            if (freshSnapshot) {
                 session.awaitingFreshSnapshot = false;
-                recipientMember.pendingFreshSnapshot = false;
+                session.snapshotDelivered = true;
+                session.snapshotDeliveredSequence = state.snapshotSequence;
                 recipient.serializeAttachment(session);
                 this.sessions.set(recipient, session);
-                stateChanged = true;
             }
-            safeSend(recipient, {
-                type: 'project_snapshot_manifest',
-                syncId: requestId,
+            const manifest = {
+                type: freshSnapshot ? 'snapshot_manifest' : 'project_snapshot_manifest',
                 chunkCount: chunks.length,
+                fresh: freshSnapshot,
                 operations: replayOperations,
                 sequence: state.snapshotSequence
-            });
+            };
+            if (!freshSnapshot) manifest.syncId = requestId;
+            safeSend(recipient, manifest);
             chunks.forEach((chunk, index) => {
-                safeSend(recipient, {type: 'snapshot_chunk', syncId: requestId, index, data: chunk});
+                const chunkMessage = {
+                    type: 'snapshot_chunk',
+                    index,
+                    data: chunk
+                };
+                if (!freshSnapshot) chunkMessage.syncId = requestId;
+                safeSend(recipient, chunkMessage);
             });
         }
-        if (stateChanged) await this.putRoomState(state);
     }
 
     async webSocketClose (socket, code, reason) {
+        const closedSession = this.getSession(socket);
         this.sessions.delete(socket);
+        const closedLock = closedSession.editLock;
+        const activeLock = closedLock && this.editLocks.get(closedLock.id);
+        if (activeLock && activeLock.memberId === closedSession.memberId) {
+            this.editLocks.delete(closedLock.id);
+            this.broadcastEditLocks();
+        }
         const state = await this.getRoomState();
         this.broadcastState(state);
         try {

@@ -21,6 +21,7 @@ const CLAIM_PREFIX = 'movie:team-claim:';
 const SESSION_IDENTITY_PREFIX = 'movie:collaboration:session-identity:';
 const MAX_ENTRY_LENGTH = 4000;
 const MEDIA_SYNC_DEBOUNCE_MS = 100;
+const LOCK_REFRESH_MS = 2000;
 
 const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -135,6 +136,10 @@ class CollaborationManager extends EventEmitter {
         this.inviteRequests = new Map();
         this.username = options.username || 'ゲスト';
         this.pendingOperationIds = new Set();
+        this.pendingOperationRollbacks = new Map();
+        this.deferredOperations = new Map();
+        this.lastSequence = 0;
+        this.lockedBlockStates = new Map();
         this.snapshotChunks = null;
         this.applyingRemote = false;
         this.projectLoadInProgress = false;
@@ -142,12 +147,18 @@ class CollaborationManager extends EventEmitter {
         this.mediaSyncPending = false;
         this.projectSyncRequestPending = false;
         this.reconnectAttempts = 0;
+        this.movieAssetManager = installMovieAssetManager(this.vm);
+        this.pendingTimelineSettings = new Map();
+        this.timelineSettingsVersion = 0;
+        this.sharedTimelineSettings = this.movieAssetManager.getTimelineSettings();
+        this.hasSharedTimelineSettings = false;
         const initialRole = getInitialRole(this.teamId, this.sessionScopedIdentity);
         this.state = {
             awareness: {},
             entries: [],
             error: null,
             history: [],
+            locks: [],
             me: {
                 id: this.identityId,
                 name: this.username,
@@ -158,16 +169,19 @@ class CollaborationManager extends EventEmitter {
             status: 'connecting',
             syncMessage: null,
             synchronizing: false,
-            teamId: this.teamId
+            teamId: this.teamId,
+            timelineSettings: this.sharedTimelineSettings
         };
 
         this.handleWorkspaceEvent = this.handleWorkspaceEvent.bind(this);
         this.handleTargetsUpdate = this.handleTargetsUpdate.bind(this);
         this.handleProjectChanged = this.handleProjectChanged.bind(this);
+        this.handleTimelineSettingsChanged = this.handleTimelineSettingsChanged.bind(this);
         this.mediaFingerprint = this.getMediaFingerprint();
         this.connect();
         this.vm.on('targetsUpdate', this.handleTargetsUpdate);
         this.vm.on('PROJECT_CHANGED', this.handleProjectChanged);
+        this.movieAssetManager.on('timelineSettingsChanged', this.handleTimelineSettingsChanged);
     }
 
     getState () {
@@ -212,12 +226,17 @@ class CollaborationManager extends EventEmitter {
                 memberId: this.identityId,
                 memberToken: getStoredValue(`${TOKEN_PREFIX}${this.teamId}`, this.sessionScopedIdentity),
                 inviteToken: this.inviteToken,
+                lastSequence: this.lastSequence,
                 name: this.username
             });
         });
         socket.addEventListener('message', event => this.handleMessage(event.data));
         socket.addEventListener('close', event => {
             if (this.destroyed) return;
+            this.rollbackPendingOperations();
+            this.rollbackPendingTimelineSettings();
+            this.clearLocalLock(false);
+            this.applyRemoteLocks([]);
             if (event.code === 4003 || event.code === 4008) {
                 this.updateState({status: 'denied', error: event.reason || 'チームへの参加が拒否されました。'});
                 return;
@@ -240,6 +259,10 @@ class CollaborationManager extends EventEmitter {
     }
 
     enterOfflineMode (message) {
+        this.rollbackPendingOperations();
+        this.rollbackPendingTimelineSettings();
+        this.clearLocalLock(false);
+        this.applyRemoteLocks([]);
         const me = this.state.me;
         this.updateState({
             error: message,
@@ -267,6 +290,9 @@ class CollaborationManager extends EventEmitter {
         switch (message.type) {
         case 'welcome':
             this.identityId = message.me.id;
+            if (Number.isInteger(message.sequence)) {
+                this.lastSequence = Math.max(this.lastSequence, message.sequence);
+            }
             setStoredValue(`${IDENTITY_PREFIX}${this.teamId}`, message.me.id, this.sessionScopedIdentity);
             setStoredValue(`${ROLE_PREFIX}${this.teamId}`, message.me.role, this.sessionScopedIdentity);
             if (message.memberToken) {
@@ -277,17 +303,27 @@ class CollaborationManager extends EventEmitter {
                 history.replaceState(null, '', `${getTeamPath(this.teamId)}${location.search}`);
                 this.inviteToken = null;
             }
+            this.timelineSettingsVersion = Number.isInteger(message.timelineSettingsVersion) ?
+                message.timelineSettingsVersion : 0;
+            if (message.timelineSettings) {
+                this.sharedTimelineSettings = message.timelineSettings;
+                this.hasSharedTimelineSettings = true;
+            }
             this.updateState({
                 entries: message.entries || [],
                 error: null,
                 history: message.history || [],
+                locks: message.locks || [],
                 me: message.me,
                 members: message.members || [],
                 onlineUserIds: message.onlineUserIds || [],
                 status: 'connected',
                 syncMessage: null,
-                synchronizing: Boolean(message.synchronizing)
+                synchronizing: Boolean(message.synchronizing),
+                timelineSettings: this.sharedTimelineSettings
             });
+            if (!message.synchronizing && message.timelineSettings) this.applySharedTimelineSettings();
+            this.applyRemoteLocks(message.locks || []);
             break;
         case 'state': {
             const members = message.members || this.state.members;
@@ -306,11 +342,38 @@ class CollaborationManager extends EventEmitter {
         case 'operation':
             this.receiveOperation(message.operation);
             break;
+        case 'operation_batch':
+            (message.operations || []).sort((a, b) => a.sequence - b.sequence)
+                .forEach(operation => this.receiveOperation(operation));
+            break;
+        case 'operation_rejected':
+            this.rejectOperation(message);
+            break;
+        case 'timeline_settings':
+            this.receiveTimelineSettings(message);
+            break;
+        case 'timeline_settings_rejected':
+            this.rejectTimelineSettings(message);
+            break;
         case 'awareness':
             this.receiveAwareness(message);
             break;
+        case 'locks':
+            this.updateState({locks: message.locks || []});
+            this.applyRemoteLocks(message.locks || []);
+            break;
+        case 'lock_granted':
+            if (this.localLock && this.localLock.id === message.requestId) {
+                this.localLock.expiresAt = message.expiresAt;
+            }
+            break;
+        case 'lock_denied':
+            this.handleLockDenied(message);
+            break;
         case 'snapshot_needed':
-            if (this.state.me.role === 'admin') this.sendSnapshot(message.baseSequence);
+            if (this.state.me.role === 'admin' && !this.state.synchronizing) {
+                this.sendSnapshot(message.baseSequence);
+            }
             break;
         case 'snapshot_manifest':
             this.prepareSnapshot(message, false);
@@ -355,6 +418,9 @@ class CollaborationManager extends EventEmitter {
 
     receiveOperation (operation) {
         if (!operation) return;
+        if (Number.isInteger(operation.sequence)) {
+            this.lastSequence = Math.max(this.lastSequence, operation.sequence);
+        }
         const history = this.state.history.filter(item => item.id !== operation.id);
         history.push(operation);
         history.sort((a, b) => b.sequence - a.sequence);
@@ -363,9 +429,11 @@ class CollaborationManager extends EventEmitter {
         if (operation.revertedBy && !operation.revertsOperationId) return;
         if (this.pendingOperationIds.has(operation.clientOperationId)) {
             this.pendingOperationIds.delete(operation.clientOperationId);
+            this.pendingOperationRollbacks.delete(operation.clientOperationId);
             return;
         }
-        if (this.projectLoadInProgress) {
+        if (this.projectLoadInProgress || this.state.synchronizing) {
+            if (!this.projectLoadOperations) this.projectLoadOperations = [];
             this.projectLoadOperations.push(operation);
             return;
         }
@@ -373,7 +441,135 @@ class CollaborationManager extends EventEmitter {
             this.snapshotCaptureOperations.push(operation);
             return;
         }
-        this.applyOperation(operation);
+        if (!this.applyOperation(operation)) this.deferOperation(operation);
+    }
+
+    deferOperation (operation) {
+        if (!operation) return;
+        if (!this.deferredOperations) this.deferredOperations = new Map();
+        this.deferredOperations.set(operation.id || operation.clientOperationId, operation);
+    }
+
+    flushDeferredOperations () {
+        if (this.projectLoadInProgress || this.state.synchronizing) return;
+        if (this.deferredOperations && this.deferredOperations.size) {
+            const operations = Array.from(this.deferredOperations.values())
+                .sort((a, b) => a.sequence - b.sequence);
+            for (const operation of operations) {
+                if (this.applyOperation(operation)) {
+                    this.deferredOperations.delete(operation.id || operation.clientOperationId);
+                }
+            }
+        }
+        this.maybeAcknowledgeSnapshot();
+    }
+
+    maybeAcknowledgeSnapshot () {
+        if (!Number.isInteger(this.snapshotAckPending) || this.projectLoadInProgress ||
+            this.state.synchronizing || (this.deferredOperations && this.deferredOperations.size)) return;
+        this.send({type: 'snapshot_applied', sequence: this.snapshotAckPending});
+        this.snapshotAckPending = null;
+    }
+
+    receiveTimelineSettings (message) {
+        const settings = message && message.settings;
+        const version = Number(message && message.version);
+        if (!settings || !Number.isInteger(version) || version < this.timelineSettingsVersion) return;
+        if (Number.isInteger(message.sequence)) {
+            this.lastSequence = Math.max(this.lastSequence, message.sequence);
+        }
+        this.timelineSettingsVersion = version;
+        this.sharedTimelineSettings = settings;
+        this.hasSharedTimelineSettings = true;
+        if (message.clientOperationId) this.pendingTimelineSettings.delete(message.clientOperationId);
+        this.updateState({timelineSettings: settings});
+        if (!this.projectLoadInProgress && !this.state.synchronizing) this.applySharedTimelineSettings();
+    }
+
+    rejectTimelineSettings (message) {
+        const clientOperationId = String(message.clientOperationId || '');
+        const pending = this.pendingTimelineSettings.get(clientOperationId);
+        this.pendingTimelineSettings.delete(clientOperationId);
+        if (message.settings) {
+            this.sharedTimelineSettings = message.settings;
+            this.hasSharedTimelineSettings = true;
+            this.timelineSettingsVersion = Number.isInteger(message.version) ?
+                message.version : this.timelineSettingsVersion;
+        } else if (pending) {
+            this.sharedTimelineSettings = pending.previousSettings;
+            this.hasSharedTimelineSettings = true;
+        }
+        this.updateState({
+            error: message.message || 'レンダリング設定が同時に更新されたため、最新の設定を読み直しました。',
+            timelineSettings: this.sharedTimelineSettings
+        });
+        this.applySharedTimelineSettings();
+    }
+
+    rollbackPendingTimelineSettings () {
+        if (!this.pendingTimelineSettings || !this.pendingTimelineSettings.size) return;
+        const pending = this.pendingTimelineSettings.values().next().value;
+        this.pendingTimelineSettings.clear();
+        if (pending) {
+            this.sharedTimelineSettings = pending.previousSettings;
+            this.hasSharedTimelineSettings = true;
+        }
+        this.applySharedTimelineSettings();
+    }
+
+    applySharedTimelineSettings () {
+        if (!this.hasSharedTimelineSettings || !this.sharedTimelineSettings) return;
+        const manager = this.movieAssetManager || installMovieAssetManager(this.vm);
+        if (JSON.stringify(manager.getTimelineSettings()) === JSON.stringify(this.sharedTimelineSettings)) return;
+        manager.updateTimelineSettings(this.sharedTimelineSettings, {remote: true});
+    }
+
+    handleTimelineSettingsChanged (settings, context = {}) {
+        if (context.remote) return;
+        const previousSettings = context.previousSettings || this.sharedTimelineSettings;
+        if (this.state.status !== 'connected' || this.state.me.role === 'viewer' ||
+            this.state.synchronizing || this.projectLoadInProgress || this.snapshotInProgress) {
+            this.sharedTimelineSettings = previousSettings;
+            this.hasSharedTimelineSettings = true;
+            this.applySharedTimelineSettings();
+            this.updateState({
+                error: this.state.me.role === 'viewer' ? '閲覧者はレンダリング設定を変更できません。' :
+                    'プロジェクトの同期が終わってからレンダリング設定を変更してください。',
+                timelineSettings: previousSettings
+            });
+            return;
+        }
+        const clientOperationId = generateId();
+        this.pendingTimelineSettings.set(clientOperationId, {previousSettings});
+        if (!this.send({
+            type: 'timeline_settings',
+            baseVersion: this.timelineSettingsVersion,
+            clientOperationId,
+            settings
+        })) {
+            this.rejectTimelineSettings({
+                clientOperationId,
+                message: 'レンダリング設定を共有できなかったため、変更前の設定に戻しました。'
+            });
+        }
+    }
+
+    rejectOperation (message) {
+        const clientOperationId = String(message.clientOperationId || '');
+        const rollback = this.pendingOperationRollbacks.get(clientOperationId);
+        this.pendingOperationIds.delete(clientOperationId);
+        this.pendingOperationRollbacks.delete(clientOperationId);
+        if (rollback) this.applyEventPayload(rollback.inverse, rollback.targetId, rollback.target);
+        this.updateState({error: message.message || '競合した変更を取り消しました。'});
+    }
+
+    rollbackPendingOperations () {
+        const rollbacks = Array.from(this.pendingOperationRollbacks.values()).reverse();
+        this.pendingOperationIds.clear();
+        this.pendingOperationRollbacks.clear();
+        for (const rollback of rollbacks) {
+            this.applyEventPayload(rollback.inverse, rollback.targetId, rollback.target);
+        }
     }
 
     receiveAwareness (message) {
@@ -382,6 +578,87 @@ class CollaborationManager extends EventEmitter {
             [message.memberId]: message.awareness
         });
         this.updateState({awareness});
+    }
+
+    restoreLockedBlocks () {
+        if (!this.lockedBlockStates) this.lockedBlockStates = new Map();
+        for (const state of this.lockedBlockStates.values()) {
+            const block = state.block;
+            if (!block || !block.workspace) continue;
+            if (typeof block.setMovable === 'function') block.setMovable(state.movable);
+            if (typeof block.setEditable === 'function') block.setEditable(state.editable);
+            if (typeof block.setDeletable === 'function') block.setDeletable(state.deletable);
+        }
+        this.lockedBlockStates.clear();
+    }
+
+    applyRemoteLocks (locks) {
+        const activeLocks = locks || (this.state && this.state.locks) || [];
+        this.restoreLockedBlocks();
+        clearTimeout(this.lockExpiryTimer);
+        if (!this.workspace) return;
+        const now = Date.now();
+        let nearestExpiry = Infinity;
+        for (const lock of activeLocks) {
+            if (!lock || (this.state && this.state.me && lock.memberId === this.state.me.id) ||
+                Number(lock.expiresAt) <= now) continue;
+            nearestExpiry = Math.min(nearestExpiry, Number(lock.expiresAt));
+            const target = resolveCollaborationTarget(this.vm.runtime, lock.target, lock.target && lock.target.id);
+            if (!target || !this.vm.editingTarget || target.id !== this.vm.editingTarget.id) continue;
+            for (const blockId of lock.blockIds || []) {
+                const block = this.workspace.getBlockById(blockId);
+                if (!block || this.lockedBlockStates.has(block.id)) continue;
+                this.lockedBlockStates.set(block.id, {
+                    block,
+                    deletable: typeof block.isDeletable === 'function' ? block.isDeletable() : true,
+                    editable: typeof block.isEditable === 'function' ? block.isEditable() : true,
+                    movable: typeof block.isMovable === 'function' ? block.isMovable() : true
+                });
+                if (typeof block.setMovable === 'function') block.setMovable(false);
+                if (typeof block.setEditable === 'function') block.setEditable(false);
+                if (typeof block.setDeletable === 'function') block.setDeletable(false);
+            }
+        }
+        if (Number.isFinite(nearestExpiry)) {
+            this.lockExpiryTimer = setTimeout(() => this.applyRemoteLocks(), Math.max(0, nearestExpiry - now + 20));
+        }
+    }
+
+    acquireLocalLock (block) {
+        this.clearLocalLock();
+        if (!block || this.state.status !== 'connected' || this.state.me.role === 'viewer' ||
+            this.state.synchronizing) return;
+        const root = typeof block.getRootBlock === 'function' ? block.getRootBlock() : block;
+        const descendants = typeof root.getDescendants === 'function' ? root.getDescendants(false) : [root];
+        const blockIds = descendants.map(descendant => descendant && descendant.id).filter(Boolean);
+        const target = describeCollaborationTarget(this.vm.runtime, this.vm.editingTarget);
+        if (!blockIds.length || !target) return;
+        const id = generateId();
+        this.localLock = {blockIds, id, target};
+        this.send({type: 'lock_acquire', blockIds, requestId: id, target});
+        this.lockRefreshTimer = setInterval(() => {
+            if (!this.localLock || this.localLock.id !== id || !this.workspace || !this.workspace.isDragging ||
+                !this.workspace.isDragging()) return;
+            this.send({type: 'lock_acquire', blockIds, requestId: id, target});
+        }, LOCK_REFRESH_MS);
+    }
+
+    clearLocalLock (notifyServer = true) {
+        clearInterval(this.lockRefreshTimer);
+        this.lockRefreshTimer = null;
+        if (!this.localLock) return;
+        const lockId = this.localLock.id;
+        this.localLock = null;
+        if (notifyServer) this.send({type: 'lock_release', lockId});
+    }
+
+    handleLockDenied (message) {
+        if (!this.localLock || this.localLock.id !== message.requestId) return;
+        this.clearLocalLock(false);
+        if (this.workspace && typeof this.workspace.cancelCurrentGesture === 'function') {
+            this.workspace.cancelCurrentGesture();
+        }
+        this.updateState({error: message.message || 'このブロックは他の参加者が操作中です。'});
     }
 
     prepareSnapshot (message, projectUpdate) {
@@ -393,7 +670,7 @@ class CollaborationManager extends EventEmitter {
         this.snapshotIsProjectUpdate = projectUpdate;
         this.bootstrapOperations = message.operations || [];
         this.projectLoadInProgress = true;
-        this.projectLoadOperations = [];
+        this.projectLoadOperations = this.projectLoadOperations || [];
         this.updateState({synchronizing: true, syncMessage: null});
     }
 
@@ -417,10 +694,21 @@ class CollaborationManager extends EventEmitter {
                 const replayOperations = Array.from(replayById.values())
                     .sort((a, b) => a.sequence - b.sequence);
                 for (const operation of replayOperations) {
-                    this.applyOperation(operation);
+                    if (!this.applyOperation(operation)) this.deferOperation(operation);
                 }
-                if (!projectUpdate) this.send({type: 'snapshot_applied', sequence: this.snapshotSequence});
+                this.lastSequence = replayOperations.reduce(
+                    (sequence, operation) => Math.max(sequence, Number(operation.sequence) || 0),
+                    Math.max(this.lastSequence, Number(this.snapshotSequence) || 0)
+                );
+                if (!projectUpdate) this.snapshotAckPending = Number(this.snapshotSequence);
                 this.mediaFingerprint = this.getMediaFingerprint();
+                if (this.hasSharedTimelineSettings) {
+                    this.applySharedTimelineSettings();
+                } else {
+                    const manager = this.movieAssetManager || installMovieAssetManager(this.vm);
+                    this.sharedTimelineSettings = manager.getTimelineSettings();
+                    this.updateState({timelineSettings: this.sharedTimelineSettings});
+                }
                 this.updateState({synchronizing: false, error: null, syncMessage: null});
                 this.emit('snapshotApplied');
             })
@@ -431,6 +719,7 @@ class CollaborationManager extends EventEmitter {
                 this.projectLoadInProgress = false;
                 this.projectLoadOperations = [];
                 this.applyingRemote = false;
+                this.flushDeferredOperations();
             });
     }
 
@@ -507,9 +796,13 @@ class CollaborationManager extends EventEmitter {
         this.workspace = workspace;
         this.ScratchBlocks = ScratchBlocks;
         workspace.addChangeListener(this.handleWorkspaceEvent);
+        this.applyRemoteLocks();
+        this.flushDeferredOperations();
     }
 
     detachWorkspace () {
+        this.restoreLockedBlocks();
+        this.clearLocalLock();
         if (this.workspace) this.workspace.removeChangeListener(this.handleWorkspaceEvent);
         this.workspace = null;
         this.ScratchBlocks = null;
@@ -521,6 +814,10 @@ class CollaborationManager extends EventEmitter {
             if (event.element === 'selected') this.updateSelection(event.newValue || event.blockId);
             return;
         }
+        if (event.type === 'endDrag') {
+            this.clearLocalLock();
+            return;
+        }
         if (!isShareableBlocklyEvent(event)) return;
 
         const forward = serializeBlocklyEvent(event, this.ScratchBlocks);
@@ -530,18 +827,23 @@ class CollaborationManager extends EventEmitter {
         const targetId = editingTarget && editingTarget.id;
         const target = describeCollaborationTarget(this.vm.runtime, editingTarget);
 
-        if (this.state.me.role === 'viewer' || this.state.synchronizing || this.snapshotInProgress) {
+        if ((this.state.status && this.state.status !== 'connected') || this.state.me.role === 'viewer' ||
+            this.state.synchronizing || this.snapshotInProgress) {
             this.applyEventPayload(inverse, targetId, target);
             this.updateState({
                 error: this.snapshotInProgress ? '最新プロジェクトの共有中はブロックを編集できません。' :
                     (this.state.synchronizing ? 'プロジェクトの同期が終わるまで編集できません。' :
-                        '閲覧者はブロックを編集できません。管理者に権限の変更を依頼してください。')
+                        (this.state.me.role === 'viewer' ?
+                            '閲覧者はブロックを編集できません。管理者に権限の変更を依頼してください。' :
+                            '共同編集サービスへ接続されるまで編集できません。'))
             });
             return;
         }
 
         const clientOperationId = generateId();
         this.pendingOperationIds.add(clientOperationId);
+        if (!this.pendingOperationRollbacks) this.pendingOperationRollbacks = new Map();
+        this.pendingOperationRollbacks.set(clientOperationId, {inverse, target, targetId});
         const sent = this.send({
             type: 'operation',
             clientOperationId,
@@ -552,20 +854,10 @@ class CollaborationManager extends EventEmitter {
             summary: describeBlocklyEvent(forward)
         });
         if (!sent) {
-            const localOperation = {
-                authorId: this.state.me.id,
-                authorName: this.state.me.name,
+            this.rejectOperation({
                 clientOperationId,
-                createdAt: new Date().toISOString(),
-                forward,
-                id: clientOperationId,
-                inverse,
-                sequence: Date.now(),
-                summary: describeBlocklyEvent(forward),
-                targetId,
-                target
-            };
-            this.receiveOperation(localOperation);
+                message: '変更を共有できなかったため、操作を取り消しました。再接続してからやり直してください。'
+            });
         }
     }
 
@@ -599,6 +891,7 @@ class CollaborationManager extends EventEmitter {
         } finally {
             this.applyingRemote = false;
         }
+        this.applyRemoteLocks();
         return true;
     }
 
@@ -653,10 +946,13 @@ class CollaborationManager extends EventEmitter {
     }
 
     handleTargetsUpdate () {
+        this.flushDeferredOperations();
         const target = this.vm.editingTarget;
         if (!target) return;
         const current = this.localAwareness || {};
         if (current.targetId === target.id) return;
+        this.clearLocalLock();
+        this.applyRemoteLocks();
         this.sendAwareness(Object.assign({}, current, {
             targetId: target.id,
             targetName: target.getName(),
@@ -669,6 +965,8 @@ class CollaborationManager extends EventEmitter {
         const target = this.vm.editingTarget;
         if (!target) return;
         const block = blockId && this.workspace ? this.workspace.getBlockById(blockId) : null;
+        if (block) this.acquireLocalLock(block);
+        else this.clearLocalLock();
         this.lastSelectedBlockId = block ? block.id : null;
         this.sendAwareness({
             blockId: block ? block.id : null,
@@ -782,8 +1080,8 @@ class CollaborationManager extends EventEmitter {
         this.send({type: 'role_change', memberId, role});
     }
 
-    transferAdmin (memberId) {
-        this.send({type: 'transfer_admin', memberId});
+    addAdmin (memberId) {
+        this.send({type: 'admin_add', memberId});
     }
 
     createInvite (role) {
@@ -802,9 +1100,15 @@ class CollaborationManager extends EventEmitter {
         this.destroyed = true;
         clearTimeout(this.reconnectTimer);
         clearTimeout(this.mediaSyncTimer);
+        clearTimeout(this.lockExpiryTimer);
+        clearInterval(this.lockRefreshTimer);
+        this.rollbackPendingOperations();
+        this.rollbackPendingTimelineSettings();
+        this.clearLocalLock();
         this.detachWorkspace();
         this.vm.removeListener('targetsUpdate', this.handleTargetsUpdate);
         this.vm.removeListener('PROJECT_CHANGED', this.handleProjectChanged);
+        this.movieAssetManager.removeListener('timelineSettingsChanged', this.handleTimelineSettingsChanged);
         if (this.socket) this.socket.close(1000, 'Editor closed');
         for (const request of this.inviteRequests.values()) {
             request.reject(new Error('共同編集を終了しました。'));

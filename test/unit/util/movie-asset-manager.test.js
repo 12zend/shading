@@ -182,6 +182,33 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.vm.setStageSize).not.toHaveBeenCalled();
     });
 
+    test('announces the project rendering settings without returning asynchronous work', () => {
+        const manager = makeTimelineManager();
+
+        const result = manager.updateTimelineSettings({
+            duration: 20,
+            framerate: 60,
+            height: 1080,
+            width: 1920
+        });
+
+        expect(result).toBeUndefined();
+        expect(manager.emit).toHaveBeenCalledWith('timelineSettingsChanged', {
+            duration: 20,
+            framerate: 60,
+            height: 1080,
+            width: 1920
+        }, {
+            previousSettings: {
+                duration: 10,
+                framerate: 30,
+                height: 360,
+                width: 480
+            },
+            remote: false
+        });
+    });
+
     test('uses output resolution for render pixels without changing the logical stage size', () => {
         const manager = makeTimelineManager();
         const canvas = {height: 360, width: 640};

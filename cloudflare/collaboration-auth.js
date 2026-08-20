@@ -8,26 +8,45 @@ const canRevertOperation = (member, operation) => Boolean(
     member && operation && (canAdminister(member) || operation.authorId === member.id)
 );
 
-const canTransferAdmin = (member, target) => Boolean(
-    canAdminister(member) && target && target.id !== member.id && target.role === 'member'
+const canPromoteAdmin = (member, target) => Boolean(
+    canAdminister(member) && target && !target.pendingFreshSnapshot &&
+    target.id !== member.id && target.role === 'member'
 );
 
-const consumeInviteRecord = (invites, tokenHash, now = Date.now()) => {
+// Keep the old export while deployed clients are upgraded. The operation now
+// promotes an additional administrator instead of transferring the role.
+const canTransferAdmin = canPromoteAdmin;
+
+const getInviteRecord = (invites, tokenHash, now = Date.now()) => {
     if (!invites || !tokenHash) return null;
     const invite = invites[tokenHash];
     if (!invite) return null;
-    delete invites[tokenHash];
-    if (!invite.expiresAt || Date.parse(invite.expiresAt) <= now) return null;
+    if (!invite.expiresAt || Date.parse(invite.expiresAt) <= now) {
+        delete invites[tokenHash];
+        return null;
+    }
     return invite;
 };
 
+// Backward-compatible name for existing imports. Invitations are reusable and
+// are therefore only removed after they expire.
+const consumeInviteRecord = getInviteRecord;
+
 const requiresFreshSnapshot = member => Boolean(member && member.pendingFreshSnapshot);
+
+const canCompleteFreshSnapshot = (member, session, sequence) => Boolean(
+    requiresFreshSnapshot(member) && session && session.snapshotDelivered &&
+    Number.isInteger(sequence) && sequence === session.snapshotDeliveredSequence
+);
 
 export {
     canAdminister,
+    canCompleteFreshSnapshot,
     canManageEntry,
+    canPromoteAdmin,
     canRevertOperation,
     canTransferAdmin,
     consumeInviteRecord,
+    getInviteRecord,
     requiresFreshSnapshot
 };

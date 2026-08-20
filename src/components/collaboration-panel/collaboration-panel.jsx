@@ -622,7 +622,7 @@ class CollaborationPanel extends React.Component {
                                 <strong>{member.name}{isMe ? '（自分）' : ''}</strong>
                                 <span>{awarenessLabel}</span>
                             </div>
-                            {managerState.me.role === 'admin' && !isMe ? (
+                            {managerState.me.role === 'admin' && !isMe && member.role !== 'admin' ? (
                                 <div className={styles.roleControls}>
                                     <select
                                         aria-label={roleControlLabel}
@@ -635,9 +635,9 @@ class CollaborationPanel extends React.Component {
                                     {member.role === 'member' ? (
                                         <button
                                             type="button"
-                                            onClick={() => this.manager.transferAdmin(member.id)}
+                                            onClick={() => this.manager.addAdmin(member.id)}
                                         >
-                                            {'管理者を渡す'}
+                                            {'管理者を増やす'}
                                         </button>
                                     ) : null}
                                 </div>
