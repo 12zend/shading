@@ -10,12 +10,10 @@ import {
     ClockIcon,
     CloseIcon,
     CopyIcon,
-    HistoryIcon,
     LinkIcon,
     NoteIcon,
     PeopleIcon,
-    PinIcon,
-    UndoIcon
+    PinIcon
 } from './icons.jsx';
 import styles from './collaboration-panel.css';
 
@@ -28,8 +26,7 @@ const ROLE_LABELS = {
 const TABS = [
     {id: 'chat', label: 'チャット', icon: ChatIcon},
     {id: 'notes', label: '共有メモ', icon: NoteIcon},
-    {id: 'people', label: 'メンバー', icon: PeopleIcon},
-    {id: 'history', label: '履歴', icon: HistoryIcon}
+    {id: 'people', label: 'メンバー', icon: PeopleIcon}
 ];
 
 const RESIZE_HANDLES = [
@@ -649,50 +646,6 @@ class CollaborationPanel extends React.Component {
         );
     }
 
-    renderHistory () {
-        const managerState = this.state.managerState;
-        if (!managerState.history.length) {
-            return (
-                <div className={styles.emptyState}>
-                    <HistoryIcon />
-                    <strong>{'変更履歴はまだありません'}</strong>
-                    <span>{'追加・削除・置き換えなどの変更がここに保存されます。'}</span>
-                </div>
-            );
-        }
-        return (
-            <div className={styles.historyList}>
-                {managerState.history.map(operation => {
-                    const canRevert = !operation.revertedBy && (
-                        managerState.me.role === 'admin' || operation.authorId === managerState.me.id
-                    );
-                    const revertLabel = `${operation.summary}を元に戻す`;
-                    return (
-                        <article
-                            className={styles.historyItem}
-                            key={operation.id}
-                        >
-                            <span className={styles.historyMark}><HistoryIcon /></span>
-                            <div>
-                                <strong>{operation.summary}</strong>
-                                <span>{operation.authorName}{' · '}{formatDate(operation.createdAt)}</span>
-                                {operation.revertedBy ? <em>{'取り消し済み'}</em> : null}
-                            </div>
-                            {canRevert ? (
-                                <button
-                                    aria-label={revertLabel}
-                                    title="この変更を元に戻す"
-                                    type="button"
-                                    onClick={() => this.manager.revertOperation(operation.id)}
-                                ><UndoIcon /></button>
-                            ) : null}
-                        </article>
-                    );
-                })}
-            </div>
-        );
-    }
-
     renderPanel () {
         const managerState = this.state.managerState;
         if (!managerState) return null;
@@ -765,7 +718,6 @@ class CollaborationPanel extends React.Component {
                 >
                     {isFeed ? this.renderEntries() : null}
                     {this.state.activeTab === 'people' ? this.renderPeople() : null}
-                    {this.state.activeTab === 'history' ? this.renderHistory() : null}
                 </div>
                 {isFeed ? this.renderComposer() : null}
                 {RESIZE_HANDLES.map(handle => (
