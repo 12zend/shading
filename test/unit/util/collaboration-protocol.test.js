@@ -1,4 +1,4 @@
-import {runSerializedRoomMutation} from '../../../cloudflare/collaboration-protocol';
+import {findProjectResyncDonor, runSerializedRoomMutation} from '../../../cloudflare/collaboration-protocol';
 
 describe('collaboration protocol transactions', () => {
     test('serializes concurrent first hello attempts', async () => {
@@ -21,5 +21,26 @@ describe('collaboration protocol transactions', () => {
 
         await Promise.all([enter(), enter(), enter()]);
         expect(maximumActive).toBe(1);
+    });
+
+    test('selects a different synchronized editor to repair a failed project', () => {
+        const requester = {};
+        const viewer = {};
+        const donor = {};
+        const staleEditor = {};
+        const sessions = new Map([
+            [requester, {memberId: 'requester'}],
+            [viewer, {memberId: 'viewer'}],
+            [staleEditor, {memberId: 'stale'}],
+            [donor, {memberId: 'donor'}]
+        ]);
+        const members = {
+            donor: {id: 'donor', pendingFreshSnapshot: false, role: 'member'},
+            requester: {id: 'requester', pendingFreshSnapshot: false, role: 'admin'},
+            stale: {id: 'stale', pendingFreshSnapshot: true, role: 'admin'},
+            viewer: {id: 'viewer', pendingFreshSnapshot: false, role: 'viewer'}
+        };
+
+        expect(findProjectResyncDonor(sessions, members, requester, 'requester')).toBe(donor);
     });
 });

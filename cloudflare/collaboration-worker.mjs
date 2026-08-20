@@ -9,7 +9,7 @@ import {
     consumeInviteRecord,
     requiresFreshSnapshot
 } from './collaboration-auth.js';
-import {runSerializedRoomMutation} from './collaboration-protocol.js';
+import {findProjectResyncDonor, runSerializedRoomMutation} from './collaboration-protocol.js';
 import {deriveTeamIdFromClaim} from './team-claim.js';
 
 const ROOM_STATE_KEY = 'room-state';
@@ -17,8 +17,6 @@ const SNAPSHOT_CHUNK_SIZE = 1500000;
 const MAX_SNAPSHOT_SIZE = 31 * 1024 * 1024;
 const ALLOWED_ROLES = new Set(['admin', 'member', 'viewer']);
 const EDITABLE_ROLES = new Set(['admin', 'member']);
-const RATE_LIMIT_WINDOW_MS = 60000;
-const RATE_LIMIT_MESSAGES = 240;
 
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
     status,
@@ -253,7 +251,7 @@ export class TeamRoom extends DurableObject {
             this.sendError(socket, 'テキスト形式のメッセージだけを受け付けます。');
             return;
         }
-        if (!this.checkRateLimit(socket, rawMessage.length)) return;
+        if (!this.checkMessageSize(socket, rawMessage.length)) return;
         let message;
         try {
             message = JSON.parse(rawMessage);
@@ -312,30 +310,19 @@ export class TeamRoom extends DurableObject {
             case 'project_applied':
                 await this.handleProjectApplied(socket, member, message, state);
                 break;
+            case 'project_resync_needed':
+                await this.handleProjectResyncNeeded(socket, member, message, state);
+                break;
             default:
                 this.sendError(socket, '未対応の共同編集操作です。');
             }
         });
     }
 
-    checkRateLimit (socket, messageLength) {
+    checkMessageSize (socket, messageLength) {
         if (messageLength > MAX_SNAPSHOT_SIZE + 100000) {
             this.sendError(socket, 'メッセージが大きすぎます。');
             socket.close(4008, 'Message too large');
-            return false;
-        }
-        const session = this.getSession(socket);
-        const now = Date.now();
-        if (!session.rateWindowStarted || now - session.rateWindowStarted >= RATE_LIMIT_WINDOW_MS) {
-            session.rateWindowStarted = now;
-            session.rateCount = 0;
-        }
-        session.rateCount += 1;
-        socket.serializeAttachment(session);
-        this.sessions.set(socket, session);
-        if (session.rateCount > RATE_LIMIT_MESSAGES) {
-            this.sendError(socket, '操作回数が多すぎます。少し待ってから再接続してください。');
-            socket.close(4008, 'Rate limit exceeded');
             return false;
         }
         return true;
@@ -569,6 +556,32 @@ export class TeamRoom extends DurableObject {
         this.sessions.set(socket, session);
         await this.putRoomState(state);
         this.broadcastState(state);
+    }
+
+    async handleProjectResyncNeeded (socket, member, message, state) {
+        const revision = Number(message.revision);
+        if (!Number.isInteger(revision) || revision !== state.projectRevision) return;
+        const session = this.getSession(socket);
+        if (session.projectResyncRevision === revision) return;
+        const donorSocket = findProjectResyncDonor(this.sessions, state.members, socket, member.id);
+        if (!donorSocket) {
+            safeSend(socket, {
+                type: 'project_waiting',
+                message: '再同期には、プロジェクトを開いている別の編集者が必要です。'
+            });
+            return;
+        }
+        session.projectResyncRevision = revision;
+        socket.serializeAttachment(session);
+        this.sessions.set(socket, session);
+        member.pendingFreshSnapshot = true;
+        state.members[member.id] = member;
+        await this.putRoomState(state);
+        safeSend(socket, {
+            type: 'project_waiting',
+            message: '別の編集者からプロジェクトを再取得しています。'
+        });
+        safeSend(donorSocket, {type: 'project_update_needed', revision});
     }
 
     markProjectDelivered (socket, state) {

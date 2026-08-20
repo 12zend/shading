@@ -79,7 +79,7 @@ npm run start:cloudflare
 - Rate limiting rule: `http.request.uri.path matches "^/api/teams/"` を対象に、同一IPから10秒間に30回を超える新規接続を Managed Challenge または Block
 - Cache rule: `/api/*` はキャッシュしない。`/js/pentapod/*` は長期キャッシュ可能
 
-WebSocket接続後の操作には、Worker内でも接続単位で1分240メッセージの制限と、1回31 MiBのプロジェクト更新上限を設けています。
+WebSocket接続後のプロジェクト更新には、1回31 MiBの上限を設けています。
 
 ### 環境変数
 

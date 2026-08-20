@@ -1,4 +1,4 @@
-import {getInitialRole, useSessionIdentity} from '../../../src/lib/collaboration-manager';
+import {getInitialRole, getWebSocketURL, useSessionIdentity} from '../../../src/lib/collaboration-manager';
 import {
     ensureTeamId,
     getTeamIdFromPath,
@@ -63,6 +63,19 @@ describe('team route', () => {
 
         global.sessionStorage.setItem('movie:collaboration:role:existing-team', 'member');
         expect(getInitialRole('existing-team', true)).toBe('member');
+    });
+
+    test('connects the alternate local GUI port to the collaboration worker', () => {
+        global.location = {
+            host: 'localhost:8602',
+            hostname: 'localhost',
+            port: '8602',
+            protocol: 'http:'
+        };
+
+        expect(getWebSocketURL('local-team')).toBe(
+            'ws://localhost:8601/api/teams/local-team/websocket'
+        );
     });
 
     test('normalizes and validates team IDs', () => {

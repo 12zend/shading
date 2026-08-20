@@ -228,6 +228,35 @@ describe('collaboration manager project flow', () => {
         expect(manager.state.synchronizing).toBe(false);
     });
 
+    test('waits for every project and asset chunk before loading a snapshot', () => {
+        const manager = Object.create(CollaborationManager.prototype);
+        manager.applyIncomingProject = jest.fn();
+        manager.incomingProjects = new Map();
+        manager.projectLoadInProgress = false;
+        manager.projectRevision = 0;
+        manager.state = {synchronizing: false};
+        manager.updateState = jest.fn(changes => {
+            manager.state = Object.assign({}, manager.state, changes);
+        });
+
+        manager.prepareProject({
+            assetChunkCounts: {'costume.svg': 2},
+            assetNames: ['costume.svg'],
+            projectChunkCount: 2,
+            projectEncoding: 'plain',
+            revision: 1
+        });
+        expect(manager.applyIncomingProject).not.toHaveBeenCalled();
+
+        manager.receiveProjectJSONChunk({data: 'first', index: 0, revision: 1});
+        manager.receiveProjectAssetChunk({data: 'asset-first', index: 0, name: 'costume.svg', revision: 1});
+        manager.receiveProjectJSONChunk({data: 'second', index: 1, revision: 1});
+        expect(manager.applyIncomingProject).not.toHaveBeenCalled();
+
+        manager.receiveProjectAssetChunk({data: 'asset-second', index: 1, name: 'costume.svg', revision: 1});
+        expect(manager.applyIncomingProject).toHaveBeenCalledTimes(1);
+    });
+
     test('queues another project snapshot when a block changes during an in-flight update', () => {
         jest.useFakeTimers();
         const manager = Object.create(CollaborationManager.prototype);

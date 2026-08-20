@@ -25,6 +25,15 @@ const CLAIM_PREFIX = 'movie:team-claim:';
 const SESSION_IDENTITY_PREFIX = 'movie:collaboration:session-identity:';
 const MAX_ENTRY_LENGTH = 4000;
 const PROJECT_SYNC_DEBOUNCE_MS = 750;
+const LOCAL_COLLABORATION_PORT = '8601';
+const LOCAL_GUI_PORT = '8602';
+
+const hasAllChunks = chunks => {
+    for (let index = 0; index < chunks.length; index++) {
+        if (typeof chunks[index] !== 'string') return false;
+    }
+    return true;
+};
 
 const hasLoadedProject = vm => Boolean(
     vm && vm.runtime && Array.isArray(vm.runtime.targets) &&
@@ -117,7 +126,10 @@ const getWebSocketURL = teamId => {
         return `${configured.replace(/\/$/, '')}/api/teams/${encodeURIComponent(teamId)}/websocket`;
     }
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${location.host}/api/teams/${encodeURIComponent(teamId)}/websocket`;
+    const hostname = location.hostname || String(location.host || '').replace(/:\d+$/, '');
+    const localWorkerHost = (hostname === 'localhost' || hostname === '127.0.0.1') &&
+        String(location.port || '') === LOCAL_GUI_PORT ? `${hostname}:${LOCAL_COLLABORATION_PORT}` : location.host;
+    return `${protocol}//${localWorkerHost}/api/teams/${encodeURIComponent(teamId)}/websocket`;
 };
 
 class CollaborationManager extends EventEmitter {
@@ -451,7 +463,7 @@ class CollaborationManager extends EventEmitter {
         if (!chunks || !Number.isInteger(index) || index < 0 || index >= chunks.length) return;
         chunks[index] = message.data;
         for (const assetChunks of incoming.chunks.values()) {
-            if (assetChunks.some(chunk => typeof chunk !== 'string')) return;
+            if (!hasAllChunks(assetChunks)) return;
         }
         this.tryApplyIncomingProject();
     }
@@ -460,9 +472,9 @@ class CollaborationManager extends EventEmitter {
         if (this.projectLoadInProgress || !this.incomingProjects.size) return;
         const incoming = Array.from(this.incomingProjects.values())
             .sort((a, b) => a.revision - b.revision)[0];
-        if (incoming.projectChunks.some(chunk => typeof chunk !== 'string')) return;
+        if (!hasAllChunks(incoming.projectChunks)) return;
         for (const assetChunks of incoming.chunks.values()) {
-            if (assetChunks.some(chunk => typeof chunk !== 'string')) return;
+            if (!hasAllChunks(assetChunks)) return;
         }
         this.applyIncomingProject(incoming);
     }
@@ -507,8 +519,21 @@ class CollaborationManager extends EventEmitter {
                 this.send({type: 'project_applied', revision: incoming.revision});
                 this.emit('projectApplied');
             })
-            .catch(() => {
-                this.updateState({error: 'チームのプロジェクトを読み込めませんでした。再接続してください。'});
+            .catch(error => {
+                // Preserve the original exception in the console so a failed snapshot can be diagnosed.
+                // The panel still shows a concise message because parser and asset errors can be very verbose.
+                // eslint-disable-next-line no-console
+                console.error('Failed to load the team project', error);
+                const resyncRequested = this.send({
+                    type: 'project_resync_needed',
+                    revision: incoming.revision
+                });
+                this.updateState({
+                    error: resyncRequested ? 'プロジェクトの再同期をリクエストしています。' :
+                        'チームのプロジェクトを読み込めませんでした。再接続してください。',
+                    syncMessage: resyncRequested ? '別の編集者からプロジェクトを再取得しています。' : null,
+                    synchronizing: true
+                });
             })
             .then(() => {
                 this.projectLoadInProgress = false;
