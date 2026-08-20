@@ -1,37 +1,7 @@
 /* eslint-env browser */
-const TEAM_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
-const TEAM_CLAIM_PREFIX = 'movie:team-claim:';
-const TEAM_CREATED_PREFIX = 'movie:team-created:';
-
-const prepareTeamRoute = async () => {
-    const rootValue = document.body.getAttribute('data-splash-root') || '/';
-    const rootPath = `/${rootValue.replace(/^\/+|\/+$/g, '')}${rootValue === '/' ? '' : '/'}`;
-    const isEditor = document.body.getAttribute('data-splash-editor') === 'true';
-    if (!isEditor || location.pathname !== rootPath) return;
-    if (typeof crypto === 'undefined' || !crypto.getRandomValues || !crypto.subtle) return;
-
-    const secretBytes = new Uint8Array(32);
-    crypto.getRandomValues(secretBytes);
-    const claimToken = Array.from(secretBytes)
-        .map(byte => byte.toString(16).padStart(2, '0'))
-        .join('');
-    const encoded = new TextEncoder().encode(claimToken);
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
-    let teamId = '';
-    for (let index = 0; index < 20; index++) {
-        teamId += TEAM_ALPHABET[digest[index] % TEAM_ALPHABET.length];
-    }
-    try {
-        sessionStorage.setItem(`${TEAM_CLAIM_PREFIX}${teamId}`, claimToken);
-        sessionStorage.setItem(`${TEAM_CREATED_PREFIX}${teamId}`, '1');
-    } catch (error) {
-        window.ShadingTeamClaim = {teamId, token: claimToken};
-    }
-    const prefix = rootPath === '/' ? '' : rootPath.replace(/\/$/, '');
-    history.replaceState(null, '', `${prefix}/${teamId}${location.search}${location.hash}`);
-};
-
-window.ShadingTeamReady = prepareTeamRoute();
+// Team routes (and their founding claim) are now created on demand by the
+// collaboration panel instead of eagerly for every editor visit. Plain
+// shading.app links stay collaboration-free until a link is generated.
 
 let theme = '';
 let accent = '#ff4c4c';

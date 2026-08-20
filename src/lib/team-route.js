@@ -11,6 +11,8 @@ const RESERVED_PATHS = new Set([
 
 const TEAM_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{4,46}[a-z0-9])$/;
 const CREATED_TEAM_PREFIX = 'movie:team-created:';
+const TEAM_CLAIM_PREFIX = 'movie:team-claim:';
+const TEAM_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const createdTeamIds = new Set();
 
 const rememberCreatedTeam = teamId => {
@@ -77,6 +79,44 @@ const ensureTeamId = () => {
     return teamId;
 };
 
+const deriveTeamIdFromClaimToken = async claimToken => {
+    const encoded = new TextEncoder().encode(claimToken);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
+    let teamId = '';
+    for (let index = 0; index < 20; index++) {
+        teamId += TEAM_ALPHABET[digest[index] % TEAM_ALPHABET.length];
+    }
+    return teamId;
+};
+
+// Creates a collaboration link on demand. Mirrors the claim derivation in cloudflare/team-claim.js
+// so the room accepts this browser as the founding administrator.
+const activateTeamRoute = async () => {
+    const existing = getTeamIdFromPath();
+    if (existing) return existing;
+    if (typeof crypto === 'undefined' || !crypto.getRandomValues || !crypto.subtle) {
+        throw new Error('このブラウザーでは共同編集リンクを生成できません。');
+    }
+    const secretBytes = new Uint8Array(32);
+    crypto.getRandomValues(secretBytes);
+    const claimToken = Array.from(secretBytes)
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('');
+    const teamId = await deriveTeamIdFromClaimToken(claimToken);
+    rememberCreatedTeam(teamId);
+    try {
+        sessionStorage.setItem(`${TEAM_CLAIM_PREFIX}${teamId}`, claimToken);
+    } catch (error) {
+        window.ShadingTeamClaim = {teamId, token: claimToken};
+    }
+    const nextPath = `${getTeamPath(teamId)}${location.search}${location.hash}`;
+    history.replaceState(null, '', nextPath);
+    if (typeof PopStateEvent === 'function') {
+        window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    return teamId;
+};
+
 const startAfterTeamRouteReady = (callback, ready = window.ShadingTeamReady) => {
     if (ready && typeof ready.then === 'function') return ready.then(callback, callback);
     return callback();
@@ -85,6 +125,7 @@ const startAfterTeamRouteReady = (callback, ready = window.ShadingTeamReady) => 
 export {
     RESERVED_PATHS,
     TEAM_ID_PATTERN,
+    activateTeamRoute,
     ensureTeamId,
     getTeamIdFromPath,
     getTeamPath,

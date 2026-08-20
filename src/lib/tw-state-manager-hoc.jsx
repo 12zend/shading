@@ -20,7 +20,7 @@ import {
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
 import {defaultStageSize} from '../reducers/custom-stage-size';
-import {ensureTeamId, getTeamIdFromPath, getTeamPath} from './team-route';
+import {getTeamIdFromPath, getTeamPath} from './team-route';
 
 /* eslint-disable no-alert */
 
@@ -242,7 +242,9 @@ class WildcardRouter extends Router {
 class TeamRouter extends Router {
     constructor (callbacks) {
         super(callbacks);
-        this.teamId = getTeamIdFromPath() || ensureTeamId();
+        // Collaboration is opt-in: a plain root link keeps its URL until the
+        // user generates a collaboration link in the collaboration panel.
+        this.teamId = getTeamIdFromPath();
     }
 
     onhashchange () {
@@ -273,6 +275,14 @@ class TeamRouter extends Router {
     }
 
     generateURL ({isPlayerOnly, isFullScreen}) {
+        if (!this.teamId) {
+            const prefix = process.env.ROOT && process.env.ROOT !== '/' ?
+                `/${process.env.ROOT.replace(/^\/+|\/+$/g, '')}` : '';
+            let path = prefix || '/';
+            if (isFullScreen) path += '/fullscreen';
+            else if (isPlayerOnly) path += '/player';
+            return `${path}${location.search}${location.hash}`;
+        }
         let path = getTeamPath(this.teamId);
         if (isFullScreen) path += '/fullscreen';
         else if (isPlayerOnly) path += '/player';

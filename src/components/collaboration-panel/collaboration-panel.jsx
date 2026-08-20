@@ -5,6 +5,7 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installCollaborationManager from '../../lib/collaboration-manager';
+import {getTeamPath} from '../../lib/team-route';
 import {
     ChatIcon,
     ClockIcon,
@@ -74,13 +75,18 @@ class CollaborationPanel extends React.Component {
             panelWidth: 384,
             panelX: Math.max(12, window.innerWidth - 396),
             panelY: 60,
-            secondsDraft: ''
+            secondsDraft: '',
+            startError: null,
+            startFlow: 'idle',
+            startUrl: null
         };
+        this.mounted = true;
         this.handleManagerState = this.handleManagerState.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.handleAttach = this.handleAttach.bind(this);
         this.handleUseCurrentTime = this.handleUseCurrentTime.bind(this);
         this.handleCopyInvite = this.handleCopyInvite.bind(this);
+        this.handleStartCollaboration = this.handleStartCollaboration.bind(this);
         this.handleDragStart = this.handleDragStart.bind(this);
         this.handlePanelKeyDown = this.handlePanelKeyDown.bind(this);
         this.handlePointerMove = this.handlePointerMove.bind(this);
@@ -114,15 +120,40 @@ class CollaborationPanel extends React.Component {
     }
 
     componentWillUnmount () {
+        this.mounted = false;
         if (this.manager) this.manager.removeListener('stateChanged', this.handleManagerState);
+        if (this.connectionWaitCleanup) this.connectionWaitCleanup();
         clearTimeout(this.copiedTimer);
         window.removeEventListener('resize', this.handleWindowResize);
         this.stopPointerAction();
         this.restoreModalIsolation();
     }
 
+    handleClosePanel () {
+        // The generated link lives in the address bar and in the invite
+        // actions, so reopening the panel shows the regular editor view.
+        this.setState(state => ({
+            open: false,
+            startFlow: state.startFlow === 'starting' ? state.startFlow : 'idle',
+            startError: state.startFlow === 'starting' ? state.startError : null,
+            startUrl: state.startFlow === 'starting' ? state.startUrl : null
+        }));
+    }
+
+    handleTogglePanel () {
+        if (this.state.open) {
+            this.handleClosePanel();
+        } else {
+            this.setState({open: true});
+        }
+    }
+
+    setStateIfMounted (changes) {
+        if (this.mounted) this.setState(changes);
+    }
+
     handleManagerState (managerState) {
-        this.setState({managerState});
+        this.setStateIfMounted({managerState});
     }
 
     handleSubmit (event) {
@@ -176,6 +207,75 @@ class CollaborationPanel extends React.Component {
             .catch(error => {
                 this.setState({composeError: error.message});
             });
+    }
+
+    waitForConnection (timeoutMs = 30000) {
+        return new Promise((resolve, reject) => {
+            const settle = state => {
+                if (state.status === 'connected') {
+                    resolve();
+                } else if (state.status === 'denied') {
+                    reject(new Error(state.error || 'チームへの参加が拒否されました。'));
+                } else {
+                    return false;
+                }
+                return true;
+            };
+            if (settle(this.manager.getState())) return;
+            let cleanup = () => {};
+            const onState = state => {
+                if (settle(state)) cleanup();
+            };
+            const timer = setTimeout(() => {
+                cleanup();
+                reject(new Error('共同編集サービスへの接続がタイムアウトしました。'));
+            }, timeoutMs);
+            cleanup = () => {
+                clearTimeout(timer);
+                this.manager.removeListener('stateChanged', onState);
+                this.connectionWaitCleanup = null;
+            };
+            this.connectionWaitCleanup = cleanup;
+            this.manager.on('stateChanged', onState);
+        });
+    }
+
+    handleStartCollaboration () {
+        if (this.state.startFlow === 'starting') return;
+        this.setState({startFlow: 'starting', startError: null, startUrl: null});
+        this.manager.startCollaboration()
+            .then(() => this.waitForConnection())
+            .then(() => this.manager.createInvite('member'))
+            .then(invite => {
+                this.setStateIfMounted({startFlow: 'ready', startUrl: invite.url});
+                return this.copyText(invite.url)
+                    .then(() => {
+                        this.setStateIfMounted({copied: true});
+                        clearTimeout(this.copiedTimer);
+                        this.copiedTimer = setTimeout(
+                            () => this.setStateIfMounted({copied: false}),
+                            1800
+                        );
+                    })
+                    .catch(() => {});
+            })
+            .catch(error => {
+                this.setStateIfMounted({
+                    startFlow: 'error',
+                    startError: error.message || '共同編集リンクを生成できませんでした。'
+                });
+            });
+    }
+
+    handleCopyStartUrl () {
+        if (!this.state.startUrl) return;
+        this.copyText(this.state.startUrl)
+            .then(() => {
+                this.setState({copied: true});
+                clearTimeout(this.copiedTimer);
+                this.copiedTimer = setTimeout(() => this.setState({copied: false}), 1800);
+            })
+            .catch(() => {});
     }
 
     handleWindowResize () {
@@ -309,7 +409,7 @@ class CollaborationPanel extends React.Component {
     handlePanelKeyDown (event) {
         if (event.key === 'Escape') {
             event.preventDefault();
-            this.setState({open: false});
+            this.handleClosePanel();
             return;
         }
         if (!this.state.isCompact || event.key !== 'Tab' || !this.panelElement) return;
@@ -373,7 +473,7 @@ class CollaborationPanel extends React.Component {
 
     renderStatus () {
         const managerState = this.state.managerState;
-        if (!managerState) return null;
+        if (!managerState || managerState.standalone) return null;
         const label = managerState.synchronizing ? 'プロジェクト同期中' :
             (managerState.status === 'connected' ? '同期中' :
             (managerState.status === 'connecting' ? '接続中' : 'オフライン'));
@@ -646,10 +746,74 @@ class CollaborationPanel extends React.Component {
         );
     }
 
+    renderStartView () {
+        const managerState = this.state.managerState;
+        const starting = this.state.startFlow === 'starting';
+        const ready = this.state.startFlow === 'ready';
+        const teamUrl = managerState && managerState.teamId ?
+            `${location.origin}${getTeamPath(managerState.teamId)}` : '';
+        return (
+            <div className={styles.startView}>
+                <div className={styles.startIcon}>
+                    <PeopleIcon />
+                </div>
+                <strong>{ready ? '共同編集リンクを生成しました' : '共同編集を始める'}</strong>
+                <p>
+                    {ready ?
+                        'このリンクを開くと、誰でもこのプロジェクトを共同編集できます。リンクは共有するまで公開されません。' :
+                        'shading.app の通常のリンクでは共同編集は無効です。リンクを生成すると、このプロジェクトを複数人で同時に編集できるページに切り替わります。'}
+                </p>
+                {starting ? (
+                    <p className={styles.startProgress}>{'共同編集リンクを生成中…'}</p>
+                ) : null}
+                {ready && this.state.startUrl ? (
+                    <div className={styles.startLink}>
+                        <span>{this.state.startUrl}</span>
+                        <button
+                            aria-label="共同編集リンクをコピー"
+                            type="button"
+                            onClick={this.handleCopyStartUrl}
+                        >
+                            <CopyIcon />
+                            {this.state.copied ? 'コピー済み' : 'コピー'}
+                        </button>
+                    </div>
+                ) : null}
+                {ready && teamUrl ? (
+                    <p className={styles.startNote}>
+                        {'このページのURLも共同編集用に切り替わりました: '}
+                        <span>{teamUrl}</span>
+                    </p>
+                ) : null}
+                {this.state.startError ? <p className={styles.composeError}>{this.state.startError}</p> : null}
+                {this.state.startFlow === 'error' && teamUrl ? (
+                    <p className={styles.startNote}>
+                        {'ページのURLは既に共同編集用に切り替わっています。しばらくしてからもう一度お試しください: '}
+                        <span>{teamUrl}</span>
+                    </p>
+                ) : null}
+                <button
+                    className={styles.sendButton}
+                    disabled={starting || ready}
+                    type="button"
+                    onClick={this.handleStartCollaboration}
+                >
+                    {starting ? '生成中…' : (ready ? 'リンク生成済み' : '共同編集リンクを生成')}
+                </button>
+                {ready ? (
+                    <p className={styles.startNote}>
+                        {'メンバー権限・閲覧権限の招待リンクは「メンバー」タブからも作成できます。'}
+                    </p>
+                ) : null}
+            </div>
+        );
+    }
+
     renderPanel () {
         const managerState = this.state.managerState;
         if (!managerState) return null;
         const isFeed = this.state.activeTab === 'chat' || this.state.activeTab === 'notes';
+        const showStartView = managerState.standalone || this.state.startFlow !== 'idle';
         return (
             <aside
                 aria-label="チーム共同編集"
@@ -684,42 +848,50 @@ class CollaborationPanel extends React.Component {
                         aria-label="共同編集パネルを閉じる"
                         className={styles.iconButton}
                         type="button"
-                        onClick={() => this.setState({open: false})}
+                        onClick={this.handleClosePanel}
                     ><CloseIcon /></button>
                 </header>
-                {this.renderStatus()}
-                {managerState.syncMessage ? <div className={styles.syncNotice}>{managerState.syncMessage}</div> : null}
-                {managerState.error ? <div className={styles.connectionError}>{managerState.error}</div> : null}
-                <nav
-                    aria-label="共同編集の項目"
-                    className={styles.tabs}
-                    role="tablist"
-                >
-                    {TABS.map(tab => {
-                        const TabIcon = tab.icon;
-                        return (
-                            <button
-                                aria-selected={this.state.activeTab === tab.id}
-                                className={classNames({[styles.active]: this.state.activeTab === tab.id})}
-                                key={tab.id}
-                                role="tab"
-                                type="button"
-                                onClick={() => this.setState({activeTab: tab.id, composeError: null})}
-                            >
-                                <TabIcon />
-                                <span>{tab.label}</span>
-                            </button>
-                        );
-                    })}
-                </nav>
-                <div
-                    className={styles.panelBody}
-                    role="tabpanel"
-                >
-                    {isFeed ? this.renderEntries() : null}
-                    {this.state.activeTab === 'people' ? this.renderPeople() : null}
-                </div>
-                {isFeed ? this.renderComposer() : null}
+                {showStartView ? this.renderStartView() : (
+                    <React.Fragment>
+                        {this.renderStatus()}
+                        {managerState.syncMessage ? (
+                            <div className={styles.syncNotice}>{managerState.syncMessage}</div>
+                        ) : null}
+                        {managerState.error ? (
+                            <div className={styles.connectionError}>{managerState.error}</div>
+                        ) : null}
+                        <nav
+                            aria-label="共同編集の項目"
+                            className={styles.tabs}
+                            role="tablist"
+                        >
+                            {TABS.map(tab => {
+                                const TabIcon = tab.icon;
+                                return (
+                                    <button
+                                        aria-selected={this.state.activeTab === tab.id}
+                                        className={classNames({[styles.active]: this.state.activeTab === tab.id})}
+                                        key={tab.id}
+                                        role="tab"
+                                        type="button"
+                                        onClick={() => this.setState({activeTab: tab.id, composeError: null})}
+                                    >
+                                        <TabIcon />
+                                        <span>{tab.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </nav>
+                        <div
+                            className={styles.panelBody}
+                            role="tabpanel"
+                        >
+                            {isFeed ? this.renderEntries() : null}
+                            {this.state.activeTab === 'people' ? this.renderPeople() : null}
+                        </div>
+                        {isFeed ? this.renderComposer() : null}
+                    </React.Fragment>
+                )}
                 {RESIZE_HANDLES.map(handle => (
                     <button
                         aria-label={handle.label}
@@ -751,7 +923,7 @@ class CollaborationPanel extends React.Component {
                     className={classNames(styles.launcher, {[styles.launcherOpen]: this.state.open})}
                     title="チーム共同編集"
                     type="button"
-                    onClick={() => this.setState(state => ({open: !state.open}))}
+                    onClick={this.handleTogglePanel}
                     ref={element => {
                         this.launcherElement = element;
                     }}

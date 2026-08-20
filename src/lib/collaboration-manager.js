@@ -16,7 +16,7 @@ import {
     describeCollaborationTarget,
     resolveCollaborationTarget
 } from './collaboration-targets';
-import {ensureTeamId, getTeamPath, wasTeamCreatedInSession} from './team-route';
+import {activateTeamRoute, getTeamIdFromPath, getTeamPath, wasTeamCreatedInSession} from './team-route';
 
 const IDENTITY_PREFIX = 'movie:collaboration:identity:';
 const TOKEN_PREFIX = 'movie:collaboration:token:';
@@ -136,8 +136,11 @@ class CollaborationManager extends EventEmitter {
     constructor (vm, options = {}) {
         super();
         this.vm = vm;
-        this.teamId = options.teamId || ensureTeamId();
-        this.inviteToken = getInviteToken();
+        // Collaboration is disabled on plain root links. A team route is only
+        // activated when the user generates a collaboration link.
+        this.teamId = options.teamId || getTeamIdFromPath() || null;
+        this.standalone = !this.teamId;
+        this.inviteToken = this.standalone ? null : getInviteToken();
         this.sessionScopedIdentity = useSessionIdentity(this.teamId, this.inviteToken);
         this.identityId = getIdentityId(this.teamId, this.sessionScopedIdentity);
         this.inviteRequests = new Map();
@@ -167,7 +170,8 @@ class CollaborationManager extends EventEmitter {
             },
             members: [],
             onlineUserIds: [],
-            status: 'connecting',
+            standalone: this.standalone,
+            status: this.standalone ? 'standalone' : 'connecting',
             syncMessage: null,
             synchronizing: false,
             teamId: this.teamId,
@@ -186,7 +190,7 @@ class CollaborationManager extends EventEmitter {
         // The collaboration panel mounts before the GUI starts its initial VM load. Connecting sooner can publish
         // an empty project, or let that initial load overwrite a project received through an invitation.
         this.projectReady = hasLoadedProject(this.vm);
-        if (this.projectReady) this.connect();
+        if (!this.standalone && this.projectReady) this.connect();
     }
 
     getState () {
@@ -196,6 +200,34 @@ class CollaborationManager extends EventEmitter {
     updateState (changes) {
         this.state = Object.assign({}, this.state, changes);
         this.emit('stateChanged', this.state);
+    }
+
+    // Turns the current plain page into a collaboration link. Creates the team
+    // claim, moves the URL onto the team route and starts connecting. The
+    // creator becomes the room administrator.
+    startCollaboration () {
+        if (!this.standalone) return Promise.resolve(this.teamId);
+        return activateTeamRoute().then(teamId => {
+            this.standalone = false;
+            this.teamId = teamId;
+            this.sessionScopedIdentity = useSessionIdentity(teamId, this.inviteToken);
+            this.identityId = getIdentityId(teamId, this.sessionScopedIdentity);
+            this.lastSequence = 0;
+            const initialRole = getInitialRole(teamId, this.sessionScopedIdentity);
+            this.updateState({
+                error: null,
+                me: {
+                    id: this.identityId,
+                    name: this.username,
+                    role: initialRole
+                },
+                standalone: false,
+                status: 'connecting',
+                teamId
+            });
+            if (this.projectReady) this.connect();
+            return teamId;
+        });
     }
 
     setUsername (username) {
@@ -210,6 +242,7 @@ class CollaborationManager extends EventEmitter {
     }
 
     connect () {
+        if (this.standalone) return;
         if (typeof WebSocket === 'undefined') {
             this.enterOfflineMode('このブラウザーではリアルタイム接続を利用できません。');
             return;
@@ -392,7 +425,7 @@ class CollaborationManager extends EventEmitter {
     }
 
     handleTimelineSettingsChanged (settings, context = {}) {
-        if (context.remote) return;
+        if (context.remote || this.state.standalone) return;
         const previousSettings = context.previousSettings || this.sharedTimelineSettings;
         if (this.state.status !== 'connected' || this.state.me.role === 'viewer' ||
             this.state.synchronizing || this.projectLoadInProgress) {
@@ -596,7 +629,7 @@ class CollaborationManager extends EventEmitter {
     }
 
     handleWorkspaceEvent (event) {
-        if (this.applyingRemote) return;
+        if (this.applyingRemote || this.state.standalone) return;
         if (event.type === 'ui') {
             if (event.element === 'selected') this.updateSelection(event.newValue || event.blockId);
             return;
@@ -656,6 +689,7 @@ class CollaborationManager extends EventEmitter {
     }
 
     handleProjectChanged () {
+        if (this.state.standalone) return;
         if (this.applyingRemote || this.projectLoadInProgress || this.state.me.role === 'viewer') return;
         this.scheduleProjectSync();
     }
@@ -663,10 +697,10 @@ class CollaborationManager extends EventEmitter {
     handleProjectLoaded () {
         if (!this.projectReady) {
             this.projectReady = true;
-            this.connect();
+            if (!this.standalone) this.connect();
             return;
         }
-        if (this.applyingRemote || this.projectLoadInProgress) return;
+        if (this.state.standalone || this.applyingRemote || this.projectLoadInProgress) return;
         this.scheduleProjectSync();
     }
 

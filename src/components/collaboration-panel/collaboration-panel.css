@@ -33,6 +33,7 @@
 .launcher:focus-visible,
 .icon-button:focus-visible,
 .compact-button:focus-visible,
+.start-link button:focus-visible,
 .tabs button:focus-visible,
 .composer button:focus-visible,
 .composer input:focus-visible,
@@ -311,6 +312,112 @@
     background: $ui-primary;
 }
 
+.start-view {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1.5rem 1.25rem;
+    background: $ui-primary;
+    color: $text-primary;
+    text-align: center;
+    overflow: auto;
+}
+
+.start-view > strong {
+    font-size: 0.9rem;
+}
+
+.start-view > p {
+    margin: 0;
+    color: $text-primary-transparent;
+    font-size: 0.72rem;
+    line-height: 1.55;
+}
+
+.start-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: $looks-light-transparent;
+    color: $looks-secondary;
+}
+
+.start-icon svg {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.start-progress {
+    color: $looks-secondary;
+    font-size: 0.72rem;
+}
+
+.start-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    padding: 0.4rem 0.5rem;
+    background: $ui-white;
+}
+
+.start-link span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: $looks-secondary;
+    font-size: 0.65rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.start-link button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.25rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    padding: 0.25rem 0.45rem;
+    background: $ui-white;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.62rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.start-link button:hover {
+    background: $ui-secondary;
+}
+
+.start-link svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+.start-note {
+    max-width: 19rem;
+    overflow-wrap: anywhere;
+}
+
+.start-note span {
+    color: $looks-secondary;
+    overflow-wrap: anywhere;
+}
+
+.start-view .send-button {
+    margin-top: 0.35rem;
+}
+
 .entry-list,
 .people-list,
 .history-list {
@@ -519,7 +626,8 @@
 
 .composer textarea:disabled,
 .composer input:disabled,
-.composer button:disabled {
+.composer button:disabled,
+.start-view .send-button:disabled {
     cursor: default;
     opacity: 0.55;
 }
