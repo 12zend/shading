@@ -7,7 +7,7 @@ import installObjectBlocks, {
     decodeDrawAsset,
     encodeDrawAsset
 } from '../../../src/lib/object-blocks';
-import {getFieldSourceBlock} from '../../../src/lib/object-blocks-ui';
+import {getFieldSourceBlock, openImportPicker} from '../../../src/lib/object-blocks-ui';
 
 const makeUtil = () => ({
     stackFrame: {},
@@ -55,6 +55,78 @@ describe('Objects blocks', () => {
 
         expect(getFieldSourceBlock({sourceBlock_: sourceBlock})).toBe(sourceBlock);
         expect(getFieldSourceBlock({getSourceBlock: () => sourceBlock})).toBe(sourceBlock);
+    });
+
+    test('selects an imported asset on the live block after the workspace refreshes', async () => {
+        const listeners = {};
+        const input = {
+            addEventListener: jest.fn((name, listener) => {
+                listeners[name] = listener;
+            }),
+            click: jest.fn(),
+            files: [{name: 'new-image.png'}],
+            parentNode: null,
+            style: {}
+        };
+        const body = {
+            appendChild: jest.fn(node => {
+                node.parentNode = body;
+            }),
+            removeChild: jest.fn(node => {
+                node.parentNode = null;
+            })
+        };
+        const originalDocument = global.document;
+        global.document = {
+            body,
+            createElement: jest.fn(() => input)
+        };
+        const liveBlock = {id: 'draw-block', setDrawAsset_: jest.fn()};
+        const workspace = {getBlockById: jest.fn(() => null)};
+        const mainWorkspace = {getBlockById: jest.fn(() => liveBlock)};
+        const ScratchBlocks = {getMainWorkspace: jest.fn(() => mainWorkspace)};
+        const staleBlock = {
+            getFieldValue: jest.fn(name => (name === 'ASSET' ? 'costume:old' : 'costume')),
+            id: 'draw-block',
+            setDrawAsset_: jest.fn(),
+            setWarningText: jest.fn(),
+            workspace
+        };
+        const manager = {
+            importFiles: jest.fn(() => Promise.resolve([{name: 'new-image', source: 'costume'}]))
+        };
+        const storedBlock = {
+            fields: {
+                ASSET: {value: 'costume:old'},
+                SOURCE: {value: 'costume'}
+            }
+        };
+        const blocks = {
+            changeBlock: jest.fn(change => {
+                storedBlock.fields[change.name].value = change.value;
+            }),
+            getBlock: jest.fn(() => storedBlock)
+        };
+        const vm = {
+            editingTarget: {blocks, id: 'sprite'},
+            refreshWorkspace: jest.fn(),
+            runtime: {movieAssetManager: manager}
+        };
+        try {
+            openImportPicker(vm, staleBlock, ScratchBlocks);
+            listeners.change();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(mainWorkspace.getBlockById).toHaveBeenCalledWith('draw-block');
+            expect(liveBlock.setDrawAsset_).toHaveBeenCalledWith('costume', 'new-image');
+            expect(staleBlock.setDrawAsset_).not.toHaveBeenCalled();
+            expect(storedBlock.fields.ASSET.value).toBe('costume:new-image');
+            expect(storedBlock.fields.SOURCE.value).toBe('costume');
+            expect(vm.refreshWorkspace).not.toHaveBeenCalled();
+        } finally {
+            global.document = originalDocument;
+        }
     });
 
     test('encodes the combined draw asset selection while keeping legacy source fields readable', () => {

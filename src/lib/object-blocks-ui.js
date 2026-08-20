@@ -1,6 +1,8 @@
 import {DRAW_SOURCES, PRIMARY, SECONDARY, TERTIARY, decodeDrawAsset, encodeDrawAsset} from './object-blocks';
 import log from './log';
 
+import styles from './object-blocks-ui.css';
+
 const IMPORT_VALUE = '__movie_import__';
 const SOURCE_LABELS = {
     costume: 'Costume',
@@ -10,37 +12,80 @@ const SOURCE_LABELS = {
 };
 const IMPORT_ACCEPT = [
     '.svg', '.png', '.bmp', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.exr',
-    '.wav', '.mp3', '.ogg', '.oga', '.flac', '.aac', '.m4a',
     '.mp4', '.webm', '.ogv', '.mov',
     '.ttf', '.otf', '.woff', '.woff2',
     '.glb', '.pmx', '.fbx', '.obj', '.mtl',
     '.spa', '.sph', '.tga', '.vmd', '.vpd'
 ].join(',');
 
+const MEDIA_FIELD_ICON = `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="1.5">' +
+    '<rect x="1.75" y="1.75" width="5" height="5" rx="1"/><rect x="9.25" y="1.75" width="5" height="5" rx="1"/>' +
+    '<rect x="1.75" y="9.25" width="5" height="5" rx="1"/><rect x="9.25" y="9.25" width="5" height="5" rx="1"/>' +
+    '</svg>'
+)}`;
+
+const createSvgIcon = (path, className) => {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(namespace, 'svg');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('class', className);
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('stroke-width', '2');
+    const shape = document.createElementNS(namespace, 'path');
+    shape.setAttribute('d', path);
+    svg.appendChild(shape);
+    return svg;
+};
+
 const getFieldSourceBlock = field => {
     if (field && typeof field.getSourceBlock === 'function') return field.getSourceBlock();
     return field && field.sourceBlock_;
 };
 
-const getAssetOptions = vm => {
-    const options = [['Import', IMPORT_VALUE]];
-    const addOptions = (source, assets) => {
+const getAssetItems = vm => {
+    const items = [];
+    const addItems = (source, assets, makeItem = () => ({})) => {
         assets.forEach(asset => {
             const name = typeof asset === 'string' ? asset : asset.name;
             if (!name) return;
-            options.push([
-                `${SOURCE_LABELS[source]}: ${name}`,
-                encodeDrawAsset(source, name)
-            ]);
+            items.push(Object.assign({
+                label: SOURCE_LABELS[source],
+                name,
+                source,
+                value: encodeDrawAsset(source, name)
+            }, makeItem(asset)));
         });
     };
 
     const target = vm.editingTarget;
     const manager = vm.runtime && vm.runtime.movieAssetManager;
-    if (target && typeof target.getCostumes === 'function') addOptions('costume', target.getCostumes());
+    if (target && typeof target.getCostumes === 'function') {
+        addItems('costume', target.getCostumes(), costume => {
+            let previewUrl = '';
+            try {
+                if (costume.asset && typeof costume.asset.encodeDataURI === 'function') {
+                    previewUrl = costume.asset.encodeDataURI();
+                }
+            } catch (error) { // A missing preview must not make the media itself unavailable.
+                log.warn(error);
+            }
+            return {previewType: 'image', previewUrl};
+        });
+    }
     if (manager && target) {
-        addOptions('video', manager.getVideos(target));
-        addOptions('model', manager.getModels(target));
+        addItems('video', manager.getVideos(target), video => ({
+            previewType: 'video',
+            previewUrl: video.url
+        }));
+        addItems('model', manager.getModels(target), model => ({
+            model,
+            previewType: 'model'
+        }));
     }
 
     const fonts = [
@@ -50,23 +95,88 @@ const getAssetOptions = vm => {
     ];
     const fontManager = vm.runtime && vm.runtime.fontManager;
     if (fontManager && typeof fontManager.getFonts === 'function') {
-        fontManager.getFonts().forEach(font => fonts.push({name: font.name, value: font.name}));
+        fontManager.getFonts().forEach(font => fonts.push({
+            family: font.family || font.name,
+            name: font.name,
+            value: font.name
+        }));
     }
-    fonts.forEach(font => options.push([
-        `${SOURCE_LABELS.text}: ${font.name}`,
-        encodeDrawAsset('text', font.value)
-    ]));
+    fonts.forEach(font => items.push({
+        family: font.family || font.value,
+        label: SOURCE_LABELS.text,
+        name: font.name,
+        previewType: 'font',
+        source: 'text',
+        value: encodeDrawAsset('text', font.value)
+    }));
 
-    return options;
+    return items;
+};
+
+const getAssetOptions = vm => [
+    ['Import', IMPORT_VALUE],
+    ...getAssetItems(vm).map(item => [`${item.label}: ${item.name}`, item.value])
+];
+
+const getLiveBlock = (block, workspace = block && block.workspace) => {
+    if (!block) return null;
+    if (workspace && block.id && typeof workspace.getBlockById === 'function') {
+        return workspace.getBlockById(block.id) || block;
+    }
+    return block;
+};
+
+const getImportedBlock = (ScratchBlocks, block, originalWorkspace) => {
+    if (ScratchBlocks && typeof ScratchBlocks.getMainWorkspace === 'function' && block && block.id) {
+        const mainWorkspace = ScratchBlocks.getMainWorkspace();
+        if (mainWorkspace && typeof mainWorkspace.getBlockById === 'function') {
+            const mainBlock = mainWorkspace.getBlockById(block.id);
+            if (mainBlock) return mainBlock;
+        }
+    }
+    return getLiveBlock(block, originalWorkspace);
+};
+
+const persistDrawAsset = (vm, block, source, asset) => {
+    const value = encodeDrawAsset(source, asset);
+    const target = vm.editingTarget;
+    const blocks = target && target.blocks;
+    const storedBlock = blocks && block && block.id && typeof blocks.getBlock === 'function' ?
+        blocks.getBlock(block.id) : null;
+    if (storedBlock && typeof blocks.changeBlock === 'function') {
+        blocks.changeBlock({
+            element: 'field',
+            id: block.id,
+            name: 'SOURCE',
+            value: source
+        });
+        blocks.changeBlock({
+            element: 'field',
+            id: block.id,
+            name: 'ASSET',
+            value
+        });
+    }
+
+    const liveBlock = getLiveBlock(block);
+    if (liveBlock && typeof liveBlock.setDrawAsset_ === 'function') {
+        liveBlock.objectDrawImportError_ = null;
+        liveBlock.setDrawAsset_(source, asset);
+    }
+    return liveBlock;
 };
 
 const showImportError = (block, error) => {
     const message = error && error.message ? error.message : String(error);
-    if (block && typeof block.setWarningText === 'function') block.setWarningText(message);
+    const liveBlock = getLiveBlock(block);
+    if (liveBlock) {
+        liveBlock.objectDrawImportError_ = message;
+        if (typeof liveBlock.setWarningText === 'function') liveBlock.setWarningText(null);
+    }
     log.error(error);
 };
 
-const openImportPicker = (vm, block) => {
+const openImportPicker = (vm, block, ScratchBlocks) => {
     if (typeof document === 'undefined' || !document.body) return;
     const manager = vm.runtime && vm.runtime.movieAssetManager;
     const target = vm.editingTarget;
@@ -79,6 +189,9 @@ const openImportPicker = (vm, block) => {
         block.getFieldValue('ASSET'),
         block.getFieldValue('SOURCE') || block.objectDrawSource_
     );
+    // Importing an asset refreshes Blockly before this promise resolves. Keep
+    // the workspace reference so we can find the replacement block by its ID.
+    const workspace = block.workspace;
     const input = document.createElement('input');
     input.accept = IMPORT_ACCEPT;
     input.multiple = true;
@@ -92,21 +205,297 @@ const openImportPicker = (vm, block) => {
         const files = Array.from(input.files || []);
         cleanup();
         if (!files.length) return;
-        if (block && typeof block.setWarningText === 'function') block.setWarningText(null);
+        const currentBlock = getImportedBlock(ScratchBlocks, block, workspace);
+        if (currentBlock) {
+            currentBlock.objectDrawImportError_ = null;
+            if (typeof currentBlock.setWarningText === 'function') currentBlock.setWarningText(null);
+        }
         manager.importFiles(target.id, files, {
             modelName: selection.source === 'model' ? selection.asset : ''
         }).then(imported => {
             const drawable = imported.slice().reverse()
                 .find(asset => DRAW_SOURCES.includes(asset.source));
-            if (drawable && typeof block.setDrawAsset_ === 'function') {
-                block.setDrawAsset_(drawable.source, drawable.name);
+            if (drawable) {
+                persistDrawAsset(
+                    vm,
+                    getImportedBlock(ScratchBlocks, block, workspace),
+                    drawable.source,
+                    drawable.name
+                );
             }
-            vm.refreshWorkspace();
-        })
-            .catch(error => showImportError(block, error));
+        }, error => showImportError(block, error));
     });
     document.body.appendChild(input);
     input.click();
+};
+
+const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
+    class MediaField extends ScratchBlocks.FieldDropdown {
+        constructor () {
+            super(assetOptions, assetValidator);
+            this.previewRenderers_ = [];
+            this.previewVersion_ = 0;
+        }
+
+        init () {
+            super.init();
+            if (this.arrow_) {
+                this.arrowSize_ = 14;
+                this.arrow_.setAttribute('height', `${this.arrowSize_}px`);
+                this.arrow_.setAttribute('width', `${this.arrowSize_}px`);
+                this.arrow_.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', MEDIA_FIELD_ICON);
+            }
+        }
+
+        refreshDisplay_ () {
+            const selectedOption = this.getOptions().find(option => option[1] === this.getValue());
+            if (selectedOption) this.setText(selectedOption[0]);
+        }
+
+        disposePreviews_ () {
+            this.previewVersion_++;
+            this.previewRenderers_.forEach(renderer => renderer.dispose());
+            this.previewRenderers_ = [];
+        }
+
+        onHide () {
+            this.disposePreviews_();
+            super.onHide();
+        }
+
+        showEditor_ () {
+            const items = getAssetItems(vm);
+            const manager = vm.runtime && vm.runtime.movieAssetManager;
+            this.dropDownOpen_ = true;
+            ScratchBlocks.DropDownDiv.hideWithoutAnimation();
+            ScratchBlocks.DropDownDiv.clearContent();
+
+            const content = ScratchBlocks.DropDownDiv.getContentDiv();
+            const picker = document.createElement('section');
+            picker.className = styles.mediaPicker;
+            picker.setAttribute('aria-label', 'Choose media for draw');
+            const boundsElement = this.sourceBlock_.workspace.getParentSvg().parentNode;
+            const availableWidth = Math.max(240, boundsElement.clientWidth - 16);
+            picker.style.setProperty('--media-picker-available-width', `${availableWidth}px`);
+
+            const header = document.createElement('div');
+            header.className = styles.mediaHeader;
+            const headingGroup = document.createElement('div');
+            const heading = document.createElement('h2');
+            heading.className = styles.mediaHeading;
+            heading.textContent = 'Choose media';
+            const helper = document.createElement('p');
+            helper.className = styles.mediaHelper;
+            helper.textContent = 'Preview an asset, then select it for this draw block.';
+            headingGroup.appendChild(heading);
+            headingGroup.appendChild(helper);
+            const importButton = document.createElement('button');
+            importButton.className = styles.importButton;
+            importButton.type = 'button';
+            importButton.appendChild(createSvgIcon('M12 3v12m0-12 4 4m-4-4-4 4M5 14v5h14v-5', styles.buttonIcon));
+            importButton.appendChild(document.createTextNode('Import'));
+            importButton.addEventListener('click', () => {
+                ScratchBlocks.DropDownDiv.hideWithoutAnimation();
+                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks);
+            });
+            header.appendChild(headingGroup);
+            header.appendChild(importButton);
+            picker.appendChild(header);
+
+            const sourceBlock = getLiveBlock(this.sourceBlock_);
+            if (sourceBlock && typeof sourceBlock.setWarningText === 'function') sourceBlock.setWarningText(null);
+            if (sourceBlock && sourceBlock.objectDrawImportError_) {
+                const importError = document.createElement('div');
+                importError.className = styles.importError;
+                importError.textContent = `Import failed: ${sourceBlock.objectDrawImportError_}`;
+                picker.appendChild(importError);
+            }
+
+            const filterBar = document.createElement('div');
+            filterBar.className = styles.filterBar;
+            filterBar.setAttribute('aria-label', 'Filter media');
+            const grid = document.createElement('div');
+            grid.className = styles.mediaGrid;
+            grid.setAttribute('aria-label', 'Available media');
+            grid.setAttribute('role', 'listbox');
+            picker.appendChild(filterBar);
+            picker.appendChild(grid);
+            content.appendChild(picker);
+
+            const filterOptions = [
+                {label: 'All', value: 'all'},
+                {label: 'Images', value: 'costume'},
+                {label: 'Videos', value: 'video'},
+                {label: 'Fonts', value: 'text'},
+                {label: '3D', value: 'model'}
+            ].filter(filter => filter.value === 'all' || items.some(item => item.source === filter.value));
+            let activeFilter = 'all';
+            let activeFilterButton;
+            let renderedButtons = [];
+
+            const selectItem = item => {
+                let value = this.callValidator(item.value);
+                if (typeof value === 'undefined') value = item.value;
+                if (value !== null) {
+                    this.setValue(value);
+                    this.refreshDisplay_();
+                }
+                ScratchBlocks.DropDownDiv.hide();
+                ScratchBlocks.Events.setGroup(false);
+            };
+
+            const renderPreview = (item, preview) => {
+                if (item.previewType === 'image' && item.previewUrl) {
+                    const image = document.createElement('img');
+                    image.alt = '';
+                    image.loading = 'lazy';
+                    image.src = item.previewUrl;
+                    preview.appendChild(image);
+                } else if (item.previewType === 'video' && item.previewUrl) {
+                    const video = document.createElement('video');
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.preload = 'metadata';
+                    video.src = item.previewUrl;
+                    preview.appendChild(video);
+                } else if (item.previewType === 'font') {
+                    const sample = document.createElement('span');
+                    sample.className = styles.fontSample;
+                    sample.style.fontFamily = item.family;
+                    sample.textContent = 'Aa';
+                    preview.appendChild(sample);
+                } else if (item.previewType === 'model') {
+                    const canvas = document.createElement('canvas');
+                    canvas.className = styles.modelCanvas;
+                    canvas.height = 180;
+                    canvas.width = 240;
+                    preview.appendChild(canvas);
+                    if (manager && typeof manager.renderModelPreview === 'function') {
+                        const version = this.previewVersion_;
+                        manager.renderModelPreview(item.model, canvas).then(renderer => {
+                            if (version !== this.previewVersion_ || !canvas.isConnected) {
+                                renderer.dispose();
+                                return;
+                            }
+                            this.previewRenderers_.push(renderer);
+                            preview.classList.add(styles.previewReady);
+                        })
+                            .catch(error => log.warn(error));
+                    }
+                } else {
+                    preview.appendChild(createSvgIcon(
+                        'M4 5h16v14H4zM4 15l4-4 3 3 2-2 7 7M16 9h.01',
+                        styles.fallbackIcon
+                    ));
+                }
+            };
+
+            const handleGridKeyDown = event => {
+                const currentIndex = renderedButtons.indexOf(document.activeElement);
+                if (currentIndex < 0) return;
+                let nextIndex = currentIndex;
+                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex++;
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex--;
+                if (event.key === 'Home') nextIndex = 0;
+                if (event.key === 'End') nextIndex = renderedButtons.length - 1;
+                if (nextIndex !== currentIndex) {
+                    event.preventDefault();
+                    renderedButtons[Math.max(0, Math.min(renderedButtons.length - 1, nextIndex))].focus();
+                }
+            };
+            grid.addEventListener('keydown', handleGridKeyDown);
+
+            const renderGrid = () => {
+                this.disposePreviews_();
+                grid.textContent = '';
+                renderedButtons = [];
+                const visibleItems = activeFilter === 'all' ?
+                    items : items.filter(item => item.source === activeFilter);
+                if (!visibleItems.length) {
+                    const empty = document.createElement('div');
+                    empty.className = styles.emptyState;
+                    empty.textContent = 'No media yet. Import a file to add it here.';
+                    grid.appendChild(empty);
+                    return;
+                }
+                visibleItems.forEach(item => {
+                    const selected = item.value === this.getValue();
+                    const button = document.createElement('button');
+                    button.className = `${styles.mediaItem}${selected ? ` ${styles.mediaItemSelected}` : ''}`;
+                    button.type = 'button';
+                    button.setAttribute('aria-label', `${item.label}: ${item.name}`);
+                    button.setAttribute('aria-selected', String(selected));
+                    button.setAttribute('role', 'option');
+                    const preview = document.createElement('span');
+                    preview.className = `${styles.mediaPreview} ${styles[`preview${item.source}`] || ''}`;
+                    renderPreview(item, preview);
+                    const meta = document.createElement('span');
+                    meta.className = styles.mediaMeta;
+                    const name = document.createElement('span');
+                    name.className = styles.mediaName;
+                    name.textContent = item.name;
+                    const type = document.createElement('span');
+                    type.className = styles.mediaType;
+                    type.textContent = item.label;
+                    meta.appendChild(name);
+                    meta.appendChild(type);
+                    button.appendChild(preview);
+                    button.appendChild(meta);
+                    if (selected) {
+                        const check = document.createElement('span');
+                        check.className = styles.selectedCheck;
+                        check.appendChild(createSvgIcon('m5 12 4 4L19 6', styles.checkIcon));
+                        button.appendChild(check);
+                    }
+                    button.addEventListener('click', () => selectItem(item));
+                    grid.appendChild(button);
+                    renderedButtons.push(button);
+                });
+            };
+
+            filterOptions.forEach(filter => {
+                const button = document.createElement('button');
+                button.className = styles.filterButton;
+                button.type = 'button';
+                button.textContent = filter.label;
+                button.setAttribute('aria-pressed', String(filter.value === activeFilter));
+                if (filter.value === activeFilter) {
+                    button.classList.add(styles.filterButtonActive);
+                    activeFilterButton = button;
+                }
+                button.addEventListener('click', () => {
+                    activeFilter = filter.value;
+                    if (activeFilterButton) {
+                        activeFilterButton.classList.remove(styles.filterButtonActive);
+                        activeFilterButton.setAttribute('aria-pressed', 'false');
+                    }
+                    activeFilterButton = button;
+                    button.classList.add(styles.filterButtonActive);
+                    button.setAttribute('aria-pressed', 'true');
+                    renderGrid();
+                    if (renderedButtons[0]) renderedButtons[0].focus();
+                });
+                filterBar.appendChild(button);
+            });
+
+            picker.addEventListener('keydown', event => {
+                if (event.key === 'Escape') ScratchBlocks.DropDownDiv.hide();
+            });
+            renderGrid();
+
+            ScratchBlocks.DropDownDiv.setColour('var(--ui-modal-background)', 'var(--ui-black-transparent)');
+            ScratchBlocks.DropDownDiv.setCategory(this.sourceBlock_.getCategory());
+            ScratchBlocks.DropDownDiv.setBoundsElement(boundsElement);
+            ScratchBlocks.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_, this.onHide.bind(this));
+
+            const selectedButton = renderedButtons.find(button => button.getAttribute('aria-selected') === 'true');
+            (selectedButton || renderedButtons[0] || importButton).focus();
+            if (!this.disableColourChange_ && this.box_) {
+                this.box_.setAttribute('fill', this.sourceBlock_.getColourQuaternary());
+            }
+        }
+    }
+    return MediaField;
 };
 
 const makeObjectRowsRenderer = ScratchBlocks => function (iconWidth) {
@@ -235,16 +624,17 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 // eslint-disable-next-line no-invalid-this
                 const block = getFieldSourceBlock(this);
                 if (value === IMPORT_VALUE) {
-                    openImportPicker(vm, block);
+                    openImportPicker(vm, block, ScratchBlocks);
                     return (block && block.getFieldValue('ASSET')) || IMPORT_VALUE;
                 }
                 if (block) block.updateDrawSelection_(value);
                 return value;
             };
+            const MediaField = createMediaField(ScratchBlocks, vm, assetOptions, assetValidator);
             const SourceField = ScratchBlocks.FieldLabelSerializable || ScratchBlocks.FieldLabel;
             this.appendDummyInput('DRAW')
                 .appendField('draw')
-                .appendField(new ScratchBlocks.FieldDropdown(assetOptions, assetValidator), 'ASSET');
+                .appendField(new MediaField(), 'ASSET');
             this.appendDummyInput('LEGACY_SOURCE')
                 .appendField(new SourceField('costume'), 'SOURCE');
             this.getInput('LEGACY_SOURCE').setVisible(false);
@@ -307,7 +697,10 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
         setDrawAsset_: function (source, asset) {
             this.updateDrawSelection_(encodeDrawAsset(source, asset));
             const assetField = this.getField('ASSET');
-            if (assetField) assetField.setValue(encodeDrawAsset(source, asset));
+            if (assetField) {
+                assetField.setValue(encodeDrawAsset(source, asset));
+                if (typeof assetField.refreshDisplay_ === 'function') assetField.refreshDisplay_();
+            }
             if (this.rendered) this.render();
         },
         syncDrawTextVisibility_: function () {
@@ -357,5 +750,13 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
     };
 };
 
-export {getFieldSourceBlock, IMPORT_VALUE, getAssetOptions};
+export {
+    getFieldSourceBlock,
+    getLiveBlock,
+    IMPORT_VALUE,
+    getAssetItems,
+    getAssetOptions,
+    openImportPicker,
+    persistDrawAsset
+};
 export default installObjectBlockDefinitions;
