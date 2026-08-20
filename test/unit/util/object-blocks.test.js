@@ -576,4 +576,68 @@ describe('Objects blocks', () => {
         expect(penFX.endGroup).toHaveBeenCalledTimes(1);
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(expect.any(Promise));
     });
+
+    test('finishes an asynchronous group before starting the next group', async () => {
+        let resolveFirstDraw;
+        const firstDraw = new Promise(resolve => {
+            resolveFirstDraw = resolve;
+        });
+        const events = [];
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => `${blockId}-branch-${branch}`)
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const sequencer = {
+            activeThread: null,
+            stepThread: jest.fn(thread => {
+                events.push(thread.topBlock);
+                if (thread.topBlock === 'first-branch-1') thread.objectPendingDraws = [firstDraw];
+            })
+        };
+        const penFX = {
+            applyCapturedEffects: jest.fn(() => events.push('apply first effects')),
+            beginEffectCapture: jest.fn(),
+            beginGroup: jest.fn(() => events.push('begin group')),
+            endEffectCapture: jest.fn(() => [{}]),
+            endGroup: jest.fn(() => events.push('end group'))
+        };
+        const manager = {runWithoutWaiting: jest.fn()};
+        const runtime = {movieAssetManager: manager, penFX, sequencer};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const objectBlocks = new ObjectBlocks();
+        const makeGroupingUtil = blockId => ({
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => blockId),
+                target
+            }
+        });
+
+        expect(objectBlocks.grouping({}, makeGroupingUtil('first'))).toBeUndefined();
+        expect(objectBlocks.grouping({}, makeGroupingUtil('second'))).toBeUndefined();
+        expect(events).toEqual([
+            'begin group',
+            'first-branch-1',
+            'first-branch-2'
+        ]);
+
+        const secondGroup = manager.runWithoutWaiting.mock.calls[1][0];
+        resolveFirstDraw();
+        await secondGroup;
+
+        expect(events).toEqual([
+            'begin group',
+            'first-branch-1',
+            'first-branch-2',
+            'apply first effects',
+            'end group',
+            'begin group',
+            'second-branch-1',
+            'second-branch-2',
+            'end group'
+        ]);
+        expect(penFX.beginGroup).toHaveBeenCalledTimes(2);
+        expect(penFX.endGroup).toHaveBeenCalledTimes(2);
+    });
 });

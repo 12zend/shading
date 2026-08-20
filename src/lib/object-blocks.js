@@ -40,16 +40,21 @@ const trackPendingDraw = (pendingDraw, util, manager) => {
     manager.runWithoutWaiting(pendingDraw);
 };
 
-const runGroupingBranch = (runtime, util, branchNumber) => {
-    // startBranch(..., true) re-enters a conditional block through the VM's loop path, which yields
-    // after every branch in both the interpreter and compiler. Execute the branch as a child warp
-    // thread instead so grouping remains atomic without returning a Promise to the parent thread.
+const getGroupingContext = util => {
     const parentThread = util.thread;
     const target = parentThread && parentThread.target;
     const blocks = parentThread && (parentThread.blockContainer || (target && target.blocks));
-    const sequencer = runtime && runtime.sequencer;
     const parentBlockId = parentThread && typeof parentThread.peekStack === 'function' ?
         parentThread.peekStack() : null;
+    return {blocks, parentBlockId, target};
+};
+
+const runGroupingBranch = (runtime, context, branchNumber) => {
+    // startBranch(..., true) re-enters a conditional block through the VM's loop path, which yields
+    // after every branch in both the interpreter and compiler. Execute the branch as a child warp
+    // thread instead so grouping remains atomic without returning a Promise to the parent thread.
+    const {blocks, parentBlockId, target} = context;
+    const sequencer = runtime && runtime.sequencer;
     const branchId = blocks && typeof blocks.getBranch === 'function' ?
         blocks.getBranch(parentBlockId, branchNumber) : null;
     if (!branchId || !target || !sequencer || typeof sequencer.stepThread !== 'function') return null;
@@ -73,6 +78,7 @@ const runGroupingBranch = (runtime, util, branchNumber) => {
 const createObjectBlocksClass = vm => class ObjectBlocks {
     constructor () {
         this.runtime = vm.runtime;
+        this.pendingGrouping = null;
         this.runtime.objectBlocks = this;
     }
 
@@ -154,27 +160,39 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     grouping (args, util) {
-        const penFX = this.runtime.penFX;
-        if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
-        const objectThread = runGroupingBranch(this.runtime, util, 1);
-        const pendingDraws = objectThread && Array.isArray(objectThread.objectPendingDraws) ?
-            objectThread.objectPendingDraws.slice() : [];
-        if (pendingDraws.length && penFX && typeof penFX.beginEffectCapture === 'function') {
-            penFX.beginEffectCapture();
-        }
-        runGroupingBranch(this.runtime, util, 2);
-        if (pendingDraws.length && penFX && typeof penFX.endEffectCapture === 'function') {
-            const effects = penFX.endEffectCapture();
-            const finishGroup = Promise.all(pendingDraws)
-                .then(() => {
-                    if (typeof penFX.applyCapturedEffects === 'function') penFX.applyCapturedEffects(effects);
-                })
-                .finally(() => penFX.endGroup());
-            const manager = this.runtime.movieAssetManager;
-            if (manager && typeof manager.runWithoutWaiting === 'function') manager.runWithoutWaiting(finishGroup);
-            return;
-        }
-        if (penFX && typeof penFX.endGroup === 'function') penFX.endGroup();
+        const context = getGroupingContext(util);
+        const runGrouping = () => {
+            const penFX = this.runtime.penFX;
+            if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
+            const objectThread = runGroupingBranch(this.runtime, context, 1);
+            const pendingDraws = objectThread && Array.isArray(objectThread.objectPendingDraws) ?
+                objectThread.objectPendingDraws.slice() : [];
+            if (pendingDraws.length && penFX && typeof penFX.beginEffectCapture === 'function') {
+                penFX.beginEffectCapture();
+            }
+            runGroupingBranch(this.runtime, context, 2);
+            if (pendingDraws.length && penFX && typeof penFX.endEffectCapture === 'function') {
+                const effects = penFX.endEffectCapture();
+                return Promise.all(pendingDraws)
+                    .then(() => {
+                        if (typeof penFX.applyCapturedEffects === 'function') penFX.applyCapturedEffects(effects);
+                    })
+                    .finally(() => penFX.endGroup());
+            }
+            if (penFX && typeof penFX.endGroup === 'function') penFX.endGroup();
+            return null;
+        };
+        const pendingGrouping = this.pendingGrouping ?
+            this.pendingGrouping.then(runGrouping, runGrouping) : runGrouping();
+        if (!pendingGrouping || typeof pendingGrouping.then !== 'function') return;
+
+        this.pendingGrouping = pendingGrouping;
+        const clearPendingGrouping = () => {
+            if (this.pendingGrouping === pendingGrouping) this.pendingGrouping = null;
+        };
+        pendingGrouping.then(clearPendingGrouping, clearPendingGrouping);
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.runWithoutWaiting === 'function') manager.runWithoutWaiting(pendingGrouping);
     }
 };
 
