@@ -7,7 +7,12 @@ import installObjectBlocks, {
     decodeDrawAsset,
     encodeDrawAsset
 } from '../../../src/lib/object-blocks';
-import {getFieldSourceBlock, openImportPicker} from '../../../src/lib/object-blocks-ui';
+import {
+    deleteAsset,
+    getAssetItems,
+    getFieldSourceBlock,
+    openImportPicker
+} from '../../../src/lib/object-blocks-ui';
 
 const makeUtil = () => ({
     stackFrame: {},
@@ -55,6 +60,68 @@ describe('Objects blocks', () => {
 
         expect(getFieldSourceBlock({sourceBlock_: sourceBlock})).toBe(sourceBlock);
         expect(getFieldSourceBlock({getSourceBlock: () => sourceBlock})).toBe(sourceBlock);
+    });
+
+    test('marks project media as deletable while protecting built-in fonts and the last costume', () => {
+        const costume = {name: 'only image'};
+        const target = {
+            getCostumes: () => [costume],
+            id: 'sprite'
+        };
+        const vm = {
+            editingTarget: target,
+            runtime: {
+                fontManager: {
+                    getFonts: () => [{family: 'Project Font', name: 'Project Font'}]
+                },
+                movieAssetManager: {
+                    getModels: () => [{name: 'model'}],
+                    getVideos: () => [{name: 'video', url: 'blob:video'}]
+                }
+            }
+        };
+
+        const items = getAssetItems(vm);
+
+        expect(items.find(item => item.source === 'costume')).toMatchObject({
+            deletable: false,
+            index: 0
+        });
+        expect(items.find(item => item.name === 'Sans Serif')).toMatchObject({deletable: false});
+        expect(items.find(item => item.name === 'Project Font')).toMatchObject({
+            deletable: true,
+            index: 0
+        });
+        expect(items.find(item => item.source === 'video')).toMatchObject({deletable: true, index: 0});
+        expect(items.find(item => item.source === 'model')).toMatchObject({deletable: true, index: 0});
+    });
+
+    test('deletes each supported project media type through its owning API', () => {
+        const deleteCostume = jest.fn(() => () => {});
+        const manager = {
+            deleteFont: jest.fn(),
+            deleteModel: jest.fn(),
+            deleteVideo: jest.fn()
+        };
+        const vm = {
+            deleteCostume,
+            editingTarget: {
+                getCostumes: () => [{name: 'one'}, {name: 'two'}],
+                id: 'sprite'
+            },
+            runtime: {movieAssetManager: manager}
+        };
+
+        expect(deleteAsset(vm, {deletable: true, index: 1, source: 'costume'})).toBe(true);
+        expect(deleteAsset(vm, {deletable: true, index: 2, source: 'video'})).toBe(true);
+        expect(deleteAsset(vm, {deletable: true, index: 3, source: 'model'})).toBe(true);
+        expect(deleteAsset(vm, {deletable: true, index: 4, source: 'text'})).toBe(true);
+        expect(deleteAsset(vm, {deletable: false, index: 0, source: 'text'})).toBe(false);
+
+        expect(deleteCostume).toHaveBeenCalledWith(1);
+        expect(manager.deleteVideo).toHaveBeenCalledWith('sprite', 2);
+        expect(manager.deleteModel).toHaveBeenCalledWith('sprite', 3);
+        expect(manager.deleteFont).toHaveBeenCalledWith(4);
     });
 
     test('selects an imported asset on the live block after the workspace refreshes', async () => {

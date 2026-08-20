@@ -50,22 +50,25 @@ const getFieldSourceBlock = field => {
 const getAssetItems = vm => {
     const items = [];
     const addItems = (source, assets, makeItem = () => ({})) => {
-        assets.forEach(asset => {
+        assets.forEach((asset, index) => {
             const name = typeof asset === 'string' ? asset : asset.name;
             if (!name) return;
             items.push(Object.assign({
+                deletable: false,
+                index,
                 label: SOURCE_LABELS[source],
                 name,
                 source,
                 value: encodeDrawAsset(source, name)
-            }, makeItem(asset)));
+            }, makeItem(asset, index)));
         });
     };
 
     const target = vm.editingTarget;
     const manager = vm.runtime && vm.runtime.movieAssetManager;
     if (target && typeof target.getCostumes === 'function') {
-        addItems('costume', target.getCostumes(), costume => {
+        const costumes = target.getCostumes();
+        addItems('costume', costumes, costume => {
             let previewUrl = '';
             try {
                 if (costume.asset && typeof costume.asset.encodeDataURI === 'function') {
@@ -74,15 +77,21 @@ const getAssetItems = vm => {
             } catch (error) { // A missing preview must not make the media itself unavailable.
                 log.warn(error);
             }
-            return {previewType: 'image', previewUrl};
+            return {
+                deletable: costumes.length > 1,
+                previewType: 'image',
+                previewUrl
+            };
         });
     }
     if (manager && target) {
         addItems('video', manager.getVideos(target), video => ({
+            deletable: true,
             previewType: 'video',
             previewUrl: video.url
         }));
         addItems('model', manager.getModels(target), model => ({
+            deletable: true,
             model,
             previewType: 'model'
         }));
@@ -95,8 +104,10 @@ const getAssetItems = vm => {
     ];
     const fontManager = vm.runtime && vm.runtime.fontManager;
     if (fontManager && typeof fontManager.getFonts === 'function') {
-        fontManager.getFonts().forEach(font => fonts.push({
+        fontManager.getFonts().forEach((font, index) => fonts.push({
+            deletable: true,
             family: font.family || font.name,
+            index,
             name: font.name,
             value: font.name
         }));
@@ -107,7 +118,9 @@ const getAssetItems = vm => {
         name: font.name,
         previewType: 'font',
         source: 'text',
-        value: encodeDrawAsset('text', font.value)
+        value: encodeDrawAsset('text', font.value),
+        deletable: Boolean(font.deletable),
+        index: font.index
     }));
 
     return items;
@@ -117,6 +130,30 @@ const getAssetOptions = vm => [
     ['Import', IMPORT_VALUE],
     ...getAssetItems(vm).map(item => [`${item.label}: ${item.name}`, item.value])
 ];
+
+const deleteAsset = (vm, item) => {
+    if (!item || !item.deletable) return false;
+    const target = vm.editingTarget;
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    if (item.source === 'costume') {
+        if (!target || typeof target.getCostumes !== 'function' || target.getCostumes().length <= 1 ||
+            typeof vm.deleteCostume !== 'function') return false;
+        return Boolean(vm.deleteCostume(item.index));
+    }
+    if (item.source === 'video' && manager && target && typeof manager.deleteVideo === 'function') {
+        manager.deleteVideo(target.id, item.index);
+        return true;
+    }
+    if (item.source === 'model' && manager && target && typeof manager.deleteModel === 'function') {
+        manager.deleteModel(target.id, item.index);
+        return true;
+    }
+    if (item.source === 'text' && manager && typeof manager.deleteFont === 'function') {
+        manager.deleteFont(item.index);
+        return true;
+    }
+    return false;
+};
 
 const getLiveBlock = (block, workspace = block && block.workspace) => {
     if (!block) return null;
@@ -420,12 +457,14 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 }
                 visibleItems.forEach(item => {
                     const selected = item.value === this.getValue();
-                    const button = document.createElement('button');
-                    button.className = `${styles.mediaItem}${selected ? ` ${styles.mediaItemSelected}` : ''}`;
-                    button.type = 'button';
-                    button.setAttribute('aria-label', `${item.label}: ${item.name}`);
-                    button.setAttribute('aria-selected', String(selected));
-                    button.setAttribute('role', 'option');
+                    const card = document.createElement('div');
+                    card.className = `${styles.mediaItem}${selected ? ` ${styles.mediaItemSelected}` : ''}`;
+                    const selectButton = document.createElement('button');
+                    selectButton.className = styles.selectButton;
+                    selectButton.type = 'button';
+                    selectButton.setAttribute('aria-label', `${item.label}: ${item.name}`);
+                    selectButton.setAttribute('aria-selected', String(selected));
+                    selectButton.setAttribute('role', 'option');
                     const preview = document.createElement('span');
                     preview.className = `${styles.mediaPreview} ${styles[`preview${item.source}`] || ''}`;
                     renderPreview(item, preview);
@@ -439,17 +478,50 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     type.textContent = item.label;
                     meta.appendChild(name);
                     meta.appendChild(type);
-                    button.appendChild(preview);
-                    button.appendChild(meta);
+                    selectButton.appendChild(preview);
+                    selectButton.appendChild(meta);
                     if (selected) {
                         const check = document.createElement('span');
                         check.className = styles.selectedCheck;
                         check.appendChild(createSvgIcon('m5 12 4 4L19 6', styles.checkIcon));
-                        button.appendChild(check);
+                        selectButton.appendChild(check);
                     }
-                    button.addEventListener('click', () => selectItem(item));
-                    grid.appendChild(button);
-                    renderedButtons.push(button);
+                    selectButton.addEventListener('click', () => selectItem(item));
+                    card.appendChild(selectButton);
+                    if (item.deletable) {
+                        const deleteButton = document.createElement('button');
+                        deleteButton.className = styles.deleteButton;
+                        deleteButton.type = 'button';
+                        deleteButton.title = `Delete ${item.name}`;
+                        deleteButton.setAttribute('aria-label', `Delete ${item.label}: ${item.name}`);
+                        deleteButton.appendChild(createSvgIcon(
+                            'M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5',
+                            styles.deleteIcon
+                        ));
+                        deleteButton.addEventListener('click', event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (selected) {
+                                const fallback = items.find(candidate => candidate.value !== item.value &&
+                                    candidate.source === item.source) ||
+                                    items.find(candidate => candidate.value !== item.value);
+                                if (fallback) {
+                                    const selection = decodeDrawAsset(fallback.value, fallback.source);
+                                    persistDrawAsset(
+                                        vm,
+                                        getLiveBlock(this.sourceBlock_),
+                                        selection.source,
+                                        selection.asset
+                                    );
+                                }
+                            }
+                            ScratchBlocks.DropDownDiv.hideWithoutAnimation();
+                            deleteAsset(vm, item);
+                        });
+                        card.appendChild(deleteButton);
+                    }
+                    grid.appendChild(card);
+                    renderedButtons.push(selectButton);
                 });
             };
 
@@ -756,6 +828,7 @@ export {
     IMPORT_VALUE,
     getAssetItems,
     getAssetOptions,
+    deleteAsset,
     openImportPicker,
     persistDrawAsset
 };

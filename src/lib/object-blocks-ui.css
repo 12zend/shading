@@ -60,9 +60,14 @@
 
 .import-button:focus-visible,
 .filter-button:focus-visible,
-.media-item:focus-visible {
+.delete-button:focus-visible {
     outline: 3px solid #8da3f7;
     outline-offset: 2px;
+}
+
+.select-button:focus-visible {
+    outline: 3px solid #8da3f7;
+    outline-offset: -3px;
 }
 
 .button-icon {
@@ -116,8 +121,9 @@
 .media-grid {
     min-height: 8rem;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr));
+    grid-template-columns: repeat(auto-fill, 7.5rem);
     gap: 0.65rem;
+    justify-content: start;
     padding: 0.15rem 1rem 1rem;
     overflow-x: hidden;
     overflow-y: auto;
@@ -126,17 +132,11 @@
 .media-item {
     min-width: 0;
     position: relative;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
     overflow: hidden;
     border: 1px solid $ui-black-transparent;
     border-radius: 0.65rem;
     background: $ui-white;
     color: $text-primary;
-    cursor: pointer;
-    font: inherit;
-    text-align: left;
 }
 
 .media-item:hover {
@@ -148,6 +148,20 @@
 .media-item-selected {
     border-color: #4968d4;
     box-shadow: 0 0 0 2px #4968d4;
+}
+
+.select-button {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
 }
 
 .media-preview {
@@ -214,7 +228,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.08rem;
-    padding: 0.52rem 0.58rem 0.58rem;
+    padding: 0.52rem 2.4rem 0.58rem 0.58rem;
 }
 
 .media-name {
@@ -246,6 +260,33 @@
     background: #4968d4;
     color: #fff;
     box-shadow: 0 0.15rem 0.35rem rgba(25, 36, 70, 0.25);
+}
+
+.delete-button {
+    width: 1.7rem;
+    height: 1.7rem;
+    position: absolute;
+    right: 0.36rem;
+    bottom: 0.36rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: $form-radius;
+    background: $ui-white;
+    color: $text-primary-transparent;
+    cursor: pointer;
+}
+
+.delete-button:hover {
+    background: $error-light;
+    color: $error-primary;
+}
+
+.delete-icon {
+    width: 0.95rem;
+    height: 0.95rem;
 }
 
 .check-icon {
@@ -284,7 +325,7 @@
     }
 
     .media-grid {
-        grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+        grid-template-columns: repeat(auto-fill, 6.75rem);
         gap: 0.5rem;
         padding: 0.1rem 0.75rem 0.75rem;
     }
