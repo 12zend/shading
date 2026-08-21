@@ -17,6 +17,10 @@ import {
     resolveCollaborationTarget
 } from './collaboration-targets';
 import {activateTeamRoute, getTeamIdFromPath, getTeamPath, wasTeamCreatedInSession} from './team-route';
+import OpEngine from './collaboration/op-engine';
+import VmApplier from './collaboration/vm-applier';
+import OpCapture from './collaboration/op-capture';
+import {clearAssetCache} from './collaboration/vm-assets';
 
 const IDENTITY_PREFIX = 'movie:collaboration:identity:';
 const TOKEN_PREFIX = 'movie:collaboration:token:';
@@ -25,6 +29,12 @@ const CLAIM_PREFIX = 'movie:team-claim:';
 const SESSION_IDENTITY_PREFIX = 'movie:collaboration:session-identity:';
 const MAX_ENTRY_LENGTH = 4000;
 const PROJECT_SYNC_DEBOUNCE_MS = 750;
+// PROJECT_CHANGED events within this window of a captured op are assumed
+// to be side effects of that op (e.g. addSprite emits PROJECT_CHANGED).
+// Anything later is an edit the op layer does not cover (costume painting,
+// sound editing, ...) and falls back to the legacy snapshot sync.
+const COVERED_OP_WINDOW_MS = 1500;
+const OP_BASELINE_TIMEOUT_MS = 5000;
 const LOCAL_COLLABORATION_PORT = '8601';
 const LOCAL_GUI_PORT = '8602';
 
@@ -156,6 +166,36 @@ class CollaborationManager extends EventEmitter {
         this.incomingProjects = new Map();
         this.reconnectAttempts = 0;
         this.movieAssetManager = installMovieAssetManager(this.vm);
+        this.opHostId = null;
+        this.opEpoch = 0;
+        this.lastCoveredOpAt = 0;
+        this.applier = new VmApplier({
+            vm: this.vm,
+            getWorkspace: () => this.workspace,
+            getScratchBlocks: () => this.ScratchBlocks
+        });
+        this.opEngine = new OpEngine({
+            send: message => this.send(message),
+            applier: this.applier,
+            clientId: this.identityId
+        });
+        this.opEngine.on('resync-needed', reason => this.handleResyncNeeded(reason));
+        this.opCapture = new OpCapture({
+            vm: this.vm,
+            isSuppressed: () => (
+                !this.isOpSyncActive() ||
+                this.applier.isApplyingRemote ||
+                this.projectLoadInProgress ||
+                this.state.synchronizing ||
+                this.state.me.role === 'viewer'
+            ),
+            onLocalOp: (type, payload) => this.submitLocalOp(type, payload),
+            onCaptureFallback: () => {
+                if (!this.isOpSyncActive()) return;
+                this.updateState({error: 'この変更は従来の同期で共有されます。'});
+                this.scheduleProjectSync();
+            }
+        });
         this.sharedTimelineSettings = this.movieAssetManager.getTimelineSettings();
         this.hasSharedTimelineSettings = false;
         const initialRole = getInitialRole(this.teamId, this.sessionScopedIdentity);
@@ -323,6 +363,7 @@ class CollaborationManager extends EventEmitter {
         switch (message.type) {
         case 'welcome':
             this.identityId = message.me.id;
+            if (this.opEngine) this.opEngine.clientId = this.identityId;
             this.projectRevision = Number.isInteger(message.projectRevision) ? message.projectRevision : 0;
             if (Number.isInteger(message.sequence)) {
                 this.lastSequence = Math.max(this.lastSequence, message.sequence);
@@ -348,6 +389,9 @@ class CollaborationManager extends EventEmitter {
                 synchronizing: Boolean(message.synchronizing),
                 timelineSettings: this.sharedTimelineSettings
             });
+            if (typeof message.hostId === 'string') {
+                this.activateOpMode(message.hostId, message.opEpoch);
+            }
             break;
         case 'state': {
             const members = message.members || this.state.members;
@@ -390,6 +434,16 @@ class CollaborationManager extends EventEmitter {
             break;
         case 'project_waiting':
             this.updateState({synchronizing: true, syncMessage: message.message || null});
+            break;
+        case 'op_propose':
+        case 'op_broadcast':
+        case 'op_reject':
+        case 'op_request':
+        case 'op_send':
+            if (this.opEngine) this.opEngine.handleMessage(message);
+            break;
+        case 'op_host_changed':
+            this.handleOpHostChanged(message);
             break;
         case 'invite':
             this.receiveInvite(message);
@@ -453,6 +507,124 @@ class CollaborationManager extends EventEmitter {
         this.updateState({awareness});
     }
 
+    /**
+     * Whether the op-based engine is driving synchronization. When the
+     * worker does not elect a host (older deployment), the manager keeps
+     * its legacy whole-project sync behavior.
+     * @returns {boolean} True when ops are the active sync path.
+     */
+    isOpSyncActive () {
+        return Boolean(
+            !this.destroyed &&
+            !this.state.standalone &&
+            this.state.status === 'connected' &&
+            this.opEngine &&
+            this.opEngine.isActive
+        );
+    }
+
+    /**
+     * Whether a remote op is currently being applied to the VM.
+     * @returns {boolean} True while a remote apply is in flight.
+     */
+    isApplyingRemoteOp () {
+        return Boolean(this.applier && this.applier.isApplyingRemote);
+    }
+
+    /**
+     * Adopt the worker-elected host and epoch. Called on welcome and on
+     * host migration. A new epoch invalidates all sequence state; the base
+     * sequence is re-established once a fresh snapshot has been applied
+     * (or after a grace period when no snapshot is coming).
+     * @param {string} hostId The elected host's member id.
+     * @param {number} [opEpoch] The room's current op epoch.
+     */
+    activateOpMode (hostId, opEpoch) {
+        if (!this.opEngine) return;
+        const wasActive = this.isOpSyncActive();
+        const previousHostId = this.opHostId;
+        this.opHostId = hostId;
+        if (Number.isInteger(opEpoch)) this.opEpoch = opEpoch;
+        const amHost = hostId === this.identityId || hostId === this.state.me.id;
+        this.opEngine.setRole({isHost: amHost, epoch: this.opEpoch});
+        if (!wasActive || previousHostId !== hostId) {
+            if (amHost) {
+                // The host sequences its own edits immediately.
+                this.opEngine.setBaseSeq(0);
+                // Publish our current project so late joiners and resyncs
+                // have a stored snapshot to fall back on, and so peers can
+                // re-anchor after a host migration.
+                this.sendProjectUpdate(true);
+            } else {
+                // Buffer live ops until the snapshot baseline arrives (or
+                // the grace period re-baselines us).
+                this.scheduleOpBaselineTimeout();
+            }
+        }
+    }
+
+    scheduleOpBaselineTimeout () {
+        clearTimeout(this.opBaselineTimer);
+        this.opBaselineTimer = setTimeout(() => {
+            this.opBaselineTimer = null;
+            if (this.opEngine.lastAppliedSeq === null) this.opEngine.setBaseSeq(0);
+        }, OP_BASELINE_TIMEOUT_MS);
+    }
+
+    /**
+     * Re-anchor the op stream to the snapshot that was just loaded. The
+     * sender stamps its epoch/seq into the snapshot metadata so receivers
+     * never replay ops already embedded in it.
+     * @param {object} incoming The applied incoming project record.
+     */
+    adoptSnapshotOpState (incoming) {
+        clearTimeout(this.opBaselineTimer);
+        this.opBaselineTimer = null;
+        const epoch = Number.isInteger(incoming.opEpoch) ? incoming.opEpoch : this.opEpoch;
+        const seq = Number.isInteger(incoming.opSeq) ? incoming.opSeq : 0;
+        if (epoch !== this.opEpoch) {
+            this.opEpoch = epoch;
+            this.opEngine.setRole({isHost: this.opHostId === this.identityId, epoch});
+            this.opEngine.setBaseSeq(seq);
+        } else if (this.opEngine.lastAppliedSeq === null) {
+            this.opEngine.setBaseSeq(seq);
+        } else {
+            this.opEngine.lastAppliedSeq = Math.max(this.opEngine.lastAppliedSeq, seq);
+        }
+    }
+
+    handleOpHostChanged (message) {
+        const nextEpoch = Number.isInteger(message.epoch) ? message.epoch : this.opEpoch + 1;
+        this.activateOpMode(String(message.hostId || ''), nextEpoch);
+        // Non-hosts buffer live ops (setRole reset the sequence state) and
+        // re-anchor when the new host's snapshot arrives, or after the
+        // baseline grace period. Editing stays available throughout.
+    }
+
+    submitLocalOp (type, payload) {
+        if (!this.isOpSyncActive()) return null;
+        if (this.state.me.role === 'viewer') return null;
+        if (this.projectLoadInProgress || this.state.synchronizing) return null;
+        this.lastCoveredOpAt = Date.now();
+        return this.opEngine.submitLocal(type, payload);
+    }
+
+    handleResyncNeeded (reason) {
+        if (!this.isOpSyncActive() || this.projectLoadInProgress) return;
+        // eslint-disable-next-line no-console
+        console.warn('Collaboration resync requested:', reason);
+        const resyncRequested = this.send({
+            type: 'project_resync_needed',
+            revision: this.projectRevision
+        });
+        this.updateState({
+            error: resyncRequested ? 'プロジェクトの再同期をリクエストしています。' :
+                '共同編集の同期が崩れたため、再接続してください。',
+            syncMessage: resyncRequested ? '別の編集者からプロジェクトを再取得しています。' : null,
+            synchronizing: true
+        });
+    }
+
     prepareProject (message) {
         const revision = Number(message.revision);
         const assetNames = Array.isArray(message.assetNames) ? message.assetNames : [];
@@ -472,6 +644,8 @@ class CollaborationManager extends EventEmitter {
             assetChunkCounts,
             assetNames,
             chunks,
+            opEpoch: Number.isInteger(message.opEpoch) ? message.opEpoch : null,
+            opSeq: Number.isInteger(message.opSeq) ? message.opSeq : null,
             projectChunks: new Array(projectChunkCount),
             projectEncoding: message.projectEncoding,
             revision
@@ -543,6 +717,9 @@ class CollaborationManager extends EventEmitter {
                 const manager = this.movieAssetManager || installMovieAssetManager(this.vm);
                 this.sharedTimelineSettings = manager.getTimelineSettings();
                 this.hasSharedTimelineSettings = true;
+                if (this.opEngine && this.opEngine.isActive) {
+                    this.adoptSnapshotOpState(incoming);
+                }
                 this.updateState({
                     error: null,
                     syncMessage: null,
@@ -587,12 +764,19 @@ class CollaborationManager extends EventEmitter {
         this.projectSyncRequestPending = true;
         const requestId = generateId();
         const files = this.vm.saveProjectSb3DontZip();
+        // Stamp the sender's op position into the snapshot so receivers can
+        // re-anchor their op stream without replaying embedded ops.
+        const opEpoch = this.opEpoch;
+        const opSeq = this.opEngine ?
+            (this.opEngine.isHost ? this.opEngine.seq : (this.opEngine.lastAppliedSeq || 0)) : 0;
         this.snapshotPromise = createProjectBundle(files, this.projectAssetNames)
             .then(bundle => {
                 this.pendingProjectUpdate = {assetNames: bundle.assetNames, requestId};
                 if (!this.send({
                     type: 'project_update',
                     baseRevision: this.projectRevision,
+                    opEpoch,
+                    opSeq,
                     requestId,
                     ...bundle
                 })) throw new Error('WebSocket is not connected');
@@ -620,22 +804,43 @@ class CollaborationManager extends EventEmitter {
         this.workspace = workspace;
         this.ScratchBlocks = ScratchBlocks;
         workspace.addChangeListener(this.handleWorkspaceEvent);
+        if (this.opCapture) this.opCapture.attachWorkspace(workspace, ScratchBlocks);
     }
 
     detachWorkspace () {
         if (this.workspace) this.workspace.removeChangeListener(this.handleWorkspaceEvent);
+        if (this.opCapture) this.opCapture.detachWorkspace();
         this.workspace = null;
         this.ScratchBlocks = null;
     }
 
     handleWorkspaceEvent (event) {
-        if (this.applyingRemote || this.state.standalone) return;
+        if (this.applyingRemote || this.isApplyingRemoteOp() || this.state.standalone) return;
         if (event.type === 'ui') {
             if (event.element === 'selected') this.updateSelection(event.newValue || event.blockId);
             return;
         }
         if (event.type === 'endDrag') return;
         if (!isShareableBlocklyEvent(event)) return;
+
+        if (this.isOpSyncActive()) {
+            // Connected edits are captured and proposed by OpCapture. Only
+            // the blocking states still surface the legacy inline error.
+            if (this.state.me.role === 'viewer' || this.state.synchronizing ||
+                this.projectLoadInProgress) {
+                const editingTarget = this.vm.editingTarget;
+                const targetId = editingTarget && editingTarget.id;
+                const target = describeCollaborationTarget(this.vm.runtime, editingTarget);
+                const inverse = invertBlocklyEvent(serializeBlocklyEvent(event, this.ScratchBlocks));
+                if (inverse) this.applyEventPayload(inverse, targetId, target);
+                this.updateState({
+                    error: this.projectLoadInProgress ? '最新プロジェクトの読み込み中はブロックを編集できません。' :
+                        (this.state.synchronizing ? 'プロジェクトの同期が終わるまで編集できません。' :
+                            '閲覧者はブロックを編集できません。管理者に権限の変更を依頼してください。')
+                });
+            }
+            return;
+        }
 
         const forward = serializeBlocklyEvent(event, this.ScratchBlocks);
         const inverse = invertBlocklyEvent(forward);
@@ -690,7 +895,17 @@ class CollaborationManager extends EventEmitter {
 
     handleProjectChanged () {
         if (this.state.standalone) return;
-        if (this.applyingRemote || this.projectLoadInProgress || this.state.me.role === 'viewer') return;
+        if (this.applyingRemote || this.isApplyingRemoteOp() ||
+            this.projectLoadInProgress || this.state.me.role === 'viewer') return;
+        if (this.isOpSyncActive()) {
+            // Covered edits already propagate as ops. Only edits the op
+            // layer does not cover (costume painting, sound editing, ...)
+            // fall back to the legacy snapshot sync.
+            if (Date.now() - this.lastCoveredOpAt > COVERED_OP_WINDOW_MS) {
+                this.scheduleProjectSync();
+            }
+            return;
+        }
         this.scheduleProjectSync();
     }
 
@@ -860,6 +1075,10 @@ class CollaborationManager extends EventEmitter {
         this.destroyed = true;
         clearTimeout(this.reconnectTimer);
         clearTimeout(this.mediaSyncTimer);
+        clearTimeout(this.opBaselineTimer);
+        if (this.opCapture) this.opCapture.destroy();
+        if (this.opEngine) this.opEngine.destroy();
+        clearAssetCache(this.vm);
         this.detachWorkspace();
         this.vm.removeListener('targetsUpdate', this.handleTargetsUpdate);
         this.vm.removeListener('PROJECT_CHANGED', this.handleProjectChanged);

@@ -17,6 +17,9 @@ const SNAPSHOT_CHUNK_SIZE = 1500000;
 const MAX_SNAPSHOT_SIZE = 31 * 1024 * 1024;
 const ALLOWED_ROLES = new Set(['admin', 'member', 'viewer']);
 const EDITABLE_ROLES = new Set(['admin', 'member']);
+// Op relay limit. The heavy per-op validation runs on the peers; the
+// relay only enforces structural bounds so one peer cannot wedge the room.
+const MAX_RELAY_OPS_PER_MESSAGE = 256;
 
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
     status,
@@ -152,6 +155,7 @@ export class TeamRoom extends DurableObject {
     constructor (ctx, env) {
         super(ctx, env);
         this.sessions = new Map();
+        this.currentHostId = null;
         for (const socket of this.ctx.getWebSockets()) {
             const attachment = socket.deserializeAttachment();
             this.sessions.set(socket, attachment || {});
@@ -192,6 +196,8 @@ export class TeamRoom extends DurableObject {
         }
         if (!Number.isInteger(state.projectRevision)) state.projectRevision = 0;
         if (!Number.isInteger(state.projectChunkCount)) state.projectChunkCount = 0;
+        if (!Number.isInteger(state.opEpoch)) state.opEpoch = 0;
+        if (!Number.isInteger(state.opSeq)) state.opSeq = 0;
         if (state.projectEncoding !== 'plain' && state.projectEncoding !== 'gzip-base64') {
             state.projectEncoding = 'plain';
         }
@@ -232,9 +238,58 @@ export class TeamRoom extends DurableObject {
     broadcastState (state) {
         this.broadcast({
             type: 'state',
+            hostId: this.currentHostId || null,
             members: this.publicMembers(state),
             onlineUserIds: this.onlineUserIds()
         });
+    }
+
+    /**
+     * The room host is the earliest-joined online member with edit rights
+     * whose project snapshot is up to date. The host is the sequencing
+     * authority for the op-based sync; when it changes, the epoch is
+     * bumped so every peer invalidates its sequence state.
+     * @param {object} state The persisted room state.
+     */
+    async updateHost (state) {
+        let host = null;
+        for (const session of this.sessions.values()) {
+            if (!session.memberId) continue;
+            const member = state.members[session.memberId];
+            if (!member || !EDITABLE_ROLES.has(member.role) || member.pendingFreshSnapshot) continue;
+            if (!host || member.joinedAt < host.joinedAt) host = member;
+        }
+        const hostId = host ? host.id : null;
+        if (hostId === this.currentHostId) return;
+        this.currentHostId = hostId;
+        state.opEpoch = (Number.isInteger(state.opEpoch) ? state.opEpoch : 0) + 1;
+        await this.putRoomState(state);
+        this.broadcast({
+            type: 'op_host_changed',
+            epoch: state.opEpoch,
+            hostId
+        });
+    }
+
+    getHostSocket () {
+        if (!this.currentHostId) return null;
+        for (const [socket, session] of this.sessions.entries()) {
+            if (session.memberId === this.currentHostId) return socket;
+        }
+        return null;
+    }
+
+    findSessionByMemberId (memberId) {
+        for (const [socket, session] of this.sessions.entries()) {
+            if (session.memberId === memberId) return socket;
+        }
+        return null;
+    }
+
+    normalizeRelayOps (value) {
+        if (!Array.isArray(value) || value.length === 0 ||
+            value.length > MAX_RELAY_OPS_PER_MESSAGE) return null;
+        return value;
     }
 
     sendError (socket, message) {
@@ -312,6 +367,13 @@ export class TeamRoom extends DurableObject {
                 break;
             case 'project_resync_needed':
                 await this.handleProjectResyncNeeded(socket, member, message, state);
+                break;
+            case 'op_propose':
+            case 'op_broadcast':
+            case 'op_reject':
+            case 'op_request':
+            case 'op_send':
+                await this.handleOpRelay(socket, member, message, state);
                 break;
             default:
                 this.sendError(socket, '未対応の共同編集操作です。');
@@ -394,13 +456,16 @@ export class TeamRoom extends DurableObject {
 
         const entries = await this.listValues('entry:', {limit: 500, reverse: true});
         const hasProject = state.projectRevision > 0 && state.projectChunkCount > 0;
+        await this.updateHost(state);
         safeSend(socket, {
             type: 'welcome',
             entries,
+            hostId: this.currentHostId || null,
             me: publicMember(member),
             memberToken,
             members: this.publicMembers(state),
             onlineUserIds: this.onlineUserIds(),
+            opEpoch: Number.isInteger(state.opEpoch) ? state.opEpoch : 0,
             projectRevision: state.projectRevision,
             sequence: state.sequence,
             synchronizing: requiresFreshSnapshot(member) || hasProject
@@ -430,6 +495,91 @@ export class TeamRoom extends DurableObject {
             targetName: String(message.awareness.targetName || '').slice(0, 120) || null
         } : {};
         this.broadcast({type: 'awareness', memberId: member.id, awareness}, socket);
+    }
+
+    /**
+     * Relay op-based sync traffic between peers. The relay never inspects
+     * op payloads beyond structural bounds; the peers validate envelopes.
+     *
+     * - op_propose (member -> host): client edit proposals.
+     * - op_broadcast (host -> everyone): sequenced ops.
+     * - op_reject / op_send (host -> one member): targeted replies.
+     * - op_request (member -> host): gap replay requests.
+     * @param {object} socket The sending peer's socket.
+     * @param {object} member The sending member record.
+     * @param {object} message The relay message.
+     * @param {object} state The persisted room state.
+     */
+    async handleOpRelay (socket, member, message, state) {
+        if (!EDITABLE_ROLES.has(member.role)) return;
+        // Recover host tracking after a Durable Object restart.
+        if (!this.currentHostId || !this.getHostSocket()) {
+            await this.updateHost(state);
+        }
+        const isHost = this.currentHostId === member.id;
+        switch (message.type) {
+        case 'op_propose': {
+            if (isHost) return; // the host edits directly, never proposes
+            const hostSocket = this.getHostSocket();
+            if (!hostSocket) return;
+            const ops = this.normalizeRelayOps(message.ops);
+            if (!ops) return;
+            safeSend(hostSocket, {
+                type: 'op_propose',
+                epoch: Number(message.epoch) || 0,
+                from: member.id,
+                ops
+            });
+            return;
+        }
+        case 'op_broadcast': {
+            if (!isHost) return;
+            const ops = this.normalizeRelayOps(message.ops);
+            if (!ops) return;
+            for (const [recipient, session] of this.sessions.entries()) {
+                if (recipient === socket || !session.memberId) continue;
+                safeSend(recipient, {
+                    type: 'op_broadcast',
+                    epoch: Number(message.epoch) || 0,
+                    ops
+                });
+            }
+            return;
+        }
+        case 'op_request': {
+            if (isHost) return;
+            const hostSocket = this.getHostSocket();
+            if (!hostSocket) return;
+            const fromSeq = Number(message.fromSeq);
+            if (!Number.isInteger(fromSeq) || fromSeq < 0) return;
+            safeSend(hostSocket, {
+                type: 'op_request',
+                epoch: Number(message.epoch) || 0,
+                from: member.id,
+                fromSeq
+            });
+            return;
+        }
+        case 'op_reject':
+        case 'op_send': {
+            if (!isHost) return;
+            const targetSocket = this.findSessionByMemberId(String(message.to || ''));
+            if (!targetSocket) return;
+            const relay = {type: message.type, epoch: Number(message.epoch) || 0};
+            if (message.type === 'op_send') {
+                const ops = this.normalizeRelayOps(message.ops);
+                if (!ops) return;
+                relay.ops = ops;
+            } else {
+                relay.clientOpId = Number(message.clientOpId) || 0;
+                relay.reason = String(message.reason || '').slice(0, 200);
+            }
+            safeSend(targetSocket, relay);
+            return;
+        }
+        default:
+            return;
+        }
     }
 
     async handleEntryAdd (socket, member, message, state) {
@@ -606,6 +756,8 @@ export class TeamRoom extends DurableObject {
             type: 'project_manifest',
             assetChunkCounts,
             assetNames: state.projectAssetNames,
+            opEpoch: Number.isInteger(state.opEpoch) ? state.opEpoch : 0,
+            opSeq: Number.isInteger(state.opSeq) ? state.opSeq : 0,
             projectChunkCount,
             projectEncoding: project.encoding,
             revision: state.projectRevision
@@ -649,6 +801,8 @@ export class TeamRoom extends DurableObject {
             type: 'project_manifest',
             assetChunkCounts: state.projectAssetChunks,
             assetNames: state.projectAssetNames,
+            opEpoch: Number.isInteger(state.opEpoch) ? state.opEpoch : 0,
+            opSeq: Number.isInteger(state.opSeq) ? state.opSeq : 0,
             projectChunkCount: state.projectChunkCount,
             projectEncoding: state.projectEncoding,
             revision: state.projectRevision
@@ -785,6 +939,16 @@ export class TeamRoom extends DurableObject {
         state.projectEncoding = project.encoding;
         // eslint-disable-next-line require-atomic-updates
         state.projectRevision = nextRevision;
+        // Snapshot metadata for the op-based sync: receivers re-anchor
+        // their op stream to the sender's position.
+        if (Number.isInteger(message.opEpoch)) {
+            // eslint-disable-next-line require-atomic-updates
+            state.opEpoch = message.opEpoch;
+        }
+        if (Number.isInteger(message.opSeq)) {
+            // eslint-disable-next-line require-atomic-updates
+            state.opSeq = message.opSeq;
+        }
         state.sequence += 1;
         await this.ctx.storage.put(ROOM_STATE_KEY, state);
         if (removedKeys.length) await this.deleteKeys(removedKeys);
@@ -807,6 +971,7 @@ export class TeamRoom extends DurableObject {
     async webSocketClose (socket, code, reason) {
         this.sessions.delete(socket);
         const state = await this.getRoomState();
+        await this.updateHost(state);
         this.broadcastState(state);
         try {
             socket.close(code, reason);
