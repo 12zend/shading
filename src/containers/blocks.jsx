@@ -25,9 +25,9 @@ import {injectExtensionBlockTheme, injectExtensionCategoryTheme} from '../lib/th
 import {connect} from 'react-redux';
 import {updateToolbox} from '../reducers/toolbox';
 import {activateColorPicker} from '../reducers/color-picker';
+import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 import {
     closeExtensionLibrary,
-    openSoundRecorder,
     openConnectionModal,
     openCustomExtensionModal
 } from '../reducers/modals';
@@ -39,7 +39,9 @@ import {isTimeTravel2020} from '../reducers/time-travel';
 import AddonHooks from '../addons/hooks.js';
 import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
 import {findTopBlock} from '../lib/backpack/code-payload.js';
+import {handleFileUpload, soundUpload} from '../lib/file-uploader.js';
 import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
+import {SOUND_FILE_ACCEPT} from '../lib/sound-upload-formats.js';
 import {
     installMyBlocksShaderBlocks,
     recolorMyBlocksShaderDefinitions,
@@ -111,7 +113,8 @@ class Blocks extends React.Component {
             'handleConnectionModalStart',
             'handleDrop',
             'handleStatusButtonUpdate',
-            'handleOpenSoundRecorder',
+            'handleImportSound',
+            'handleImportSoundUpload',
             'handlePromptStart',
             'handlePromptCallback',
             'handlePromptClose',
@@ -129,12 +132,13 @@ class Blocks extends React.Component {
             'onWorkspaceUpdate',
             'onWorkspaceMetricsChange',
             'setBlocks',
+            'setSoundFileInput',
             'setLocale',
             'handleEnableProcedureReturns'
         ]);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
-        this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
+        this.ScratchBlocks.importSoundCallback = this.handleImportSound;
 
         this.state = {
             prompt: null
@@ -146,7 +150,7 @@ class Blocks extends React.Component {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
-        this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
+        this.ScratchBlocks.importSoundCallback = this.handleImportSound;
 
         this.ScratchBlocks.FieldColourSlider.activateEyedropper_ = this.props.onActivateColorPicker;
         this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.handleActivateCustomProcedures;
@@ -626,8 +630,26 @@ class Blocks extends React.Component {
     handleStatusButtonUpdate () {
         this.ScratchBlocks.refreshStatusButtons(this.workspace);
     }
-    handleOpenSoundRecorder () {
-        this.props.onOpenSoundRecorder();
+    handleImportSound () {
+        this.soundFileInput.click();
+    }
+    handleImportSoundUpload (e) {
+        const target = this.props.vm.editingTarget;
+        if (!target) return;
+
+        const targetId = target.id;
+        this.props.onShowImporting();
+        handleFileUpload(e.target, (buffer, fileType, fileName) => {
+            soundUpload(buffer, fileType, this.props.vm.runtime.storage, newSound => {
+                newSound.name = fileName;
+                this.props.vm.addSound(newSound, targetId)
+                    .then(this.props.onCloseImporting)
+                    .catch(this.props.onCloseImporting);
+            }, this.props.onCloseImporting);
+        }, this.props.onCloseImporting);
+    }
+    setSoundFileInput (input) {
+        this.soundFileInput = input;
     }
 
     /*
@@ -707,7 +729,6 @@ class Blocks extends React.Component {
             isVisible,
             onActivateColorPicker,
             onOpenConnectionModal,
-            onOpenSoundRecorder,
             onOpenCustomExtensionModal,
             reduxOnOpenCustomExtensionModal,
             updateToolboxState,
@@ -727,6 +748,13 @@ class Blocks extends React.Component {
                     componentRef={this.setBlocks}
                     onDrop={this.handleDrop}
                     {...props}
+                />
+                <input
+                    accept={SOUND_FILE_ACCEPT}
+                    ref={this.setSoundFileInput}
+                    style={{display: 'none'}}
+                    type="file"
+                    onChange={this.handleImportSoundUpload}
                 />
                 {this.state.prompt ? (
                     <Prompt
@@ -782,8 +810,9 @@ Blocks.propTypes = {
     onActivateColorPicker: PropTypes.func,
     onActivateCustomProcedures: PropTypes.func,
     onOpenConnectionModal: PropTypes.func,
-    onOpenSoundRecorder: PropTypes.func,
     onOpenCustomExtensionModal: PropTypes.func,
+    onCloseImporting: PropTypes.func,
+    onShowImporting: PropTypes.func,
     reduxOnOpenCustomExtensionModal: PropTypes.func,
     onRequestCloseCustomProcedures: PropTypes.func,
     onRequestCloseExtensionLibrary: PropTypes.func,
@@ -856,9 +885,8 @@ const mapDispatchToProps = dispatch => ({
         dispatch(setConnectionModalExtensionId(id));
         dispatch(openConnectionModal());
     },
-    onOpenSoundRecorder: () => {
-        dispatch(openSoundRecorder());
-    },
+    onCloseImporting: () => dispatch(closeAlertWithId('importingAsset')),
+    onShowImporting: () => dispatch(showStandardAlert('importingAsset')),
     reduxOnOpenCustomExtensionModal: () => dispatch(openCustomExtensionModal()),
     onRequestCloseExtensionLibrary: () => {
         dispatch(closeExtensionLibrary());

@@ -93,8 +93,8 @@ export default function (vm) {
             menu = vm.editingTarget.sprite.sounds.map(sound => [sound.name, sound.name]);
         }
         menu.push([
-            ScratchBlocks.ScratchMsgs.translate('SOUND_RECORD', 'record...'),
-            ScratchBlocks.recordSoundCallback
+            ScratchBlocks.ScratchMsgs.translate('SOUND_IMPORT', 'import...'),
+            ScratchBlocks.importSoundCallback
         ]);
         return menu;
     };

@@ -184,17 +184,17 @@ describe('Working with the blocks', () => {
         await expect(logs).toEqual([]);
     });
 
-    test('Record option from sound block menu opens sound recorder', async () => {
+    test('Import option from sound block menu opens sound file picker', async () => {
         await loadUri(uri);
         await clickText('Code');
         await clickBlocksCategory('Sound');
         await clickText('Meow', scope.blocksTab); // Click "play sound <Meow> until done" block
-        await clickText('record'); // Click "record..." option in the block's sound menu
-        // Access has been force denied, so close the alert that comes up
-        await driver.sleep(1000); // getUserMedia requests are very slow to fail for some reason
-        await driver.switchTo().alert()
-            .accept();
-        await findByText('Record Sound'); // Sound recorder is open
+        await clickText('import'); // Click "import..." option in the block's sound menu
+        const input = await findByXpath('//input[@type="file"]' +
+            '[contains(@accept, ".wav")]');
+        await input.sendKeys(path.resolve(__dirname, '../fixtures/movie.wav'));
+        await clickText('Sounds');
+        await findByText('movie', scope.soundsTab);
         const logs = await getLogs();
         await expect(logs).toEqual([]);
     });

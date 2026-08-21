@@ -20,6 +20,7 @@ import SoundEditorNotSupported from '../components/tw-sound-editor-not-supported
 
 import {getSoundLibrary} from '../lib/libraries/tw-async-libraries';
 import {handleFileUpload, soundUpload} from '../lib/file-uploader.js';
+import {SOUND_FILE_ACCEPT} from '../lib/sound-upload-formats.js';
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
 import downloadBlob from '../lib/download-blob';
@@ -234,7 +235,7 @@ class SoundTab extends React.Component {
                     title: intl.formatMessage(messages.fileUploadSound),
                     img: fileUploadIcon,
                     onClick: this.handleFileUploadClick,
-                    fileAccept: '.wav, .mp3, .ogg, .flac, .aac, .m4a',
+                    fileAccept: SOUND_FILE_ACCEPT,
                     fileChange: this.handleSoundUpload,
                     fileInput: this.setFileInput,
                     fileMultiple: true
