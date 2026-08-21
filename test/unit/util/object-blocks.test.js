@@ -351,7 +351,7 @@ describe('Objects blocks', () => {
         const blocks = new ObjectBlocks();
         const info = blocks.getInfo();
 
-        expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual(['draw', 'grouping']);
+        expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual(['draw', 'shape', 'grouping']);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
@@ -360,6 +360,61 @@ describe('Objects blocks', () => {
             'SIZE', 'WIDTH', 'HEIGHT',
             'T1', 'T2'
         ]);
+        expect(Object.keys(info.blocks[1].arguments)).toEqual([
+            'SHAPE', 'N',
+            'PX', 'PY', 'PZ',
+            'RX', 'RY', 'RZ',
+            'SX', 'SY', 'SZ',
+            'INNER', 'OUTER', 'WIDTH', 'HEIGHT',
+            'T1', 'T2'
+        ]);
+        expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
+    });
+
+    test('draws a generated shape without returning asynchronous work to the VM', () => {
+        const pending = new Promise(() => {});
+        const manager = {
+            drawShape: jest.fn(() => pending),
+            runWithoutWaiting: jest.fn()
+        };
+        const vm = {runtime: {movieAssetManager: manager}};
+        const ObjectBlocks = createObjectBlocksClass(vm);
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks.shape({
+            HEIGHT: 80,
+            INNER: 25,
+            N: 5,
+            OUTER: 50,
+            PX: 10,
+            PY: 20,
+            PZ: 30,
+            RX: 1,
+            RY: 2,
+            RZ: 3,
+            SHAPE: 'star',
+            SX: 2,
+            SY: 3,
+            SZ: 4,
+            T1: 1,
+            T2: 4,
+            WIDTH: 120
+        }, util)).toBeUndefined();
+
+        expect(manager.drawShape).toHaveBeenCalledWith(util.target, {
+            height: 80,
+            n: 5,
+            playbackId: 'draw-block',
+            position: {x: 10, y: 20, z: 30},
+            radius: {inner: 25, outer: 50},
+            rotation: {x: 1, y: 2, z: 3},
+            scale: {x: 2, y: 3, z: 4},
+            shape: 'star',
+            time: {start: 1, end: 4},
+            width: 120
+        });
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });
 
     test('draws one complete object and never returns a promise to the VM', () => {

@@ -30,6 +30,7 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_switchmodelto',
     'looks_switchvideoto',
     'objects_draw',
+    'objects_shape',
     'objects_grouping',
     'sound_playatframe',
     'sound_playattime'

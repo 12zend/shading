@@ -1,6 +1,7 @@
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import installBlockNumberScrubbing from './block-number-scrubbing';
 import installObjectBlockDefinitions from './object-blocks-ui';
+import installPenFXBlockDefinitions from './pen-fx-ui';
 
 /**
  * Connect scratch blocks with the vm
@@ -10,6 +11,7 @@ import installObjectBlockDefinitions from './object-blocks-ui';
 export default function (vm) {
     const ScratchBlocks = LazyScratchBlocks.get();
     installObjectBlockDefinitions(ScratchBlocks, vm);
+    installPenFXBlockDefinitions(ScratchBlocks);
     installBlockNumberScrubbing(ScratchBlocks, () => {
         const manager = vm.runtime && vm.runtime.movieAssetManager;
         if (manager && typeof manager.requestTimelinePreviewRefresh === 'function') {

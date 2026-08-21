@@ -48,6 +48,7 @@ import {
     syncShaderCalls
 } from '../lib/my-blocks-shader-blocks';
 import installObjectBlockDefinitions from '../lib/object-blocks-ui';
+import installPenFXBlockDefinitions from '../lib/pen-fx-ui';
 import {SHADER_MARKER} from '../lib/my-blocks-shader';
 import installCollaborationManager from '../lib/collaboration-manager';
 
@@ -581,6 +582,7 @@ class Blocks extends React.Component {
         defineBlocks(categoryInfo.menus);
         defineBlocks(categoryInfo.blocks);
         if (categoryInfo.id === 'objects') installObjectBlockDefinitions(this.ScratchBlocks, this.props.vm);
+        if (categoryInfo.id === 'penfx') installPenFXBlockDefinitions(this.ScratchBlocks);
 
         // Update the toolbox with new blocks if possible
         const toolboxXML = this.getToolboxXML();

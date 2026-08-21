@@ -73,6 +73,88 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const COLOR_OVERLAY_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform vec3 u_color;
+    uniform float u_mix;
+
+    vec3 straightColor(vec4 p) {
+      return p.a > 0.00001 ? p.rgb / p.a : vec3(0.0);
+    }
+
+    void main() {
+      vec4 original = texture2D(u_image, v_uv);
+      vec3 overlaid = u_color;
+      vec3 color = mix(straightColor(original), overlaid, clamp(u_mix, 0.0, 1.0));
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0) * original.a, original.a);
+    }
+  `;
+
+  const GRADATION_OVERLAY_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform float u_direction;
+    uniform float u_mix;
+    uniform int u_stopCount;
+    uniform vec3 u_color0;
+    uniform vec3 u_color1;
+    uniform vec3 u_color2;
+    uniform vec3 u_color3;
+    uniform vec3 u_color4;
+    uniform vec3 u_color5;
+    uniform vec3 u_color6;
+    uniform vec3 u_color7;
+    uniform float u_position0;
+    uniform float u_position1;
+    uniform float u_position2;
+    uniform float u_position3;
+    uniform float u_position4;
+    uniform float u_position5;
+    uniform float u_position6;
+    uniform float u_position7;
+
+    vec3 straightColor(vec4 p) {
+      return p.a > 0.00001 ? p.rgb / p.a : vec3(0.0);
+    }
+
+    vec3 gradientColor(float position) {
+      if (u_stopCount <= 1 || position <= u_position0) return u_color0;
+      if (u_stopCount <= 2 || position <= u_position1) {
+        return mix(u_color0, u_color1, smoothstep(u_position0, u_position1, position));
+      }
+      if (u_stopCount <= 3 || position <= u_position2) {
+        return mix(u_color1, u_color2, smoothstep(u_position1, u_position2, position));
+      }
+      if (u_stopCount <= 4 || position <= u_position3) {
+        return mix(u_color2, u_color3, smoothstep(u_position2, u_position3, position));
+      }
+      if (u_stopCount <= 5 || position <= u_position4) {
+        return mix(u_color3, u_color4, smoothstep(u_position3, u_position4, position));
+      }
+      if (u_stopCount <= 6 || position <= u_position5) {
+        return mix(u_color4, u_color5, smoothstep(u_position4, u_position5, position));
+      }
+      if (u_stopCount <= 7 || position <= u_position6) {
+        return mix(u_color5, u_color6, smoothstep(u_position5, u_position6, position));
+      }
+      if (position <= u_position7) {
+        return mix(u_color6, u_color7, smoothstep(u_position6, u_position7, position));
+      }
+      return u_color7;
+    }
+
+    void main() {
+      vec4 original = texture2D(u_image, v_uv);
+      vec2 direction = vec2(sin(radians(u_direction)), cos(radians(u_direction)));
+      float position = clamp(dot(v_uv - vec2(0.5), direction) + 0.5, 0.0, 1.0);
+      vec3 color = mix(straightColor(original), gradientColor(position), clamp(u_mix, 0.0, 1.0));
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0) * original.a, original.a);
+    }
+  `;
+
   const RGB_SHIFT_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -1528,6 +1610,8 @@ const createPenFXClass = vm => {
       this.programSources = {
         copy: COPY_SHADER,
         color: COLOR_SHADER,
+        colorOverlay: COLOR_OVERLAY_SHADER,
+        gradationOverlay: GRADATION_OVERLAY_SHADER,
         rgbShift: RGB_SHIFT_SHADER,
         signal: SIGNAL_SHADER,
         gaussian: GAUSSIAN_SHADER,
@@ -2117,6 +2201,38 @@ const createPenFXClass = vm => {
         u_mul: uniforms.mul || [1, 1, 1],
         u_div: uniforms.div || [1, 1, 1]
       }, ['u_mode'], blendMode);
+    }
+
+    colorOverlay(overlayColor, mixValue, blendMode) {
+      if (this._isNoOp(mixValue, blendMode)) return;
+      const skin = this._prepare();
+      if (!skin) return;
+      this._renderEffect(skin, this._program('colorOverlay'), [{name: 'u_image', texture: this.textures[0]}], {
+        u_color: overlayColor,
+        u_mix: mixValue
+      }, [], blendMode);
+    }
+
+    gradationOverlay(stops, direction, mixValue, blendMode) {
+      if (this._isNoOp(mixValue, blendMode) || !Array.isArray(stops) || !stops.length) return;
+      const skin = this._prepare();
+      if (!skin) return;
+
+      const normalizedStops = stops.slice(0, 8);
+      const lastStop = normalizedStops[normalizedStops.length - 1];
+      const uniforms = {
+        u_direction: direction,
+        u_mix: mixValue,
+        u_stopCount: normalizedStops.length
+      };
+      for (let index = 0; index < 8; index++) {
+        const stop = normalizedStops[index] || lastStop;
+        uniforms[`u_color${index}`] = stop.color;
+        uniforms[`u_position${index}`] = stop.position;
+      }
+      this._renderEffect(skin, this._program('gradationOverlay'), [
+        {name: 'u_image', texture: this.textures[0]}
+      ], uniforms, ['u_stopCount'], blendMode);
     }
 
     _singlePass(program, uniforms, integerUniforms, blendMode) {
@@ -2793,6 +2909,33 @@ const createPenFXClass = vm => {
     return [rgb.r / 255, rgb.g / 255, rgb.b / 255];
   };
 
+  const DEFAULT_GRADIENT_STOPS = [
+    {color: '#000000', position: 0},
+    {color: '#ffffff', position: 1}
+  ];
+
+  const gradient = value => {
+    let descriptor = value;
+    if (typeof descriptor === 'string') {
+      try {
+        descriptor = JSON.parse(descriptor);
+      } catch (error) {
+        descriptor = null;
+      }
+    }
+    const sourceStops = descriptor && Array.isArray(descriptor.stops) ? descriptor.stops : DEFAULT_GRADIENT_STOPS;
+    const stops = sourceStops.map(stop => ({
+      color: color(stop && stop.color || '#000000'),
+      position: Math.min(1, Math.max(0, numberOr(stop && stop.position, 0)))
+    })).slice(0, 8);
+    if (!stops.length) return DEFAULT_GRADIENT_STOPS.map(stop => ({
+      color: color(stop.color),
+      position: stop.position
+    }));
+    stops.sort((a, b) => a.position - b.position);
+    return stops;
+  };
+
   const boolean = value => value === true || String(value).toLowerCase() === 'true';
 
   class PenFX {
@@ -2829,6 +2972,8 @@ const createPenFXClass = vm => {
           {opcode: 'autoExposure', blockType: BlockType.COMMAND, text: 'auto exposure target: [TARGET] min: [MIN] max: [MAX] mix: [MIX] %', arguments: {TARGET: {type: ArgumentType.NUMBER, defaultValue: 0.18}, MIN: {type: ArgumentType.NUMBER, defaultValue: 0.25}, MAX: {type: ArgumentType.NUMBER, defaultValue: 4}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'paletteSwap', blockType: BlockType.COMMAND, text: 'palette map shadows: [C1] [C2] [C3] highlights: [C4] mix: [MIX] %', arguments: {C1: {type: ArgumentType.COLOR, defaultValue: '#0b1026'}, C2: {type: ArgumentType.COLOR, defaultValue: '#3b426e'}, C3: {type: ArgumentType.COLOR, defaultValue: '#8a6f7d'}, C4: {type: ArgumentType.COLOR, defaultValue: '#f6d6bd'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'chromaKey', blockType: BlockType.COMMAND, text: 'chroma key: [KEY] tolerance: [TOLERANCE] softness: [SOFTNESS] use [BEHAVIOR] colors: [COLOR1] [COLOR2] mix: [MIX] %', arguments: {KEY: {type: ArgumentType.COLOR, defaultValue: '#00ff00'}, TOLERANCE: {type: ArgumentType.NUMBER, defaultValue: 0.1}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.05}, BEHAVIOR: {type: ArgumentType.STRING, menu: 'chromaBehavior'}, COLOR1: {type: ArgumentType.COLOR, defaultValue: '#000000'}, COLOR2: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'colorOverlay', blockType: BlockType.COMMAND, text: 'color overlay [COLOR] mix: [MIX] %', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'gradationOverlay', blockType: BlockType.COMMAND, text: 'gradation overlay [GRADIENT] dir: [DIR] mix: [MIX] %', arguments: {GRADIENT: {type: ArgumentType.STRING, defaultValue: '{"stops":[{"color":"#000000","position":0},{"color":"#ffffff","position":1}]}'}, DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           '---',
           {opcode: 'rgbShift', blockType: BlockType.COMMAND, text: 'rgb shift dir: [DIR] value: [VALUE] color: [COLOR] mix: [MIX] %', arguments: {DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, COLOR: {type: ArgumentType.STRING, menu: 'rgbPair'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'gaussianBlur', blockType: BlockType.COMMAND, text: 'gaussian blur type: [TYPE] value: [VALUE] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'gaussianType'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -3017,6 +3162,16 @@ const createPenFXClass = vm => {
 
     paletteSwap(args) {
       this._safe(engine => engine.paletteSwap([color(args.C1), color(args.C2), color(args.C3), color(args.C4)], mixAmount(args.MIX), this.blendMode));
+    }
+
+    colorOverlay(args) {
+      this._safe(engine => engine.colorOverlay(color(args.COLOR || '#ffffff'), mixAmount(args.MIX), this.blendMode));
+    }
+
+    gradationOverlay(args) {
+      this._safe(engine => engine.gradationOverlay(
+        gradient(args.GRADIENT), numberOr(args.DIR, 90), mixAmount(args.MIX), this.blendMode
+      ));
     }
 
     chromaKey(args) {

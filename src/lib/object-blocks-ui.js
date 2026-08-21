@@ -1,4 +1,13 @@
-import {DRAW_SOURCES, PRIMARY, SECONDARY, TERTIARY, decodeDrawAsset, encodeDrawAsset} from './object-blocks';
+import {
+    DRAW_SOURCES,
+    PRIMARY,
+    SECONDARY,
+    SHAPE_TYPES,
+    TERTIARY,
+    decodeDrawAsset,
+    encodeDrawAsset,
+    normalizeShapeType
+} from './object-blocks';
 import log from './log';
 
 import styles from './object-blocks-ui.css';
@@ -987,6 +996,57 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                 this.updateDrawSelection_(encodeDrawAsset(source, asset));
             }
             this.objectRestoringDrawMutation_ = false;
+        }
+    };
+
+    ScratchBlocks.Blocks.objects_shape = {
+        init: function () {
+            const shapeOptions = SHAPE_TYPES.map(shape => [shape, shape]);
+            this.appendDummyInput('SHAPE_INPUT')
+                .appendField('shape')
+                .appendField(
+                    new ScratchBlocks.FieldDropdown(shapeOptions, value => normalizeShapeType(value)),
+                    'SHAPE'
+                );
+            this.appendValueInput('N').appendField('n:');
+            const position = this.appendValueInput('PX').appendField('position x:');
+            position.objectStartRow_ = true;
+            this.appendValueInput('PY').appendField('y:');
+            this.appendValueInput('PZ').appendField('z:');
+            const rotation = this.appendValueInput('RX').appendField('rotation x:');
+            rotation.objectStartRow_ = true;
+            this.appendValueInput('RY').appendField('y:');
+            this.appendValueInput('RZ').appendField('z:');
+            const scale = this.appendValueInput('SX').appendField('scale x:');
+            scale.objectStartRow_ = true;
+            this.appendValueInput('SY').appendField('y:');
+            this.appendValueInput('SZ').appendField('z:');
+            const radius = this.appendValueInput('INNER').appendField('radius:');
+            radius.objectStartRow_ = true;
+            this.appendValueInput('OUTER');
+            const width = this.appendValueInput('WIDTH').appendField('width:');
+            width.objectStartRow_ = true;
+            this.appendValueInput('HEIGHT').appendField('height:');
+            const startTime = this.appendValueInput('T1').appendField('time:');
+            startTime.objectStartRow_ = true;
+            this.appendValueInput('T2').appendField('~');
+            this.setInputsInline(true);
+            this.setColour(PRIMARY, SECONDARY, TERTIARY);
+            this.setPreviousStatement(true);
+            this.setNextStatement(true);
+            this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_SQUARE);
+            this.renderCompute_ = makeObjectRowsRenderer(ScratchBlocks);
+            this.renderDrawRight_ = makeObjectRightEdgeRenderer(ScratchBlocks);
+            this.setOnChange(function () {
+                // ScratchBlocks binds onchange handlers to the block instance.
+                // eslint-disable-next-line no-invalid-this
+                const block = this;
+                const field = block.getField('SHAPE');
+                if (field) {
+                    const value = normalizeShapeType(block.getFieldValue('SHAPE'));
+                    if (value !== block.getFieldValue('SHAPE')) field.setValue(value);
+                }
+            });
         }
     };
 

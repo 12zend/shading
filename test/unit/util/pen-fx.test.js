@@ -51,6 +51,8 @@ describe('built-in Pen FX category', () => {
         expect(edgeDetection.arguments.BACKGROUND.defaultValue).toBe('#ffffff');
         expect(info.blocks.find(block => block.opcode === 'duplicate')).toBeDefined();
         expect(info.blocks.find(block => block.opcode === 'bufferStackSize')).toBeDefined();
+        expect(info.blocks.find(block => block.opcode === 'colorOverlay')).toBeDefined();
+        expect(info.blocks.find(block => block.opcode === 'gradationOverlay')).toBeDefined();
         const depthOfField = info.blocks.find(block => block.opcode === 'depthOfField');
         expect(depthOfField).toBeDefined();
         expect(depthOfField.arguments.FOCUS.defaultValue).toBe(480);
@@ -72,6 +74,36 @@ describe('built-in Pen FX category', () => {
         ]);
         expect(info.menus.fractalNoiseType.items).toEqual(['ブロック', 'リニア', 'ソフトリニア', 'スプライン']);
         expect(info.menus.fractalOverflowType.items).toEqual(['HDR', 'Clip', 'Soft clamp']);
+    });
+
+    test('routes RGB overlay and multi-stop gradation overlay without returning a promise', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {
+            colorOverlay: jest.fn(),
+            gradationOverlay: jest.fn()
+        };
+
+        expect(penFX.colorOverlay({COLOR: '#204080', MIX: 75})).toBeUndefined();
+        expect(penFX.gradationOverlay({
+            DIR: 30,
+            GRADIENT: JSON.stringify({
+                stops: [
+                    {color: '#ff0000', position: 0},
+                    {color: '#00ff00', position: 0.4},
+                    {color: '#0000ff', position: 1}
+                ]
+            }),
+            MIX: 60
+        })).toBeUndefined();
+
+        expect(penFX.engine.colorOverlay).toHaveBeenCalledWith([32 / 255, 64 / 255, 128 / 255], 0.75, 'normal');
+        expect(penFX.engine.gradationOverlay).toHaveBeenCalledWith([
+            {color: [1, 0, 0], position: 0},
+            {color: [0, 1, 0], position: 0.4},
+            {color: [0, 0, 1], position: 1}
+        ], 30, 0.6, 'normal');
     });
 
     test('routes fractal noise controls without returning a promise', () => {

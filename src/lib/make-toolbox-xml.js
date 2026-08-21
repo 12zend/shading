@@ -1045,10 +1045,38 @@ const objects = function (costumeName) {
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${number('T1', 0)}${number('T2', 10)}
         </block>
+        <block type="objects_shape">
+            <field name="SHAPE">polygon</field>
+            ${number('N', 6)}
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+            ${number('INNER', 50)}${number('OUTER', 100)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${number('T1', 0)}${number('T2', 10)}
+        </block>
         <sep gap="36"/>
         <block type="objects_grouping"/>
     </category>
     `;
+};
+
+const withPenFXGradientField = xml => {
+    if (!xml) return xml;
+    const gradient = xmlEscape(JSON.stringify({
+        stops: [
+            {color: '#000000', position: 0},
+            {color: '#ffffff', position: 1}
+        ]
+    }));
+    return xml.replace(
+        /<block type="penfx_gradationOverlay"(?:\/>|>[\s\S]*?<\/block>)/,
+        `<block type="penfx_gradationOverlay">
+            <field name="GRADIENT">${gradient}</field>
+            <value name="DIR"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
+            <value name="MIX"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
+        </block>`
+    );
 };
 
 // eslint-disable-next-line max-len
@@ -1099,8 +1127,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
     const looksXML = moveCategory('looks') ||
         looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
-    const objectsXML = moveCategory('objects') ? objects(costumeName) : undefined;
-    const penFXXML = moveCategory('penfx');
+    const objectsXML = moveCategory('objects') ? objects(costumeName) : null;
+    const penFXXML = withPenFXGradientField(moveCategory('penfx'));
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
@@ -1126,6 +1154,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         ...(objectsXML ? [objectsXML, gap] : []),
         motionXML, gap,
         looksXML, gap,
+        ...(penXML ? [penXML, gap] : []),
+        ...(penFXXML ? [penFXXML, gap] : []),
         soundXML, gap,
         eventsXML, gap,
         controlXML, gap,
@@ -1133,9 +1163,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         operatorsXML, gap,
         variablesXML, gap,
         myBlocksXML, gap,
-        myBlocksShaderXML,
-        ...(penXML ? [penXML, gap] : []),
-        ...(penFXXML ? [penFXXML, gap] : [])
+        myBlocksShaderXML
     ];
 
     if (turbowarpXML) {

@@ -1450,6 +1450,58 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
     });
 
+    test.each(['polygon', 'star', 'flower'])('renders the %s shape directly into the Pen layer', shape => {
+        const manager = makeManager();
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn()
+        };
+        const canvas = {
+            getContext: jest.fn(() => context)
+        };
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            setSize: jest.fn(),
+            visible: false
+        };
+
+        try {
+            expect(manager.drawShape(target, {
+                height: 80,
+                n: 5,
+                position: {x: 10, y: 20, z: 480},
+                radius: {inner: 25, outer: 50},
+                rotation: {x: 0, y: 0, z: 0},
+                scale: {x: 1, y: 1, z: 1},
+                shape,
+                width: 120
+            })).toBeUndefined();
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(canvas.width).toBe(120);
+        expect(canvas.height).toBe(80);
+        expect(context.beginPath).toHaveBeenCalledTimes(1);
+        expect(context.fill).toHaveBeenCalledTimes(1);
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(manager.getTargetState(target).penOnly).toBe(true);
+    });
+
     test.each([
         [0.99, false],
         [1, true],

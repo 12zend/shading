@@ -47,6 +47,7 @@ describe('Movie project format', () => {
     test('marks object drawing and grouping as Movie blocks', () => {
         const json = project({
             draw: block('objects_draw'),
+            shape: block('objects_shape'),
             grouping: block('objects_grouping')
         });
 

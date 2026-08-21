@@ -1,0 +1,209 @@
+@import "../css/colors.css";
+@import "../css/units.css";
+
+.gradient-picker {
+    width: min(30rem, calc(100vw - 2rem));
+    max-height: min(32rem, calc(100vh - 4rem));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: calc($form-radius * 2);
+    background: $ui-modal-background;
+    color: $text-primary;
+    font-family: inherit;
+}
+
+.gradient-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1rem 0.7rem;
+}
+
+.gradient-heading {
+    margin: 0 0 0.18rem;
+    color: $text-primary;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.gradient-helper {
+    margin: 0;
+    color: $text-primary-transparent;
+    font-size: 0.7rem;
+    line-height: 1.35;
+}
+
+.gradient-close-button,
+.gradient-add-button,
+.gradient-remove-button {
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.gradient-close-button {
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: $form-radius;
+    background: transparent;
+    color: $text-primary-transparent;
+}
+
+.gradient-close-button:hover {
+    background: $ui-tertiary;
+    color: $text-primary;
+}
+
+.gradient-close-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
+.gradient-preview {
+    min-height: 4.5rem;
+    flex: 0 0 auto;
+    margin: 0 1rem 0.8rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: linear-gradient(90deg, #000000, #ffffff);
+    box-shadow: 0 0.25rem 0.7rem rgba(25, 36, 70, 0.12);
+}
+
+.gradient-stops {
+    min-height: 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0 1rem 0.8rem;
+    overflow-y: auto;
+}
+
+.gradient-stop {
+    min-height: 2.5rem;
+    display: grid;
+    grid-template-columns: 3.6rem 2.1rem minmax(5rem, 1fr) 2.6rem auto;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.gradient-stop-label,
+.gradient-position-label {
+    color: $text-primary-transparent;
+    font-size: 0.68rem;
+    line-height: 1;
+}
+
+.gradient-position-label {
+    text-align: right;
+}
+
+.gradient-color-input {
+    width: 2rem;
+    height: 2rem;
+    padding: 0.12rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    cursor: pointer;
+}
+
+.gradient-position-input {
+    width: 100%;
+    accent-color: #6b56d9;
+}
+
+.gradient-add-button {
+    min-height: 2rem;
+    padding: 0 0.75rem;
+    border-radius: $form-radius;
+    background: #6b56d9;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.gradient-add-button:hover {
+    background: #5945c2;
+}
+
+.gradient-add-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.gradient-remove-button {
+    min-height: 1.8rem;
+    padding: 0 0.45rem;
+    border-radius: $form-radius;
+    background: transparent;
+    color: $text-primary-transparent;
+    font-size: 0.65rem;
+}
+
+.gradient-remove-button:hover {
+    background: $error-light;
+    color: $error-primary;
+}
+
+.gradient-footer {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    padding: 0 1rem 1rem;
+}
+
+.gradient-close-button:focus-visible,
+.gradient-add-button:focus-visible,
+.gradient-remove-button:focus-visible,
+.gradient-color-input:focus-visible,
+.gradient-position-input:focus-visible {
+    outline: 3px solid #a49af0;
+    outline-offset: 2px;
+}
+
+@media (max-width: 36rem) {
+    .gradient-picker {
+        width: min(calc(100vw - 1rem), 30rem);
+    }
+
+    .gradient-header {
+        padding: 0.75rem;
+    }
+
+    .gradient-helper {
+        display: none;
+    }
+
+    .gradient-preview {
+        margin-right: 0.75rem;
+        margin-left: 0.75rem;
+    }
+
+    .gradient-stops {
+        padding-right: 0.75rem;
+        padding-left: 0.75rem;
+    }
+
+    .gradient-stop {
+        grid-template-columns: 3.2rem 2.1rem minmax(4rem, 1fr) 2.4rem;
+    }
+
+    .gradient-remove-button {
+        grid-column: 3 / -1;
+        justify-self: end;
+    }
+
+    .gradient-footer {
+        padding-right: 0.75rem;
+        padding-left: 0.75rem;
+    }
+}

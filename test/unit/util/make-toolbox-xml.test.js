@@ -7,6 +7,9 @@ describe('Movie toolbox categories', () => {
 
         expect(toolbox).toContain('<category name="Objects" id="objects"');
         expect(toolbox).toContain('<block type="objects_draw">');
+        expect(toolbox).toContain('<block type="objects_shape">');
+        expect(toolbox).toContain('<field name="SHAPE">polygon</field>');
+        expect(toolbox).toContain('<value name="INNER"><shadow type="math_number"><field name="NUM">50</field>');
         expect(toolbox).toContain('<value name="FRAME"><shadow type="math_number"><field name="NUM">1</field>');
         expect(toolbox).toContain('<value name="SPEED"><shadow type="math_number"><field name="NUM">1</field>');
         expect(toolbox).toContain('<value name="VOLUME"><shadow type="math_number"><field name="NUM">100</field>');
@@ -25,7 +28,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="T2"><shadow type="math_number"><field name="NUM">10</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
-        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="objects"'));
+        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="looks"'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="sound"'));
     });
 

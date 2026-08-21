@@ -7,6 +7,7 @@ const PRIMARY = '#4968D4';
 const SECONDARY = '#3E59B8';
 const TERTIARY = '#334A99';
 const DRAW_SOURCES = ['costume', 'video', 'text', 'model'];
+const SHAPE_TYPES = ['polygon', 'star', 'flower'];
 
 const encodeDrawAsset = (source, asset) => `${source}:${asset}`;
 
@@ -26,6 +27,11 @@ const decodeDrawAsset = (value, fallbackSource = 'costume') => {
         asset: stringValue,
         source: String(fallbackSource || 'costume').toLowerCase()
     };
+};
+
+const normalizeShapeType = value => {
+    const shape = String(value || '').toLowerCase();
+    return SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
 };
 
 const trackPendingDraw = (pendingDraw, util, manager) => {
@@ -120,12 +126,44 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     }
                 },
                 {
+                    opcode: 'shape',
+                    blockType: BlockType.COMMAND,
+                    text: 'shape [SHAPE] n: [N] position x: [PX] y: [PY] z: [PZ] ' +
+                        'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
+                        'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2]',
+                    arguments: {
+                        SHAPE: {type: ArgumentType.STRING, menu: 'shapeType', defaultValue: 'polygon'},
+                        N: numberArgument(6),
+                        PX: numberArgument(0),
+                        PY: numberArgument(0),
+                        PZ: numberArgument(480),
+                        RX: numberArgument(0),
+                        RY: numberArgument(0),
+                        RZ: numberArgument(0),
+                        SX: numberArgument(1),
+                        SY: numberArgument(1),
+                        SZ: numberArgument(1),
+                        INNER: numberArgument(50),
+                        OUTER: numberArgument(100),
+                        WIDTH: numberArgument(100),
+                        HEIGHT: numberArgument(100),
+                        T1: numberArgument(0),
+                        T2: numberArgument(10)
+                    }
+                },
+                {
                     opcode: 'grouping',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 2,
                     text: ['grouping', 'effects']
                 }
-            ]
+            ],
+            menus: {
+                shapeType: {
+                    acceptReporters: true,
+                    items: SHAPE_TYPES
+                }
+            }
         };
     }
 
@@ -156,6 +194,30 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawObject === 'function') {
             trackPendingDraw(manager.drawObject(util.target, context), util, manager);
+        }
+    }
+
+    shape (args, util) {
+        const playbackId = util && util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : '';
+        const context = {
+            height: args.HEIGHT,
+            n: args.N,
+            playbackId,
+            position: {x: args.PX, y: args.PY, z: args.PZ},
+            radius: {inner: args.INNER, outer: args.OUTER},
+            rotation: {x: args.RX, y: args.RY, z: args.RZ},
+            scale: {x: args.SX, y: args.SY, z: args.SZ},
+            shape: normalizeShapeType(args.SHAPE),
+            width: args.WIDTH
+        };
+        if (Object.prototype.hasOwnProperty.call(args, 'T1') ||
+            Object.prototype.hasOwnProperty.call(args, 'T2')) {
+            context.time = {start: args.T1, end: args.T2};
+        }
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.drawShape === 'function') {
+            trackPendingDraw(manager.drawShape(util.target, context), util, manager);
         }
     }
 
@@ -212,8 +274,10 @@ export {
     SECONDARY,
     TERTIARY,
     DRAW_SOURCES,
+    SHAPE_TYPES,
     encodeDrawAsset,
     decodeDrawAsset,
+    normalizeShapeType,
     createObjectBlocksClass,
     installObjectBlocks as default
 };

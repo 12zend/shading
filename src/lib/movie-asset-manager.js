@@ -206,6 +206,60 @@ const normalizeRotationOrder = value => {
 
 const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
 
+const SHAPE_TYPES = ['polygon', 'star', 'flower'];
+
+const normalizeShapeType = value => {
+    const shape = String(value || '').toLowerCase();
+    return SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
+};
+
+const createShapeBitmap = configuration => {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+    const width = Math.max(2, Math.min(4096, Math.round(Math.abs(toNumber(configuration.width, 100)))));
+    const height = Math.max(2, Math.min(4096, Math.round(Math.abs(toNumber(configuration.height, 100)))));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext && canvas.getContext('2d');
+    if (!context) return null;
+
+    canvas.width = width;
+    canvas.height = height;
+    const radius = configuration.radius || {};
+    const outerRadius = Math.max(0.001, Math.abs(toNumber(radius.outer, 50)));
+    const innerRadius = Math.min(
+        outerRadius,
+        Math.max(0, Math.abs(toNumber(radius.inner, outerRadius * 0.5)))
+    );
+    const scale = Math.min(width, height) / (outerRadius * 2);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const shape = normalizeShapeType(configuration.shape);
+    const sides = Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6)))));
+    const pointCount = shape === 'polygon' ? sides : shape === 'flower' ? Math.max(24, sides * 12) : sides * 2;
+
+    const radiusAt = angle => {
+        if (shape === 'polygon') return outerRadius;
+        if (shape === 'star') return angle % 2 === 0 ? outerRadius : innerRadius;
+        const petal = (Math.cos((angle / pointCount) * sides * Math.PI * 2) + 1) / 2;
+        return innerRadius + ((outerRadius - innerRadius) * Math.pow(petal, 0.45));
+    };
+
+    context.clearRect(0, 0, width, height);
+    context.beginPath();
+    for (let index = 0; index < pointCount; index++) {
+        const angle = (-Math.PI / 2) + ((index / pointCount) * Math.PI * 2);
+        const distance = radiusAt(index) * scale;
+        const x = centerX + (Math.cos(angle) * distance);
+        const y = centerY + (Math.sin(angle) * distance);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+    }
+    context.closePath();
+    context.fillStyle = '#ffffff';
+    context.fill();
+    canvas.reusable = false;
+    return canvas;
+};
+
 const cloneScale = scale => ({
     x: normalizeScale(scale && scale.x),
     y: normalizeScale(scale && scale.y),
@@ -2379,7 +2433,7 @@ class MovieAssetManager extends EventEmitter {
         const state = this.getTargetState(target);
         // Objects video is a Pen source. Keep its drawable available for stamping, but do not leave the
         // unprocessed video visible above the Pen layer where it would cover the grouped Pen FX result.
-        state.penOnly = source === 'video';
+        state.penOnly = source === 'video' || source === 'shape';
         // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
         // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
         // the corresponding Motion and Looks blocks, including Z perspective.
@@ -2705,6 +2759,36 @@ class MovieAssetManager extends EventEmitter {
         if (state.objectDrawPromise) return this.queueObjectDraw(target, drawConfiguration);
         if (source === 'model') return this.queueObjectDraw(target, drawConfiguration);
         return this.performObjectDraw(target, drawConfiguration);
+    }
+
+    renderShape (target, configuration = {}) {
+        if (!target || target.isStage || !this.runtime.renderer) return;
+        const bitmap = createShapeBitmap(configuration);
+        if (!bitmap) return;
+
+        const state = this.getTargetState(target);
+        state.renderVersion++;
+        state.requestedMode = 'shape';
+        state.pendingVideoFrame = null;
+        state.textQueue.length = 0;
+        state.modelRenderVersion++;
+        state.modelScene = [];
+        state.modelAssetId = null;
+
+        this.applyObjectDrawConfiguration(target, configuration);
+        this.applyBitmap(target, bitmap, 'shape', null, true);
+        this.finishObjectDraw(target, configuration, 'shape');
+    }
+
+    drawShape (target, configuration = {}) {
+        if (!target || target.isStage) return;
+        if (configuration.time) {
+            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
+            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            if (currentTime < startTime || currentTime > endTime) return;
+        }
+        return this.renderShape(target, configuration);
     }
 
     replaceModelScene (target, requestedModel) {
