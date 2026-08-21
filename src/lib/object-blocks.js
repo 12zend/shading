@@ -122,7 +122,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         WIDTH: numberArgument(100),
                         HEIGHT: numberArgument(100),
                         T1: numberArgument(0),
-                        T2: numberArgument(10)
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -151,7 +151,84 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
                         OPACITY: numberArgument(100),
                         T1: numberArgument(0),
-                        T2: numberArgument(10)
+                        T2: numberArgument(Infinity)
+                    }
+                },
+                {
+                    opcode: 'arc',
+                    blockType: BlockType.COMMAND,
+                    text: 'arc position x: [PX] y: [PY] z: [PZ] ' +
+                        'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
+                        'radius: [INNER] [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
+                        'time: [T1] ~ [T2]\ncolor: [COLOR] opacity: [OPACITY] %',
+                    arguments: {
+                        PX: numberArgument(0),
+                        PY: numberArgument(0),
+                        PZ: numberArgument(480),
+                        RX: numberArgument(0),
+                        RY: numberArgument(0),
+                        RZ: numberArgument(0),
+                        SX: numberArgument(1),
+                        SY: numberArgument(1),
+                        SZ: numberArgument(1),
+                        INNER: numberArgument(50),
+                        OUTER: numberArgument(100),
+                        START: {type: ArgumentType.ANGLE, defaultValue: 0},
+                        END: {type: ArgumentType.ANGLE, defaultValue: 360},
+                        WIDTH: numberArgument(100),
+                        HEIGHT: numberArgument(100),
+                        COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
+                        OPACITY: numberArgument(100),
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
+                    }
+                },
+                {
+                    opcode: 'circularSegment',
+                    blockType: BlockType.COMMAND,
+                    text: 'circular segment position x: [PX] y: [PY] z: [PZ] ' +
+                        'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
+                        'size: [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
+                        'time: [T1] ~ [T2]\ncolor: [COLOR] opacity: [OPACITY] %',
+                    arguments: {
+                        PX: numberArgument(0),
+                        PY: numberArgument(0),
+                        PZ: numberArgument(480),
+                        RX: numberArgument(0),
+                        RY: numberArgument(0),
+                        RZ: numberArgument(0),
+                        SX: numberArgument(1),
+                        SY: numberArgument(1),
+                        SZ: numberArgument(1),
+                        OUTER: numberArgument(100),
+                        START: {type: ArgumentType.ANGLE, defaultValue: 0},
+                        END: {type: ArgumentType.ANGLE, defaultValue: 360},
+                        WIDTH: numberArgument(100),
+                        HEIGHT: numberArgument(100),
+                        COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
+                        OPACITY: numberArgument(100),
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
+                    }
+                },
+                {
+                    opcode: 'line',
+                    blockType: BlockType.COMMAND,
+                    text: 'line position1 x: [P1X] y: [P1Y] z: [P1Z] ' +
+                        'position2 x: [P2X] y: [P2Y] z: [P2Z] thickness: [THICKNESS] ' +
+                        'time: [T1] ~ [T2]\ncolor: [COLOR] opacity: [OPACITY] %',
+                    arguments: {
+                        P1X: numberArgument(0),
+                        P1Y: numberArgument(0),
+                        P1Z: numberArgument(480),
+                        P2X: numberArgument(100),
+                        P2Y: numberArgument(100),
+                        P2Z: numberArgument(480),
+                        THICKNESS: numberArgument(5),
+                        COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
+                        OPACITY: numberArgument(100),
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -224,6 +301,57 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (manager && typeof manager.drawShape === 'function') {
             trackPendingDraw(manager.drawShape(util.target, context), util, manager);
         }
+    }
+
+    drawProceduralShape (shape, args, util, configuration = {}) {
+        const playbackId = util && util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : '';
+        const context = Object.assign({
+            playbackId,
+            shape,
+            color: args.COLOR,
+            opacity: args.OPACITY
+        }, configuration);
+        if (Object.prototype.hasOwnProperty.call(args, 'T1') ||
+            Object.prototype.hasOwnProperty.call(args, 'T2')) {
+            context.time = {start: args.T1, end: args.T2};
+        }
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.drawShape === 'function') {
+            trackPendingDraw(manager.drawShape(util.target, context), util, manager);
+        }
+    }
+
+    arc (args, util) {
+        this.drawProceduralShape('arc', args, util, {
+            height: args.HEIGHT,
+            position: {x: args.PX, y: args.PY, z: args.PZ},
+            radius: {inner: args.INNER, outer: args.OUTER},
+            rotation: {x: args.RX, y: args.RY, z: args.RZ},
+            scale: {x: args.SX, y: args.SY, z: args.SZ},
+            angle: {start: args.START, end: args.END},
+            width: args.WIDTH
+        });
+    }
+
+    circularSegment (args, util) {
+        this.drawProceduralShape('circular segment', args, util, {
+            height: args.HEIGHT,
+            position: {x: args.PX, y: args.PY, z: args.PZ},
+            size: args.OUTER,
+            rotation: {x: args.RX, y: args.RY, z: args.RZ},
+            scale: {x: args.SX, y: args.SY, z: args.SZ},
+            angle: {start: args.START, end: args.END},
+            width: args.WIDTH
+        });
+    }
+
+    line (args, util) {
+        this.drawProceduralShape('line', args, util, {
+            position1: {x: args.P1X, y: args.P1Y, z: args.P1Z},
+            position2: {x: args.P2X, y: args.P2Y, z: args.P2Z},
+            thickness: args.THICKNESS
+        });
     }
 
     grouping (args, util) {

@@ -1030,6 +1030,9 @@ const objects = function (costumeName) {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
+    const angle = (name, value) => (
+        `<value name="${name}"><shadow type="math_angle"><field name="NUM">${value}</field></shadow></value>`
+    );
     return `
     <category name="Objects" id="objects" colour="#4968D4" secondaryColour="#334A99">
         <block type="objects_draw">
@@ -1043,7 +1046,7 @@ const objects = function (costumeName) {
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
             ${number('SIZE', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 10)}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
         </block>
         <block type="objects_shape">
             <field name="SHAPE">polygon</field>
@@ -1053,7 +1056,37 @@ const objects = function (costumeName) {
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
             ${number('INNER', 50)}${number('OUTER', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 10)}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('OPACITY', 100)}
+        </block>
+        <block type="objects_arc">
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+            ${number('INNER', 50)}${number('OUTER', 100)}
+            ${angle('START', 0)}${angle('END', 360)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('OPACITY', 100)}
+        </block>
+        <block type="objects_circularSegment">
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+            ${number('OUTER', 100)}
+            ${angle('START', 0)}${angle('END', 360)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('OPACITY', 100)}
+        </block>
+        <block type="objects_line">
+            ${number('P1X', 0)}${number('P1Y', 0)}${number('P1Z', 480)}
+            ${number('P2X', 100)}${number('P2Y', 100)}${number('P2Z', 480)}
+            ${number('THICKNESS', 5)}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
             <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
             ${number('OPACITY', 100)}
         </block>

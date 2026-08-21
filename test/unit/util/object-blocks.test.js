@@ -351,7 +351,9 @@ describe('Objects blocks', () => {
         const blocks = new ObjectBlocks();
         const info = blocks.getInfo();
 
-        expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual(['draw', 'shape', 'grouping']);
+        expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
+            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping'
+        ]);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
@@ -371,6 +373,44 @@ describe('Objects blocks', () => {
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
         expect(info.blocks[1].text).toContain('\ncolor: [COLOR] opacity: [OPACITY] %');
+        expect(info.blocks[0].arguments.T2.defaultValue).toBe(Infinity);
+        expect(info.blocks[1].arguments.T2.defaultValue).toBe(Infinity);
+        expect(info.blocks[2].arguments).toEqual(expect.objectContaining({
+            START: {type: expect.anything(), defaultValue: 0},
+            END: {type: expect.anything(), defaultValue: 360},
+            T1: {type: expect.anything(), defaultValue: 0},
+            T2: {type: expect.anything(), defaultValue: Infinity}
+        }));
+    });
+
+    test.each([
+        ['arc', {
+            INNER: 25, OUTER: 50, START: 10, END: 120,
+            PX: 10, PY: 20, PZ: 30, RX: 1, RY: 2, RZ: 3, SX: 2, SY: 3, SZ: 4,
+            WIDTH: 120, HEIGHT: 80
+        }],
+        ['circularSegment', {
+            OUTER: 50, START: 10, END: 120,
+            PX: 10, PY: 20, PZ: 30, RX: 1, RY: 2, RZ: 3, SX: 2, SY: 3, SZ: 4,
+            WIDTH: 120, HEIGHT: 80
+        }],
+        ['line', {
+            P1X: 10, P1Y: 20, P1Z: 30, P2X: 40, P2Y: 50, P2Z: 60, THICKNESS: 4
+        }]
+    ])('draws the %s shape without returning asynchronous work', (opcode, args) => {
+        const pending = new Promise(() => {});
+        const manager = {drawShape: jest.fn(() => pending), runWithoutWaiting: jest.fn()};
+        const ObjectBlocks = createObjectBlocksClass({runtime: {movieAssetManager: manager}});
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks[opcode](Object.assign({
+            COLOR: '#ff0000', OPACITY: 65, T1: 0, T2: Infinity
+        }, args), util)).toBeUndefined();
+        expect(manager.drawShape).toHaveBeenCalledWith(util.target, expect.objectContaining({
+            shape: opcode === 'circularSegment' ? 'circular segment' : opcode
+        }));
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });
 
     test('draws a generated shape without returning asynchronous work to the VM', () => {

@@ -207,12 +207,45 @@ const normalizeRotationOrder = value => {
 const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
 
 const SHAPE_TYPES = ['polygon', 'star', 'flower'];
+const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'line']);
 const MAX_SHAPE_SIZE = 4096;
 const SHAPE_RADIUS_SCALE = 0.5;
 
 const normalizeShapeType = value => {
     const shape = String(value || '').toLowerCase();
-    return SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
+    return PROCEDURAL_SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
+};
+
+const createLineBitmap = configuration => {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+    const point1 = configuration.position1 || {};
+    const point2 = configuration.position2 || {};
+    const thickness = Math.max(0.001, Math.abs(toNumber(configuration.thickness, 5)));
+    const padding = thickness / 2;
+    const width = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(
+        Math.abs(toNumber(point2.x) - toNumber(point1.x)) + (padding * 2)
+    )));
+    const height = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(
+        Math.abs(toNumber(point2.y) - toNumber(point1.y)) + (padding * 2)
+    )));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext && canvas.getContext('2d');
+    if (!context) return null;
+    canvas.width = width;
+    canvas.height = height;
+    const minX = Math.min(toNumber(point1.x), toNumber(point2.x));
+    const minY = Math.min(toNumber(point1.y), toNumber(point2.y));
+    context.clearRect(0, 0, width, height);
+    context.beginPath();
+    context.moveTo(toNumber(point1.x) - minX + padding, toNumber(point1.y) - minY + padding);
+    context.lineTo(toNumber(point2.x) - minX + padding, toNumber(point2.y) - minY + padding);
+    context.lineWidth = thickness;
+    context.strokeStyle = typeof configuration.color === 'string' && configuration.color ?
+        configuration.color : '#ffffff';
+    context.globalAlpha = clamp(toNumber(configuration.opacity, 100), 0, 100) / 100;
+    context.stroke();
+    canvas.reusable = false;
+    return canvas;
 };
 
 const createShapeBitmap = configuration => {
@@ -227,14 +260,21 @@ const createShapeBitmap = configuration => {
     const context = canvas.getContext && canvas.getContext('2d');
     if (!context) return null;
 
+    const shape = normalizeShapeType(configuration.shape);
+    if (shape === 'line') return null;
     const radius = configuration.radius || {};
     const outerRadius = Math.min(
         MAX_SHAPE_SIZE,
-        Math.max(0.001, Math.abs(toNumber(radius.outer, 100)))
+        Math.max(0.001, Math.abs(toNumber(
+            shape === 'circular segment' ? configuration.size : radius.outer, 100
+        )))
     );
     const innerRadius = Math.min(
         outerRadius,
-        Math.max(0, Math.abs(toNumber(radius.inner, outerRadius * 0.5)))
+        Math.max(0, Math.abs(toNumber(
+            shape === 'circular segment' ? 0 : radius.inner,
+            shape === 'circular segment' ? 0 : outerRadius * 0.5
+        )))
     );
     // Keep radius in the same coordinate system as the block's default 100px outer radius. The bitmap grows
     // when a larger radius is requested instead of normalizing every shape back to the requested dimensions.
@@ -246,7 +286,6 @@ const createShapeBitmap = configuration => {
     canvas.height = height;
     const centerX = width / 2;
     const centerY = height / 2;
-    const shape = normalizeShapeType(configuration.shape);
     const sides = Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6)))));
     const pointCount = shape === 'polygon' ? sides : shape === 'flower' ? Math.max(24, sides * 12) : sides * 2;
 
@@ -272,8 +311,24 @@ const createShapeBitmap = configuration => {
 
     context.clearRect(0, 0, width, height);
     context.beginPath();
-    drawPath(pointCount, radiusAt);
-    if (innerRadius > 0) drawPath(sides, () => innerRadius, true);
+    if (shape === 'arc' || shape === 'circular segment') {
+        const angle = configuration.angle || {};
+        const start = (toNumber(angle.start, 0) - 90) * Math.PI / 180;
+        const end = (toNumber(angle.end, 360) - 90) * Math.PI / 180;
+        const anticlockwise = end < start;
+        const outerStartX = centerX + (Math.cos(start) * outerRadius * scale);
+        const outerStartY = centerY + (Math.sin(start) * outerRadius * scale);
+        context.moveTo(outerStartX, outerStartY);
+        context.arc(centerX, centerY, outerRadius * scale, start, end, anticlockwise);
+        if (shape === 'arc' && innerRadius > 0) {
+            context.arc(centerX, centerY, innerRadius * scale, end, start, !anticlockwise);
+        } else {
+            context.lineTo(outerStartX, outerStartY);
+        }
+    } else {
+        drawPath(pointCount, radiusAt);
+        if (innerRadius > 0) drawPath(sides, () => innerRadius, true);
+    }
     context.fillStyle = typeof configuration.color === 'string' && configuration.color ?
         configuration.color : '#ffffff';
     context.globalAlpha = clamp(toNumber(configuration.opacity, 100), 0, 100) / 100;
@@ -2785,7 +2840,27 @@ class MovieAssetManager extends EventEmitter {
 
     renderShape (target, configuration = {}) {
         if (!target || target.isStage || !this.runtime.renderer) return;
-        const bitmap = createShapeBitmap(configuration);
+        const shape = normalizeShapeType(configuration.shape);
+        let drawConfiguration = configuration;
+        let bitmap;
+        if (shape === 'line') {
+            const point1 = configuration.position1 || {};
+            const point2 = configuration.position2 || {};
+            drawConfiguration = {
+                ...configuration,
+                position: {
+                    x: (toNumber(point1.x) + toNumber(point2.x)) / 2,
+                    y: (toNumber(point1.y) + toNumber(point2.y)) / 2,
+                    z: (toNumber(point1.z) + toNumber(point2.z)) / 2
+                },
+                rotation: {x: 0, y: 0, z: 0},
+                scale: {x: 1, y: 1, z: 1},
+                size: 100
+            };
+            bitmap = createLineBitmap(drawConfiguration);
+        } else {
+            bitmap = createShapeBitmap({...configuration, shape});
+        }
         if (!bitmap) return;
 
         const state = this.getTargetState(target);
@@ -2797,10 +2872,10 @@ class MovieAssetManager extends EventEmitter {
         state.modelScene = [];
         state.modelAssetId = null;
 
-        this.applyObjectDrawConfiguration(target, configuration);
+        this.applyObjectDrawConfiguration(target, drawConfiguration);
         // Shapes are temporary bitmap sources for Pen, not visible sprite costumes.
         this.applyBitmap(target, bitmap, 'shape', null, true);
-        this.finishObjectDraw(target, configuration, 'shape');
+        this.finishObjectDraw(target, drawConfiguration, 'shape');
     }
 
     drawShape (target, configuration = {}) {

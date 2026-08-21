@@ -1,7 +1,7 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
-    test('offers one complete object block and grouping block in a dedicated category', () => {
+    test('offers complete object and procedural shape blocks in a dedicated category', () => {
         const categories = [{id: 'objects', xml: '<category id="objects" />'}];
         const toolbox = makeToolboxXML(false, false, 'target', categories, 'costume1');
 
@@ -27,7 +27,11 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="SZ">');
         expect(toolbox).toContain('<value name="HEIGHT">');
         expect(toolbox).toContain('<value name="T1"><shadow type="math_number"><field name="NUM">0</field>');
-        expect(toolbox).toContain('<value name="T2"><shadow type="math_number"><field name="NUM">10</field>');
+        expect(toolbox).toContain('<value name="T2"><shadow type="math_number"><field name="NUM">Infinity</field>');
+        expect(toolbox).toContain('<block type="objects_arc">');
+        expect(toolbox).toContain('<block type="objects_circularSegment">');
+        expect(toolbox).toContain('<block type="objects_line">');
+        expect(toolbox).toContain('<value name="START"><shadow type="math_angle"><field name="NUM">0</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="looks"'));

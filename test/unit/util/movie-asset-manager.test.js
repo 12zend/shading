@@ -1547,6 +1547,83 @@ describe('MovieAssetManager rendering performance', () => {
         expect(context.fill).toHaveBeenCalledWith('evenodd');
     });
 
+    test.each(['arc', 'circular segment'])('renders the %s angle range directly into the Pen layer', shape => {
+        const manager = makeManager();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            arc: jest.fn(),
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            visible: false
+        };
+
+        try {
+            manager.drawShape(target, {
+                angle: {start: 30, end: 180},
+                height: 100,
+                radius: {inner: 20, outer: 80},
+                shape,
+                width: 100
+            });
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(context.arc).toHaveBeenCalled();
+        expect(context.fill).toHaveBeenCalledWith('evenodd');
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+    });
+
+    test('renders a line between its two positions with the requested thickness', () => {
+        const manager = makeManager();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn(),
+            stroke: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            visible: false
+        };
+
+        try {
+            manager.drawShape(target, {
+                position1: {x: 10, y: 20, z: 30},
+                position2: {x: 110, y: 80, z: 30},
+                shape: 'line',
+                thickness: 6
+            });
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(canvas.width).toBe(106);
+        expect(canvas.height).toBe(66);
+        expect(context.stroke).toHaveBeenCalledTimes(1);
+        expect(context.lineWidth).toBe(6);
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+    });
+
     test.each([
         [0.99, false],
         [1, true],

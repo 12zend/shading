@@ -1055,6 +1055,92 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
         }
     };
 
+    /* eslint-disable no-invalid-this */
+    const installProceduralShapeBlock = (opcode, setup) => {
+        ScratchBlocks.Blocks[opcode] = {
+            init: function () {
+                setup.call(this);
+                this.setInputsInline(true);
+                this.setColour(PRIMARY, SECONDARY, TERTIARY);
+                this.setPreviousStatement(true);
+                this.setNextStatement(true);
+                this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_SQUARE);
+                this.renderCompute_ = makeObjectRowsRenderer(ScratchBlocks);
+                this.renderDrawRight_ = makeObjectRightEdgeRenderer(ScratchBlocks);
+            }
+        };
+    };
+
+    const addTransformInputs = block => {
+        const position = block.appendValueInput('PX').appendField('position x:');
+        position.objectStartRow_ = true;
+        block.appendValueInput('PY').appendField('y:');
+        block.appendValueInput('PZ').appendField('z:');
+        const rotation = block.appendValueInput('RX').appendField('rotation x:');
+        rotation.objectStartRow_ = true;
+        block.appendValueInput('RY').appendField('y:');
+        block.appendValueInput('RZ').appendField('z:');
+        const scale = block.appendValueInput('SX').appendField('scale x:');
+        scale.objectStartRow_ = true;
+        block.appendValueInput('SY').appendField('y:');
+        block.appendValueInput('SZ').appendField('z:');
+    };
+
+    const addShapeAppearanceInputs = block => {
+        const time = block.appendValueInput('T1').appendField('time:');
+        time.objectStartRow_ = true;
+        block.appendValueInput('T2').appendField('~');
+        const color = block.appendValueInput('COLOR').appendField('color:');
+        color.objectStartRow_ = true;
+        block.appendValueInput('OPACITY')
+            .appendField('opacity:')
+            .appendField('%');
+    };
+
+    installProceduralShapeBlock('objects_arc', function () {
+        this.appendDummyInput('ARC_INPUT').appendField('arc');
+        addTransformInputs(this);
+        const radius = this.appendValueInput('INNER').appendField('radius:');
+        radius.objectStartRow_ = true;
+        this.appendValueInput('OUTER');
+        const angle = this.appendValueInput('START').appendField('angle:');
+        angle.objectStartRow_ = true;
+        this.appendValueInput('END');
+        const width = this.appendValueInput('WIDTH').appendField('width:');
+        width.objectStartRow_ = true;
+        this.appendValueInput('HEIGHT').appendField('height:');
+        addShapeAppearanceInputs(this);
+    });
+
+    installProceduralShapeBlock('objects_circularSegment', function () {
+        this.appendDummyInput('SEGMENT_INPUT').appendField('circular segment');
+        addTransformInputs(this);
+        this.appendValueInput('OUTER').appendField('size:');
+        const angle = this.appendValueInput('START').appendField('angle:');
+        angle.objectStartRow_ = true;
+        this.appendValueInput('END');
+        const width = this.appendValueInput('WIDTH').appendField('width:');
+        width.objectStartRow_ = true;
+        this.appendValueInput('HEIGHT').appendField('height:');
+        addShapeAppearanceInputs(this);
+    });
+
+    installProceduralShapeBlock('objects_line', function () {
+        this.appendDummyInput('LINE_INPUT').appendField('line');
+        const position1 = this.appendValueInput('P1X').appendField('position1 x:');
+        position1.objectStartRow_ = true;
+        this.appendValueInput('P1Y').appendField('y:');
+        this.appendValueInput('P1Z').appendField('z:');
+        const position2 = this.appendValueInput('P2X').appendField('position2 x:');
+        position2.objectStartRow_ = true;
+        this.appendValueInput('P2Y').appendField('y:');
+        this.appendValueInput('P2Z').appendField('z:');
+        const thickness = this.appendValueInput('THICKNESS').appendField('thickness:');
+        thickness.objectStartRow_ = true;
+        addShapeAppearanceInputs(this);
+    });
+    /* eslint-enable no-invalid-this */
+
     ScratchBlocks.Blocks.objects_grouping = {
         init: function () {
             this.jsonInit({
