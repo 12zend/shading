@@ -86,7 +86,10 @@ class CollaborationPanel extends React.Component {
         this.handleAttach = this.handleAttach.bind(this);
         this.handleUseCurrentTime = this.handleUseCurrentTime.bind(this);
         this.handleCopyInvite = this.handleCopyInvite.bind(this);
+        this.handleClosePanel = this.handleClosePanel.bind(this);
+        this.handleTogglePanel = this.handleTogglePanel.bind(this);
         this.handleStartCollaboration = this.handleStartCollaboration.bind(this);
+        this.handleCopyStartUrl = this.handleCopyStartUrl.bind(this);
         this.handleDragStart = this.handleDragStart.bind(this);
         this.handlePanelKeyDown = this.handlePanelKeyDown.bind(this);
         this.handlePointerMove = this.handlePointerMove.bind(this);
