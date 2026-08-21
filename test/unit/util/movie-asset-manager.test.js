@@ -1463,6 +1463,7 @@ describe('MovieAssetManager rendering performance', () => {
             clearRect: jest.fn(),
             closePath: jest.fn(),
             fill: jest.fn(),
+            globalAlpha: 1,
             lineTo: jest.fn(),
             moveTo: jest.fn()
         };
@@ -1488,7 +1489,9 @@ describe('MovieAssetManager rendering performance', () => {
                 rotation: {x: 0, y: 0, z: 0},
                 scale: {x: 1, y: 1, z: 1},
                 shape,
-                width: 120
+                width: 120,
+                color: '#ff0000',
+                opacity: 65
             })).toBeUndefined();
         } finally {
             global.document = originalDocument;
@@ -1497,9 +1500,51 @@ describe('MovieAssetManager rendering performance', () => {
         expect(canvas.width).toBe(120);
         expect(canvas.height).toBe(80);
         expect(context.beginPath).toHaveBeenCalledTimes(1);
-        expect(context.fill).toHaveBeenCalledTimes(1);
+        expect(context.fill).toHaveBeenCalledWith('evenodd');
+        expect(context.globalAlpha).toBe(0.65);
+        expect(context.fillStyle).toBe('#ff0000');
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
         expect(manager.getTargetState(target).penOnly).toBe(true);
+    });
+
+    test('keeps the inner radius hollow and lets the outer radius change the stamped size', () => {
+        const manager = makeManager();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            visible: false
+        };
+
+        try {
+            manager.drawShape(target, {
+                height: 100,
+                n: 6,
+                radius: {inner: 50, outer: 150},
+                shape: 'polygon',
+                width: 100
+            });
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(canvas.width).toBe(150);
+        expect(canvas.height).toBe(150);
+        expect(context.moveTo).toHaveBeenCalledTimes(2);
+        expect(context.closePath).toHaveBeenCalledTimes(2);
+        expect(context.fill).toHaveBeenCalledWith('evenodd');
     });
 
     test.each([

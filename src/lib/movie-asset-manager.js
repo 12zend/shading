@@ -207,6 +207,8 @@ const normalizeRotationOrder = value => {
 const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
 
 const SHAPE_TYPES = ['polygon', 'star', 'flower'];
+const MAX_SHAPE_SIZE = 4096;
+const SHAPE_RADIUS_SCALE = 0.5;
 
 const normalizeShapeType = value => {
     const shape = String(value || '').toLowerCase();
@@ -215,21 +217,33 @@ const normalizeShapeType = value => {
 
 const createShapeBitmap = configuration => {
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
-    const width = Math.max(2, Math.min(4096, Math.round(Math.abs(toNumber(configuration.width, 100)))));
-    const height = Math.max(2, Math.min(4096, Math.round(Math.abs(toNumber(configuration.height, 100)))));
+    const requestedWidth = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.round(
+        Math.abs(toNumber(configuration.width, 100))
+    )));
+    const requestedHeight = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.round(
+        Math.abs(toNumber(configuration.height, 100))
+    )));
     const canvas = document.createElement('canvas');
     const context = canvas.getContext && canvas.getContext('2d');
     if (!context) return null;
 
-    canvas.width = width;
-    canvas.height = height;
     const radius = configuration.radius || {};
-    const outerRadius = Math.max(0.001, Math.abs(toNumber(radius.outer, 50)));
+    const outerRadius = Math.min(
+        MAX_SHAPE_SIZE,
+        Math.max(0.001, Math.abs(toNumber(radius.outer, 100)))
+    );
     const innerRadius = Math.min(
         outerRadius,
         Math.max(0, Math.abs(toNumber(radius.inner, outerRadius * 0.5)))
     );
-    const scale = Math.min(width, height) / (outerRadius * 2);
+    // Keep radius in the same coordinate system as the block's default 100px outer radius. The bitmap grows
+    // when a larger radius is requested instead of normalizing every shape back to the requested dimensions.
+    const scale = SHAPE_RADIUS_SCALE;
+    const diameter = Math.max(2, Math.ceil(outerRadius * scale * 2));
+    const width = Math.max(requestedWidth, diameter);
+    const height = Math.max(requestedHeight, diameter);
+    canvas.width = width;
+    canvas.height = height;
     const centerX = width / 2;
     const centerY = height / 2;
     const shape = normalizeShapeType(configuration.shape);
@@ -243,19 +257,27 @@ const createShapeBitmap = configuration => {
         return innerRadius + ((outerRadius - innerRadius) * Math.pow(petal, 0.45));
     };
 
+    const drawPath = (count, distanceAt, reverse = false) => {
+        for (let index = 0; index < count; index++) {
+            const pathIndex = reverse ? count - index - 1 : index;
+            const angle = (-Math.PI / 2) + ((pathIndex / count) * Math.PI * 2);
+            const distance = distanceAt(pathIndex) * scale;
+            const x = centerX + (Math.cos(angle) * distance);
+            const y = centerY + (Math.sin(angle) * distance);
+            if (index === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+        }
+        context.closePath();
+    };
+
     context.clearRect(0, 0, width, height);
     context.beginPath();
-    for (let index = 0; index < pointCount; index++) {
-        const angle = (-Math.PI / 2) + ((index / pointCount) * Math.PI * 2);
-        const distance = radiusAt(index) * scale;
-        const x = centerX + (Math.cos(angle) * distance);
-        const y = centerY + (Math.sin(angle) * distance);
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-    }
-    context.closePath();
-    context.fillStyle = '#ffffff';
-    context.fill();
+    drawPath(pointCount, radiusAt);
+    if (innerRadius > 0) drawPath(sides, () => innerRadius, true);
+    context.fillStyle = typeof configuration.color === 'string' && configuration.color ?
+        configuration.color : '#ffffff';
+    context.globalAlpha = clamp(toNumber(configuration.opacity, 100), 0, 100) / 100;
+    context.fill('evenodd');
     canvas.reusable = false;
     return canvas;
 };
@@ -2776,6 +2798,7 @@ class MovieAssetManager extends EventEmitter {
         state.modelAssetId = null;
 
         this.applyObjectDrawConfiguration(target, configuration);
+        // Shapes are temporary bitmap sources for Pen, not visible sprite costumes.
         this.applyBitmap(target, bitmap, 'shape', null, true);
         this.finishObjectDraw(target, configuration, 'shape');
     }

@@ -1054,6 +1054,8 @@ const objects = function (costumeName) {
             ${number('INNER', 50)}${number('OUTER', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${number('T1', 0)}${number('T2', 10)}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('OPACITY', 100)}
         </block>
         <sep gap="36"/>
         <block type="objects_grouping"/>

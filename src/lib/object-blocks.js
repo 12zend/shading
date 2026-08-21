@@ -130,7 +130,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     blockType: BlockType.COMMAND,
                     text: 'shape [SHAPE] n: [N] position x: [PX] y: [PY] z: [PZ] ' +
                         'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
-                        'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2]',
+                        'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2]\n' +
+                        'color: [COLOR] opacity: [OPACITY] %',
                     arguments: {
                         SHAPE: {type: ArgumentType.STRING, menu: 'shapeType', defaultValue: 'polygon'},
                         N: numberArgument(6),
@@ -147,6 +148,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         OUTER: numberArgument(100),
                         WIDTH: numberArgument(100),
                         HEIGHT: numberArgument(100),
+                        COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
+                        OPACITY: numberArgument(100),
                         T1: numberArgument(0),
                         T2: numberArgument(10)
                     }
@@ -209,7 +212,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ},
             shape: normalizeShapeType(args.SHAPE),
-            width: args.WIDTH
+            width: args.WIDTH,
+            color: args.COLOR,
+            opacity: args.OPACITY
         };
         if (Object.prototype.hasOwnProperty.call(args, 'T1') ||
             Object.prototype.hasOwnProperty.call(args, 'T2')) {

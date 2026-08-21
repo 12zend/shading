@@ -366,9 +366,11 @@ describe('Objects blocks', () => {
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
             'INNER', 'OUTER', 'WIDTH', 'HEIGHT',
+            'COLOR', 'OPACITY',
             'T1', 'T2'
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
+        expect(info.blocks[1].text).toContain('\ncolor: [COLOR] opacity: [OPACITY] %');
     });
 
     test('draws a generated shape without returning asynchronous work to the VM', () => {
@@ -399,7 +401,9 @@ describe('Objects blocks', () => {
             SZ: 4,
             T1: 1,
             T2: 4,
-            WIDTH: 120
+            WIDTH: 120,
+            COLOR: '#ff0000',
+            OPACITY: 65
         }, util)).toBeUndefined();
 
         expect(manager.drawShape).toHaveBeenCalledWith(util.target, {
@@ -412,7 +416,9 @@ describe('Objects blocks', () => {
             scale: {x: 2, y: 3, z: 4},
             shape: 'star',
             time: {start: 1, end: 4},
-            width: 120
+            width: 120,
+            color: '#ff0000',
+            opacity: 65
         });
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });

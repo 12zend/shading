@@ -1030,6 +1030,11 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             const startTime = this.appendValueInput('T1').appendField('time:');
             startTime.objectStartRow_ = true;
             this.appendValueInput('T2').appendField('~');
+            const color = this.appendValueInput('COLOR').appendField('color:');
+            color.objectStartRow_ = true;
+            this.appendValueInput('OPACITY')
+                .appendField('opacity:')
+                .appendField('%');
             this.setInputsInline(true);
             this.setColour(PRIMARY, SECONDARY, TERTIARY);
             this.setPreviousStatement(true);
