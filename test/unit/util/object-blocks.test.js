@@ -683,6 +683,100 @@ describe('Objects blocks', () => {
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(expect.any(Promise));
     });
 
+    test('keeps an outer grouping open for an asynchronous video draw in a nested grouping', async () => {
+        let resolveVideo;
+        const pendingVideo = new Promise(resolve => {
+            resolveVideo = resolve;
+        });
+        const events = [];
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => {
+                const branches = {
+                    outer: ['outer-objects', 'outer-effects'],
+                    inner: ['inner-objects', 'inner-effects']
+                };
+                const branchIds = branches[blockId];
+                return branchIds ? branchIds[branch - 1] : null;
+            })
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const parentThread = {
+            blockContainer: blocksContainer,
+            peekStack: jest.fn(() => 'outer'),
+            target
+        };
+        const manager = {
+            drawObject: jest.fn(() => pendingVideo),
+            runWithoutWaiting: jest.fn()
+        };
+        const penFX = {
+            applyCapturedEffects: jest.fn(() => events.push('apply effects')),
+            beginEffectCapture: jest.fn(() => events.push('begin effects')),
+            beginGroup: jest.fn(() => events.push('begin group')),
+            endEffectCapture: jest.fn(() => [{}]),
+            endGroup: jest.fn(() => events.push('end group'))
+        };
+        const sequencer = {
+            activeThread: null,
+            stepThread: jest.fn(thread => {
+                events.push(thread.topBlock);
+                if (thread.topBlock === 'outer-objects') {
+                    const originalPeekStack = thread.peekStack;
+                    thread.peekStack = jest.fn(() => 'inner');
+                    blocks.grouping({}, {
+                        target,
+                        thread
+                    });
+                    thread.peekStack = originalPeekStack;
+                }
+                if (thread.topBlock === 'inner-objects') {
+                    blocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, {
+                        target,
+                        thread
+                    });
+                }
+            })
+        };
+        const runtime = {movieAssetManager: manager, penFX, sequencer};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const blocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: parentThread
+        };
+
+        expect(blocks.grouping({}, util)).toBeUndefined();
+        expect(manager.drawObject).toHaveBeenCalledWith(target, expect.objectContaining({source: 'video'}));
+        expect(events).toEqual([
+            'begin group',
+            'outer-objects',
+            'begin group',
+            'inner-objects',
+            'begin effects',
+            'inner-effects',
+            'begin effects',
+            'outer-effects'
+        ]);
+
+        resolveVideo();
+        await Promise.all(manager.runWithoutWaiting.mock.calls.map(call => call[0]));
+
+        expect(events).toEqual([
+            'begin group',
+            'outer-objects',
+            'begin group',
+            'inner-objects',
+            'begin effects',
+            'inner-effects',
+            'begin effects',
+            'outer-effects',
+            'apply effects',
+            'end group',
+            'apply effects',
+            'end group'
+        ]);
+    });
+
     test('finishes an asynchronous group before starting the next group', async () => {
         let resolveFirstDraw;
         const firstDraw = new Promise(resolve => {

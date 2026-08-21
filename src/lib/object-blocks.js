@@ -43,7 +43,7 @@ const trackPendingDraw = (pendingDraw, util, manager) => {
         if (index >= 0) util.thread.objectPendingDraws.splice(index, 1);
     };
     pendingDraw.then(removePending, removePending);
-    manager.runWithoutWaiting(pendingDraw);
+    if (manager && typeof manager.runWithoutWaiting === 'function') manager.runWithoutWaiting(pendingDraw);
 };
 
 const getGroupingContext = util => {
@@ -386,8 +386,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             if (this.pendingGrouping === pendingGrouping) this.pendingGrouping = null;
         };
         pendingGrouping.then(clearPendingGrouping, clearPendingGrouping);
-        const manager = this.runtime.movieAssetManager;
-        if (manager && typeof manager.runWithoutWaiting === 'function') manager.runWithoutWaiting(pendingGrouping);
+        // Propagate nested grouping completion to the branch that owns this grouping. Without this, an outer
+        // grouping can apply its effects and close the Pen capture before an asynchronous inner video draw is stamped.
+        trackPendingDraw(pendingGrouping, util, this.runtime.movieAssetManager);
     }
 };
 
