@@ -315,6 +315,7 @@ const createShapeBitmap = configuration => {
         const angle = configuration.angle || {};
         const start = (toNumber(angle.start, 0) - 90) * Math.PI / 180;
         const end = (toNumber(angle.end, 360) - 90) * Math.PI / 180;
+        // Keep the endpoints unwrapped so their order describes the sweep direction.
         const anticlockwise = end < start;
         const outerStartX = centerX + (Math.cos(start) * outerRadius * scale);
         const outerStartY = centerY + (Math.sin(start) * outerRadius * scale);

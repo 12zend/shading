@@ -1571,7 +1571,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         try {
             manager.drawShape(target, {
-                angle: {start: 30, end: 180},
+                angle: {start: 30, end: 270},
                 height: 100,
                 radius: {inner: 20, outer: 80},
                 shape,
@@ -1582,6 +1582,11 @@ describe('MovieAssetManager rendering performance', () => {
         }
 
         expect(context.arc).toHaveBeenCalled();
+        expect(context.arc.mock.calls[0].slice(3)).toEqual([
+            (30 - 90) * Math.PI / 180,
+            (270 - 90) * Math.PI / 180,
+            false
+        ]);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });

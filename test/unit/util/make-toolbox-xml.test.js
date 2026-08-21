@@ -31,7 +31,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<block type="objects_arc">');
         expect(toolbox).toContain('<block type="objects_circularSegment">');
         expect(toolbox).toContain('<block type="objects_line">');
-        expect(toolbox).toContain('<value name="START"><shadow type="math_angle"><field name="NUM">0</field>');
+        expect(toolbox).toContain('<value name="START"><shadow type="math_number"><field name="NUM">0</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="looks"'));

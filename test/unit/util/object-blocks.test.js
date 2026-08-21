@@ -1,4 +1,5 @@
 import VM from 'scratch-vm';
+import ArgumentType from 'scratch-vm/src/extension-support/argument-type';
 import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
 import Sprite from 'scratch-vm/src/sprites/sprite';
 
@@ -376,10 +377,14 @@ describe('Objects blocks', () => {
         expect(info.blocks[0].arguments.T2.defaultValue).toBe(Infinity);
         expect(info.blocks[1].arguments.T2.defaultValue).toBe(Infinity);
         expect(info.blocks[2].arguments).toEqual(expect.objectContaining({
-            START: {type: expect.anything(), defaultValue: 0},
-            END: {type: expect.anything(), defaultValue: 360},
+            START: {type: ArgumentType.NUMBER, defaultValue: 0},
+            END: {type: ArgumentType.NUMBER, defaultValue: 360},
             T1: {type: expect.anything(), defaultValue: 0},
             T2: {type: expect.anything(), defaultValue: Infinity}
+        }));
+        expect(info.blocks[3].arguments).toEqual(expect.objectContaining({
+            START: {type: ArgumentType.NUMBER, defaultValue: 0},
+            END: {type: ArgumentType.NUMBER, defaultValue: 360}
         }));
     });
 
