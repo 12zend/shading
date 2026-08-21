@@ -40,6 +40,13 @@ describe('Movie easing', () => {
         expect(calculate({type: 'PowerInOut'}, 0.25)).toBeCloseTo(12.5);
     });
 
+    test('uses the standard exponential curves', () => {
+        expect(calculate({type: 'ExpoIn'}, 0.001)).toBeCloseTo(0.0983, 3);
+        expect(calculate({type: 'ExpoOut'}, 0.5)).toBeCloseTo(96.875, 3);
+        expect(calculate({type: 'ExpoOut'}, 0.999)).toBeCloseTo(99.9017, 3);
+        expect(calculate({type: 'ExpoInOut'}, 0.999)).toBeCloseTo(99.9505, 3);
+    });
+
     test('all easing types preserve both endpoints', () => {
         for (const type of EASING_TYPES) {
             expect(calculate({type}, 0)).toBe(0);

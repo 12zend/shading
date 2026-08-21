@@ -47,20 +47,22 @@ const circInOut = (progress, power) => {
     return (1 + Math.pow(1 - Math.pow(2 - (2 * progress), power), 1 / power)) / 2;
 };
 
-const expoIn = (progress, power) => {
+const EXPO_EXPONENT = 10;
+
+const expoIn = progress => {
     if (progress === 0) return 0;
-    return Math.pow(2, power * (progress - 1));
+    return Math.pow(2, EXPO_EXPONENT * (progress - 1));
 };
-const expoOut = (progress, power) => {
+const expoOut = progress => {
     if (progress === 1) return 1;
-    return 1 - Math.pow(2, -power * progress);
+    return 1 - Math.pow(2, -EXPO_EXPONENT * progress);
 };
-const expoInOut = (progress, power) => {
+const expoInOut = progress => {
     if (progress === 0 || progress === 1) return progress;
     if (progress < 0.5) {
-        return Math.pow(2, power * ((2 * progress) - 1)) / 2;
+        return Math.pow(2, EXPO_EXPONENT * ((2 * progress) - 1)) / 2;
     }
-    return (2 - Math.pow(2, -power * ((2 * progress) - 1))) / 2;
+    return (2 - Math.pow(2, -EXPO_EXPONENT * ((2 * progress) - 1))) / 2;
 };
 
 const easingFunctions = {
