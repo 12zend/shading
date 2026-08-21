@@ -84,8 +84,19 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
 const createObjectBlocksClass = vm => class ObjectBlocks {
     constructor () {
         this.runtime = vm.runtime;
+        this.groupingGeneration = 0;
         this.pendingGrouping = null;
         this.runtime.objectBlocks = this;
+        if (this.runtime && typeof this.runtime.on === 'function') {
+            this.runtime.on('PROJECT_STOP_ALL', () => this.cancelPendingGroupings());
+        }
+    }
+
+    cancelPendingGroupings () {
+        this.groupingGeneration++;
+        this.pendingGrouping = null;
+        const penFX = this.runtime.penFX;
+        if (penFX && typeof penFX.cancelGroups === 'function') penFX.cancelGroups();
     }
 
     getInfo () {
@@ -356,7 +367,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     grouping (args, util) {
         const context = getGroupingContext(util);
+        const generation = this.groupingGeneration;
         const runGrouping = () => {
+            if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
             if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
             const objectThread = runGroupingBranch(this.runtime, context, 1);
@@ -370,11 +383,18 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 const effects = penFX.endEffectCapture();
                 return Promise.all(pendingDraws)
                     .then(() => {
+                        if (generation !== this.groupingGeneration) return;
                         if (typeof penFX.applyCapturedEffects === 'function') penFX.applyCapturedEffects(effects);
                     })
-                    .finally(() => penFX.endGroup());
+                    .finally(() => {
+                        if (generation === this.groupingGeneration && typeof penFX.endGroup === 'function') {
+                            penFX.endGroup();
+                        }
+                    });
             }
-            if (penFX && typeof penFX.endGroup === 'function') penFX.endGroup();
+            if (generation === this.groupingGeneration && penFX && typeof penFX.endGroup === 'function') {
+                penFX.endGroup();
+            }
             return null;
         };
         const pendingGrouping = this.pendingGrouping ?

@@ -840,4 +840,65 @@ describe('Objects blocks', () => {
         expect(penFX.beginGroup).toHaveBeenCalledTimes(2);
         expect(penFX.endGroup).toHaveBeenCalledTimes(2);
     });
+
+    test('does not let a stopped asynchronous group affect the next timeline frame', async () => {
+        let resolveFirstDraw;
+        const firstDraw = new Promise(resolve => {
+            resolveFirstDraw = resolve;
+        });
+        const events = [];
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => `${blockId}-branch-${branch}`)
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const sequencer = {
+            activeThread: null,
+            stepThread: jest.fn(thread => {
+                events.push(thread.topBlock);
+                if (thread.topBlock === 'first-branch-1') thread.objectPendingDraws = [firstDraw];
+            })
+        };
+        const penFX = {
+            applyCapturedEffects: jest.fn(() => events.push('apply effects')),
+            beginEffectCapture: jest.fn(),
+            beginGroup: jest.fn(() => events.push('begin group')),
+            cancelGroups: jest.fn(() => events.push('cancel groups')),
+            endEffectCapture: jest.fn(() => [{}]),
+            endGroup: jest.fn(() => events.push('end group'))
+        };
+        const manager = {runWithoutWaiting: jest.fn()};
+        const runtime = {movieAssetManager: manager, penFX, sequencer, on: jest.fn()};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const objectBlocks = new ObjectBlocks();
+        const makeGroupingUtil = blockId => ({
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => blockId),
+                target
+            }
+        });
+
+        objectBlocks.grouping({}, makeGroupingUtil('first'));
+        const stopAll = runtime.on.mock.calls.find(call => call[0] === 'PROJECT_STOP_ALL')[1];
+        stopAll();
+        objectBlocks.grouping({}, makeGroupingUtil('second'));
+
+        expect(events).toEqual([
+            'begin group',
+            'first-branch-1',
+            'first-branch-2',
+            'cancel groups',
+            'begin group',
+            'second-branch-1',
+            'second-branch-2',
+            'end group'
+        ]);
+
+        resolveFirstDraw();
+        await manager.runWithoutWaiting.mock.calls[0][0];
+
+        expect(penFX.applyCapturedEffects).not.toHaveBeenCalled();
+        expect(penFX.endGroup).toHaveBeenCalledTimes(1);
+    });
 });

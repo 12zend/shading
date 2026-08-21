@@ -372,6 +372,22 @@ describe('built-in Pen FX category', () => {
         expect(vm.runtime.penFX).toBe(penFX);
     });
 
+    test('cancels open groups and captured effects together', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {
+            _restoreGLState: jest.fn(),
+            clearGroupStack: jest.fn()
+        };
+        penFX.effectCaptureStack = [{}];
+
+        expect(penFX.cancelGroups()).toBeUndefined();
+        expect(penFX.effectCaptureStack).toEqual([]);
+        expect(penFX.engine.clearGroupStack).toHaveBeenCalledTimes(1);
+        expect(penFX.engine._restoreGLState).toHaveBeenCalledTimes(1);
+    });
+
     test('stages an Objects group on a transparent layer without touching the visible pen frame', () => {
         const gl = {
             ARRAY_BUFFER: 1,

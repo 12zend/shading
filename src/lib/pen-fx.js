@@ -3463,6 +3463,17 @@ const createPenFXClass = vm => {
       }
     }
 
+    cancelGroups() {
+      this.effectCaptureStack.length = 0;
+      if (!this.engine) return;
+      try {
+        this.engine.clearGroupStack();
+        this.engine._restoreGLState();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+      }
+    }
+
     drawDefaultBackground(color4f) {
       const pen = vm.runtime.ext_pen;
       if (pen && typeof pen._getPenLayerID === 'function') pen._getPenLayerID();
