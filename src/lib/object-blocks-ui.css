@@ -4,6 +4,7 @@
 .media-picker {
     width: min(34rem, calc(100vw - 2rem), var(--media-picker-available-width, 34rem));
     max-height: min(31rem, calc(100vh - 4rem));
+    position: relative;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -11,6 +12,38 @@
     background: $ui-modal-background;
     color: $text-primary;
     font-family: inherit;
+}
+
+.drop-overlay {
+    position: absolute;
+    z-index: 2;
+    inset: 0.45rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.55rem;
+    border: 0.16rem dashed #4968d4;
+    border-radius: calc($form-radius * 1.5);
+    background: $ui-modal-background;
+    color: #3e59b8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 120ms ease-out, visibility 0s linear 120ms;
+}
+
+.media-picker-dragging .drop-overlay {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 120ms ease-out;
+}
+
+.drop-icon {
+    width: 1.75rem;
+    height: 1.75rem;
 }
 
 .media-header {
@@ -371,6 +404,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .drop-overlay,
+    .media-picker-dragging .drop-overlay {
+        transition: none;
+    }
+
     .media-item:hover {
         transform: none;
     }

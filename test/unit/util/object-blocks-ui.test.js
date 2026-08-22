@@ -99,7 +99,7 @@ const findByLabel = (root, label) => {
 };
 
 describe('Objects draw media picker', () => {
-    test('stays open after a selection and closes from outside or its close button', () => {
+    test('stays open after a selection, imports dropped files, and closes explicitly', async () => {
         const originalDocument = global.document;
         const fakeDocument = createFakeDocument();
         global.document = fakeDocument;
@@ -148,16 +148,25 @@ describe('Objects draw media picker', () => {
             FieldDropdown
         };
         const boundsElement = {clientWidth: 640};
+        const importedFile = {name: 'Dropped.png'};
+        const manager = {
+            getModels: jest.fn(() => []),
+            getVideos: jest.fn(() => []),
+            importFiles: jest.fn(() => Promise.resolve([{name: 'Dropped', source: 'costume'}]))
+        };
         const vm = {
             editingTarget: {
-                getCostumes: () => [{name: 'One'}, {name: 'Two'}]
+                getCostumes: () => [{name: 'One'}, {name: 'Two'}],
+                id: 'sprite'
             },
-            runtime: {}
+            runtime: {movieAssetManager: manager}
         };
         const MediaField = createMediaField(ScratchBlocks, vm, () => [], value => value);
         const field = new MediaField();
         field.sourceBlock_ = {
+            getFieldValue: name => (name === 'ASSET' ? 'costume:One' : 'costume'),
             getCategory: () => 'Objects',
+            setDrawAsset_: jest.fn(),
             workspace: {
                 getParentSvg: () => ({parentNode: boundsElement})
             }
@@ -168,6 +177,8 @@ describe('Objects draw media picker', () => {
             const firstItem = findByLabel(content, 'Costume: One');
             const secondItem = findByLabel(content, 'Costume: Two');
             const closeButton = findByLabel(content, 'Close media picker');
+            const picker = findByLabel(content, 'Choose media for draw');
+            const dropOverlay = findByLabel(content, 'Drop files to import');
 
             expect(ScratchBlocks.DropDownDiv.showPositionedByBlock).toHaveBeenCalledWith(
                 field,
@@ -181,6 +192,33 @@ describe('Objects draw media picker', () => {
             expect(secondItem.getAttribute('aria-selected')).toBe('true');
             expect(ScratchBlocks.DropDownDiv.hide).not.toHaveBeenCalled();
             expect(fakeDocument.activeElement).toBe(secondItem);
+
+            const dataTransfer = {
+                dropEffect: 'none',
+                files: [importedFile],
+                types: ['Files']
+            };
+            const dragEvent = {
+                dataTransfer,
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn()
+            };
+            picker._listeners.dragenter(dragEvent);
+            picker._listeners.dragenter(dragEvent);
+            expect(dropOverlay.getAttribute('aria-hidden')).toBe('false');
+            picker._listeners.dragleave(dragEvent);
+            expect(dropOverlay.getAttribute('aria-hidden')).toBe('false');
+            picker._listeners.dragover(dragEvent);
+            expect(dataTransfer.dropEffect).toBe('copy');
+            picker._listeners.drop(dragEvent);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(dragEvent.preventDefault).toHaveBeenCalled();
+            expect(dragEvent.stopPropagation).toHaveBeenCalled();
+            expect(dropOverlay.getAttribute('aria-hidden')).toBe('true');
+            expect(manager.importFiles).toHaveBeenCalledWith('sprite', [importedFile], {modelName: ''});
+            expect(field.sourceBlock_.setDrawAsset_).toHaveBeenCalledWith('costume', 'Dropped');
 
             fakeDocument.pointerDown(fakeDocument.createElement('main'));
             expect(ScratchBlocks.DropDownDiv.hide).toHaveBeenCalledTimes(1);

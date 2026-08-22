@@ -303,6 +303,10 @@ const getClipboardFiles = clipboardData => {
         .filter(Boolean);
 };
 
+const hasFileTransfer = dataTransfer => (
+    Boolean(dataTransfer) && Array.from(dataTransfer.types || []).includes('Files')
+);
+
 const openImportPicker = (vm, block, ScratchBlocks, files = []) => {
     const importedFiles = Array.from(files || []);
     if (importedFiles.length) {
@@ -400,7 +404,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             heading.textContent = 'Choose media';
             const helper = document.createElement('p');
             helper.className = styles.mediaHelper;
-            helper.textContent = 'Import a file or paste it with ⌘V / Ctrl+V, then select it.';
+            helper.textContent = 'Import, drop, or paste files with ⌘V / Ctrl+V, then select one.';
             headingGroup.appendChild(heading);
             headingGroup.appendChild(helper);
             const importButton = document.createElement('button');
@@ -445,6 +449,20 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             grid.setAttribute('role', 'listbox');
             picker.appendChild(filterBar);
             picker.appendChild(grid);
+
+            const dropOverlay = document.createElement('div');
+            dropOverlay.className = styles.dropOverlay;
+            dropOverlay.setAttribute('aria-label', 'Drop files to import');
+            dropOverlay.setAttribute('aria-hidden', 'true');
+            dropOverlay.setAttribute('role', 'status');
+            dropOverlay.appendChild(createSvgIcon(
+                'M12 3v12m0-12 4 4m-4-4-4 4M5 14v5h14v-5',
+                styles.dropIcon
+            ));
+            const dropLabel = document.createElement('span');
+            dropLabel.textContent = 'Drop files to import';
+            dropOverlay.appendChild(dropLabel);
+            picker.appendChild(dropOverlay);
             content.appendChild(picker);
 
             const filterOptions = [
@@ -669,6 +687,40 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 if (!files.length) return;
                 event.preventDefault();
                 event.stopPropagation();
+                ScratchBlocks.DropDownDiv.hideWithoutAnimation();
+                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
+            });
+            let fileDragDepth = 0;
+            const showDropOverlay = show => {
+                picker.classList.toggle(styles.mediaPickerDragging, show);
+                dropOverlay.setAttribute('aria-hidden', String(!show));
+            };
+            picker.addEventListener('dragenter', event => {
+                if (!hasFileTransfer(event.dataTransfer)) return;
+                event.preventDefault();
+                fileDragDepth++;
+                showDropOverlay(true);
+            });
+            picker.addEventListener('dragover', event => {
+                if (!hasFileTransfer(event.dataTransfer)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                fileDragDepth = Math.max(1, fileDragDepth);
+                showDropOverlay(true);
+            });
+            picker.addEventListener('dragleave', () => {
+                if (fileDragDepth === 0) return;
+                fileDragDepth = Math.max(0, fileDragDepth - 1);
+                if (fileDragDepth === 0) showDropOverlay(false);
+            });
+            picker.addEventListener('drop', event => {
+                const files = Array.from((event.dataTransfer && event.dataTransfer.files) || []);
+                if (!hasFileTransfer(event.dataTransfer) && !files.length) return;
+                event.preventDefault();
+                event.stopPropagation();
+                fileDragDepth = 0;
+                showDropOverlay(false);
+                if (!files.length) return;
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
                 openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
             });
