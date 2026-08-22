@@ -502,6 +502,14 @@ class MovieAssetManager extends EventEmitter {
         this.penFrameTransactionActive = this.penFX.beginFrame() === true;
     }
 
+    resetPenForRenderFrame () {
+        // beginFrame swaps in a transparent staging texture while the completed frame remains visible.
+        // This is the render-frame reset: do not call pen_clear from a VM execute hook, because that would
+        // expose an empty Pen layer before compiled or interpreted render-frame scripts finish drawing.
+        this.beginPenFrameTransaction();
+        if (this.penFrameTransactionActive) this.drawDefaultPenBackground();
+    }
+
     commitPenFrameTransaction () {
         if (!this.penFrameTransactionActive) return;
         this.penFrameTransactionActive = false;
@@ -1392,6 +1400,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.pendingFrame = false;
         this.timeline.renderedThisStep = true;
         this.beginObjectVideoAudioFrame();
+        this.resetPenForRenderFrame();
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     }

@@ -52,7 +52,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="myBlocksShader"'));
     });
 
-    test('places the default Pen category before Pen FX', () => {
+    test('hides the default Pen category and keeps Pen FX in the compositor palette', () => {
         const categories = [
             {id: 'custom', xml: '<category id="custom" />'},
             {id: 'penfx', xml: '<category id="penfx" />'},
@@ -60,8 +60,8 @@ describe('Movie toolbox categories', () => {
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="pen"'));
-        expect(toolbox.indexOf('id="pen"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
+        expect(toolbox).not.toContain('id="pen"');
+        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
@@ -143,18 +143,22 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="looks_changevideoframeby"');
     });
 
-    test('offers both camera-aware and camera-independent 3D go-to blocks', () => {
+    test('renames Motion to Camera and only offers camera controls', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
-        expect(toolbox).toContain('type="motion_gotoxyz"');
-        expect(toolbox).toContain('type="motion_gotoxyz_nocamera"');
+        expect(toolbox).toContain('<category name="Camera" id="motion"');
+        expect(toolbox).toContain('type="motion_setcamerato"');
+        expect(toolbox).toContain('type="motion_lookat"');
+        expect(toolbox).not.toContain('type="motion_gotoxyz"');
+        expect(toolbox).not.toContain('type="motion_gotoxyz_nocamera"');
     });
 
-    test('offers per-axis model scale controls', () => {
+    test('moves object transforms out of Camera', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
-        expect(toolbox).toContain('type="motion_setscale"');
-        expect(toolbox).toContain('<field name="NUM">1</field>');
+        expect(toolbox).not.toContain('type="motion_setscale"');
+        expect(toolbox).not.toContain('type="motion_setrotation"');
+        expect(toolbox).not.toContain('type="motion_setx"');
     });
 
     test('shows every VM-executable block including legacy rendering and event blocks', () => {
@@ -163,7 +167,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="looks_addrenderingframe"');
         expect(toolbox).toContain('type="looks_clearrenderingframe"');
         expect(toolbox).toContain('type="looks_exportrenderingmp4"');
-        expect(toolbox).toContain('type="event_whenflagclicked"');
+        expect(toolbox).not.toContain('type="event_whenflagclicked"');
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
         expect(toolbox).toContain('type="sound_playattime"');
@@ -174,23 +178,20 @@ describe('Movie toolbox categories', () => {
         );
     });
 
-    test('offers all core VM blocks that are hidden from the curated palette', () => {
+    test('curates core categories around compositing while legacy opcodes remain loadable', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
-        // Motion: classic 2D blocks and legacy no-ops.
-        expect(toolbox).toContain('type="motion_gotoxy"');
-        expect(toolbox).toContain('type="motion_movesteps"');
-        expect(toolbox).toContain('type="motion_glidesecstoxy"');
-        expect(toolbox).toContain('type="motion_ifonedgebounce"');
-        expect(toolbox).toContain('type="motion_changezby"');
-        expect(toolbox).toContain('type="motion_changerotationby"');
+        // Camera.
+        expect(toolbox).not.toContain('type="motion_gotoxy"');
+        expect(toolbox).not.toContain('type="motion_movesteps"');
         expect(toolbox).toContain('type="motion_setcamerax"');
         expect(toolbox).toContain('type="motion_changecamerazby"');
         expect(toolbox).toContain('type="motion_changecamerarotationby"');
-        expect(toolbox).toContain('type="motion_xscroll"');
-        // Looks: speech, size, and graphic effect filters.
-        expect(toolbox).toContain('type="looks_say"');
-        expect(toolbox).toContain('type="looks_thinkforsecs"');
+        // Looks keeps visual production tools but removes speech and layer-order blocks.
+        expect(toolbox).not.toContain('type="looks_say"');
+        expect(toolbox).not.toContain('type="looks_thinkforsecs"');
+        expect(toolbox).not.toContain('type="looks_gotofrontback"');
+        expect(toolbox).not.toContain('type="looks_goforwardbackwardlayers"');
         expect(toolbox).toContain('type="looks_nextcostume"');
         expect(toolbox).toContain('type="looks_changesizeby"');
         expect(toolbox).toContain('type="looks_turbulentdisplace"');
@@ -203,34 +204,27 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="sound_seteffectto"');
         expect(toolbox).toContain('type="sound_cleareffects"');
         // Events.
-        expect(toolbox).toContain('type="event_whenkeypressed"');
-        expect(toolbox).toContain('type="event_whenthisspriteclicked"');
-        expect(toolbox).toContain('type="event_whentouchingobject"');
-        expect(toolbox).toContain('type="event_whenbackdropswitchesto"');
-        expect(toolbox).toContain('type="event_whengreaterthan"');
+        expect(toolbox).not.toContain('type="event_whenkeypressed"');
+        expect(toolbox).not.toContain('type="event_whenthisspriteclicked"');
+        expect(toolbox).not.toContain('type="event_whentouchingobject"');
+        expect(toolbox).not.toContain('type="event_whenbackdropswitchesto"');
+        expect(toolbox).not.toContain('type="event_whengreaterthan"');
+        expect(toolbox).toContain('type="event_whenbroadcastreceived"');
         // Control.
         expect(toolbox).toContain('type="control_wait"');
         expect(toolbox).toContain('type="control_for_each"');
-        expect(toolbox).toContain('type="control_all_at_once"');
-        expect(toolbox).toContain('type="control_get_counter"');
-        expect(toolbox).toContain('type="control_incr_counter"');
-        expect(toolbox).toContain('type="control_clear_counter"');
-        expect(toolbox).toContain('type="control_start_as_clone"');
-        expect(toolbox).toContain('type="control_create_clone_of"');
-        expect(toolbox).toContain('type="control_delete_this_clone"');
-        // Sensing.
-        expect(toolbox).toContain('type="sensing_touchingobject"');
-        expect(toolbox).toContain('type="sensing_coloristouchingcolor"');
-        expect(toolbox).toContain('type="sensing_distanceto"');
-        expect(toolbox).toContain('type="sensing_keypressed"');
-        expect(toolbox).toContain('type="sensing_askandwait"');
-        expect(toolbox).toContain('type="sensing_answer"');
-        expect(toolbox).toContain('type="sensing_of"');
-        expect(toolbox).toContain('type="sensing_current"');
-        expect(toolbox).toContain('type="sensing_dayssince2000"');
-        expect(toolbox).toContain('type="sensing_username"');
-        expect(toolbox).toContain('type="sensing_online"');
-        expect(toolbox).toContain('type="sensing_userid"');
+        expect(toolbox).not.toContain('type="control_all_at_once"');
+        expect(toolbox).not.toContain('type="control_get_counter"');
+        expect(toolbox).not.toContain('type="control_incr_counter"');
+        expect(toolbox).not.toContain('type="control_clear_counter"');
+        expect(toolbox).not.toContain('type="control_start_as_clone"');
+        expect(toolbox).not.toContain('type="control_create_clone_of"');
+        expect(toolbox).not.toContain('type="control_delete_this_clone"');
+        // Sensing exposes only timer.
+        expect(toolbox).toContain('type="sensing_timer"');
+        expect(toolbox).not.toContain('type="sensing_resettimer"');
+        expect(toolbox).not.toContain('type="sensing_touchingobject"');
+        expect(toolbox).not.toContain('type="sensing_answer"');
         // The legacy switch-model alias shares the render-model block definition and stays deduplicated.
         expect(toolbox).not.toContain('type="looks_switchmodelto"');
     });

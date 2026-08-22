@@ -2049,6 +2049,45 @@ describe('MovieAssetManager rendering performance', () => {
     );
 
     test.each(['interpreter', 'compiled'])(
+        'automatically resets %s render-frame scripts inside the Pen transaction',
+        executionPath => {
+            const manager = makeTimelineManager();
+            const thread = {};
+            const observedTransaction = jest.fn();
+            const rawCompiledClear = jest.fn();
+            const rawInterpreterClear = jest.fn();
+            const penFX = {
+                beginFrame: jest.fn(() => true),
+                cancelFrame: jest.fn(),
+                commitFrame: jest.fn()
+            };
+            manager.runtime.ext_pen = {clear: rawCompiledClear};
+            manager.runtime._primitives.pen_clear = rawInterpreterClear;
+            manager.attachPenFrameTransactions(penFX);
+            manager.timeline.pendingFrame = true;
+            manager.runtime.startHats.mockImplementation(() => {
+                if (executionPath === 'compiled') observedTransaction(manager.penFrameTransactionActive);
+                return executionPath === 'interpreter' ? [thread] : [];
+            });
+
+            manager.handleTimelineBeforeExecute();
+            if (executionPath === 'interpreter') observedTransaction(manager.penFrameTransactionActive);
+
+            expect(observedTransaction).toHaveBeenCalledWith(true);
+            expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
+            expect(rawCompiledClear).not.toHaveBeenCalled();
+            expect(rawInterpreterClear).not.toHaveBeenCalled();
+            expect(penFX.commitFrame).not.toHaveBeenCalled();
+
+            manager.runtime.threads = [];
+            manager.handleTimelineAfterExecute();
+
+            expect(penFX.commitFrame).toHaveBeenCalledTimes(1);
+            expect(penFX.cancelFrame).not.toHaveBeenCalled();
+        }
+    );
+
+    test.each(['interpreter', 'compiled'])(
         'redraws the default backdrop as Pen without yielding after %s erase-all execution',
         executionPath => {
             const manager = makeTimelineManager();
