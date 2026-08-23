@@ -96,8 +96,12 @@ const createGradientField = ScratchBlocks => {
     };
 
     GradientField.prototype.setValue = function (value) {
-        this.gradientValue_ = serializeGradient(value);
-        BaseField.prototype.setValue.call(this, this.gradientValue_);
+        const serializedValue = serializeGradient(value);
+        // Let Blockly compare the serialized value with the previous value before
+        // updating our backing value. Otherwise getValue() returns the new value
+        // during BaseField#setValue and no BlockChange event reaches the VM.
+        BaseField.prototype.setValue.call(this, serializedValue);
+        this.gradientValue_ = serializedValue;
         this.refreshDisplay_();
     };
 
