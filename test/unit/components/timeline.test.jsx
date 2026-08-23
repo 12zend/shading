@@ -196,6 +196,46 @@ describe('Timeline keyboard controls', () => {
         expect(manager.seekTimeline).toHaveBeenCalledWith(3);
     });
 
+    test('vertical wheel input scrolls layers when they overflow the viewport', () => {
+        instance.viewportElement = {
+            clientHeight: 120,
+            scrollHeight: 240,
+            scrollLeft: 144
+        };
+        const event = {
+            ctrlKey: false,
+            deltaX: 0,
+            deltaY: 40,
+            metaKey: false,
+            preventDefault: jest.fn()
+        };
+
+        instance.handleTimelineWheel(event);
+
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(instance.viewportElement.scrollLeft).toBe(144);
+    });
+
+    test('vertical wheel input scrolls time horizontally when layers fit the viewport', () => {
+        instance.viewportElement = {
+            clientHeight: 120,
+            scrollHeight: 120,
+            scrollLeft: 144
+        };
+        const event = {
+            ctrlKey: false,
+            deltaX: 0,
+            deltaY: 40,
+            metaKey: false,
+            preventDefault: jest.fn()
+        };
+
+        instance.handleTimelineWheel(event);
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(instance.viewportElement.scrollLeft).toBe(184);
+    });
+
     test('zoom keeps the time under the viewport center anchored', () => {
         instance.viewportElement = {
             getBoundingClientRect: () => ({left: 0, width: 400}),

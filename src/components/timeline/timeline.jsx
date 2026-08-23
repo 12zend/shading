@@ -297,6 +297,9 @@ class Timeline extends React.Component {
             );
             return;
         }
+        const hasVerticalOverflow =
+            this.viewportElement.scrollHeight > this.viewportElement.clientHeight;
+        if (hasVerticalOverflow) return;
         if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
             event.preventDefault();
             this.viewportElement.scrollLeft += event.deltaY;

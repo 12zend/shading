@@ -230,17 +230,18 @@
 .timeline-viewport {
     position: relative;
     width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    max-height: 13rem;
+    overflow: auto;
     border: 1px solid $ui-black-transparent;
     border-radius: $form-radius;
     background: $ui-secondary;
-    overscroll-behavior-x: contain;
+    overscroll-behavior: contain;
     scrollbar-color: $text-primary-transparent $ui-tertiary;
     scrollbar-width: thin;
 }
 
 .timeline-viewport::-webkit-scrollbar {
+    width: 0.625rem;
     height: 0.625rem;
 }
 
@@ -436,11 +437,14 @@
 }
 
 .ruler {
-    position: absolute;
+    position: sticky;
+    z-index: 6;
     top: 0;
     right: 0;
     left: 0;
     height: 2rem;
+    background: $ui-secondary;
+    box-shadow: 0 1px 0 $ui-black-transparent;
     color: $text-primary-transparent;
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
