@@ -1662,6 +1662,98 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });
 
+    test('reuses procedural stamp skins when only their transform changes', () => {
+        const manager = makeManager();
+        let nextSkinId = 0;
+        manager.runtime.renderer.createBitmapSkin.mockImplementation(() => ++nextSkinId);
+        manager.setTargetPosition = jest.fn();
+        manager.setTargetRotation = jest.fn();
+        manager.setTargetScale = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            arc: jest.fn(),
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn(),
+            stroke: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            setSize: jest.fn(),
+            visible: false
+        };
+        const configurations = [
+            {
+                height: 100,
+                n: 6,
+                position: {x: 0, y: 0, z: 480},
+                radius: {inner: 20, outer: 80},
+                shape: 'polygon',
+                width: 100
+            },
+            {
+                angle: {start: 30, end: 270},
+                height: 100,
+                position: {x: 0, y: 0, z: 480},
+                radius: {inner: 20, outer: 80},
+                shape: 'arc',
+                width: 100
+            },
+            {
+                angle: {start: 30, end: 270},
+                height: 100,
+                position: {x: 0, y: 0, z: 480},
+                shape: 'circular segment',
+                size: 80,
+                width: 100
+            },
+            {
+                position1: {x: 10, y: 20, z: 30},
+                position2: {x: 110, y: 80, z: 30},
+                shape: 'line',
+                thickness: 6
+            }
+        ];
+
+        try {
+            for (const configuration of configurations) {
+                expect(manager.drawShape(target, configuration)).toBeUndefined();
+                const translated = configuration.shape === 'line' ? {
+                    ...configuration,
+                    position1: {x: 20, y: 40, z: 30},
+                    position2: {x: 120, y: 100, z: 30}
+                } : {
+                    ...configuration,
+                    position: {x: 50, y: -25, z: 480}
+                };
+                expect(manager.drawShape(target, translated)).toBeUndefined();
+            }
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(global.document).toBe(originalDocument);
+        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledTimes(configurations.length);
+        expect(manager.runtime.renderer.updateBitmapSkin).not.toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(configurations.length * 2);
+        expect(manager.runtime.renderer.updateDrawableSkinId.mock.calls.map(call => call[1])).toEqual([
+            1, 1, 2, 2, 3, 3, 4, 4
+        ]);
+        const skinUpdates = manager.runtime.renderer.updateDrawableSkinId.mock.calls.length;
+        manager.restoreCustomSkin(target);
+        expect(manager.runtime.renderer.updateDrawableSkinId).toHaveBeenCalledTimes(skinUpdates + 1);
+    });
+
     test.each([
         [0.99, false],
         [1, true],

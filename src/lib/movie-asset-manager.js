@@ -210,10 +210,59 @@ const SHAPE_TYPES = ['polygon', 'star', 'flower'];
 const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'line']);
 const MAX_SHAPE_SIZE = 4096;
 const SHAPE_RADIUS_SCALE = 0.5;
+const MAX_CACHED_SHAPE_SKINS = 256;
+const MAX_CACHED_SHAPE_SKIN_PIXELS = 4096 * 4096;
 
 const normalizeShapeType = value => {
     const shape = String(value || '').toLowerCase();
     return PROCEDURAL_SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
+};
+
+const getShapeBitmapCacheKey = configuration => {
+    const shape = normalizeShapeType(configuration.shape);
+    const color = typeof configuration.color === 'string' && configuration.color ?
+        configuration.color : '#ffffff';
+    const opacity = clamp(toNumber(configuration.opacity, 100), 0, 100);
+    if (shape === 'line') {
+        const point1 = configuration.position1 || {};
+        const point2 = configuration.position2 || {};
+        return JSON.stringify([
+            shape,
+            toNumber(point2.x) - toNumber(point1.x),
+            toNumber(point2.y) - toNumber(point1.y),
+            Math.max(0.001, Math.abs(toNumber(configuration.thickness, 5))),
+            color,
+            opacity
+        ]);
+    }
+
+    const radius = configuration.radius || {};
+    const outerRadius = Math.min(
+        MAX_SHAPE_SIZE,
+        Math.max(0.001, Math.abs(toNumber(
+            shape === 'circular segment' ? configuration.size : radius.outer, 100
+        )))
+    );
+    const innerRadius = Math.min(
+        outerRadius,
+        Math.max(0, Math.abs(toNumber(
+            shape === 'circular segment' ? 0 : radius.inner,
+            shape === 'circular segment' ? 0 : outerRadius * 0.5
+        )))
+    );
+    const angle = configuration.angle || {};
+    return JSON.stringify([
+        shape,
+        Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.round(Math.abs(toNumber(configuration.width, 100))))),
+        Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.round(Math.abs(toNumber(configuration.height, 100))))),
+        Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6))))),
+        outerRadius,
+        innerRadius,
+        shape === 'arc' || shape === 'circular segment' ? toNumber(angle.start, 0) : 0,
+        shape === 'arc' || shape === 'circular segment' ? toNumber(angle.end, 360) : 360,
+        color,
+        opacity
+    ]);
 };
 
 const createLineBitmap = configuration => {
@@ -364,6 +413,8 @@ class MovieAssetManager extends EventEmitter {
         this.modelObjects = new Map();
         this.buildingMaterials = new Map();
         this.buildingTextures = new Map();
+        this.shapeSkinCache = new Map();
+        this.shapeSkinCachePixels = 0;
         this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
         this.renderingSoundEvents = [];
@@ -2855,7 +2906,6 @@ class MovieAssetManager extends EventEmitter {
         if (!target || target.isStage || !this.runtime.renderer) return;
         const shape = normalizeShapeType(configuration.shape);
         let drawConfiguration = configuration;
-        let bitmap;
         if (shape === 'line') {
             const point1 = configuration.position1 || {};
             const point2 = configuration.position2 || {};
@@ -2870,11 +2920,11 @@ class MovieAssetManager extends EventEmitter {
                 scale: {x: 1, y: 1, z: 1},
                 size: 100
             };
-            bitmap = createLineBitmap(drawConfiguration);
-        } else {
-            bitmap = createShapeBitmap({...configuration, shape});
         }
-        if (!bitmap) return;
+
+        const shapeConfiguration = shape === 'line' ? drawConfiguration : {...configuration, shape};
+        const skinId = this.getShapeSkin(shapeConfiguration);
+        if (skinId === null) return;
 
         const state = this.getTargetState(target);
         state.renderVersion++;
@@ -2884,11 +2934,69 @@ class MovieAssetManager extends EventEmitter {
         state.modelRenderVersion++;
         state.modelScene = [];
         state.modelAssetId = null;
+        state.mode = 'shape';
+        state.penOnly = true;
+        state.shapeSkinId = skinId;
 
         this.applyObjectDrawConfiguration(target, drawConfiguration);
-        // Shapes are temporary bitmap sources for Pen, not visible sprite costumes.
-        this.applyBitmap(target, bitmap, 'shape', null, true);
+        // Cached procedural skins follow the same cheap stamp path as costume skins. Geometry, color and opacity
+        // select the skin; position, rotation and scale only update the drawable transform.
+        this.runtime.renderer.updateDrawableSkinId(target.drawableID, skinId);
         this.finishObjectDraw(target, drawConfiguration, 'shape');
+        this.trimShapeSkinCache(skinId);
+    }
+
+    getShapeSkin (configuration) {
+        if (!(this.shapeSkinCache instanceof Map)) {
+            this.shapeSkinCache = new Map();
+            this.shapeSkinCachePixels = 0;
+        }
+        const key = getShapeBitmapCacheKey(configuration);
+        const cached = this.shapeSkinCache.get(key);
+        if (cached) {
+            // Map insertion order is the LRU order.
+            this.shapeSkinCache.delete(key);
+            this.shapeSkinCache.set(key, cached);
+            return cached.skinId;
+        }
+
+        const bitmap = normalizeShapeType(configuration.shape) === 'line' ?
+            createLineBitmap(configuration) : createShapeBitmap(configuration);
+        if (!bitmap) return null;
+        const skinId = this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION);
+        if (skinId === null || typeof skinId === 'undefined') return null;
+        const pixels = Math.max(1, toNumber(bitmap.width, 1) * toNumber(bitmap.height, 1));
+        this.shapeSkinCache.set(key, {pixels, skinId});
+        this.shapeSkinCachePixels += pixels;
+        return skinId;
+    }
+
+    trimShapeSkinCache (currentSkinId) {
+        if (!(this.shapeSkinCache instanceof Map)) return;
+        const activeSkinIds = new Set([currentSkinId]);
+        for (const state of this.targetStates.values()) {
+            if (state.mode === 'shape' && state.shapeSkinId !== null) activeSkinIds.add(state.shapeSkinId);
+        }
+        while (
+            this.shapeSkinCache.size > MAX_CACHED_SHAPE_SKINS ||
+            this.shapeSkinCachePixels > MAX_CACHED_SHAPE_SKIN_PIXELS
+        ) {
+            let evictedKey = null;
+            let evicted = null;
+            for (const [key, entry] of this.shapeSkinCache) {
+                if (!activeSkinIds.has(entry.skinId)) {
+                    evictedKey = key;
+                    evicted = entry;
+                    break;
+                }
+            }
+            if (!evicted) return;
+            this.shapeSkinCache.delete(evictedKey);
+            this.shapeSkinCachePixels -= evicted.pixels;
+            if (typeof this.runtime.renderer.destroySkin === 'function') {
+                this.runtime.renderer.destroySkin(evicted.skinId);
+            }
+        }
     }
 
     drawShape (target, configuration = {}) {
@@ -3367,6 +3475,7 @@ class MovieAssetManager extends EventEmitter {
                 rotationOrder: 'XYZ',
                 scale: {x: 1, y: 1, z: 1},
                 requestedMode: 'costume',
+                shapeSkinId: null,
                 skinId: null,
                 textQueue: [],
                 textRenderPromise: null,
@@ -3959,8 +4068,9 @@ class MovieAssetManager extends EventEmitter {
 
     restoreCustomSkin (target) {
         const state = this.targetStates.get(target.id);
-        if (state && state.mode !== 'costume' && state.skinId !== null && this.runtime.renderer) {
-            this.runtime.renderer.updateDrawableSkinId(target.drawableID, state.skinId);
+        const skinId = state && state.mode === 'shape' ? state.shapeSkinId : state && state.skinId;
+        if (state && state.mode !== 'costume' && skinId !== null && this.runtime.renderer) {
+            this.runtime.renderer.updateDrawableSkinId(target.drawableID, skinId);
         }
         if (state) this.applyProjection(target);
     }
