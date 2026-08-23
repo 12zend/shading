@@ -276,21 +276,6 @@ describe('Working with the blocks', () => {
         await clickText('A\u00A0Bass', scope.blocksTab); // Need &nbsp; for block text
     });
 
-    // Regression test for switching between editor/player causing toolbox to stop updating
-    test('"See inside" after being on project page re-initializing variables', async () => {
-        const playerUri = path.resolve(__dirname, '../../build/player.html');
-        await loadUri(playerUri);
-        await clickText('See inside');
-        await clickBlocksCategory('Variables');
-        await clickText('my\u00A0variable');
-
-        await clickText('See Project Page');
-        await clickText('See inside');
-
-        await clickBlocksCategory('Variables');
-        await clickText('my\u00A0variable');
-    });
-
     // Regression test for switching editor tabs causing toolbox to stop updating
     test('Creating variables after adding extensions updates the toolbox', async () => {
         await loadUri(uri);

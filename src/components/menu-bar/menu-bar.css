@@ -100,17 +100,6 @@
     z-index: $z-index-menu-bar;
 }
 
-.feedback-link {
-    color: $menu-bar-background;
-    text-decoration: none;
-}
-
-.feedback-button {
-    background-color: white;
-    color: inherit;
-    height: 34px;
-}
-
 .divider {
     height: 34px;
 }

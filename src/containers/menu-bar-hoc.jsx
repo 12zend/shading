@@ -10,8 +10,7 @@ const MenuBarHOC = function (WrappedComponent) {
             super(props);
 
             bindAll(this, [
-                'confirmReadyToReplaceProject',
-                'shouldSaveBeforeTransition'
+                'confirmReadyToReplaceProject'
             ]);
         }
         confirmReadyToReplaceProject (message) {
@@ -20,9 +19,6 @@ const MenuBarHOC = function (WrappedComponent) {
                 readyToReplaceProject = this.props.confirmWithMessage(message);
             }
             return readyToReplaceProject;
-        }
-        shouldSaveBeforeTransition () {
-            return (this.props.canSave && this.props.projectChanged);
         }
         render () {
             const {
@@ -38,7 +34,6 @@ const MenuBarHOC = function (WrappedComponent) {
                     {(_className, _downloadProject, extended) => (
                         <WrappedComponent
                             confirmReadyToReplaceProject={this.confirmReadyToReplaceProject}
-                            shouldSaveBeforeTransition={this.shouldSaveBeforeTransition}
                             handleSaveProject={extended.smartSave}
                             {...props}
                         />
