@@ -1,6 +1,10 @@
 import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
 
-import {MovieAssetManager} from '../../../src/lib/movie-asset-manager';
+import {
+    COSTUME_GROUP_PROJECT_KEY,
+    COSTUME_GROUP_SOURCE,
+    MovieAssetManager
+} from '../../../src/lib/movie-asset-manager';
 
 const makeManager = () => {
     const manager = Object.create(MovieAssetManager.prototype);
@@ -168,6 +172,62 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.addSoundFromFile).toHaveBeenCalledWith('target', {name: 'audio.wav'});
         expect(manager.addVideoFromFile).toHaveBeenCalledWith('target', {name: 'clip.webm'});
         expect(manager.addFontFromFile).toHaveBeenCalledWith({name: 'typeface.woff2'});
+    });
+
+    test('creates named costume groups from stable costume asset ids', () => {
+        const manager = makeManager();
+        const costumes = [
+            {assetId: 'svg-one', name: 'One'},
+            {assetId: 'svg-two', name: 'Two'},
+            {assetId: 'svg-three', name: 'Three'}
+        ];
+        const target = {getCostumes: () => costumes, id: 'target', isOriginal: true};
+
+        const group = manager.createCostumeGroup(target, ['svg-one', 'svg-three'], 'Walk');
+
+        expect(group).toEqual({
+            costumeAssetIds: ['svg-one', 'svg-three'],
+            name: 'Walk'
+        });
+        expect(manager.getCostumeGroups(target)).toEqual([group]);
+        expect(manager.getCostumeGroupCostumes(target, 'Walk')).toEqual([costumes[0], costumes[2]]);
+        expect(manager.getCostumeGroupFrameNumber(group, 99)).toBe(2);
+        expect(manager.getCostumeForObjectDraw(target, COSTUME_GROUP_SOURCE, 'Walk', 2))
+            .toBe(costumes[2]);
+    });
+
+    test('serializes and restores costume group membership without copying SVG assets', () => {
+        const manager = makeManager();
+        const target = {
+            getCostumes: () => [{assetId: 'svg-one', name: 'One'}, {assetId: 'svg-two', name: 'Two'}],
+            getName: () => 'Sprite',
+            id: 'target',
+            isOriginal: true,
+            isStage: false
+        };
+        manager.runtime.targets = [target];
+        manager.costumeGroups = new Map([[
+            target.id,
+            [{costumeAssetIds: ['svg-one', 'svg-two'], name: 'Walk'}]
+        ]]);
+
+        const descriptors = manager.serializeCostumeGroups();
+        expect(descriptors).toEqual([{
+            costumeAssetIds: ['svg-one', 'svg-two'],
+            isStage: false,
+            name: 'Walk',
+            targetId: 'target',
+            targetIndex: 0,
+            targetName: 'Sprite'
+        }]);
+        expect(COSTUME_GROUP_PROJECT_KEY).toBe('movieCostumeGroups');
+
+        manager.replaceCostumeGroups(manager.deserializeCostumeGroups(descriptors));
+
+        expect(manager.getCostumeGroups(target)).toEqual([{
+            costumeAssetIds: ['svg-one', 'svg-two'],
+            name: 'Walk'
+        }]);
     });
 
     test('sets exact sprite sizes and restores position fencing', () => {
@@ -1554,6 +1614,37 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeGreaterThan(target.setCostume.mock.invocationCallOrder[0]);
         expect(manager.applyProjection.mock.invocationCallOrder[0])
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+    });
+
+    test('draws a selected costume group frame through the original costume skin', () => {
+        const manager = makeManager();
+        const costumes = [
+            {assetId: 'svg-one', name: 'One'},
+            {assetId: 'svg-two', name: 'Two'}
+        ];
+        const target = {
+            getCostumes: () => costumes,
+            id: 'target',
+            isStage: false,
+            setCostume: jest.fn(),
+            setSize: jest.fn()
+        };
+        manager.costumeGroups = new Map([[
+            target.id,
+            [{costumeAssetIds: ['svg-one', 'svg-two'], name: 'Walk'}]
+        ]]);
+        manager.applyObjectDrawConfiguration = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+
+        expect(manager.drawObject(target, {
+            asset: 'Walk',
+            frame: 2,
+            source: COSTUME_GROUP_SOURCE
+        })).toBeUndefined();
+
+        expect(target.setCostume).toHaveBeenCalledWith(1);
+        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });
 
     test('captures scene draws without changing or stamping the target', () => {

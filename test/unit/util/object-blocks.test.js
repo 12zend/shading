@@ -6,6 +6,7 @@ import Sprite from 'scratch-vm/src/sprites/sprite';
 import installObjectBlocks, {
     ANIMATION_EASING_TYPES,
     BLEND_MODES,
+    COSTUME_GROUP_SOURCE,
     MATTE_MODES,
     applyObjectTransforms,
     createObjectBlocksClass,
@@ -177,6 +178,36 @@ describe('Objects blocks', () => {
         expect(items.find(item => item.source === 'model')).toMatchObject({deletable: true, index: 0});
     });
 
+    test('exposes costume groups as frame-based media without replacing their source costumes', () => {
+        const costumes = [
+            {assetId: 'svg-one', name: 'One'},
+            {assetId: 'svg-two', name: 'Two'}
+        ];
+        const group = {costumeAssetIds: ['svg-one', 'svg-two'], name: 'Walk'};
+        const vm = {
+            editingTarget: {
+                getCostumes: () => costumes,
+                id: 'sprite'
+            },
+            runtime: {
+                fontManager: {getFonts: () => []},
+                movieAssetManager: {
+                    getCostumeGroupCostumes: jest.fn(() => costumes),
+                    getCostumeGroups: jest.fn(() => [group]),
+                    getModels: () => [],
+                    getVideos: () => []
+                }
+            }
+        };
+
+        expect(getAssetItems(vm).find(item => item.source === COSTUME_GROUP_SOURCE)).toMatchObject({
+            deletable: true,
+            details: '2 frames',
+            name: 'Walk',
+            value: `${COSTUME_GROUP_SOURCE}:Walk`
+        });
+    });
+
     test('deletes each supported project media type through its owning API', () => {
         const deleteCostume = jest.fn(() => () => {});
         const manager = {
@@ -329,6 +360,7 @@ describe('Objects blocks', () => {
 
         expect(drawSelectionUsesFrame(vm, 'video', 'clip')).toBe(true);
         expect(drawSelectionUsesFrame(vm, 'video', 'clip', 'video')).toBe(false);
+        expect(drawSelectionUsesFrame(vm, COSTUME_GROUP_SOURCE, 'poses')).toBe(true);
         expect(drawSelectionUsesFrame(vm, 'model', 'Still')).toBe(false);
         expect(drawSelectionUsesFrame(vm, 'model', 'Animated')).toBe(true);
         expect(drawSelectionUsesFrame(vm, 'costume', 'image')).toBe(false);
@@ -345,6 +377,13 @@ describe('Objects blocks', () => {
             text: false,
             videoMode: true,
             volume: true
+        });
+        expect(getDrawInputVisibility(vm, COSTUME_GROUP_SOURCE, 'poses')).toEqual({
+            frame: true,
+            speed: false,
+            text: false,
+            videoMode: false,
+            volume: false
         });
         expect(normalizeVideoMode('anything else')).toBe('sequence');
         expect(modelHasFrames({animationCount: 1})).toBe(true);

@@ -46,6 +46,8 @@ const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
 const DEFAULT_BACKDROP_ASSET_ID = 'cd21514d0531fdffb22204e0ec5ed84a';
 const VIDEO_PROJECT_KEY = 'movieVideos';
+const COSTUME_GROUP_PROJECT_KEY = 'movieCostumeGroups';
+const COSTUME_GROUP_SOURCE = 'costume-group';
 const MODEL_PROJECT_KEY = 'movieModels';
 const CAMERA_PROJECT_KEY = 'movieCamera';
 const TRANSFORM_PROJECT_KEY = 'movie3D';
@@ -231,6 +233,25 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const getOriginalTarget = target => {
     if (!target || target.isOriginal || !target.sprite || !target.sprite.clones) return target;
     return target.sprite.clones.find(clone => clone.isOriginal) || target;
+};
+
+const getCostumeAssetId = costume => (
+    typeof costume === 'string' ? costume : costume && (costume.assetId || costume.name)
+);
+
+const normalizeCostumeGroup = (group, fallbackName = 'Costume group') => {
+    const source = group || {};
+    const members = Array.isArray(source.costumeAssetIds) ? source.costumeAssetIds : source.costumes;
+    const costumeAssetIds = Array.from(new Set(
+        (Array.isArray(members) ? members : [])
+            .map(getCostumeAssetId)
+            .filter(Boolean)
+            .map(String)
+    ));
+    return {
+        costumeAssetIds,
+        name: String(source.name || fallbackName)
+    };
 };
 
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -448,6 +469,7 @@ class MovieAssetManager extends EventEmitter {
         this.vm = vm;
         this.runtime = vm.runtime;
         this.videos = new Map();
+        this.costumeGroups = new Map();
         this.models = new Map();
         this.targetStates = new Map();
         this.fontFaces = new Map();
@@ -895,6 +917,8 @@ class MovieAssetManager extends EventEmitter {
             const json = JSON.parse(originalToJSON(targetId, serializationOptions));
             const videos = this.serializeJSON(targetId);
             if (videos.length) json[VIDEO_PROJECT_KEY] = videos;
+            const costumeGroups = this.serializeCostumeGroups(targetId);
+            if (costumeGroups.length) json[COSTUME_GROUP_PROJECT_KEY] = costumeGroups;
             const models = this.serializeModelsJSON(targetId);
             if (models.length) json[MODEL_PROJECT_KEY] = models;
             if (!this.isDefaultCamera()) json[CAMERA_PROJECT_KEY] = cloneCamera(this.camera);
@@ -914,12 +938,14 @@ class MovieAssetManager extends EventEmitter {
             this.clearRenderingFrames();
             this.lights = null;
             const videoPromise = this.deserializeVideos(projectJSON[VIDEO_PROJECT_KEY], zip);
+            const costumeGroups = this.deserializeCostumeGroups(projectJSON[COSTUME_GROUP_PROJECT_KEY]);
             const modelPromise = this.deserializeModels(projectJSON[MODEL_PROJECT_KEY], zip);
             const transformDescriptors = this.readTransformDescriptors(projectJSON);
             const cameraDescriptor = projectJSON[CAMERA_PROJECT_KEY];
             const timelineDescriptor = projectJSON[TIMELINE_PROJECT_KEY];
             const result = await originalDeserializeProject(projectJSON, zip);
             this.replaceVideos(await videoPromise);
+            this.replaceCostumeGroups(costumeGroups);
             this.replaceModels(await modelPromise);
             await this.preloadModels();
             this.restoreCamera(cameraDescriptor);
@@ -1804,6 +1830,165 @@ class MovieAssetManager extends EventEmitter {
     handleFontsChanged () {
         this.syncFontFaces();
         this.emit('fontsChanged');
+    }
+
+    getCostumeGroups (targetOrId) {
+        const target = typeof targetOrId === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(targetOrId) : targetOrId;
+        const original = getOriginalTarget(target);
+        const targetId = original && original.id ? original.id : targetOrId;
+        if (!(this.costumeGroups instanceof Map)) return [];
+        return (this.costumeGroups.get(targetId) || []).map(group => normalizeCostumeGroup(group));
+    }
+
+    getCostumeGroupByName (target, requestedGroup) {
+        const groups = this.getCostumeGroups(target);
+        if (!groups.length) return null;
+        if (typeof requestedGroup === 'number' || /^\s*\d+\s*$/.test(String(requestedGroup))) {
+            return groups[clamp(Number(requestedGroup) - 1, 0, groups.length - 1)];
+        }
+        return groups.find(group => group.name === String(requestedGroup)) || null;
+    }
+
+    getCostumeGroupCostumes (target, requestedGroup) {
+        const resolvedTarget = typeof target === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(target) : target;
+        const original = getOriginalTarget(resolvedTarget);
+        const costumes = original && typeof original.getCostumes === 'function' ? original.getCostumes() : [];
+        const group = requestedGroup && typeof requestedGroup === 'object' ?
+            normalizeCostumeGroup(requestedGroup) : this.getCostumeGroupByName(target, requestedGroup);
+        if (!group || !costumes.length) return [];
+        return group.costumeAssetIds.map(assetId => costumes.find(costume => (
+            String(costume && costume.assetId) === assetId ||
+            (!costume.assetId && String(costume.name) === assetId)
+        ))).filter(Boolean);
+    }
+
+    getCostumeGroupFrameNumber (group, requestedFrame) {
+        const normalized = normalizeCostumeGroup(group);
+        const frameCount = normalized.costumeAssetIds.length;
+        if (!frameCount) return 1;
+        const numericFrame = Number(requestedFrame);
+        return Math.round(clamp(Number.isFinite(numericFrame) ? numericFrame : 1, 1, frameCount));
+    }
+
+    getCostumeForObjectDraw (target, source, asset, frame) {
+        if (source !== COSTUME_GROUP_SOURCE) return this.getCostumeByName(target, asset);
+        const group = this.getCostumeGroupByName(target, asset);
+        const costumes = this.getCostumeGroupCostumes(target, group);
+        return costumes[this.getCostumeGroupFrameNumber(group, frame) - 1] || null;
+    }
+
+    getCostumeIndexForObjectDraw (target, costume, fallbackName = null) {
+        const original = getOriginalTarget(target);
+        const costumes = target && typeof target.getCostumes === 'function' ? target.getCostumes() :
+            original && typeof original.getCostumes === 'function' ? original.getCostumes() : [];
+        if (costume && costumes.length) {
+            const assetIndex = costumes.findIndex(item => item.assetId && item.assetId === costume.assetId);
+            if (assetIndex >= 0) return assetIndex;
+            const objectIndex = costumes.indexOf(costume);
+            if (objectIndex >= 0) return objectIndex;
+        }
+        if (typeof target.getCostumeIndexByName !== 'function') return -1;
+        if (fallbackName !== null) return target.getCostumeIndexByName(String(fallbackName));
+        return costume ? target.getCostumeIndexByName(String(costume.name)) : -1;
+    }
+
+    createCostumeGroup (targetOrId, requestedCostumeAssetIds, requestedName) {
+        const target = typeof targetOrId === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(targetOrId) : targetOrId;
+        const original = getOriginalTarget(target);
+        const costumes = original && typeof original.getCostumes === 'function' ? original.getCostumes() : [];
+        if (!original || !costumes.length) return null;
+
+        const requestedIds = Array.from(requestedCostumeAssetIds || []).map(String);
+        const costumeAssetIds = Array.from(new Set(requestedIds.map(requestedId => {
+            const costume = costumes.find(item => (
+                String(item && item.assetId) === requestedId || String(item && item.name) === requestedId
+            ));
+            return getCostumeAssetId(costume);
+        })
+            .filter(Boolean)
+            .map(String)));
+        if (costumeAssetIds.length < 2) return null;
+
+        if (!(this.costumeGroups instanceof Map)) this.costumeGroups = new Map();
+        const targetId = original.id;
+        const groups = this.getCostumeGroups(original);
+        const group = {
+            costumeAssetIds,
+            name: unusedName(
+                String(requestedName || '').trim() || 'Costume group',
+                groups.map(item => item.name)
+            )
+        };
+        this.costumeGroups.set(targetId, groups.concat(group));
+        this.changedCostumeGroups(targetId);
+        return {...group, costumeAssetIds: group.costumeAssetIds.slice()};
+    }
+
+    deleteCostumeGroup (targetOrId, index) {
+        const target = typeof targetOrId === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(targetOrId) : targetOrId;
+        const original = getOriginalTarget(target);
+        const targetId = original && original.id ? original.id : targetOrId;
+        const groups = this.getCostumeGroups(targetId).slice();
+        const [removed] = groups.splice(index, 1);
+        if (!removed) return false;
+        if (!(this.costumeGroups instanceof Map)) this.costumeGroups = new Map();
+        this.costumeGroups.set(targetId, groups);
+        this.changedCostumeGroups(targetId);
+        return true;
+    }
+
+    renameCostumeGroup (targetOrId, index, requestedName) {
+        const target = typeof targetOrId === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(targetOrId) : targetOrId;
+        const original = getOriginalTarget(target);
+        const targetId = original && original.id ? original.id : targetOrId;
+        const groups = this.getCostumeGroups(targetId).slice();
+        if (!groups[index]) return '';
+        const usedNames = groups.filter((item, itemIndex) => itemIndex !== index).map(item => item.name);
+        const name = unusedName(String(requestedName || '').trim() || 'Costume group', usedNames);
+        groups[index] = {...groups[index], name};
+        if (!(this.costumeGroups instanceof Map)) this.costumeGroups = new Map();
+        this.costumeGroups.set(targetId, groups);
+        this.changedCostumeGroups(targetId);
+        return name;
+    }
+
+    removeCostumeFromGroups (targetOrId, assetId) {
+        const target = typeof targetOrId === 'string' && this.runtime &&
+            typeof this.runtime.getTargetById === 'function' ?
+            this.runtime.getTargetById(targetOrId) : targetOrId;
+        const original = getOriginalTarget(target);
+        const targetId = original && original.id ? original.id : targetOrId;
+        const removedId = String(assetId || '');
+        const groups = this.getCostumeGroups(targetId);
+        const nextGroups = groups.map(group => ({
+            ...group,
+            costumeAssetIds: group.costumeAssetIds.filter(id => id !== removedId)
+        })).filter(group => group.costumeAssetIds.length >= 2);
+        if (nextGroups.length === groups.length && nextGroups.every((group, index) => (
+            group.name === groups[index].name &&
+            group.costumeAssetIds.length === groups[index].costumeAssetIds.length
+        ))) return;
+        if (!(this.costumeGroups instanceof Map)) this.costumeGroups = new Map();
+        this.costumeGroups.set(targetId, nextGroups);
+        this.changedCostumeGroups(targetId);
+    }
+
+    changedCostumeGroups (targetId) {
+        this.emit('costumeGroupsChanged', targetId);
+        if (this.runtime && typeof this.runtime.emitProjectChanged === 'function') {
+            this.runtime.emitProjectChanged();
+        }
+        if (this.vm && typeof this.vm.refreshWorkspace === 'function') this.vm.refreshWorkspace();
     }
 
     getVideos (targetOrId) {
@@ -3018,8 +3203,13 @@ class MovieAssetManager extends EventEmitter {
         let logicalWidth;
         let logicalHeight;
         let rotationCenter;
-        if (source === 'costume') {
-            const costume = this.getCostumeByName(target, configuration.asset);
+        if (source === 'costume' || source === COSTUME_GROUP_SOURCE) {
+            const costume = this.getCostumeForObjectDraw(
+                target,
+                source,
+                configuration.asset,
+                configuration.frame
+            );
             if (!costume || !costume.asset || typeof costume.asset.encodeDataURI !== 'function') return null;
             const cached = this.getBuildingTexture(costume, 'albedo');
             const texture = cached.texture || await cached.promise;
@@ -3389,9 +3579,18 @@ class MovieAssetManager extends EventEmitter {
         this.applyObjectDrawConfiguration(target, configuration);
         const source = String(configuration.source || 'costume').toLowerCase();
         let render;
-        if (source === 'costume') {
-            const costumeIndex = typeof target.getCostumeIndexByName === 'function' ?
-                target.getCostumeIndexByName(String(configuration.asset)) : -1;
+        if (source === 'costume' || source === COSTUME_GROUP_SOURCE) {
+            const costume = this.getCostumeForObjectDraw(
+                target,
+                source,
+                configuration.asset,
+                configuration.frame
+            );
+            const costumeIndex = this.getCostumeIndexForObjectDraw(
+                target,
+                costume,
+                source === 'costume' ? configuration.asset : null
+            );
             if (costumeIndex < 0 || typeof target.setCostume !== 'function') return;
             target.setCostume(costumeIndex);
         } else if (source === 'text') {
@@ -3421,7 +3620,7 @@ class MovieAssetManager extends EventEmitter {
     drawObject (target, configuration = {}) {
         if (!target || target.isStage) return;
         const source = String(configuration.source || 'costume').toLowerCase();
-        if (!['costume', 'video', 'text', 'model'].includes(source)) return;
+        if (!['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model'].includes(source)) return;
         if (configuration.sceneCapture) {
             this.captureObjectSceneDraw(target, configuration);
             return;
@@ -4710,6 +4909,64 @@ class MovieAssetManager extends EventEmitter {
         return document.fonts.load(descriptor).catch(() => {});
     }
 
+    serializeCostumeGroups (targetId) {
+        const originalTargets = this.runtime.targets.filter(target => target.isOriginal);
+        const result = [];
+        if (!(this.costumeGroups instanceof Map)) return result;
+        for (const [groupTargetId, groups] of this.costumeGroups) {
+            if (targetId && groupTargetId !== targetId) continue;
+            const target = originalTargets.find(item => item.id === groupTargetId);
+            if (!target) continue;
+            for (const group of groups) {
+                const normalized = normalizeCostumeGroup(group);
+                if (!normalized.name || normalized.costumeAssetIds.length < 2) continue;
+                result.push({
+                    costumeAssetIds: normalized.costumeAssetIds,
+                    isStage: target.isStage,
+                    name: normalized.name,
+                    targetId: groupTargetId,
+                    targetIndex: originalTargets.indexOf(target),
+                    targetName: target.getName()
+                });
+            }
+        }
+        return result;
+    }
+
+    deserializeCostumeGroups (descriptors) {
+        if (!Array.isArray(descriptors)) return [];
+        return descriptors.map(descriptor => {
+            if (!descriptor || typeof descriptor.targetId !== 'string') return null;
+            const group = normalizeCostumeGroup(descriptor);
+            if (!group.name || group.costumeAssetIds.length < 2) return null;
+            return {
+                group,
+                isStage: descriptor.isStage === true,
+                targetId: descriptor.targetId,
+                targetIndex: Number.isInteger(descriptor.targetIndex) ? descriptor.targetIndex : -1,
+                targetName: typeof descriptor.targetName === 'string' ? descriptor.targetName : ''
+            };
+        }).filter(Boolean);
+    }
+
+    replaceCostumeGroups (entries) {
+        if (!(this.costumeGroups instanceof Map)) this.costumeGroups = new Map();
+        this.costumeGroups.clear();
+        const originalTargets = this.runtime.targets.filter(target => target.isOriginal);
+        for (const entry of entries || []) {
+            const indexedTarget = originalTargets[entry.targetIndex];
+            const target = indexedTarget && indexedTarget.isStage === entry.isStage ? indexedTarget :
+                originalTargets.find(item => item.isStage === entry.isStage && item.getName() === entry.targetName);
+            const targetId = target ? target.id : entry.targetId;
+            const group = normalizeCostumeGroup(entry.group);
+            if (!group.name || group.costumeAssetIds.length < 2) continue;
+            const groups = this.costumeGroups.get(targetId) || [];
+            groups.push(group);
+            this.costumeGroups.set(targetId, groups);
+        }
+        this.emit('costumeGroupsChanged');
+    }
+
     serializeJSON (targetId) {
         const originalTargets = this.runtime.targets.filter(target => target.isOriginal);
         const result = [];
@@ -5081,6 +5338,8 @@ const installMovieAssetManager = vm => {
 };
 
 export {
+    COSTUME_GROUP_PROJECT_KEY,
+    COSTUME_GROUP_SOURCE,
     MovieAssetManager,
     VIDEO_FRAME_RATE,
     installMovieAssetManager as default

@@ -254,4 +254,108 @@ describe('Objects draw media picker', () => {
             global.document = originalDocument;
         }
     });
+
+    test('selects multiple costumes and stores a named costume group as the draw asset', () => {
+        const originalDocument = global.document;
+        const fakeDocument = createFakeDocument();
+        global.document = fakeDocument;
+        const content = fakeDocument.createElement('div');
+        const costumes = [
+            {assetId: 'svg-one', name: 'One'},
+            {assetId: 'svg-two', name: 'Two'}
+        ];
+        let groups = [];
+        class FieldDropdown {
+            constructor () {
+                this.value_ = 'costume:One';
+            }
+
+            callValidator (value) {
+                return value;
+            }
+
+            getOptions () {
+                return [];
+            }
+
+            getValue () {
+                return this.value_;
+            }
+
+            onHide () {}
+
+            setText () {}
+
+            setValue (value) {
+                this.value_ = value;
+            }
+        }
+        const manager = {
+            createCostumeGroup: jest.fn((targetId, assetIds, name) => {
+                const group = {costumeAssetIds: assetIds, name: name || 'Costume group'};
+                groups = [group];
+                return group;
+            }),
+            getCostumeGroupCostumes: jest.fn((target, group) => costumes.filter(costume => (
+                group.costumeAssetIds.includes(costume.assetId)
+            ))),
+            getCostumeGroups: jest.fn(() => groups),
+            getModels: jest.fn(() => []),
+            getVideos: jest.fn(() => [])
+        };
+        const ScratchBlocks = {
+            DropDownDiv: {
+                clearContent: jest.fn(() => {
+                    content.textContent = '';
+                }),
+                getContentDiv: jest.fn(() => content),
+                hide: jest.fn(),
+                hideWithoutAnimation: jest.fn(),
+                setBoundsElement: jest.fn(),
+                setCategory: jest.fn(),
+                setColour: jest.fn(),
+                showPositionedByBlock: jest.fn()
+            },
+            Events: {setGroup: jest.fn()},
+            FieldDropdown
+        };
+        const vm = {
+            editingTarget: {
+                getCostumes: () => costumes,
+                id: 'sprite'
+            },
+            runtime: {movieAssetManager: manager}
+        };
+        const MediaField = createMediaField(ScratchBlocks, vm, () => [], value => value);
+        const field = new MediaField();
+        field.sourceBlock_ = {
+            getFieldValue: name => (name === 'ASSET' ? field.getValue() : 'costume'),
+            getCategory: () => 'Objects',
+            setDrawAsset_: jest.fn(),
+            workspace: {
+                getParentSvg: () => ({parentNode: {clientWidth: 640}})
+            }
+        };
+
+        try {
+            field.showEditor_();
+            findByLabel(content, 'Select costumes for a group').click();
+            findByLabel(content, 'Costume: One').click();
+            findByLabel(content, 'Costume: Two').click();
+            const groupName = findByLabel(content, 'Costume group name');
+            groupName.value = 'Walk';
+            findByLabel(content, 'Group selected costumes').click();
+
+            expect(manager.createCostumeGroup).toHaveBeenCalledWith(
+                'sprite',
+                ['svg-one', 'svg-two'],
+                'Walk'
+            );
+            expect(field.getValue()).toBe('costume-group:Walk');
+            expect(field.sourceBlock_.setDrawAsset_).toHaveBeenCalledWith('costume-group', 'Walk');
+            expect(findByLabel(content, 'Costume group: Walk')).not.toBeNull();
+        } finally {
+            global.document = originalDocument;
+        }
+    });
 });

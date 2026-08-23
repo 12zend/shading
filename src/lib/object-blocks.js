@@ -25,7 +25,8 @@ const EXTENSION_ID = 'objects';
 const PRIMARY = '#4968D4';
 const SECONDARY = '#3E59B8';
 const TERTIARY = '#334A99';
-const DRAW_SOURCES = ['costume', 'video', 'text', 'model'];
+const COSTUME_GROUP_SOURCE = 'costume-group';
+const DRAW_SOURCES = ['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model'];
 const SHAPE_TYPES = ['polygon', 'star', 'flower'];
 const BLEND_MODES = ['normal', 'add', 'mul', 'screen', 'overlay', 'darken', 'lighten', 'color dodge'];
 const MATTE_MODES = ['alpha', 'luma', 'alpha inverted', 'luma inverted'];
@@ -1307,6 +1308,7 @@ export {
     TERTIARY,
     ANIMATION_EASING_TYPES,
     BLEND_MODES,
+    COSTUME_GROUP_SOURCE,
     DRAW_SOURCES,
     MATTE_MODES,
     OBJECT_REPORTER_OPCODES,

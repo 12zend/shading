@@ -1,5 +1,6 @@
 import {
     DRAW_SOURCES,
+    COSTUME_GROUP_SOURCE,
     PRIMARY,
     SECONDARY,
     SHAPE_TYPES,
@@ -21,6 +22,7 @@ const INLINE_PAINT_REFERENCE_HEIGHT = 700;
 const INLINE_PAINT_REFERENCE_WIDTH = 1249;
 const SOURCE_LABELS = {
     costume: 'Costume',
+    [COSTUME_GROUP_SOURCE]: 'Costume group',
     model: 'Model',
     text: 'Font',
     video: 'Video'
@@ -93,6 +95,8 @@ const getAssetItems = vm => {
                 log.warn(error);
             }
             return {
+                assetId: costume.assetId,
+                costume,
                 deletable: costumes.length > 1,
                 details: costume.size ? `${Math.ceil(costume.size[0] / (costume.bitmapResolution || 1))} × ${
                     Math.ceil(costume.size[1] / (costume.bitmapResolution || 1))}` : '',
@@ -100,6 +104,30 @@ const getAssetItems = vm => {
                 previewUrl
             };
         });
+        if (manager && typeof manager.getCostumeGroups === 'function') {
+            const groups = manager.getCostumeGroups(target);
+            addItems(COSTUME_GROUP_SOURCE, groups, group => {
+                const groupCostumes = typeof manager.getCostumeGroupCostumes === 'function' ?
+                    manager.getCostumeGroupCostumes(target, group) : [];
+                const firstCostume = groupCostumes[0];
+                let previewUrl = '';
+                try {
+                    if (firstCostume && firstCostume.asset &&
+                        typeof firstCostume.asset.encodeDataURI === 'function') {
+                        previewUrl = firstCostume.asset.encodeDataURI();
+                    }
+                } catch (error) { // A missing preview must not make the group unavailable.
+                    log.warn(error);
+                }
+                return {
+                    deletable: true,
+                    details: `${groupCostumes.length || (group.costumeAssetIds || []).length} frames`,
+                    group,
+                    previewType: 'image',
+                    previewUrl
+                };
+            });
+        }
     }
     if (manager && target) {
         addItems('video', manager.getVideos(target), video => ({
@@ -160,6 +188,7 @@ const normalizeVideoMode = mode => (
 );
 
 const drawSelectionUsesFrame = (vm, source, asset, videoMode = 'sequence') => {
+    if (source === COSTUME_GROUP_SOURCE) return true;
     if (source === 'video') return normalizeVideoMode(videoMode) === 'sequence';
     if (source !== 'model') return false;
     const manager = vm.runtime && vm.runtime.movieAssetManager;
@@ -181,6 +210,10 @@ const getDrawInputVisibility = (vm, source, asset, videoMode) => {
     };
 };
 
+const isCostumeItem = item => item && (
+    item.source === 'costume' || item.source === COSTUME_GROUP_SOURCE
+);
+
 const deleteAsset = (vm, item) => {
     if (!item || !item.deletable) return false;
     const target = vm.editingTarget;
@@ -188,7 +221,15 @@ const deleteAsset = (vm, item) => {
     if (item.source === 'costume') {
         if (!target || typeof target.getCostumes !== 'function' || target.getCostumes().length <= 1 ||
             typeof vm.deleteCostume !== 'function') return false;
-        return Boolean(vm.deleteCostume(item.index));
+        const deleted = Boolean(vm.deleteCostume(item.index));
+        if (deleted && manager && typeof manager.removeCostumeFromGroups === 'function') {
+            manager.removeCostumeFromGroups(target, item.assetId || item.name);
+        }
+        return deleted;
+    }
+    if (item.source === COSTUME_GROUP_SOURCE && manager && target &&
+        typeof manager.deleteCostumeGroup === 'function') {
+        return manager.deleteCostumeGroup(target.id, item.index);
     }
     if (item.source === 'video' && manager && target && typeof manager.deleteVideo === 'function') {
         manager.deleteVideo(target.id, item.index);
@@ -442,7 +483,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             heading.textContent = 'Choose media';
             const helper = document.createElement('p');
             helper.className = styles.mediaHelper;
-            helper.textContent = 'Import, drop, or paste files with ⌘V / Ctrl+V, then select one.';
+            helper.textContent = 'Import, drop, or paste files, then select media or make a costume sequence.';
             headingGroup.appendChild(heading);
             headingGroup.appendChild(helper);
             const importButton = document.createElement('button');
@@ -524,6 +565,41 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             browserView.className = styles.browserView;
             browserView.setAttribute('aria-label', 'Media browser');
             browserView.appendChild(filterBar);
+
+            const costumeSelectionBar = document.createElement('div');
+            costumeSelectionBar.className = styles.costumeSelectionBar;
+            const costumeSelectionToggle = document.createElement('button');
+            costumeSelectionToggle.className = styles.selectionButton;
+            costumeSelectionToggle.type = 'button';
+            costumeSelectionToggle.setAttribute('aria-label', 'Select costumes for a group');
+            costumeSelectionToggle.setAttribute('aria-pressed', 'false');
+            costumeSelectionToggle.textContent = 'Select costumes';
+            const costumeSelectionHint = document.createElement('span');
+            costumeSelectionHint.className = styles.selectionHint;
+            costumeSelectionHint.textContent = 'Select 2+ costumes to make a sequence';
+            const costumeSelectionTools = document.createElement('div');
+            costumeSelectionTools.className = styles.selectionTools;
+            const costumeSelectionCount = document.createElement('span');
+            costumeSelectionCount.className = styles.selectionCount;
+            costumeSelectionCount.setAttribute('aria-live', 'polite');
+            const costumeGroupName = document.createElement('input');
+            costumeGroupName.className = styles.groupNameInput;
+            costumeGroupName.type = 'text';
+            costumeGroupName.setAttribute('aria-label', 'Costume group name');
+            costumeGroupName.placeholder = 'Group name';
+            costumeGroupName.value = 'Costume group';
+            const costumeGroupButton = document.createElement('button');
+            costumeGroupButton.className = styles.groupButton;
+            costumeGroupButton.type = 'button';
+            costumeGroupButton.setAttribute('aria-label', 'Group selected costumes');
+            costumeGroupButton.textContent = 'Group selected';
+            costumeSelectionTools.appendChild(costumeSelectionCount);
+            costumeSelectionTools.appendChild(costumeGroupName);
+            costumeSelectionTools.appendChild(costumeGroupButton);
+            costumeSelectionBar.appendChild(costumeSelectionToggle);
+            costumeSelectionBar.appendChild(costumeSelectionHint);
+            costumeSelectionBar.appendChild(costumeSelectionTools);
+            browserView.appendChild(costumeSelectionBar);
             browserView.appendChild(grid);
             picker.appendChild(browserView);
 
@@ -599,23 +675,35 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 {label: 'Videos', value: 'video'},
                 {label: 'Fonts', value: 'text'},
                 {label: '3D', value: 'model'}
-            ].filter(filter => filter.value === 'all' || items.some(item => item.source === filter.value));
+            ].filter(filter => filter.value === 'all' || items.some(item => (
+                filter.value === 'costume' ? isCostumeItem(item) : item.source === filter.value
+            )));
             let activeFilter = 'all';
             let activeFilterButton;
             let activeView = 'media';
+            let costumeSelectionMode = false;
+            const selectedCostumeValues = new Set();
             let renderedButtons = [];
             let renderedCostumeButtons = [];
+            const renderGridRef = {current: () => {}};
+            const renderGrid = () => renderGridRef.current();
 
             const getSelectedCostume = () => items.find(item => (
                 item.source === 'costume' && item.value === this.getValue()
             ));
 
+            const getSelectedCostumeGroup = () => items.find(item => (
+                item.source === COSTUME_GROUP_SOURCE && item.value === this.getValue()
+            ));
+
             const updateEditAvailability = () => {
                 const costume = getSelectedCostume();
+                const group = getSelectedCostumeGroup();
                 editViewButton.disabled = !costume;
                 editHint.textContent = costume ?
                     `${costume.name} · edits save automatically` :
-                    'Select an image to edit';
+                    group ? `${group.name} · ${group.details} · use frame input` :
+                        'Select an image to edit';
             };
 
             const selectItem = item => {
@@ -628,6 +716,66 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 ScratchBlocks.Events.setGroup(false);
                 updateEditAvailability();
             };
+
+            const updateCostumeSelectionControls = () => {
+                const canGroupCostumes = Boolean(
+                    manager && typeof manager.createCostumeGroup === 'function' &&
+                    items.filter(item => item.source === 'costume').length > 1
+                );
+                costumeSelectionBar.hidden = !canGroupCostumes;
+                if (!canGroupCostumes) return;
+                costumeSelectionToggle.textContent = costumeSelectionMode ?
+                    'Cancel selection' : 'Select costumes';
+                costumeSelectionToggle.setAttribute('aria-pressed', String(costumeSelectionMode));
+                costumeSelectionHint.textContent = costumeSelectionMode ?
+                    'Click costumes to add frames' : 'Select 2+ costumes to make a sequence';
+                costumeSelectionTools.hidden = !costumeSelectionMode;
+                filterBar.hidden = costumeSelectionMode;
+                costumeSelectionCount.textContent = `${selectedCostumeValues.size} selected`;
+                costumeGroupButton.disabled = selectedCostumeValues.size < 2;
+            };
+
+            const setCostumeSelectionMode = enabled => {
+                costumeSelectionMode = enabled;
+                if (!enabled) selectedCostumeValues.clear();
+                updateCostumeSelectionControls();
+                renderGrid();
+            };
+
+            const createCostumeGroup = () => {
+                const selectedCostumes = items.filter(item => (
+                    item.source === 'costume' && selectedCostumeValues.has(item.value)
+                ));
+                if (selectedCostumes.length < 2 || !manager || !vm.editingTarget) return;
+                const group = manager.createCostumeGroup(
+                    vm.editingTarget.id,
+                    selectedCostumes.map(item => item.assetId || item.name),
+                    costumeGroupName.value
+                );
+                if (!group) return;
+                const groupItem = getAssetItems(vm).find(item => (
+                    item.source === COSTUME_GROUP_SOURCE && item.name === group.name
+                ));
+                if (!groupItem) return;
+                items.push(groupItem);
+                selectedCostumeValues.clear();
+                costumeSelectionMode = false;
+                costumeGroupName.value = group.name;
+                selectItem(groupItem);
+                persistDrawAsset(
+                    vm,
+                    getLiveBlock(this.sourceBlock_),
+                    COSTUME_GROUP_SOURCE,
+                    group.name
+                );
+                updateCostumeSelectionControls();
+                renderGrid();
+            };
+
+            costumeSelectionToggle.addEventListener('click', () => {
+                setCostumeSelectionMode(!costumeSelectionMode);
+            });
+            costumeGroupButton.addEventListener('click', createCostumeGroup);
 
             const syncRenderedSelection = () => {
                 renderedButtons.forEach(button => {
@@ -878,12 +1026,14 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             };
             grid.addEventListener('keydown', handleGridKeyDown);
 
-            const renderGrid = () => {
+            renderGridRef.current = () => {
                 this.disposePreviews_();
                 grid.textContent = '';
                 renderedButtons = [];
-                const visibleItems = activeFilter === 'all' ?
-                    items : items.filter(item => item.source === activeFilter);
+                const visibleItems = costumeSelectionMode ? items.filter(item => item.source === 'costume') :
+                    activeFilter === 'all' ? items : items.filter(item => (
+                        activeFilter === 'costume' ? isCostumeItem(item) : item.source === activeFilter
+                    ));
                 if (!visibleItems.length) {
                     const empty = document.createElement('div');
                     empty.className = styles.emptyState;
@@ -893,13 +1043,17 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 }
                 visibleItems.forEach(item => {
                     const selected = item.value === this.getValue();
+                    const multiSelected = costumeSelectionMode && item.source === 'costume' &&
+                        selectedCostumeValues.has(item.value);
                     const card = document.createElement('div');
-                    card.className = `${styles.mediaItem}${selected ? ` ${styles.mediaItemSelected}` : ''}`;
+                    card.className = `${styles.mediaItem}${selected ? ` ${styles.mediaItemSelected}` : ''}${
+                        multiSelected ? ` ${styles.mediaItemMultiSelected}` : ''}`;
                     const selectButton = document.createElement('button');
                     selectButton.className = styles.selectButton;
                     selectButton.type = 'button';
                     selectButton.setAttribute('aria-label', `${item.label}: ${item.name}`);
                     selectButton.setAttribute('aria-selected', String(selected));
+                    selectButton.setAttribute('aria-checked', String(multiSelected));
                     selectButton.setAttribute('role', 'option');
                     selectButton.objectDrawValue_ = item.value;
                     const preview = document.createElement('span');
@@ -918,7 +1072,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     meta.appendChild(type);
                     selectButton.appendChild(preview);
                     selectButton.appendChild(meta);
-                    if (selected) {
+                    if (selected || multiSelected) {
                         const check = document.createElement('span');
                         check.className = styles.selectedCheck;
                         check.appendChild(createSvgIcon('m5 12 4 4L19 6', styles.checkIcon));
@@ -926,6 +1080,20 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         selectButton.objectDrawSelectedCheck_ = check;
                     }
                     selectButton.addEventListener('click', () => {
+                        if (costumeSelectionMode && item.source === 'costume') {
+                            if (selectedCostumeValues.has(item.value)) {
+                                selectedCostumeValues.delete(item.value);
+                            } else {
+                                selectedCostumeValues.add(item.value);
+                            }
+                            updateCostumeSelectionControls();
+                            renderGrid();
+                            const nextButton = renderedButtons.find(button => (
+                                button.objectDrawValue_ === item.value
+                            ));
+                            if (nextButton) nextButton.focus();
+                            return;
+                        }
                         selectItem(item);
                         syncRenderedSelection();
                         selectButton.focus();
@@ -944,6 +1112,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         deleteButton.addEventListener('click', event => {
                             event.preventDefault();
                             event.stopPropagation();
+                            selectedCostumeValues.delete(item.value);
                             if (selected) {
                                 const fallback = items.find(candidate => candidate.value !== item.value &&
                                     candidate.source === item.source) ||

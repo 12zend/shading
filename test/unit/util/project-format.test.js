@@ -124,6 +124,16 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['video-assets']);
     });
 
+    test('marks costume groups as Movie-only project data', () => {
+        const json = project({});
+        json.movieCostumeGroups = [{
+            costumeAssetIds: ['svg-one', 'svg-two'],
+            name: 'Walk'
+        }];
+
+        expect(getMovieProjectFeatures(json)).toEqual(['costume-groups']);
+    });
+
     test('marks the atomic video render block as Movie project data', () => {
         const json = project({video: block('looks_rendervideo')});
 

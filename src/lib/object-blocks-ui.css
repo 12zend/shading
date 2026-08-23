@@ -129,6 +129,9 @@
 .view-button:focus-visible,
 .costume-rail-item:focus-visible,
 .filter-button:focus-visible,
+.selection-button:focus-visible,
+.group-button:focus-visible,
+.group-name-input:focus-visible,
 .delete-button:focus-visible {
     outline: 3px solid #8da3f7;
     outline-offset: 2px;
@@ -591,6 +594,103 @@
     color: #fff;
 }
 
+.costume-selection-bar {
+    min-height: 2.25rem;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    margin: 0 1rem 0.55rem;
+    padding: 0.3rem 0.4rem 0.3rem 0.5rem;
+    border-radius: $form-radius;
+    background: $ui-tertiary;
+}
+
+.selection-button,
+.group-button {
+    min-height: 1.65rem;
+    padding: 0 0.62rem;
+    border: 0;
+    border-radius: $form-radius;
+    background: transparent;
+    color: $text-primary;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.selection-button:hover,
+.selection-button[aria-pressed="true"] {
+    background: #4968d4;
+    color: #fff;
+}
+
+.selection-hint {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+    color: $text-primary-transparent;
+    font-size: 0.6rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selection-tools {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.selection-count {
+    color: $text-primary-transparent;
+    font-size: 0.62rem;
+    white-space: nowrap;
+}
+
+.group-name-input {
+    width: 7rem;
+    min-height: 1.65rem;
+    box-sizing: border-box;
+    padding: 0 0.45rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-modal-background;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.64rem;
+}
+
+.group-name-input::placeholder {
+    color: $text-primary-transparent;
+}
+
+.group-button {
+    background: #4968d4;
+    color: #fff;
+}
+
+.group-button:hover:not(:disabled) {
+    background: #3e59b8;
+}
+
+.group-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.costume-selection-bar[hidden] {
+    display: none;
+}
+
+.selection-tools[hidden] {
+    display: none;
+}
+
 .media-grid {
     min-height: 8rem;
     display: grid;
@@ -624,6 +724,11 @@
 .media-item-selected {
     border-color: #4968d4;
     box-shadow: 0 0 0 2px #4968d4;
+}
+
+.media-item-multi-selected {
+    border-color: #8da3f7;
+    box-shadow: 0 0 0 2px #8da3f7;
 }
 
 .select-button {

@@ -203,6 +203,9 @@ const getMovieProjectFeatures = projectJSON => {
     if (Array.isArray(projectJSON.movieVideos) && projectJSON.movieVideos.length > 0) {
         features.add('video-assets');
     }
+    if (Array.isArray(projectJSON.movieCostumeGroups) && projectJSON.movieCostumeGroups.length > 0) {
+        features.add('costume-groups');
+    }
     if (Array.isArray(projectJSON.movieModels) && projectJSON.movieModels.length > 0) {
         features.add('model-assets');
         features.add('3d-engine');
@@ -230,6 +233,14 @@ const getRuntimeMovieProjectFeatures = runtime => {
         for (const videos of movieAssetManager.videos.values()) {
             if (videos.length > 0) {
                 features.add('video-assets');
+                break;
+            }
+        }
+    }
+    if (movieAssetManager && movieAssetManager.costumeGroups instanceof Map) {
+        for (const groups of movieAssetManager.costumeGroups.values()) {
+            if (groups.length > 0) {
+                features.add('costume-groups');
                 break;
             }
         }
