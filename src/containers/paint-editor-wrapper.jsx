@@ -45,6 +45,10 @@ class PaintEditorWrapper extends React.Component {
     }
     handleUpdateName (name) {
         this.props.vm.renameCostume(this.props.selectedCostumeIndex, name);
+        if (this.props.onCostumeRenamed) {
+            const costume = this.props.vm.editingTarget.sprite.costumes[this.props.selectedCostumeIndex];
+            this.props.onCostumeRenamed(costume.name);
+        }
     }
     handleUpdateImage (isVector, image, rotationCenterX, rotationCenterY) {
         if (isVector) {
@@ -68,6 +72,7 @@ class PaintEditorWrapper extends React.Component {
     render () {
         if (!this.props.imageId) return null;
         const {
+            onCostumeRenamed, // eslint-disable-line no-unused-vars
             selectedCostumeIndex,
             vm,
             ...componentProps
@@ -101,6 +106,7 @@ PaintEditorWrapper.propTypes = {
     imageId: PropTypes.string.isRequired,
     theme: PropTypes.instanceOf(Theme),
     name: PropTypes.string,
+    onCostumeRenamed: PropTypes.func,
     rotationCenterX: PropTypes.number,
     rotationCenterY: PropTypes.number,
     rtl: PropTypes.bool,

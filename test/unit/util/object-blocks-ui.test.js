@@ -1,4 +1,10 @@
 import {createMediaField} from '../../../src/lib/object-blocks-ui';
+import {mountInlinePaintEditor, unmountInlinePaintEditor} from '../../../src/lib/inline-paint-editor';
+
+jest.mock('../../../src/lib/inline-paint-editor', () => ({
+    mountInlinePaintEditor: jest.fn(() => true),
+    unmountInlinePaintEditor: jest.fn()
+}));
 
 const createFakeDocument = () => {
     const fakeDocument = {activeElement: null};
@@ -177,6 +183,11 @@ describe('Objects draw media picker', () => {
             const firstItem = findByLabel(content, 'Costume: One');
             const secondItem = findByLabel(content, 'Costume: Two');
             const closeButton = findByLabel(content, 'Close media picker');
+            const editButton = findByLabel(content, 'Edit selected costume');
+            const mediaButton = findByLabel(content, 'Show media');
+            const chooseCostumeButton = findByLabel(content, 'Choose a Costume');
+            const uploadCostumeButton = findByLabel(content, 'Upload Costume');
+            const editor = findByLabel(content, 'Costume editor');
             const picker = findByLabel(content, 'Choose media for draw');
             const dropOverlay = findByLabel(content, 'Drop files to import');
 
@@ -185,6 +196,8 @@ describe('Objects draw media picker', () => {
                 field.sourceBlock_,
                 expect.any(Function)
             );
+            expect(chooseCostumeButton).not.toBeNull();
+            expect(uploadCostumeButton).not.toBeNull();
             secondItem.click();
 
             expect(field.getValue()).toBe('costume:Two');
@@ -192,6 +205,18 @@ describe('Objects draw media picker', () => {
             expect(secondItem.getAttribute('aria-selected')).toBe('true');
             expect(ScratchBlocks.DropDownDiv.hide).not.toHaveBeenCalled();
             expect(fakeDocument.activeElement).toBe(secondItem);
+
+            editButton.click();
+            expect(editor.hidden).toBe(false);
+            expect(editButton.getAttribute('aria-pressed')).toBe('true');
+            expect(mountInlinePaintEditor).toHaveBeenCalledWith(
+                expect.any(Object),
+                1,
+                expect.any(Function)
+            );
+            mediaButton.click();
+            expect(editor.hidden).toBe(true);
+            expect(unmountInlinePaintEditor).toHaveBeenCalledTimes(1);
 
             const dataTransfer = {
                 dropEffect: 'none',

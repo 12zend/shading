@@ -9,10 +9,15 @@ import {
     normalizeShapeType
 } from './object-blocks';
 import log from './log';
+import {mountInlinePaintEditor, unmountInlinePaintEditor} from './inline-paint-editor';
+import addLibraryCostumeIcon from '../components/asset-panel/icon--add-costume-lib.svg';
+import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
 
 import styles from './object-blocks-ui.css';
 
 const IMPORT_VALUE = '__movie_import__';
+const INLINE_PAINT_REFERENCE_HEIGHT = 700;
+const INLINE_PAINT_REFERENCE_WIDTH = 1249;
 const SOURCE_LABELS = {
     costume: 'Costume',
     model: 'Model',
@@ -88,6 +93,8 @@ const getAssetItems = vm => {
             }
             return {
                 deletable: costumes.length > 1,
+                details: costume.size ? `${Math.ceil(costume.size[0] / (costume.bitmapResolution || 1))} × ${
+                    Math.ceil(costume.size[1] / (costume.bitmapResolution || 1))}` : '',
                 previewType: 'image',
                 previewUrl
             };
@@ -344,6 +351,11 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
     class MediaField extends ScratchBlocks.FieldDropdown {
         constructor () {
             super(assetOptions, assetValidator);
+            this.inlineEditorRoot_ = null;
+            this.inlineEditorResizeObserver_ = null;
+            this.inlineEditorResize_ = null;
+            this.inlineEditorOverlay_ = null;
+            this.inlineEditorDropdownContainer_ = null;
             this.previewRenderers_ = [];
             this.previewVersion_ = 0;
         }
@@ -369,6 +381,29 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             this.previewRenderers_ = [];
         }
 
+        disposeInlineEditor_ () {
+            if (this.inlineEditorResizeObserver_) {
+                this.inlineEditorResizeObserver_.disconnect();
+                this.inlineEditorResizeObserver_ = null;
+            }
+            this.inlineEditorResize_ = null;
+            if (!this.inlineEditorRoot_) return;
+            unmountInlinePaintEditor(this.inlineEditorRoot_);
+            this.inlineEditorRoot_ = null;
+        }
+
+        disposeInlineEditorOverlay_ () {
+            if (this.inlineEditorDropdownContainer_) {
+                this.inlineEditorDropdownContainer_.classList.remove(styles.mediaDropdownHidden);
+                this.inlineEditorDropdownContainer_ = null;
+            }
+            if (!this.inlineEditorOverlay_) return;
+            if (this.inlineEditorOverlay_.parentNode) {
+                this.inlineEditorOverlay_.parentNode.removeChild(this.inlineEditorOverlay_);
+            }
+            this.inlineEditorOverlay_ = null;
+        }
+
         removeOutsideCloseListener_ () {
             if (!this.outsideCloseListener_ || typeof document === 'undefined') return;
             document.removeEventListener('pointerdown', this.outsideCloseListener_, true);
@@ -377,6 +412,8 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
 
         onHide () {
             this.removeOutsideCloseListener_();
+            this.disposeInlineEditor_();
+            this.disposeInlineEditorOverlay_();
             this.disposePreviews_();
             super.onHide();
         }
@@ -447,8 +484,98 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             grid.className = styles.mediaGrid;
             grid.setAttribute('aria-label', 'Available media');
             grid.setAttribute('role', 'listbox');
-            picker.appendChild(filterBar);
-            picker.appendChild(grid);
+
+            const viewSwitchBar = document.createElement('div');
+            viewSwitchBar.className = styles.viewSwitchBar;
+            const viewSwitch = document.createElement('div');
+            viewSwitch.className = styles.viewSwitch;
+            viewSwitch.setAttribute('aria-label', 'Media picker view');
+            viewSwitch.setAttribute('role', 'group');
+            const mediaViewButton = document.createElement('button');
+            mediaViewButton.className = `${styles.viewButton} ${styles.viewButtonActive}`;
+            mediaViewButton.type = 'button';
+            mediaViewButton.setAttribute('aria-label', 'Show media');
+            mediaViewButton.setAttribute('aria-pressed', 'true');
+            mediaViewButton.appendChild(createSvgIcon(
+                'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+                styles.viewIcon
+            ));
+            mediaViewButton.appendChild(document.createTextNode('Media'));
+            const editViewButton = document.createElement('button');
+            editViewButton.className = styles.viewButton;
+            editViewButton.type = 'button';
+            editViewButton.setAttribute('aria-label', 'Edit selected costume');
+            editViewButton.setAttribute('aria-pressed', 'false');
+            editViewButton.appendChild(createSvgIcon(
+                'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z',
+                styles.viewIcon
+            ));
+            editViewButton.appendChild(document.createTextNode('Edit'));
+            const editHint = document.createElement('span');
+            editHint.className = styles.editHint;
+            viewSwitch.appendChild(mediaViewButton);
+            viewSwitch.appendChild(editViewButton);
+            viewSwitchBar.appendChild(viewSwitch);
+            viewSwitchBar.appendChild(editHint);
+            picker.appendChild(viewSwitchBar);
+
+            const browserView = document.createElement('div');
+            browserView.className = styles.browserView;
+            browserView.setAttribute('aria-label', 'Media browser');
+            browserView.appendChild(filterBar);
+            browserView.appendChild(grid);
+            picker.appendChild(browserView);
+
+            const editorView = document.createElement('div');
+            editorView.className = styles.editorView;
+            editorView.setAttribute('aria-label', 'Costume editor');
+            editorView.hidden = true;
+            const editorLayout = document.createElement('div');
+            editorLayout.className = styles.editorLayout;
+            const costumeRail = document.createElement('div');
+            costumeRail.className = styles.costumeRail;
+            const costumeRailList = document.createElement('div');
+            costumeRailList.className = styles.costumeRailList;
+            costumeRailList.setAttribute('aria-label', 'Costumes');
+            costumeRailList.setAttribute('role', 'listbox');
+            const costumeActionMenu = document.createElement('div');
+            costumeActionMenu.className = styles.costumeActionMenu;
+            const uploadCostumeButton = document.createElement('button');
+            uploadCostumeButton.className = styles.costumeActionSecondary;
+            uploadCostumeButton.type = 'button';
+            uploadCostumeButton.title = 'Upload Costume';
+            uploadCostumeButton.setAttribute('aria-label', 'Upload Costume');
+            const uploadCostumeIcon = document.createElement('img');
+            uploadCostumeIcon.alt = '';
+            uploadCostumeIcon.draggable = false;
+            uploadCostumeIcon.src = fileUploadIcon;
+            uploadCostumeButton.appendChild(uploadCostumeIcon);
+            uploadCostumeButton.addEventListener('click', () => {
+                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks);
+            });
+            const chooseCostumeButton = document.createElement('button');
+            chooseCostumeButton.className = styles.costumeActionButton;
+            chooseCostumeButton.type = 'button';
+            chooseCostumeButton.title = 'Choose a Costume';
+            chooseCostumeButton.setAttribute('aria-label', 'Choose a Costume');
+            const chooseCostumeIcon = document.createElement('img');
+            chooseCostumeIcon.alt = '';
+            chooseCostumeIcon.draggable = false;
+            chooseCostumeIcon.src = addLibraryCostumeIcon;
+            chooseCostumeButton.appendChild(chooseCostumeIcon);
+            costumeActionMenu.appendChild(uploadCostumeButton);
+            costumeActionMenu.appendChild(chooseCostumeButton);
+            costumeRail.appendChild(costumeRailList);
+            costumeRail.appendChild(costumeActionMenu);
+            const editorViewport = document.createElement('div');
+            editorViewport.className = styles.inlineEditor;
+            const editorRoot = document.createElement('div');
+            editorRoot.className = styles.inlineEditorSurface;
+            editorViewport.appendChild(editorRoot);
+            editorLayout.appendChild(costumeRail);
+            editorLayout.appendChild(editorViewport);
+            editorView.appendChild(editorLayout);
+            picker.appendChild(editorView);
 
             const dropOverlay = document.createElement('div');
             dropOverlay.className = styles.dropOverlay;
@@ -474,7 +601,21 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             ].filter(filter => filter.value === 'all' || items.some(item => item.source === filter.value));
             let activeFilter = 'all';
             let activeFilterButton;
+            let activeView = 'media';
             let renderedButtons = [];
+            let renderedCostumeButtons = [];
+
+            const getSelectedCostume = () => items.find(item => (
+                item.source === 'costume' && item.value === this.getValue()
+            ));
+
+            const updateEditAvailability = () => {
+                const costume = getSelectedCostume();
+                editViewButton.disabled = !costume;
+                editHint.textContent = costume ?
+                    `${costume.name} · edits save automatically` :
+                    'Select an image to edit';
+            };
 
             const selectItem = item => {
                 let value = this.callValidator(item.value);
@@ -484,6 +625,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     this.refreshDisplay_();
                 }
                 ScratchBlocks.Events.setGroup(false);
+                updateEditAvailability();
             };
 
             const syncRenderedSelection = () => {
@@ -503,6 +645,176 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     }
                 });
             };
+
+            const syncCostumeRailSelection = () => {
+                renderedCostumeButtons.forEach(button => {
+                    const selected = button.objectDrawItem_.value === this.getValue();
+                    button.setAttribute('aria-selected', String(selected));
+                    button.classList.toggle(styles.costumeRailItemSelected, selected);
+                });
+            };
+
+            const mountSelectedCostumeEditor = () => {
+                const costume = getSelectedCostume();
+                if (!costume) return;
+                this.disposeInlineEditor_();
+                editorRoot.textContent = '';
+                editorRoot.classList.remove(styles.editorUnavailable);
+                const resizeEditorToViewport = () => {
+                    if (this.inlineEditorOverlay_) {
+                        editorLayout.style.height = '';
+                        editorRoot.style.setProperty('--inline-paint-scale', '1');
+                        return;
+                    }
+                    const viewportWidth = editorViewport.clientWidth || Math.min(544, availableWidth) - 72;
+                    const viewportBounds = typeof editorViewport.getBoundingClientRect === 'function' ?
+                        editorViewport.getBoundingClientRect() : null;
+                    const visibleViewportHeight = viewportBounds && typeof window !== 'undefined' ?
+                        Math.max(140, window.innerHeight - viewportBounds.top - 16) : 384;
+                    const editorScale = Math.min(
+                        viewportWidth / INLINE_PAINT_REFERENCE_WIDTH,
+                        visibleViewportHeight / INLINE_PAINT_REFERENCE_HEIGHT,
+                        1
+                    );
+                    editorLayout.style.height = `${INLINE_PAINT_REFERENCE_HEIGHT * editorScale}px`;
+                    editorRoot.style.setProperty('--inline-paint-scale', String(editorScale));
+                };
+                this.inlineEditorResize_ = resizeEditorToViewport;
+                resizeEditorToViewport();
+                this.inlineEditorRoot_ = editorRoot;
+                const mounted = mountInlinePaintEditor(editorRoot, costume.index, name => {
+                    const oldValue = costume.value;
+                    costume.name = name;
+                    costume.value = encodeDrawAsset('costume', name);
+                    selectItem(costume);
+                    const selectedButton = renderedButtons.find(button => button.objectDrawValue_ === oldValue);
+                    if (selectedButton) {
+                        selectedButton.objectDrawValue_ = costume.value;
+                        selectedButton.setAttribute('aria-label', `${costume.label}: ${name}`);
+                        selectedButton.objectDrawNameElement_.textContent = name;
+                    }
+                    const railButton = renderedCostumeButtons.find(button => button.objectDrawItem_ === costume);
+                    if (railButton) {
+                        railButton.setAttribute('aria-label', `Edit Costume: ${name}`);
+                        railButton.objectDrawNameElement_.textContent = name;
+                    }
+                    syncRenderedSelection();
+                    syncCostumeRailSelection();
+                    editHint.textContent = `${name} · edits save automatically`;
+                });
+                if (!mounted) {
+                    this.inlineEditorRoot_ = null;
+                    editorRoot.textContent = 'The costume editor is unavailable. Reopen Movie and try again.';
+                    editorRoot.classList.add(styles.editorUnavailable);
+                } else if (typeof ResizeObserver !== 'undefined') {
+                    this.inlineEditorResizeObserver_ = new ResizeObserver(resizeEditorToViewport);
+                    this.inlineEditorResizeObserver_.observe(editorViewport);
+                }
+            };
+
+            const renderCostumeRail = () => {
+                costumeRailList.textContent = '';
+                renderedCostumeButtons = [];
+                items.filter(item => item.source === 'costume').forEach((item, index) => {
+                    const selected = item.value === this.getValue();
+                    const button = document.createElement('button');
+                    button.className = `${styles.costumeRailItem}${selected ?
+                        ` ${styles.costumeRailItemSelected}` : ''}`;
+                    button.type = 'button';
+                    button.setAttribute('aria-label', `Edit ${item.label}: ${item.name}`);
+                    button.setAttribute('aria-selected', String(selected));
+                    button.setAttribute('role', 'option');
+                    button.objectDrawItem_ = item;
+                    const number = document.createElement('span');
+                    number.className = styles.costumeRailNumber;
+                    number.textContent = String(index + 1);
+                    const preview = document.createElement('span');
+                    preview.className = styles.costumeRailPreview;
+                    if (item.previewUrl) {
+                        const image = document.createElement('img');
+                        image.alt = '';
+                        image.src = item.previewUrl;
+                        preview.appendChild(image);
+                    } else {
+                        preview.appendChild(createSvgIcon(
+                            'M4 5h16v14H4zM4 15l4-4 3 3 2-2 7 7M16 9h.01',
+                            styles.fallbackIcon
+                        ));
+                    }
+                    const name = document.createElement('span');
+                    name.className = styles.costumeRailName;
+                    name.textContent = item.name;
+                    button.objectDrawNameElement_ = name;
+                    const details = document.createElement('span');
+                    details.className = styles.costumeRailDetails;
+                    details.textContent = item.details;
+                    button.appendChild(number);
+                    button.appendChild(preview);
+                    button.appendChild(name);
+                    button.appendChild(details);
+                    button.addEventListener('click', () => {
+                        selectItem(item);
+                        syncRenderedSelection();
+                        syncCostumeRailSelection();
+                        mountSelectedCostumeEditor();
+                    });
+                    costumeRailList.appendChild(button);
+                    renderedCostumeButtons.push(button);
+                });
+            };
+
+            const setActiveView = view => {
+                if (view === 'editor' && !getSelectedCostume()) return;
+                activeView = view;
+                const editing = view === 'editor';
+                browserView.hidden = editing;
+                editorView.hidden = !editing;
+                editorView.classList.toggle(styles.editorViewFullscreen, editing);
+                mediaViewButton.classList.toggle(styles.viewButtonActive, !editing);
+                editViewButton.classList.toggle(styles.viewButtonActive, editing);
+                mediaViewButton.setAttribute('aria-pressed', String(!editing));
+                editViewButton.setAttribute('aria-pressed', String(editing));
+                if (!editing) {
+                    this.disposeInlineEditor_();
+                    if (this.inlineEditorOverlay_) {
+                        picker.hidden = false;
+                        if (this.inlineEditorDropdownContainer_) {
+                            this.inlineEditorDropdownContainer_.classList.remove(styles.mediaDropdownHidden);
+                            this.inlineEditorDropdownContainer_ = null;
+                        }
+                        picker.insertBefore(header, picker.firstChild);
+                        picker.insertBefore(viewSwitchBar, browserView);
+                        picker.insertBefore(editorView, dropOverlay);
+                        this.inlineEditorOverlay_ = null;
+                    }
+                    (renderedButtons.find(button => button.getAttribute('aria-selected') === 'true') ||
+                        renderedButtons[0] || importButton).focus();
+                    return;
+                }
+                if (typeof document !== 'undefined' && document.body) {
+                    editorView.insertBefore(header, editorLayout);
+                    editorView.insertBefore(viewSwitchBar, editorLayout);
+                    document.body.appendChild(editorView);
+                    this.inlineEditorOverlay_ = editorView;
+                    picker.hidden = true;
+                    if (content.parentNode) {
+                        this.inlineEditorDropdownContainer_ = content.parentNode;
+                        this.inlineEditorDropdownContainer_.classList.add(styles.mediaDropdownHidden);
+                    }
+                }
+                syncCostumeRailSelection();
+                mountSelectedCostumeEditor();
+                if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+                    window.requestAnimationFrame(() => {
+                        if (this.inlineEditorResize_) this.inlineEditorResize_();
+                    });
+                }
+            };
+
+            mediaViewButton.addEventListener('click', () => setActiveView('media'));
+            editViewButton.addEventListener('click', () => setActiveView('editor'));
+            chooseCostumeButton.addEventListener('click', () => setActiveView('media'));
+            renderCostumeRail();
 
             const renderPreview = (item, preview) => {
                 if (item.previewType === 'image' && item.previewUrl) {
@@ -597,6 +909,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     const name = document.createElement('span');
                     name.className = styles.mediaName;
                     name.textContent = item.name;
+                    selectButton.objectDrawNameElement_ = name;
                     const type = document.createElement('span');
                     type.className = styles.mediaType;
                     type.textContent = item.label;
@@ -725,13 +1038,14 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
             });
             renderGrid();
+            updateEditAvailability();
 
             ScratchBlocks.DropDownDiv.setColour('var(--ui-modal-background)', 'var(--ui-black-transparent)');
             ScratchBlocks.DropDownDiv.setCategory(this.sourceBlock_.getCategory());
             ScratchBlocks.DropDownDiv.setBoundsElement(boundsElement);
             ScratchBlocks.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_, this.onHide.bind(this));
             this.outsideCloseListener_ = event => {
-                if (!picker.contains(event.target)) ScratchBlocks.DropDownDiv.hide();
+                if (activeView !== 'editor' && !picker.contains(event.target)) ScratchBlocks.DropDownDiv.hide();
             };
             document.addEventListener('pointerdown', this.outsideCloseListener_, true);
 
