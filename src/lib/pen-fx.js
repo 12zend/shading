@@ -1579,14 +1579,73 @@ const createPenFXClass = vm => {
     varying vec2 v_uv;
     uniform sampler2D u_base;
     uniform sampler2D u_effect;
+    uniform int u_blend;
+    uniform float u_opacity;
+
+    vec3 straightColor(vec4 p) {
+      return p.a > 0.00001 ? p.rgb / p.a : vec3(0.0);
+    }
 
     void main() {
       vec4 basePixel = texture2D(u_base, v_uv);
       vec4 effectPixel = texture2D(u_effect, v_uv);
-      float inverseAlpha = 1.0 - effectPixel.a;
+      vec3 baseColor = straightColor(basePixel);
+      vec3 effectColor = straightColor(effectPixel);
+      vec3 blended = effectColor;
+      if (u_blend == 1) {
+        blended = baseColor + effectColor;
+      } else if (u_blend == 2) {
+        blended = baseColor * effectColor;
+      } else if (u_blend == 3) {
+        blended = vec3(1.0) - (vec3(1.0) - baseColor) * (vec3(1.0) - effectColor);
+      } else if (u_blend == 4) {
+        blended = mix(
+          2.0 * baseColor * effectColor,
+          vec3(1.0) - 2.0 * (vec3(1.0) - baseColor) * (vec3(1.0) - effectColor),
+          step(vec3(0.5), baseColor)
+        );
+      } else if (u_blend == 5) {
+        blended = min(baseColor, effectColor);
+      } else if (u_blend == 6) {
+        blended = max(baseColor, effectColor);
+      } else if (u_blend == 7) {
+        blended = min(vec3(1.0), baseColor / max(vec3(1.0) - effectColor, vec3(0.0039215686)));
+      }
+
+      float effectAlpha = effectPixel.a * clamp(u_opacity, 0.0, 1.0);
+      float outputAlpha = effectAlpha + (basePixel.a * (1.0 - effectAlpha));
+      vec3 compositedColor = mix(effectColor, blended, basePixel.a);
+      vec3 outputColor = (basePixel.rgb * (1.0 - effectAlpha)) + (compositedColor * effectAlpha);
+      gl_FragColor = vec4(clamp(outputColor, 0.0, 1.0), outputAlpha);
+    }
+  `;
+
+  const MATTE_OVER_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_base;
+    uniform sampler2D u_source;
+    uniform sampler2D u_matte;
+    uniform int u_mode;
+
+    vec3 straightColor(vec4 p) {
+      return p.a > 0.00001 ? p.rgb / p.a : vec3(0.0);
+    }
+
+    void main() {
+      vec4 basePixel = texture2D(u_base, v_uv);
+      vec4 sourcePixel = texture2D(u_source, v_uv);
+      vec4 mattePixel = texture2D(u_matte, v_uv);
+      float matteValue = mattePixel.a;
+      if (u_mode == 1 || u_mode == 3) {
+        matteValue = dot(straightColor(mattePixel), vec3(0.2126, 0.7152, 0.0722)) * mattePixel.a;
+      }
+      if (u_mode >= 2) matteValue = 1.0 - matteValue;
+      vec4 maskedSource = sourcePixel * clamp(matteValue, 0.0, 1.0);
+      float inverseAlpha = 1.0 - maskedSource.a;
       gl_FragColor = vec4(
-        effectPixel.rgb + basePixel.rgb * inverseAlpha,
-        effectPixel.a + basePixel.a * inverseAlpha
+        maskedSource.rgb + (basePixel.rgb * inverseAlpha),
+        maskedSource.a + (basePixel.a * inverseAlpha)
       );
     }
   `;
@@ -1662,6 +1721,7 @@ const createPenFXClass = vm => {
         acerolaSpatial: ACEROLA_SPATIAL_SHADER,
         composite: COMPOSITE_SHADER,
         groupOver: GROUP_OVER_SHADER,
+        matteOver: MATTE_OVER_SHADER,
         stack: STACK_SHADER
       };
       this.programs = Object.create(null);
@@ -1678,6 +1738,7 @@ const createPenFXClass = vm => {
       this.framebuffers = [];
       this.bufferStack = [];
       this.groupStack = [];
+      this.matteStack = [];
       this.frameTransaction = null;
       this.blendOpacity = 1;
       this.uniformCache = new WeakMap();
@@ -1760,6 +1821,7 @@ const createPenFXClass = vm => {
       if (this.width === width && this.height === height) return;
       this.clearBufferStack();
       this.clearGroupStack();
+      this.clearMatteStack();
       for (const framebuffer of this.framebuffers) gl.deleteFramebuffer(framebuffer);
       for (const texture of this.textures) gl.deleteTexture(texture);
       this.width = width;
@@ -1970,10 +2032,14 @@ const createPenFXClass = vm => {
       this._restoreGLState();
     }
 
-    endGroup() {
+    endGroup(options = {}) {
       if (!this.groupStack.length) return;
       const entry = this.groupStack.pop();
       const skin = entry.skin;
+      const blendMode = String(options.blendMode || 'normal');
+      const blendIndex = Math.max(0, BLEND_MODES.indexOf(blendMode));
+      const requestedOpacity = Number(options.opacity);
+      const opacity = Number.isFinite(requestedOpacity) ? Math.max(0, Math.min(1, requestedOpacity)) : 1;
       // The pen skin may have been resized or replaced while the group was open. Only composite when the
       // staged texture is still installed so we never render into a stale framebuffer.
       const stillStaged = Boolean(skin) && skin._texture === entry.texture;
@@ -1987,12 +2053,93 @@ const createPenFXClass = vm => {
           this._render(this._program('groupOver'), this.framebuffers[0], [
             {name: 'u_base', texture: entry.baselineTexture},
             {name: 'u_effect', texture: entry.texture}
-          ], {}, []);
+          ], {u_blend: blendIndex, u_opacity: opacity}, ['u_blend']);
           this._replaceSkin(skin, this.textures[0]);
         }
       }
       gl.deleteFramebuffer(entry.framebuffer);
       gl.deleteTexture(entry.texture);
+    }
+
+    beginMatte() {
+      const skin = this._prepare(false, false);
+      if (!skin) return false;
+      const source = this._createBufferTexture();
+      const hadOwnGetTexture = Object.prototype.hasOwnProperty.call(skin, 'getTexture');
+      const originalGetTexture = skin.getTexture;
+      const baselineTexture = skin._texture;
+      this.matteStack.push({
+        baselineFramebuffer: skin._framebuffer,
+        baselineTexture,
+        hadOwnGetTexture,
+        mask: null,
+        originalGetTexture,
+        skin,
+        source
+      });
+      skin._texture = source.texture;
+      skin._framebuffer = {
+        attachments: [source.texture],
+        framebuffer: source.framebuffer,
+        height: this.height,
+        width: this.width
+      };
+      if (!hadOwnGetTexture) skin.getTexture = () => baselineTexture;
+      this._clearTransparent(source.framebuffer);
+      this._restoreGLState();
+      return true;
+    }
+
+    beginMatteMask() {
+      if (!this.matteStack.length) return false;
+      const entry = this.matteStack[this.matteStack.length - 1];
+      const {skin, source} = entry;
+      if (!skin || skin._texture !== source.texture) return false;
+      const mask = this._createBufferTexture();
+      entry.mask = mask;
+      skin._texture = mask.texture;
+      skin._framebuffer = {
+        attachments: [mask.texture],
+        framebuffer: mask.framebuffer,
+        height: this.height,
+        width: this.width
+      };
+      this._clearTransparent(mask.framebuffer);
+      this._restoreGLState();
+      return true;
+    }
+
+    endMatte(options = {}) {
+      if (!this.matteStack.length) return false;
+      const entry = this.matteStack.pop();
+      const {mask, skin, source} = entry;
+      const stillStaged = Boolean(mask && skin) && skin._texture === mask.texture;
+      if (stillStaged) {
+        skin._texture = entry.baselineTexture;
+        skin._framebuffer = entry.baselineFramebuffer;
+        this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+        if (this._prepare(false, false) === skin) {
+          const modes = ['alpha', 'luma', 'alpha inverted', 'luma inverted'];
+          const modeIndex = Math.max(0, modes.indexOf(String(options.mode || 'alpha').toLowerCase()));
+          this._render(this._program('matteOver'), this.framebuffers[0], [
+            {name: 'u_base', texture: entry.baselineTexture},
+            {name: 'u_source', texture: source.texture},
+            {name: 'u_matte', texture: mask.texture}
+          ], {u_mode: modeIndex}, ['u_mode']);
+          this._replaceSkin(skin, this.textures[0]);
+        }
+      } else if (skin && (skin._texture === source.texture || (mask && skin._texture === mask.texture))) {
+        skin._texture = entry.baselineTexture;
+        skin._framebuffer = entry.baselineFramebuffer;
+        this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+      }
+      gl.deleteFramebuffer(source.framebuffer);
+      gl.deleteTexture(source.texture);
+      if (mask) {
+        gl.deleteFramebuffer(mask.framebuffer);
+        gl.deleteTexture(mask.texture);
+      }
+      return stillStaged;
     }
 
     beginFrame() {
@@ -2085,6 +2232,26 @@ const createPenFXClass = vm => {
         gl.deleteTexture(entry.texture);
       }
       this.groupStack.length = 0;
+    }
+
+    clearMatteStack() {
+      if (!this.matteStack) return;
+      for (let index = this.matteStack.length - 1; index >= 0; index--) {
+        const entry = this.matteStack[index];
+        const {mask, skin, source} = entry;
+        if (skin && (skin._texture === source.texture || (mask && skin._texture === mask.texture))) {
+          skin._texture = entry.baselineTexture;
+          skin._framebuffer = entry.baselineFramebuffer;
+          this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+        }
+        gl.deleteFramebuffer(source.framebuffer);
+        gl.deleteTexture(source.texture);
+        if (mask) {
+          gl.deleteFramebuffer(mask.framebuffer);
+          gl.deleteTexture(mask.texture);
+        }
+      }
+      this.matteStack.length = 0;
     }
 
     stackCurrent(weight, limit) {
@@ -3478,8 +3645,35 @@ const createPenFXClass = vm => {
       this._safe(engine => engine.beginGroup());
     }
 
-    endGroup() {
-      this._safe(engine => engine.endGroup());
+    endGroup(options) {
+      this._safe(engine => engine.endGroup(options));
+    }
+
+    beginMatte() {
+      try {
+        return this._getEngine().beginMatte();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
+    }
+
+    beginMatteMask() {
+      try {
+        return this._getEngine().beginMatteMask();
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
+    }
+
+    endMatte(options) {
+      try {
+        return this._getEngine().endMatte(options);
+      } catch (error) {
+        console.error('[Pen FX]', error);
+        return false;
+      }
     }
 
     beginFrame() {
@@ -3514,6 +3708,7 @@ const createPenFXClass = vm => {
       if (!this.engine) return;
       try {
         this.engine.clearGroupStack();
+        this.engine.clearMatteStack();
         this.engine._restoreGLState();
       } catch (error) {
         console.error('[Pen FX]', error);

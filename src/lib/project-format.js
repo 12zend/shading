@@ -29,13 +29,29 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_setvideoframeto',
     'looks_switchmodelto',
     'looks_switchvideoto',
+    'objects_animate',
+    'objects_composite',
     'objects_draw',
+    'objects_group',
     'objects_shape',
     'objects_arc',
     'objects_circularSegment',
+    'objects_interpolateAngle',
+    'objects_interpolateColor',
+    'objects_interpolateVector',
     'objects_line',
+    'objects_loopValue',
+    'objects_matte',
     'objects_grouping',
+    'objects_pingPongValue',
+    'objects_posterizeTime',
+    'objects_repeat',
     'objects_scene',
+    'objects_timeOffset',
+    'objects_timeWithin',
+    'objects_timelineTime',
+    'objects_transform',
+    'objects_wiggle',
     'sound_playatframe',
     'sound_playattime'
 ];
@@ -72,6 +88,8 @@ const MOVIE_3D_BLOCKS = [
     'motion_setscale',
     'motion_setz',
     'objects_draw',
+    'objects_repeat',
+    'objects_transform',
     'objects_scene'
 ];
 

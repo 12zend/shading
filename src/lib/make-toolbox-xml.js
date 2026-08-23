@@ -786,6 +786,38 @@ const objects = function (costumeName) {
     );
     return `
     <category name="Objects" id="objects" colour="#4968D4" secondaryColour="#334A99">
+        <block type="objects_animate">
+            ${number('A', 0)}${number('B', 100)}${number('T1', 1)}${number('T2', 2)}
+            <field name="EASING">ExpoOut</field>
+        </block>
+        <block type="objects_loopValue">
+            ${number('A', 0)}${number('B', 100)}${number('DURATION', 2)}
+        </block>
+        <block type="objects_pingPongValue">
+            ${number('A', 0)}${number('B', 100)}${number('DURATION', 2)}
+        </block>
+        <block type="objects_wiggle">
+            ${number('FREQUENCY', 2)}${number('AMOUNT', 20)}${number('SEED', 1)}
+        </block>
+        <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
+        <block type="objects_timelineTime"/>
+        <block type="objects_posterizeTime">${number('FPS', 12)}</block>
+        <block type="objects_interpolateColor">
+            <value name="A"><shadow type="colour_picker"><field name="COLOUR">#ff3366</field></shadow></value>
+            <value name="B"><shadow type="colour_picker"><field name="COLOUR">#3366ff</field></shadow></value>
+            ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
+        </block>
+        <block type="objects_interpolateAngle">
+            ${number('A', 0)}${number('B', 360)}${number('T1', 0)}${number('T2', 1)}
+            <field name="EASING">Linear</field>
+        </block>
+        <block type="objects_interpolateVector">
+            <field name="COMPONENT">x</field>
+            ${number('X1', 0)}${number('Y1', 0)}${number('Z1', 0)}
+            ${number('X2', 100)}${number('Y2', 100)}${number('Z2', 100)}
+            ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
+        </block>
+        <sep gap="36"/>
         <block type="objects_draw">
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
@@ -842,6 +874,21 @@ const objects = function (costumeName) {
             ${number('OPACITY', 100)}
         </block>
         <sep gap="36"/>
+        <block type="objects_group"/>
+        <block type="objects_transform">
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
+            ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}
+            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+        </block>
+        <block type="objects_composite">
+            ${number('OPACITY', 100)}<field name="BLEND">normal</field>
+        </block>
+        <block type="objects_matte"><field name="MODE">alpha</field></block>
+        <block type="objects_repeat">
+            ${number('COUNT', 12)}${number('ANGLE', 30)}${number('TIME', 0.05)}
+        </block>
+        <block type="objects_timeOffset">${number('TIME', 0)}</block>
         <block type="objects_grouping"/>
         <block type="objects_scene"/>
     </category>

@@ -8,6 +8,7 @@ import {
     encodeDrawAsset,
     normalizeShapeType
 } from './object-blocks';
+import installObjectCompositionBlockDefinitions from './object-composition-blocks-ui';
 import log from './log';
 import {mountInlinePaintEditor, unmountInlinePaintEditor} from './inline-paint-editor';
 import addLibraryCostumeIcon from '../components/asset-panel/icon--add-costume-lib.svg';
@@ -1539,6 +1540,8 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             });
         }
     };
+
+    installObjectCompositionBlockDefinitions(ScratchBlocks);
 };
 
 export {

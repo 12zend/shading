@@ -411,19 +411,37 @@ describe('built-in Pen FX category', () => {
         expect(vm.runtime.penFX).toBe(penFX);
     });
 
+    test('exposes matte capture boundaries to the Objects control block', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {
+            beginMatte: jest.fn(() => true),
+            beginMatteMask: jest.fn(() => true),
+            endMatte: jest.fn(() => true)
+        };
+
+        expect(penFX.beginMatte()).toBe(true);
+        expect(penFX.beginMatteMask()).toBe(true);
+        expect(penFX.endMatte({mode: 'luma'})).toBe(true);
+        expect(penFX.engine.endMatte).toHaveBeenCalledWith({mode: 'luma'});
+    });
+
     test('cancels open groups and captured effects together', () => {
         const vm = {runtime: {renderer: {}}};
         const PenFX = createPenFXClass(vm);
         const penFX = new PenFX();
         penFX.engine = {
             _restoreGLState: jest.fn(),
-            clearGroupStack: jest.fn()
+            clearGroupStack: jest.fn(),
+            clearMatteStack: jest.fn()
         };
         penFX.effectCaptureStack = [{}];
 
         expect(penFX.cancelGroups()).toBeUndefined();
         expect(penFX.effectCaptureStack).toEqual([]);
         expect(penFX.engine.clearGroupStack).toHaveBeenCalledTimes(1);
+        expect(penFX.engine.clearMatteStack).toHaveBeenCalledTimes(1);
         expect(penFX.engine._restoreGLState).toHaveBeenCalledTimes(1);
     });
 
@@ -571,7 +589,7 @@ describe('built-in Pen FX category', () => {
         expect(engine._render).toHaveBeenCalledWith('group-over-program', 'engine-framebuffer', [
             {name: 'u_base', texture: 'pen-texture'},
             {name: 'u_effect', texture: 'group-staging'}
-        ], {}, []);
+        ], {u_blend: 0, u_opacity: 1}, ['u_blend']);
         expect(engine._replaceSkin).toHaveBeenCalledWith(skin, 'engine-texture');
         expect(skin._texture).toBe('pen-texture');
         expect(skin._framebuffer).toBe(penFramebuffer);
@@ -579,6 +597,85 @@ describe('built-in Pen FX category', () => {
         expect(gl.deleteFramebuffer).toHaveBeenCalledWith('group-framebuffer');
         expect(gl.deleteTexture).toHaveBeenCalledWith('group-staging');
         expect(engine.groupStack).toEqual([]);
+    });
+
+    test('captures source and matte layers before compositing a luma matte over the baseline', () => {
+        const gl = {
+            ARRAY_BUFFER: 1,
+            BLEND: 2,
+            COLOR_BUFFER_BIT: 4,
+            DEPTH_TEST: 5,
+            FRAMEBUFFER: 6,
+            FUNC_ADD: 7,
+            ONE: 8,
+            ONE_MINUS_SRC_ALPHA: 9,
+            SCISSOR_TEST: 10,
+            STATIC_DRAW: 11,
+            STENCIL_TEST: 12,
+            TEXTURE0: 13,
+            VERTEX_SHADER: 14,
+            activeTexture: jest.fn(),
+            bindBuffer: jest.fn(),
+            bindFramebuffer: jest.fn(),
+            blendEquation: jest.fn(),
+            blendFunc: jest.fn(),
+            bufferData: jest.fn(),
+            clear: jest.fn(),
+            clearColor: jest.fn(),
+            colorMask: jest.fn(),
+            compileShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            createShader: jest.fn(() => ({})),
+            deleteFramebuffer: jest.fn(),
+            deleteTexture: jest.fn(),
+            disable: jest.fn(),
+            enable: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            shaderSource: jest.fn()
+        };
+        const penFramebuffer = {framebuffer: 'pen-framebuffer'};
+        const skin = {
+            _framebuffer: penFramebuffer,
+            _size: [480, 360],
+            _texture: 'pen-texture'
+        };
+        const renderer = {
+            _allSkins: {1: skin},
+            _doExitDrawRegion: jest.fn(),
+            _gl: gl,
+            _penSkinId: 1
+        };
+        const PenFX = createPenFXClass({runtime: {renderer}});
+        const engine = new PenFX()._getEngine();
+        engine.width = 480;
+        engine.height = 360;
+        engine.framebuffers = ['engine-framebuffer'];
+        engine.textures = ['engine-texture'];
+        engine._createBufferTexture = jest.fn()
+            .mockReturnValueOnce({framebuffer: 'source-framebuffer', texture: 'source-texture'})
+            .mockReturnValueOnce({framebuffer: 'matte-framebuffer', texture: 'matte-texture'});
+        engine._program = jest.fn(() => 'matte-over-program');
+        engine._render = jest.fn();
+        engine._replaceSkin = jest.fn();
+
+        expect(engine.beginMatte()).toBe(true);
+        expect(skin._texture).toBe('source-texture');
+        expect(skin.getTexture()).toBe('pen-texture');
+        expect(engine.beginMatteMask()).toBe(true);
+        expect(skin._texture).toBe('matte-texture');
+        expect(engine.endMatte({mode: 'luma'})).toBe(true);
+
+        expect(engine._render).toHaveBeenCalledWith('matte-over-program', 'engine-framebuffer', [
+            {name: 'u_base', texture: 'pen-texture'},
+            {name: 'u_source', texture: 'source-texture'},
+            {name: 'u_matte', texture: 'matte-texture'}
+        ], {u_mode: 1}, ['u_mode']);
+        expect(engine._replaceSkin).toHaveBeenCalledWith(skin, 'engine-texture');
+        expect(skin._texture).toBe('pen-texture');
+        expect(Object.prototype.hasOwnProperty.call(skin, 'getTexture')).toBe(false);
+        expect(gl.deleteFramebuffer).toHaveBeenCalledWith('source-framebuffer');
+        expect(gl.deleteFramebuffer).toHaveBeenCalledWith('matte-framebuffer');
+        expect(engine.matteStack).toEqual([]);
     });
 
     test('exposes Pen frame transaction boundaries to timeline rendering', () => {

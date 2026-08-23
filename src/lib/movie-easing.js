@@ -20,6 +20,24 @@ const EASING_TYPES = [
     'ExpoInOut'
 ];
 
+// Keep EASING_TYPES stable for projects created with the original operator_easing block.
+// Objects uses the expanded set below as its shared animation vocabulary.
+const ANIMATION_EASING_TYPES = [
+    'Linear',
+    'PowerIn',
+    'PowerOut',
+    'PowerInOut',
+    'CircIn',
+    'CircOut',
+    'CircInOut',
+    'ExpoIn',
+    'ExpoOut',
+    'ExpoInOut',
+    'BackIn',
+    'BackOut',
+    'BackInOut'
+];
+
 const clamp01 = value => Math.max(0, Math.min(1, value));
 
 const finiteNumber = (value, fallback = 0) => {
@@ -48,6 +66,7 @@ const circInOut = (progress, power) => {
 };
 
 const EXPO_EXPONENT = 10;
+const BACK_OVERSHOOT = 1.70158;
 
 const expoIn = progress => {
     if (progress === 0) return 0;
@@ -65,7 +84,27 @@ const expoInOut = progress => {
     return (2 - Math.pow(2, -EXPO_EXPONENT * ((2 * progress) - 1))) / 2;
 };
 
+const backIn = progress => (
+    ((BACK_OVERSHOOT + 1) * progress * progress * progress) -
+    (BACK_OVERSHOOT * progress * progress)
+);
+const backOut = progress => {
+    const shifted = progress - 1;
+    return 1 + ((BACK_OVERSHOOT + 1) * shifted * shifted * shifted) +
+        (BACK_OVERSHOOT * shifted * shifted);
+};
+const backInOut = progress => {
+    const overshoot = BACK_OVERSHOOT * 1.525;
+    if (progress < 0.5) {
+        const doubled = progress * 2;
+        return (doubled * doubled * (((overshoot + 1) * doubled) - overshoot)) / 2;
+    }
+    const shifted = (progress * 2) - 2;
+    return ((shifted * shifted * (((overshoot + 1) * shifted) + overshoot)) + 2) / 2;
+};
+
 const easingFunctions = {
+    Linear: progress => progress,
     PowerIn: powerIn,
     PowerOut: powerOut,
     PowerInOut: powerInOut,
@@ -74,7 +113,23 @@ const easingFunctions = {
     CircInOut: circInOut,
     ExpoIn: expoIn,
     ExpoOut: expoOut,
-    ExpoInOut: expoInOut
+    ExpoInOut: expoInOut,
+    BackIn: backIn,
+    BackOut: backOut,
+    BackInOut: backInOut
+};
+
+const normalizeEasingType = value => {
+    const compact = String(value || '')
+        .replace(/[\s_-]+/g, '')
+        .toLowerCase();
+    return ANIMATION_EASING_TYPES.find(type => type.toLowerCase() === compact) || 'Linear';
+};
+
+const calculateEasingProgress = (type, progress, power = 2) => {
+    const normalizedProgress = clamp01(finiteNumber(progress));
+    const easing = easingFunctions[normalizeEasingType(type)] || easingFunctions.Linear;
+    return easing(normalizedProgress, normalizePower(power));
 };
 
 /**
@@ -108,8 +163,8 @@ const calculateEasingValue = ({type, v0, v1, t0, t1, power, speed}, timer) => {
     if (currentTime >= endTime) return endValue;
 
     const progress = clamp01((currentTime - startTime) / (endTime - startTime));
-    const easing = easingFunctions[type] || easingFunctions.PowerIn;
-    const easedProgress = easing(progress, normalizePower(power));
+    const easingType = EASING_TYPES.includes(type) ? type : 'PowerIn';
+    const easedProgress = calculateEasingProgress(easingType, progress, power);
     const angularSpeed = finiteNumber(speed);
     const elapsed = currentTime - startTime;
     const elasticProgress = 1 - (Math.cos(elapsed * angularSpeed) * (1 - easedProgress));
@@ -144,7 +199,10 @@ const installMovieEasing = vm => {
 };
 
 export {
+    ANIMATION_EASING_TYPES,
     EASING_TYPES,
+    calculateEasingProgress,
     calculateEasingValue,
+    normalizeEasingType,
     installMovieEasing as default
 };

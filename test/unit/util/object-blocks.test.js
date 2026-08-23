@@ -4,6 +4,10 @@ import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
 import Sprite from 'scratch-vm/src/sprites/sprite';
 
 import installObjectBlocks, {
+    ANIMATION_EASING_TYPES,
+    BLEND_MODES,
+    MATTE_MODES,
+    applyObjectTransforms,
     createObjectBlocksClass,
     decodeDrawAsset,
     encodeDrawAsset
@@ -346,14 +350,17 @@ describe('Objects blocks', () => {
         expect(modelHasFrames({animationCount: 1})).toBe(true);
     });
 
-    test('exposes one draw command instead of separate transform commands', () => {
+    test('keeps draw self-contained while adding reusable composition structures and reporters', () => {
         const vm = {runtime: {}};
         const ObjectBlocks = createObjectBlocksClass(vm);
         const blocks = new ObjectBlocks();
         const info = blocks.getInfo();
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
-            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene'
+            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene',
+            'group', 'transform', 'composite', 'matte', 'repeat', 'timeOffset',
+            'timelineTime', 'animate', 'loopValue', 'pingPongValue', 'wiggle',
+            'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector'
         ]);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
@@ -373,6 +380,9 @@ describe('Objects blocks', () => {
             'T1', 'T2'
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
+        expect(info.menus.blendMode.items).toEqual(BLEND_MODES);
+        expect(info.menus.easing.items).toEqual(ANIMATION_EASING_TYPES);
+        expect(info.menus.matteMode.items).toEqual(MATTE_MODES);
         expect(info.blocks[1].text).toContain('\ncolor: [COLOR] opacity: [OPACITY] %');
         expect(info.blocks[0].arguments.T2.defaultValue).toBe(Infinity);
         expect(info.blocks[1].arguments.T2.defaultValue).toBe(Infinity);
@@ -386,6 +396,268 @@ describe('Objects blocks', () => {
             START: {type: ArgumentType.NUMBER, defaultValue: 0},
             END: {type: ArgumentType.NUMBER, defaultValue: 360}
         }));
+    });
+
+    test('composes a group transform around its anchor without mutating the draw configuration', () => {
+        const configuration = {
+            position: {x: 20, y: 10, z: 0},
+            rotation: {x: 1, y: 2, z: 3},
+            scale: {x: 2, y: 3, z: 4}
+        };
+        const transformed = applyObjectTransforms(configuration, [{
+            anchor: {x: 10, y: 10, z: 0},
+            position: {x: 100, y: 50, z: 0},
+            rotation: {x: 0, y: 0, z: 90},
+            scale: {x: 2, y: 2, z: 1}
+        }]);
+
+        expect(transformed.position.x).toBeCloseTo(100);
+        expect(transformed.position.y).toBeCloseTo(70);
+        expect(transformed.position.z).toBeCloseTo(0);
+        expect(transformed.rotation).toEqual({x: 1, y: 2, z: 93});
+        expect(transformed.scale).toEqual({x: 4, y: 6, z: 4});
+        expect(configuration.position).toEqual({x: 20, y: 10, z: 0});
+    });
+
+    test('evaluates animation reporters from the deterministic timeline time', () => {
+        const runtime = {movieAssetManager: {timeline: {currentTime: 1}}};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks.timelineTime({}, util)).toBe(1);
+        expect(blocks.animate({A: 0, B: 100, T1: 0, T2: 2, EASING: 'Linear'}, util)).toBe(50);
+        expect(blocks.loopValue({A: 0, B: 100, DURATION: 2}, util)).toBe(50);
+        expect(blocks.pingPongValue({A: 0, B: 100, DURATION: 2}, util)).toBe(100);
+        expect(blocks.timeWithin({T1: 0.5, T2: 1.5}, util)).toBe(true);
+        expect(blocks.posterizeTime({FPS: 4}, util)).toBe(1);
+        expect(blocks.interpolateColor({
+            A: '#000000', B: '#ffffff', T1: 0, T2: 2, EASING: 'Linear'
+        }, util)).toBe('#808080');
+        expect(blocks.interpolateAngle({
+            A: 350, B: 10, T1: 0, T2: 2, EASING: 'Linear'
+        }, util)).toBe(360);
+        expect(blocks.interpolateVector({
+            COMPONENT: 'y', X1: 0, Y1: 20, Z1: 0, X2: 100, Y2: 40, Z2: 100,
+            T1: 0, T2: 2, EASING: 'Linear'
+        }, util)).toBe(30);
+        expect(blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)).toBe(
+            blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)
+        );
+    });
+
+    test('applies transform C-block context to every child draw without yielding', () => {
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'transform' && branch === 1 ? 'transform-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {drawObject: jest.fn(), runWithoutWaiting: jest.fn()};
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    objectBlocks.draw({
+                        ASSET: 'costume:Logo', SOURCE: 'costume', PX: 20, PY: 10, PZ: 0,
+                        RX: 0, RY: 0, RZ: 5, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100, T1: 0, T2: 1
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'transform'),
+                target
+            }
+        };
+
+        expect(objectBlocks.transform({
+            PX: 100, PY: 50, PZ: 0,
+            AX: 10, AY: 10, AZ: 0,
+            RX: 0, RY: 0, RZ: 90,
+            SX: 2, SY: 2, SZ: 1
+        }, util)).toBeUndefined();
+        expect(manager.drawObject).toHaveBeenCalledWith(target, expect.objectContaining({
+            position: expect.objectContaining({x: expect.closeTo(100), y: expect.closeTo(70), z: 0}),
+            rotation: {x: 0, y: 0, z: 95},
+            scale: {x: 2, y: 2, z: 1}
+        }));
+        expect(util.thread).not.toHaveProperty('objectTransformStack');
+    });
+
+    test('repeat creates rotated, time-shifted component instances in the same VM tick', () => {
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'repeat' && branch === 1 ? 'repeat-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {drawObject: jest.fn(), runWithoutWaiting: jest.fn()};
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    objectBlocks.draw({
+                        ASSET: 'costume:Dot', SOURCE: 'costume', PX: 10, PY: 0, PZ: 0,
+                        RX: 0, RY: 0, RZ: 0, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100, T1: 0, T2: 1
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'repeat'),
+                target
+            }
+        };
+
+        expect(objectBlocks.repeat({COUNT: 3, ANGLE: 90, TIME: 0.5}, util)).toBeUndefined();
+        const configurations = manager.drawObject.mock.calls.map(call => call[1]);
+        expect(configurations).toHaveLength(3);
+        expect(configurations[0]).toEqual(expect.objectContaining({
+            position: {x: 10, y: 0, z: 0},
+            time: {start: 0, end: 1}
+        }));
+        expect(configurations[1].position.x).toBeCloseTo(0);
+        expect(configurations[1].position.y).toBeCloseTo(10);
+        expect(configurations[1].time).toEqual({start: 0.5, end: 1.5});
+        expect(configurations[2].time).toEqual({start: 1, end: 2});
+        expect(new Set(configurations.map(configuration => configuration.playbackId)).size).toBe(3);
+    });
+
+    test('composite closes an asynchronous isolated group with opacity and blend settings without yielding', async () => {
+        let resolveDraw;
+        const pendingDraw = new Promise(resolve => {
+            resolveDraw = resolve;
+        });
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'composite' && branch === 1 ? 'composite-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {runWithoutWaiting: jest.fn()};
+        const penFX = {beginGroup: jest.fn(), endGroup: jest.fn()};
+        const runtime = {
+            movieAssetManager: manager,
+            penFX,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    thread.objectPendingDraws = [pendingDraw];
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'composite'),
+                target
+            }
+        };
+
+        expect(objectBlocks.composite({OPACITY: 80, BLEND: 'screen'}, util)).toBeUndefined();
+        expect(penFX.beginGroup).toHaveBeenCalledTimes(1);
+        expect(penFX.endGroup).not.toHaveBeenCalled();
+        const completion = manager.runWithoutWaiting.mock.calls[0][0];
+        resolveDraw();
+        await completion;
+        expect(penFX.endGroup).toHaveBeenCalledWith({blendMode: 'screen', opacity: 0.8});
+    });
+
+    test('matte evaluates source then mask and composites only after both asynchronous branches finish', async () => {
+        let resolveSource;
+        let resolveMask;
+        const sourceDraw = new Promise(resolve => {
+            resolveSource = resolve;
+        });
+        const maskDraw = new Promise(resolve => {
+            resolveMask = resolve;
+        });
+        const events = [];
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'matte' ? `matte-branch-${branch}` : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {runWithoutWaiting: jest.fn()};
+        const penFX = {
+            beginMatte: jest.fn(() => events.push('begin source')),
+            beginMatteMask: jest.fn(() => events.push('begin mask')),
+            endMatte: jest.fn(() => events.push('end matte'))
+        };
+        const runtime = {
+            movieAssetManager: manager,
+            penFX,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    events.push(thread.topBlock);
+                    thread.objectPendingDraws = [
+                        thread.topBlock === 'matte-branch-1' ? sourceDraw : maskDraw
+                    ];
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'matte'),
+                target
+            }
+        };
+
+        expect(objectBlocks.matte({MODE: 'luma inverted'}, util)).toBeUndefined();
+        expect(events).toEqual(['begin source', 'matte-branch-1']);
+        const completion = manager.runWithoutWaiting.mock.calls[0][0];
+        resolveSource();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(events).toEqual(['begin source', 'matte-branch-1', 'begin mask', 'matte-branch-2']);
+        resolveMask();
+        await completion;
+        expect(events).toEqual([
+            'begin source', 'matte-branch-1', 'begin mask', 'matte-branch-2', 'end matte'
+        ]);
+        expect(penFX.endMatte).toHaveBeenCalledWith({mode: 'luma inverted'});
+    });
+
+    test('every new Objects command primitive returns undefined', () => {
+        const runtime = {sequencer: {stepThread: jest.fn()}};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+        util.thread.blockContainer = {getBranch: jest.fn(() => null)};
+        util.thread.target = util.target;
+
+        expect(blocks.group({}, util)).toBeUndefined();
+        expect(blocks.transform({}, util)).toBeUndefined();
+        expect(blocks.composite({}, util)).toBeUndefined();
+        expect(blocks.matte({}, util)).toBeUndefined();
+        expect(blocks.repeat({COUNT: 2}, util)).toBeUndefined();
+        expect(blocks.timeOffset({}, util)).toBeUndefined();
     });
 
     test.each([
@@ -649,6 +921,39 @@ describe('Objects blocks', () => {
         expect(manager.drawObject).toHaveBeenCalledWith(util.target, expect.objectContaining({
             sceneCapture: capture
         }));
+    });
+
+    test('stack-clicks an Objects reporter without compiling it as an invalid command block', () => {
+        const vm = new VM();
+        installObjectBlocks(vm);
+        const runtime = vm.runtime;
+        const sprite = new Sprite(null, runtime);
+        sprite.name = 'main';
+        const target = new RenderedTarget(sprite, runtime);
+        runtime.targets = [target];
+        target.blocks.createBlock({
+            id: 'animate',
+            opcode: 'objects_animate',
+            inputs: {},
+            fields: {},
+            next: null,
+            parent: null,
+            shadow: false,
+            topLevel: true
+        });
+        const emitCompileError = jest.spyOn(runtime, 'emitCompileError');
+
+        const thread = runtime._pushThread('animate', target, {stackClick: true});
+
+        expect(thread.isCompiled).toBe(false);
+        expect(emitCompileError).not.toHaveBeenCalled();
+        expect(runtime.compilerOptions.enabled).toBe(true);
+
+        // Flyout templates use the opcode itself as the click ID and are not stored in target.blocks.
+        const flyoutThread = runtime._pushThread('objects_animate', target, {stackClick: true});
+        expect(flyoutThread.isCompiled).toBe(false);
+        expect(emitCompileError).not.toHaveBeenCalled();
+        expect(runtime.compilerOptions.enabled).toBe(true);
     });
 
     test('finishes a scene branch and the following block in one compiled VM step', () => {
