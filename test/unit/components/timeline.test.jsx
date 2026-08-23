@@ -67,6 +67,18 @@ describe('Timeline keyboard controls', () => {
         expect(component.find('[data-movie-timeline-addons]')).toHaveLength(1);
     });
 
+    test('keeps playback controls in the header above the layer viewport', () => {
+        const playbackControls = component.find('[data-movie-timeline-playback]');
+        const renderedMarkup = component.debug();
+        const playbackIndex = renderedMarkup.indexOf('data-movie-timeline-playback');
+        const layerViewportIndex = renderedMarkup.indexOf('aria-label="Current timeline position"');
+
+        expect(playbackControls).toHaveLength(1);
+        expect(playbackIndex).toBeGreaterThan(-1);
+        expect(layerViewportIndex).toBeGreaterThan(-1);
+        expect(playbackIndex).toBeLessThan(layerViewportIndex);
+    });
+
     test('space does not toggle playback while editing text', () => {
         const event = makeEvent({
             key: ' ',

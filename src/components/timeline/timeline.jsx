@@ -624,15 +624,37 @@ class Timeline extends React.Component {
             >
                 {this.renderSettings()}
                 <div className={styles.header}>
-                    <div className={styles.titleGroup}>
-                        <strong>{'Timeline'}</strong>
-                        <span>{timeline.framerate}{' FPS · frame '}{frame}</span>
-                        <span
-                            className={classNames(styles.frameSafety, {
-                                [styles.hasWarnings]: warnings.length > 0
-                            })}
-                        >{warnings.length ? `${warnings.length} frame warning${warnings.length === 1 ? '' : 's'}` :
-                                'Frame-safe'}</span>
+                    <div className={styles.headerLeading}>
+                        <div
+                            aria-label="Timeline playback"
+                            className={styles.playbackControls}
+                            data-movie-timeline-playback
+                            role="group"
+                        >
+                            <button
+                                aria-label={timeline.playing ? 'Pause' : 'Play'}
+                                className={styles.playButton}
+                                title={timeline.playing ? 'Pause (Space)' : 'Play (Space)'}
+                                type="button"
+                                onClick={this.handlePlayPause}
+                            >{timeline.playing ? <PauseIcon /> : <PlayIcon />}</button>
+                            <button
+                                aria-label="Stop and return to start"
+                                className={styles.stopButton}
+                                type="button"
+                                onClick={this.handleStop}
+                            ><span /></button>
+                        </div>
+                        <div className={styles.titleGroup}>
+                            <strong>{'Timeline'}</strong>
+                            <span>{timeline.framerate}{' FPS · frame '}{frame}</span>
+                            <span
+                                className={classNames(styles.frameSafety, {
+                                    [styles.hasWarnings]: warnings.length > 0
+                                })}
+                            >{warnings.length ? `${warnings.length} frame warning${warnings.length === 1 ? '' : 's'}` :
+                                    'Frame-safe'}</span>
+                        </div>
                     </div>
                     <div className={styles.headerActions}>
                         <div
@@ -789,19 +811,6 @@ class Timeline extends React.Component {
                     </div>
                 </div>
                 <div className={styles.transport}>
-                    <button
-                        aria-label={timeline.playing ? 'Pause' : 'Play'}
-                        className={styles.playButton}
-                        title={timeline.playing ? 'Pause (Space)' : 'Play (Space)'}
-                        type="button"
-                        onClick={this.handlePlayPause}
-                    >{timeline.playing ? <PauseIcon /> : <PlayIcon />}</button>
-                    <button
-                        aria-label="Stop and return to start"
-                        className={styles.stopButton}
-                        type="button"
-                        onClick={this.handleStop}
-                    ><span /></button>
                     <span className={styles.status}>
                         {timeline.recording ? (timeline.playing ? 'Rendering' : 'Render paused') :
                             (timeline.playing ? 'Playing' : 'Paused')}

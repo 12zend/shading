@@ -17,6 +17,8 @@
 }
 
 .header,
+.header-leading,
+.playback-controls,
 .transport,
 .settings-heading,
 .settings-actions {
@@ -27,6 +29,16 @@
 .header {
     justify-content: space-between;
     gap: 0.75rem;
+}
+
+.header-leading {
+    min-width: 0;
+    gap: 0.75rem;
+}
+
+.playback-controls {
+    flex: 0 0 auto;
+    gap: 0.375rem;
 }
 
 .title-group {
@@ -555,6 +567,10 @@
 }
 
 .timeline.is-compact .header {
+    gap: 0.375rem;
+}
+
+.timeline.is-compact .header-leading {
     gap: 0.375rem;
 }
 
