@@ -34,7 +34,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="START"><shadow type="math_number"><field name="NUM">0</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
-        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="looks"'));
+        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="motion"'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="sound"'));
     });
 
@@ -52,7 +52,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="myBlocksShader"'));
     });
 
-    test('hides the default Pen category and keeps Pen FX in the compositor palette', () => {
+    test('hides the default Pen category and keeps Looks (Pen FX) in the compositor palette', () => {
         const categories = [
             {id: 'custom', xml: '<category id="custom" />'},
             {id: 'penfx', xml: '<category id="penfx" />'},
@@ -61,86 +61,34 @@ describe('Movie toolbox categories', () => {
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
         expect(toolbox).not.toContain('id="pen"');
-        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
+        expect(toolbox.indexOf('id="motion"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 
-    test('places Pen FX with built-in categories instead of extension categories', () => {
+    test('places Looks (Pen FX) with built-in categories instead of extension categories', () => {
         const categories = [
             {id: 'custom', xml: '<category id="custom" />'},
             {id: 'penfx', xml: '<category id="penfx" />'}
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox.indexOf('id="looks"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
+        expect(toolbox.indexOf('id="motion"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 
-    test('offers clear scene before the accumulating render model block', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', []);
+    test('hides Looks while keeping later built-in and extension categories', () => {
+        const categories = [
+            {id: 'looks', xml: '<category id="looks"><block type="looks_show" /></category>'},
+            {id: 'custom', xml: '<category id="custom" />'}
+        ];
+        const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox).toContain('type="looks_clearscene"');
-        expect(toolbox).toContain('type="looks_rendermodel"');
-        expect(toolbox).toContain('type="looks_setmodelframeto"');
-        expect(toolbox.indexOf('type="looks_clearscene"')).toBeLessThan(
-            toolbox.indexOf('type="looks_rendermodel"')
-        );
-        expect(toolbox.indexOf('type="looks_rendermodel"')).toBeLessThan(
-            toolbox.indexOf('type="looks_setmodelframeto"')
-        );
-        expect(toolbox).not.toContain('type="looks_switchmodelto"');
-    });
-
-    test('offers building primitives and material setup with native color and costume inputs', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', []);
-
-        expect(toolbox).toContain('type="looks_clearmaterial"');
-        expect(toolbox).toContain('type="looks_addmaterial"');
-        expect(toolbox).toContain('type="looks_setalbedofromcolor"');
-        expect(toolbox).toContain('type="looks_setalbedofromtexture"');
-        expect(toolbox).toContain('type="looks_setemissionfromcolor"');
-        expect(toolbox).toContain('type="looks_setemissionfromtexture"');
-        expect(toolbox).toContain('type="looks_setdisplacementmap"');
-        expect(toolbox).toContain('type="looks_setnormalmap"');
-        expect(toolbox).toContain('type="looks_setroughmap"');
-        expect(toolbox).toContain('type="looks_renderwall"');
-        expect(toolbox).toContain('type="looks_renderfloor"');
-        expect(toolbox).toContain('type="looks_renderbox"');
-        expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker">');
-        expect(toolbox).toContain('<value name="TEXTURE"><shadow type="looks_costume">');
-        expect(toolbox).toContain('<value name="U2"><shadow type="math_number"><field name="NUM">1</field>');
-        expect(toolbox.indexOf('type="looks_clearmaterial"')).toBeLessThan(
-            toolbox.indexOf('type="looks_addmaterial"')
-        );
-    });
-
-    test('offers point and spot lights with color pickers and fractional shadows', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', []);
-
-        expect(toolbox).toContain('type="looks_clearlight"');
-        expect(toolbox).toContain('type="looks_addpointlight"');
-        expect(toolbox).toContain('type="looks_addlight"');
-        expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker">');
-        expect(toolbox).toContain('<value name="SHADOW"><shadow type="math_number">');
-        expect(toolbox.indexOf('type="looks_clearlight"')).toBeLessThan(
-            toolbox.indexOf('type="looks_addpointlight"')
-        );
-        expect(toolbox.indexOf('type="looks_addpointlight"')).toBeLessThan(
-            toolbox.indexOf('type="looks_addlight"')
-        );
-    });
-
-    test('offers the atomic video-frame render block plus the legacy video controls', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', []);
-
-        expect(toolbox).toContain('type="looks_rendervideo"');
-        expect(toolbox).toContain('<value name="VIDEO">');
-        expect(toolbox).toContain('<value name="FRAME">');
-        expect(toolbox).toContain('type="looks_switchvideoto"');
-        expect(toolbox).toContain('type="looks_setvideoframeto"');
-        expect(toolbox).toContain('type="looks_changevideoframeby"');
+        expect(toolbox).not.toContain('id="looks"');
+        expect(toolbox).not.toContain('type="looks_');
+        expect(toolbox).toContain('id="sound"');
+        expect(toolbox).toContain('id="custom"');
     });
 
     test('renames Motion to Camera and only offers camera controls', () => {
@@ -161,12 +109,9 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="motion_setx"');
     });
 
-    test('shows every VM-executable block including legacy rendering and event blocks', () => {
+    test('shows the curated sound and event blocks', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 
-        expect(toolbox).toContain('type="looks_addrenderingframe"');
-        expect(toolbox).toContain('type="looks_clearrenderingframe"');
-        expect(toolbox).toContain('type="looks_exportrenderingmp4"');
         expect(toolbox).not.toContain('type="event_whenflagclicked"');
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
@@ -187,17 +132,18 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('type="motion_setcamerax"');
         expect(toolbox).toContain('type="motion_changecamerazby"');
         expect(toolbox).toContain('type="motion_changecamerarotationby"');
-        // Looks keeps visual production tools but removes speech and layer-order blocks.
+        // Looks opcodes remain loadable for project compatibility but are not offered in the toolbox.
+        expect(toolbox).not.toContain('id="looks"');
         expect(toolbox).not.toContain('type="looks_say"');
         expect(toolbox).not.toContain('type="looks_thinkforsecs"');
         expect(toolbox).not.toContain('type="looks_gotofrontback"');
         expect(toolbox).not.toContain('type="looks_goforwardbackwardlayers"');
-        expect(toolbox).toContain('type="looks_nextcostume"');
-        expect(toolbox).toContain('type="looks_changesizeby"');
-        expect(toolbox).toContain('type="looks_turbulentdisplace"');
-        expect(toolbox).toContain('type="looks_bloom"');
-        expect(toolbox).toContain('type="looks_effectweight"');
-        expect(toolbox).toContain('type="looks_hideallsprites"');
+        expect(toolbox).not.toContain('type="looks_nextcostume"');
+        expect(toolbox).not.toContain('type="looks_changesizeby"');
+        expect(toolbox).not.toContain('type="looks_turbulentdisplace"');
+        expect(toolbox).not.toContain('type="looks_bloom"');
+        expect(toolbox).not.toContain('type="looks_effectweight"');
+        expect(toolbox).not.toContain('type="looks_hideallsprites"');
         // Sound.
         expect(toolbox).toContain('type="sound_play"');
         expect(toolbox).toContain('type="sound_stopallsounds"');

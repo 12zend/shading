@@ -911,8 +911,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         // return `undefined`
     };
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
-    const looksXML = moveCategory('looks') ||
-        looks(isInitialSetup, isStage, targetId, costumeName, backdropName, colors.looks);
+    // Looks blocks remain registered so existing projects can load, but the
+    // category is intentionally hidden from the Movie toolbox.
+    moveCategory('looks');
     const objectsXML = moveCategory('objects') ? objects(costumeName) : null;
     const penFXXML = withPenFXGradientField(moveCategory('penfx'));
     const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
@@ -922,7 +923,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
-    // Pen remains loadable for project compatibility, but compositing is presented through Pen FX.
+    // Pen remains loadable for project compatibility, but compositing is presented through Looks (Pen FX).
     moveCategory('pen');
     // The VM registration allows myblocksshader_* opcodes to deserialize. Its
     // empty extension category is replaced by the native dynamic category.
@@ -940,7 +941,6 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         xmlOpen,
         ...(objectsXML ? [objectsXML, gap] : []),
         motionXML, gap,
-        looksXML, gap,
         ...(penFXXML ? [penFXXML, gap] : []),
         soundXML, gap,
         eventsXML, gap,

@@ -1,4 +1,4 @@
-// Name: Pen FX
+// Name: Looks
 // ID: penfx
 // Description: Fast GPU post-processing effects for TurboWarp's pen layer.
 // License: MIT
@@ -2996,7 +2996,7 @@ const createPenFXClass = vm => {
     getInfo() {
       return {
         id: 'penfx',
-        name: 'Pen FX',
+        name: 'Looks',
         color1: '#6b56d9',
         color2: '#5945c2',
         color3: '#46359f',
