@@ -5,6 +5,7 @@
 .timeline {
     position: relative;
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     align-self: stretch;
     color: $text-primary;
@@ -51,6 +52,57 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
+}
+
+.zoom-controls {
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-secondary;
+}
+
+.zoom-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.875rem;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: $text-primary;
+    cursor: pointer;
+}
+
+.zoom-button:hover:not(:disabled) {
+    background: $ui-tertiary;
+}
+
+.zoom-button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid $looks-secondary;
+    outline-offset: 1px;
+}
+
+.zoom-button:disabled {
+    cursor: default;
+    opacity: 0.4;
+}
+
+.zoom-button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.zoom-level {
+    min-width: 2.5rem;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
 }
 
 .addon-controls {
@@ -138,7 +190,7 @@
 }
 
 .icon-button:disabled,
-.scrubber input:disabled {
+.timeline-track.is-disabled {
     cursor: default;
     opacity: 0.5;
 }
@@ -148,19 +200,53 @@
     margin-top: 0.625rem;
 }
 
+.timeline-viewport {
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-secondary;
+    overscroll-behavior-x: contain;
+    scrollbar-color: $text-primary-transparent $ui-tertiary;
+    scrollbar-width: thin;
+}
+
+.timeline-viewport::-webkit-scrollbar {
+    height: 0.625rem;
+}
+
+.timeline-viewport::-webkit-scrollbar-track {
+    background: $ui-tertiary;
+}
+
+.timeline-viewport::-webkit-scrollbar-thumb {
+    border: 2px solid $ui-tertiary;
+    border-radius: 0.3125rem;
+    background: $text-primary-transparent;
+}
+
+.timeline-canvas {
+    position: relative;
+    height: 4.25rem;
+    min-width: 100%;
+    user-select: none;
+}
+
 .markers {
     position: absolute;
-    z-index: 1;
-    right: 0.4375rem;
-    bottom: calc(100% + 0.15rem);
-    left: 0.4375rem;
-    height: 0.75rem;
+    z-index: 3;
+    top: 2rem;
+    right: 0;
+    left: 0;
+    height: 2rem;
     pointer-events: none;
 }
 
 .marker {
     position: absolute;
-    bottom: 0;
+    top: 0.125rem;
     width: 0.75rem;
     height: 0.75rem;
     margin-left: -0.375rem;
@@ -197,44 +283,120 @@
     outline-offset: 2px;
 }
 
-.scrubber input {
-    display: block;
-    width: 100%;
-    height: 0.375rem;
-    margin: 0;
-    border-radius: 0.1875rem;
-    appearance: none;
-    background-color: $ui-tertiary;
-    background-image: linear-gradient($looks-secondary, $looks-secondary);
-    background-repeat: no-repeat;
+.timeline-track {
+    position: absolute;
+    top: 2rem;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow: hidden;
+    border-top: 1px solid $ui-black-transparent;
+    background: $ui-tertiary;
     cursor: pointer;
 }
 
-.scrubber input::-webkit-slider-thumb {
-    width: 0.875rem;
-    height: 0.875rem;
-    border: 2px solid $ui-white;
-    border-radius: 50%;
-    appearance: none;
-    background: $looks-secondary;
-    box-shadow: 0 0 0 1px $looks-secondary-dark;
+.timeline-track:focus-visible {
+    z-index: 4;
+    outline: 2px solid $looks-secondary;
+    outline-offset: -2px;
 }
 
-.scrubber input::-moz-range-thumb {
-    width: 0.75rem;
-    height: 0.75rem;
-    border: 2px solid $ui-white;
-    border-radius: 50%;
+.timeline-track::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 0.25rem;
+    background: $ui-black-transparent;
+    content: "";
+}
+
+.elapsed-range {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: $looks-light-transparent;
+    pointer-events: none;
+}
+
+.elapsed-range::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 0.25rem;
     background: $looks-secondary;
+    content: "";
 }
 
 .ruler {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 0.375rem;
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 2rem;
     color: $text-primary-transparent;
     font-size: 0.625rem;
     font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+.ruler-tick {
+    position: absolute;
+    bottom: 0;
+    width: 1px;
+    height: 0.375rem;
+    background: $ui-black-transparent;
+}
+
+.ruler-tick.major-tick {
+    height: 0.625rem;
+    background: $text-primary-transparent;
+}
+
+.ruler-tick > span {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 0;
+    white-space: nowrap;
+    transform: translateX(-50%);
+}
+
+.ruler-tick.origin-tick > span {
+    transform: none;
+}
+
+.playhead {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: $looks-secondary;
+    pointer-events: none;
+}
+
+.playhead > span {
+    position: absolute;
+    top: 0.125rem;
+    left: 50%;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 0.125rem 0.125rem 50% 50%;
+    background: $looks-secondary;
+    box-shadow: 0 0.125rem 0.25rem $shadow;
+    transform: translateX(-50%);
+}
+
+.playhead.at-origin > span {
+    left: 0;
+    transform: none;
+}
+
+.playhead.at-end > span {
+    left: 0;
+    transform: translateX(-100%);
 }
 
 .transport {
@@ -256,6 +418,36 @@
 .frame-count {
     margin-left: auto;
     white-space: nowrap;
+}
+
+.timeline.is-compact {
+    padding: 0.5rem;
+}
+
+.timeline.is-compact .header {
+    gap: 0.375rem;
+}
+
+.timeline.is-compact .title-group span,
+.timeline.is-compact .status,
+.timeline.is-compact .frame-count {
+    display: none;
+}
+
+.timeline.is-compact .header-actions {
+    gap: 0.25rem;
+}
+
+.timeline.is-compact .timecode {
+    font-size: 0.6875rem;
+}
+
+.timeline.is-compact .zoom-controls {
+    margin-left: auto;
+}
+
+.timeline.is-compact .zoom-level {
+    min-width: 2rem;
 }
 
 .settings-panel {
@@ -357,6 +549,7 @@
     .icon-button,
     .play-button,
     .stop-button,
+    .zoom-button,
     .primary-button,
     .secondary-button {
         transition: none;

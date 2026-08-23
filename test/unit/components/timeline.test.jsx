@@ -51,8 +51,8 @@ describe('Timeline keyboard controls', () => {
         instance.manager = manager;
     });
 
-    test('space toggles playback while the timeline scrubber is focused', () => {
-        const scrubber = {tagName: 'INPUT', type: 'range'};
+    test('space toggles playback while the timeline is focused', () => {
+        const scrubber = {tagName: 'DIV'};
         instance.timelineElement = {contains: target => target === scrubber};
         instance.scrubberElement = scrubber;
         const event = makeEvent({key: ' ', code: 'Space', target: scrubber});
@@ -90,7 +90,7 @@ describe('Timeline keyboard controls', () => {
     });
 
     test('left arrow moves back one frame when the timeline is focused', () => {
-        const timelineControl = {tagName: 'INPUT', type: 'range'};
+        const timelineControl = {tagName: 'DIV'};
         instance.timelineElement = {contains: target => target === timelineControl};
         instance.scrubberElement = timelineControl;
         component.setState({
@@ -122,6 +122,33 @@ describe('Timeline keyboard controls', () => {
         expect(manager.seekTimeline).not.toHaveBeenCalled();
     });
 
+    test('up and down arrows step the focused timeline by one frame', () => {
+        const timelineControl = {tagName: 'DIV'};
+        instance.timelineElement = {contains: target => target === timelineControl};
+        instance.scrubberElement = timelineControl;
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {currentTime: 1})
+        });
+
+        instance.handleKeyDown(makeEvent({key: 'ArrowUp', keyCode: 38, target: timelineControl}));
+        instance.handleKeyDown(makeEvent({key: 'ArrowDown', keyCode: 40, target: timelineControl}));
+
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(1, 31 / 30);
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(2, 29 / 30);
+    });
+
+    test('home and end seek to the timeline boundaries', () => {
+        const timelineControl = {tagName: 'DIV'};
+        instance.timelineElement = {contains: target => target === timelineControl};
+        instance.scrubberElement = timelineControl;
+
+        instance.handleKeyDown(makeEvent({key: 'Home', keyCode: 36, target: timelineControl}));
+        instance.handleKeyDown(makeEvent({key: 'End', keyCode: 35, target: timelineControl}));
+
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(1, 0);
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(2, 10);
+    });
+
     test('volume slider keeps its native keyboard controls inside the timeline', () => {
         const volumeSlider = {tagName: 'INPUT', type: 'range'};
         instance.timelineElement = {contains: target => target === volumeSlider};
@@ -132,6 +159,57 @@ describe('Timeline keyboard controls', () => {
 
         expect(event.preventDefault).not.toHaveBeenCalled();
         expect(manager.seekTimeline).not.toHaveBeenCalled();
+    });
+
+    test('renders a scrollable ruler instead of a range input', () => {
+        expect(component.find('[role="slider"]')).toHaveLength(1);
+        expect(component.find('input[type="range"]')).toHaveLength(0);
+        expect(component.find('[aria-label="Timeline zoom"]')).toHaveLength(1);
+    });
+
+    test('keeps fractional ruler labels accurate at high zoom', () => {
+        component.setState({pixelsPerSecond: 320, viewportWidth: 640});
+
+        expect(component.text()).toContain('0.5s');
+        expect(component.text()).toContain('1.5s');
+    });
+
+    test('clicking the ruler seeks using its scrolled and zoomed position', () => {
+        instance.viewportElement = {
+            getBoundingClientRect: () => ({left: 100}),
+            scrollLeft: 144
+        };
+        instance.seekFromClientX(172);
+
+        expect(manager.seekTimeline).toHaveBeenCalledWith(3);
+    });
+
+    test('zoom keeps the time under the viewport center anchored', () => {
+        instance.viewportElement = {
+            getBoundingClientRect: () => ({left: 0, width: 400}),
+            scrollLeft: 160
+        };
+
+        instance.handleZoomIn();
+
+        expect(instance.state.pixelsPerSecond).toBe(90);
+        expect(instance.viewportElement.scrollLeft).toBe(250);
+    });
+
+    test('zooms out to 5 percent for long timelines', () => {
+        instance.viewportElement = {
+            getBoundingClientRect: () => ({left: 0, width: 480}),
+            scrollLeft: 0
+        };
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {duration: 200})
+        });
+
+        for (let attempt = 0; attempt < 20; attempt++) instance.handleZoomOut();
+
+        expect(instance.state.pixelsPerSecond).toBe(3.6);
+        expect(component.text()).toContain('5%');
+        expect(component.find('button[aria-label="Zoom out timeline"]').prop('disabled')).toBe(true);
     });
 
     test('Export MP4 applies settings and renders fresh frames before exporting', async () => {

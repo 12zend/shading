@@ -6,8 +6,17 @@ import VM from 'scratch-vm';
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 import installCollaborationManager from '../../lib/collaboration-manager';
 
-import {GearIcon, PauseIcon, PlayIcon} from './icons.jsx';
+import {GearIcon, PauseIcon, PlayIcon, ZoomInIcon, ZoomOutIcon} from './icons.jsx';
 import styles from './timeline.css';
+
+const DEFAULT_PIXELS_PER_SECOND = 72;
+const MIN_ZOOM_PERCENT = 5;
+const MIN_PIXELS_PER_SECOND = DEFAULT_PIXELS_PER_SECOND * (MIN_ZOOM_PERCENT / 100);
+const MAX_PIXELS_PER_SECOND = 320;
+const ZOOM_FACTOR = 1.25;
+const COMPACT_TIMELINE_WIDTH = 360;
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const formatTime = seconds => {
     const safeSeconds = Math.max(0, Number(seconds) || 0);
@@ -18,6 +27,21 @@ const formatTime = seconds => {
     return `${minuteText}:${secondText}`;
 };
 
+const formatRulerTime = seconds => {
+    if (seconds >= 60) {
+        const minutes = Math.floor(seconds / 60);
+        const remaining = Number((seconds - (minutes * 60)).toFixed(1));
+        const remainingText = Number.isInteger(remaining) ? String(remaining) : remaining.toFixed(1);
+        return `${minutes}:${remaining < 10 ? '0' : ''}${remainingText}`;
+    }
+    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+};
+
+const getMajorTickStep = pixelsPerSecond => {
+    const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+    return steps.find(step => step * pixelsPerSecond >= 72) || steps[steps.length - 1];
+};
+
 class Timeline extends React.Component {
     constructor (props) {
         super(props);
@@ -25,7 +49,10 @@ class Timeline extends React.Component {
             draft: null,
             exporting: false,
             markers: [],
+            pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
+            scrollLeft: 0,
             settingsOpen: false,
+            viewportWidth: 0,
             timeline: {
                 currentTime: 0,
                 duration: 10,
@@ -44,12 +71,20 @@ class Timeline extends React.Component {
         this.handlePlayPause = this.handlePlayPause.bind(this);
         this.handleStepFrame = this.handleStepFrame.bind(this);
         this.handleStop = this.handleStop.bind(this);
-        this.handleSeek = this.handleSeek.bind(this);
         this.handleToggleSettings = this.handleToggleSettings.bind(this);
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
         this.handleExport = this.handleExport.bind(this);
         this.handleMarkerClick = this.handleMarkerClick.bind(this);
+        this.handleMarkerMouseDown = this.handleMarkerMouseDown.bind(this);
+        this.handleRulerMouseDown = this.handleRulerMouseDown.bind(this);
+        this.handleScrubEnd = this.handleScrubEnd.bind(this);
+        this.handleScrubMove = this.handleScrubMove.bind(this);
+        this.handleScroll = this.handleScroll.bind(this);
+        this.handleTimelineWheel = this.handleTimelineWheel.bind(this);
+        this.handleZoomIn = this.handleZoomIn.bind(this);
+        this.handleZoomOut = this.handleZoomOut.bind(this);
+        this.measureTimelineViewport = this.measureTimelineViewport.bind(this);
     }
 
     componentDidMount () {
@@ -60,8 +95,22 @@ class Timeline extends React.Component {
         this.collaborationManager = installCollaborationManager(this.props.vm);
         this.collaborationManager.on('stateChanged', this.handleCollaborationChanged);
         document.addEventListener('keydown', this.handleKeyDown);
+        if (typeof ResizeObserver === 'function') {
+            this.resizeObserver = new ResizeObserver(this.measureTimelineViewport);
+            if (this.viewportElement) this.resizeObserver.observe(this.viewportElement);
+        } else if (typeof window !== 'undefined') {
+            window.addEventListener('resize', this.measureTimelineViewport);
+        }
+        this.measureTimelineViewport();
         this.handleTimelineChanged(this.manager.getTimelineState());
         this.handleCollaborationChanged(this.collaborationManager.getState());
+    }
+
+    componentDidUpdate (prevProps, prevState) {
+        const timeline = this.state.timeline;
+        if (timeline.playing && timeline.currentTime !== prevState.timeline.currentTime) {
+            this.keepPlayheadVisible();
+        }
     }
 
     componentWillUnmount () {
@@ -73,6 +122,18 @@ class Timeline extends React.Component {
             this.collaborationManager.removeListener('stateChanged', this.handleCollaborationChanged);
         }
         document.removeEventListener('keydown', this.handleKeyDown);
+        document.removeEventListener('mousemove', this.handleScrubMove);
+        document.removeEventListener('mouseup', this.handleScrubEnd);
+        if (this.resizeObserver) this.resizeObserver.disconnect();
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('resize', this.measureTimelineViewport);
+        }
+    }
+
+    measureTimelineViewport () {
+        if (!this.viewportElement) return;
+        const viewportWidth = this.viewportElement.clientWidth;
+        if (viewportWidth !== this.state.viewportWidth) this.setState({viewportWidth});
     }
 
     handleTimelineChanged (timeline) {
@@ -98,7 +159,12 @@ class Timeline extends React.Component {
         const isSpace = event.key === ' ' || event.code === 'Space';
         const isArrowLeft = event.key === 'ArrowLeft' || event.keyCode === 37;
         const isArrowRight = event.key === 'ArrowRight' || event.keyCode === 39;
-        if (!isSpace && !isArrowLeft && !isArrowRight) return;
+        const isArrowDown = event.key === 'ArrowDown' || event.keyCode === 40;
+        const isArrowUp = event.key === 'ArrowUp' || event.keyCode === 38;
+        const isHome = event.key === 'Home' || event.keyCode === 36;
+        const isEnd = event.key === 'End' || event.keyCode === 35;
+        if (!isSpace && !isArrowLeft && !isArrowRight && !isArrowDown && !isArrowUp &&
+            !isHome && !isEnd) return;
 
         const target = event.target;
         const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
@@ -107,10 +173,11 @@ class Timeline extends React.Component {
         );
         const isTimelineScrubber = isTimelineTarget && target === this.scrubberElement;
         const isFormControl = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+        const isInteractiveControl = isFormControl || tagName === 'button' || tagName === 'a';
         const isEditingText = (isFormControl && !isTimelineScrubber) || (target && target.isContentEditable);
 
         if (isSpace) {
-            if (event.repeat || isEditingText) return;
+            if (event.repeat || isEditingText || (isInteractiveControl && !isTimelineScrubber)) return;
             event.preventDefault();
             this.handlePlayPause();
             return;
@@ -118,9 +185,13 @@ class Timeline extends React.Component {
 
         const hasNoFocusedControl = !target || target === document || target === document.body;
         if (this.state.timeline.recording || isEditingText ||
-            (!hasNoFocusedControl && !isTimelineTarget)) return;
+            (!hasNoFocusedControl && !isTimelineScrubber)) return;
         event.preventDefault();
-        this.handleStepFrame(isArrowLeft ? -1 : 1);
+        if (isHome || isEnd) {
+            this.manager.seekTimeline(isHome ? 0 : this.state.timeline.duration);
+        } else {
+            this.handleStepFrame(isArrowLeft || isArrowDown ? -1 : 1);
+        }
     }
 
     handlePlayPause () {
@@ -143,12 +214,134 @@ class Timeline extends React.Component {
         this.manager.stopTimeline();
     }
 
-    handleSeek (event) {
-        this.manager.seekTimeline(Number(event.target.value));
+    seekFromClientX (clientX) {
+        if (!this.viewportElement) return;
+        const rect = this.viewportElement.getBoundingClientRect();
+        const contentX = this.viewportElement.scrollLeft + clientX - rect.left;
+        const time = clamp(
+            contentX / this.state.pixelsPerSecond,
+            0,
+            this.state.timeline.duration
+        );
+        this.manager.seekTimeline(time);
+    }
+
+    handleRulerMouseDown (event) {
+        if (event.button !== 0 || this.state.timeline.recording) return;
+        event.preventDefault();
+        this.scrubbing = true;
+        this.seekFromClientX(event.clientX);
+        document.addEventListener('mousemove', this.handleScrubMove);
+        document.addEventListener('mouseup', this.handleScrubEnd);
+    }
+
+    handleScrubMove (event) {
+        if (!this.scrubbing) return;
+        event.preventDefault();
+        this.seekFromClientX(event.clientX);
+    }
+
+    handleScrubEnd () {
+        this.scrubbing = false;
+        document.removeEventListener('mousemove', this.handleScrubMove);
+        document.removeEventListener('mouseup', this.handleScrubEnd);
     }
 
     handleMarkerClick (event) {
         this.manager.seekTimeline(Number(event.currentTarget.value));
+    }
+
+    handleMarkerMouseDown (event) {
+        event.stopPropagation();
+    }
+
+    handleScroll (event) {
+        const scrollLeft = event.currentTarget.scrollLeft;
+        if (Math.abs(scrollLeft - this.state.scrollLeft) > 0.5) this.setState({scrollLeft});
+    }
+
+    handleTimelineWheel (event) {
+        if (!this.viewportElement) return;
+        if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            this.setZoom(
+                this.state.pixelsPerSecond * (event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR),
+                event.clientX
+            );
+            return;
+        }
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            event.preventDefault();
+            this.viewportElement.scrollLeft += event.deltaY;
+        }
+    }
+
+    setZoom (pixelsPerSecond, anchorClientX) {
+        if (!this.viewportElement) return;
+        const nextPixelsPerSecond = clamp(
+            pixelsPerSecond,
+            MIN_PIXELS_PER_SECOND,
+            MAX_PIXELS_PER_SECOND
+        );
+        if (nextPixelsPerSecond === this.state.pixelsPerSecond) return;
+        const rect = this.viewportElement.getBoundingClientRect();
+        const anchorOffset = Number.isFinite(anchorClientX) ?
+            clamp(anchorClientX - rect.left, 0, rect.width) : rect.width / 2;
+        const anchorTime = (this.viewportElement.scrollLeft + anchorOffset) /
+            this.state.pixelsPerSecond;
+        this.setState({pixelsPerSecond: nextPixelsPerSecond}, () => {
+            this.viewportElement.scrollLeft = (anchorTime * nextPixelsPerSecond) - anchorOffset;
+        });
+    }
+
+    handleZoomIn () {
+        this.setZoom(this.state.pixelsPerSecond * ZOOM_FACTOR);
+    }
+
+    handleZoomOut () {
+        this.setZoom(this.state.pixelsPerSecond / ZOOM_FACTOR);
+    }
+
+    keepPlayheadVisible () {
+        if (!this.viewportElement) return;
+        const playheadX = this.state.timeline.currentTime * this.state.pixelsPerSecond;
+        const left = this.viewportElement.scrollLeft;
+        const right = left + this.viewportElement.clientWidth;
+        const padding = Math.min(48, this.viewportElement.clientWidth * 0.15);
+        if (playheadX < left + padding) {
+            this.viewportElement.scrollLeft = Math.max(0, playheadX - padding);
+        } else if (playheadX > right - padding) {
+            this.viewportElement.scrollLeft = playheadX - this.viewportElement.clientWidth + padding;
+        }
+    }
+
+    getRulerTicks () {
+        const pixelsPerSecond = this.state.pixelsPerSecond;
+        const majorStep = getMajorTickStep(pixelsPerSecond);
+        const divisions = 5;
+        const minorStep = majorStep / divisions;
+        const fallbackWidth = Math.min(
+            this.state.timeline.duration * pixelsPerSecond,
+            800
+        );
+        const viewportWidth = this.state.viewportWidth || fallbackWidth;
+        const visibleStart = Math.max(0, this.state.scrollLeft / pixelsPerSecond);
+        const visibleEnd = Math.min(
+            this.state.timeline.duration,
+            (this.state.scrollLeft + viewportWidth) / pixelsPerSecond
+        );
+        const firstIndex = Math.max(0, Math.floor(visibleStart / minorStep) - 1);
+        const lastIndex = Math.ceil(visibleEnd / minorStep) + 1;
+        const ticks = [];
+        for (let index = firstIndex; index <= lastIndex; index++) {
+            const time = Number((index * minorStep).toFixed(6));
+            if (time > this.state.timeline.duration) break;
+            ticks.push({
+                major: index % divisions === 0,
+                time
+            });
+        }
+        return ticks;
     }
 
     handleToggleSettings () {
@@ -287,12 +480,22 @@ class Timeline extends React.Component {
 
     render () {
         const timeline = this.state.timeline;
-        const progress = timeline.duration ? (timeline.currentTime / timeline.duration) * 100 : 0;
         const frame = Math.round(timeline.currentTime * timeline.framerate);
+        const timelineWidth = Math.max(
+            timeline.duration * this.state.pixelsPerSecond,
+            Math.max(1, this.state.viewportWidth - 2)
+        );
+        const rulerTicks = this.getRulerTicks();
+        const zoomPercent = Math.round(
+            (this.state.pixelsPerSecond / DEFAULT_PIXELS_PER_SECOND) * 100
+        );
         return (
             <section
                 aria-label="Timeline"
-                className={styles.timeline}
+                className={classNames(styles.timeline, {
+                    [styles.isCompact]: this.state.viewportWidth > 0 &&
+                        this.state.viewportWidth < COMPACT_TIMELINE_WIDTH
+                })}
                 ref={element => {
                     this.timelineElement = element;
                 }}
@@ -327,48 +530,89 @@ class Timeline extends React.Component {
                     </div>
                 </div>
                 <div className={styles.scrubber}>
-                    <div className={styles.markers}>
-                        {this.state.markers.map(marker => {
-                            const markerKind = marker.kind === 'note' ? 'メモ' : 'チャット';
-                            const markerLabel = `${marker.authorName}の${markerKind}、${formatTime(marker.seconds)}`;
-                            const markerTitle = `${marker.authorName}: ${marker.text}`;
-                            const markerPosition = timeline.duration ?
-                                (marker.seconds / timeline.duration) * 100 : 0;
-                            return (
-                                <button
-                                    aria-label={markerLabel}
-                                    className={classNames(styles.marker, styles[marker.kind])}
-                                    key={marker.id}
-                                    style={{left: `${markerPosition}%`}}
-                                    title={markerTitle}
-                                    type="button"
-                                    value={marker.seconds}
-                                    onClick={this.handleMarkerClick}
-                                ><span /></button>
-                            );
-                        })}
-                    </div>
-                    <input
-                        aria-label="Current timeline position"
-                        max={timeline.duration}
-                        min="0"
-                        disabled={timeline.recording}
-                        step="0.001"
-                        style={{backgroundSize: `${progress}% 100%`}}
-                        type="range"
-                        value={timeline.currentTime}
-                        onChange={this.handleSeek}
-                        ref={element => {
-                            this.scrubberElement = element;
-                        }}
-                    />
                     <div
-                        aria-hidden="true"
-                        className={styles.ruler}
+                        className={styles.timelineViewport}
+                        onScroll={this.handleScroll}
+                        onWheel={this.handleTimelineWheel}
+                        ref={element => {
+                            this.viewportElement = element;
+                        }}
                     >
-                        {[0, 0.25, 0.5, 0.75, 1].map(position => (
-                            <span key={position}>{(timeline.duration * position).toFixed(1)}{'s'}</span>
-                        ))}
+                        <div
+                            className={styles.timelineCanvas}
+                            style={{width: `${timelineWidth}px`}}
+                        >
+                            <div
+                                aria-hidden="true"
+                                className={styles.ruler}
+                                onMouseDown={this.handleRulerMouseDown}
+                            >
+                                {rulerTicks.map(tick => (
+                                    <span
+                                        className={classNames(styles.rulerTick, {
+                                            [styles.majorTick]: tick.major,
+                                            [styles.originTick]: tick.time === 0
+                                        })}
+                                        key={tick.time}
+                                        style={{left: `${tick.time * this.state.pixelsPerSecond}px`}}
+                                    >
+                                        {tick.major ? <span>{formatRulerTime(tick.time)}</span> : null}
+                                    </span>
+                                ))}
+                            </div>
+                            <div
+                                aria-disabled={timeline.recording}
+                                aria-label="Current timeline position"
+                                aria-valuemax={timeline.duration}
+                                aria-valuemin="0"
+                                aria-valuenow={timeline.currentTime}
+                                aria-valuetext={formatTime(timeline.currentTime)}
+                                className={classNames(styles.timelineTrack, {
+                                    [styles.isDisabled]: timeline.recording
+                                })}
+                                role="slider"
+                                tabIndex={timeline.recording ? -1 : 0}
+                                onMouseDown={this.handleRulerMouseDown}
+                                ref={element => {
+                                    this.scrubberElement = element;
+                                }}
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className={styles.elapsedRange}
+                                    style={{width: `${timeline.currentTime * this.state.pixelsPerSecond}px`}}
+                                />
+                            </div>
+                            <div className={styles.markers}>
+                                {this.state.markers.map(marker => {
+                                    const markerKind = marker.kind === 'note' ? 'メモ' : 'チャット';
+                                    const markerLabel =
+                                        `${marker.authorName}の${markerKind}、${formatTime(marker.seconds)}`;
+                                    const markerTitle = `${marker.authorName}: ${marker.text}`;
+                                    return (
+                                        <button
+                                            aria-label={markerLabel}
+                                            className={classNames(styles.marker, styles[marker.kind])}
+                                            key={marker.id}
+                                            style={{left: `${marker.seconds * this.state.pixelsPerSecond}px`}}
+                                            title={markerTitle}
+                                            type="button"
+                                            value={marker.seconds}
+                                            onClick={this.handleMarkerClick}
+                                            onMouseDown={this.handleMarkerMouseDown}
+                                        ><span /></button>
+                                    );
+                                })}
+                            </div>
+                            <div
+                                aria-hidden="true"
+                                className={classNames(styles.playhead, {
+                                    [styles.atOrigin]: timeline.currentTime === 0,
+                                    [styles.atEnd]: timeline.currentTime === timeline.duration
+                                })}
+                                style={{left: `${timeline.currentTime * this.state.pixelsPerSecond}px`}}
+                            ><span /></div>
+                        </div>
                     </div>
                 </div>
                 <div className={styles.transport}>
@@ -391,6 +635,31 @@ class Timeline extends React.Component {
                         {' at '}{timeline.currentTime.toFixed(2)}{'s'}
                     </span>
                     <span className={styles.frameCount}>{timeline.frameCount}{' rendered frames'}</span>
+                    <div
+                        aria-label="Timeline zoom"
+                        className={styles.zoomControls}
+                        role="group"
+                    >
+                        <button
+                            aria-label="Zoom out timeline"
+                            className={styles.zoomButton}
+                            disabled={this.state.pixelsPerSecond <= MIN_PIXELS_PER_SECOND}
+                            title="Zoom out"
+                            type="button"
+                            onClick={this.handleZoomOut}
+                        ><ZoomOutIcon /></button>
+                        <span
+                            className={styles.zoomLevel}
+                        >{zoomPercent}{'%'}</span>
+                        <button
+                            aria-label="Zoom in timeline"
+                            className={styles.zoomButton}
+                            disabled={this.state.pixelsPerSecond >= MAX_PIXELS_PER_SECOND}
+                            title="Zoom in"
+                            type="button"
+                            onClick={this.handleZoomIn}
+                        ><ZoomInIcon /></button>
+                    </div>
                 </div>
             </section>
         );

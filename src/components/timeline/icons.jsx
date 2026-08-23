@@ -66,8 +66,54 @@ const PauseIcon = () => (
     </svg>
 );
 
+const ZoomInIcon = () => (
+    <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <circle
+            cx="10.5"
+            cy="10.5"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+        />
+        <path
+            d="M14.5 14.5 20 20M10.5 8v5M8 10.5h5"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+        />
+    </svg>
+);
+
+const ZoomOutIcon = () => (
+    <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <circle
+            cx="10.5"
+            cy="10.5"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+        />
+        <path
+            d="M14.5 14.5 20 20M8 10.5h5"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+        />
+    </svg>
+);
+
 export {
     GearIcon,
     PauseIcon,
-    PlayIcon
+    PlayIcon,
+    ZoomInIcon,
+    ZoomOutIcon
 };
