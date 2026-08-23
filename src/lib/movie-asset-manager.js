@@ -778,7 +778,7 @@ class MovieAssetManager extends EventEmitter {
             const render = this.queueModelSceneRender(target);
             if (render && typeof render.then === 'function') renders.push(render);
         }
-        return renders.length ? Promise.all(renders) : undefined;
+        if (renders.length) return Promise.all(renders);
     }
 
     clearLights () {
@@ -2450,16 +2450,16 @@ class MovieAssetManager extends EventEmitter {
         let cached = cachedByUsage[usage];
         if (cached) return cached;
         cached = {promise: null, texture: null};
-        cached.promise = Promise.resolve().then(() => loadBuildingTexture(
-            source.encodeDataURI(), usage === 'color'
-        )).then(texture => {
-            cached.texture = texture;
-            return texture;
-        }, error => {
-            if (cachedByUsage[usage] === cached) delete cachedByUsage[usage];
-            if (!Object.keys(cachedByUsage).length) this.buildingTextures.delete(source);
-            throw error;
-        });
+        cached.promise = Promise.resolve()
+            .then(() => loadBuildingTexture(source.encodeDataURI(), usage === 'color'))
+            .then(texture => {
+                cached.texture = texture;
+                return texture;
+            }, error => {
+                if (cachedByUsage[usage] === cached) delete cachedByUsage[usage];
+                if (!Object.keys(cachedByUsage).length) this.buildingTextures.delete(source);
+                throw error;
+            });
         cachedByUsage[usage] = cached;
         return cached;
     }
@@ -2483,16 +2483,15 @@ class MovieAssetManager extends EventEmitter {
             this.rerenderBuildingScenes();
             return;
         }
-        let pending;
-        const clearPending = () => {
-            if (record[pendingKey] === pending) record[pendingKey] = null;
-        };
-        pending = cached.promise.then(texture => {
+        const pending = cached.promise.then(texture => {
             if (record.textureVersions[channel] !== version || record[sourceKey] !== source) return;
             record[textureKey] = texture;
             this.syncBuildingMaterial(record);
             this.rerenderBuildingScenes();
         });
+        const clearPending = () => {
+            if (record[pendingKey] === pending) record[pendingKey] = null;
+        };
         record[pendingKey] = pending;
         pending.then(clearPending, clearPending);
         return pending;
@@ -4036,13 +4035,13 @@ class MovieAssetManager extends EventEmitter {
         const state = this.getTargetState(target);
         const hasRotationCenter = rotationCenter !== null && typeof rotationCenter !== 'undefined';
         if (state.skinId === null) {
-            state.skinId = !hasRotationCenter ?
-                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION) :
-                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION, rotationCenter);
-        } else if (!hasRotationCenter) {
-            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION);
-        } else {
+            state.skinId = hasRotationCenter ?
+                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION, rotationCenter) :
+                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION);
+        } else if (hasRotationCenter) {
             this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION, rotationCenter);
+        } else {
+            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION);
         }
         state.mode = mode;
         state.penOnly = penOnly;
