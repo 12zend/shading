@@ -92,6 +92,36 @@ const createPenFXClass = vm => {
     }
   `;
 
+  const STROKE_SHADER = `
+    precision highp float;
+    varying vec2 v_uv;
+    uniform sampler2D u_image;
+    uniform vec2 u_resolution;
+    uniform vec3 u_color;
+    uniform float u_width;
+
+    float sampleAlpha(vec2 uv) {
+      if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
+      return texture2D(u_image, uv).a;
+    }
+
+    void main() {
+      vec4 base = texture2D(u_image, v_uv);
+      float expandedAlpha = base.a;
+      vec2 sampleStep = vec2(u_width / 8.0) / u_resolution;
+      for (int y = -8; y <= 8; y++) {
+        for (int x = -8; x <= 8; x++) {
+          vec2 offset = vec2(float(x), float(y));
+          if (dot(offset, offset) <= 64.0) {
+            expandedAlpha = max(expandedAlpha, sampleAlpha(v_uv + offset * sampleStep));
+          }
+        }
+      }
+      float strokeAlpha = expandedAlpha * (1.0 - base.a);
+      gl_FragColor = vec4(base.rgb + u_color * strokeAlpha, base.a + strokeAlpha);
+    }
+  `;
+
   const GRADATION_OVERLAY_SHADER = `
     precision highp float;
     varying vec2 v_uv;
@@ -1611,6 +1641,7 @@ const createPenFXClass = vm => {
         copy: COPY_SHADER,
         color: COLOR_SHADER,
         colorOverlay: COLOR_OVERLAY_SHADER,
+        stroke: STROKE_SHADER,
         gradationOverlay: GRADATION_OVERLAY_SHADER,
         rgbShift: RGB_SHIFT_SHADER,
         signal: SIGNAL_SHADER,
@@ -2210,6 +2241,16 @@ const createPenFXClass = vm => {
       this._renderEffect(skin, this._program('colorOverlay'), [{name: 'u_image', texture: this.textures[0]}], {
         u_color: overlayColor,
         u_mix: mixValue
+      }, [], blendMode);
+    }
+
+    stroke(strokeColor, width, blendMode) {
+      const safeWidth = Math.min(64, Math.max(0, Math.abs(width)));
+      if (safeWidth <= 0) return;
+      this._singlePass(this._program('stroke'), {
+        u_resolution: this.resolution,
+        u_color: strokeColor,
+        u_width: safeWidth
       }, [], blendMode);
     }
 
@@ -2974,6 +3015,7 @@ const createPenFXClass = vm => {
           {opcode: 'chromaKey', blockType: BlockType.COMMAND, text: 'chroma key: [KEY] tolerance: [TOLERANCE] softness: [SOFTNESS] use [BEHAVIOR] colors: [COLOR1] [COLOR2] mix: [MIX] %', arguments: {KEY: {type: ArgumentType.COLOR, defaultValue: '#00ff00'}, TOLERANCE: {type: ArgumentType.NUMBER, defaultValue: 0.1}, SOFTNESS: {type: ArgumentType.NUMBER, defaultValue: 0.05}, BEHAVIOR: {type: ArgumentType.STRING, menu: 'chromaBehavior'}, COLOR1: {type: ArgumentType.COLOR, defaultValue: '#000000'}, COLOR2: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'colorOverlay', blockType: BlockType.COMMAND, text: 'color overlay [COLOR] mix: [MIX] %', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'gradationOverlay', blockType: BlockType.COMMAND, text: 'gradation overlay [GRADIENT] dir: [DIR] mix: [MIX] %', arguments: {GRADIENT: {type: ArgumentType.STRING, defaultValue: '{"stops":[{"color":"#000000","position":0},{"color":"#ffffff","position":1}]}'}, DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
+          {opcode: 'stroke', blockType: BlockType.COMMAND, text: 'stroke color: [COLOR] width: [WIDTH]', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, WIDTH: {type: ArgumentType.NUMBER, defaultValue: 4}}},
           '---',
           {opcode: 'rgbShift', blockType: BlockType.COMMAND, text: 'rgb shift dir: [DIR] value: [VALUE] color: [COLOR] mix: [MIX] %', arguments: {DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, COLOR: {type: ArgumentType.STRING, menu: 'rgbPair'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'gaussianBlur', blockType: BlockType.COMMAND, text: 'gaussian blur type: [TYPE] value: [VALUE] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'gaussianType'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -3172,6 +3214,10 @@ const createPenFXClass = vm => {
       this._safe(engine => engine.gradationOverlay(
         gradient(args.GRADIENT), numberOr(args.DIR, 90), mixAmount(args.MIX), this.blendMode
       ));
+    }
+
+    stroke(args) {
+      this._safe(engine => engine.stroke(color(args.COLOR || '#000000'), numberOr(args.WIDTH, 4), this.blendMode));
     }
 
     chromaKey(args) {

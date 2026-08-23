@@ -53,6 +53,10 @@ describe('built-in Pen FX category', () => {
         expect(info.blocks.find(block => block.opcode === 'bufferStackSize')).toBeDefined();
         expect(info.blocks.find(block => block.opcode === 'colorOverlay')).toBeDefined();
         expect(info.blocks.find(block => block.opcode === 'gradationOverlay')).toBeDefined();
+        const stroke = info.blocks.find(block => block.opcode === 'stroke');
+        expect(stroke).toBeDefined();
+        expect(stroke.arguments.COLOR.defaultValue).toBe('#000000');
+        expect(stroke.arguments.WIDTH.defaultValue).toBe(4);
         const depthOfField = info.blocks.find(block => block.opcode === 'depthOfField');
         expect(depthOfField).toBeDefined();
         expect(depthOfField.arguments.FOCUS.defaultValue).toBe(480);
@@ -104,6 +108,41 @@ describe('built-in Pen FX category', () => {
             {color: [0, 1, 0], position: 0.4},
             {color: [0, 0, 1], position: 1}
         ], 30, 0.6, 'normal');
+    });
+
+    test('routes stroke color and width without returning a promise', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {stroke: jest.fn()};
+
+        const result = penFX.stroke({COLOR: '#204080', WIDTH: 12});
+
+        expect(result).toBeUndefined();
+        expect(penFX.engine.stroke).toHaveBeenCalledWith([32 / 255, 64 / 255, 128 / 255], 12, 'normal');
+    });
+
+    test('provides a bounded GPU stroke shader which preserves the original over the outline', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const vm = {runtime: {renderer: {_gl: gl}}};
+        const PenFX = createPenFXClass(vm);
+        const shader = new PenFX()._getEngine().programSources.stroke;
+
+        expect(shader).toContain('for (int y = -8; y <= 8; y++)');
+        expect(shader).toContain('float strokeAlpha = expandedAlpha * (1.0 - base.a)');
+        expect(shader).toContain('base.rgb + u_color * strokeAlpha');
     });
 
     test('routes fractal noise controls without returning a promise', () => {
