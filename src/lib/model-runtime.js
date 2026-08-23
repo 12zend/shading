@@ -603,6 +603,36 @@ const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = 
     return mesh;
 };
 
+const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, requestedRotationCenter) => {
+    const width = Math.max(0.001, Number(requestedWidth) || 0.001);
+    const height = Math.max(0.001, Number(requestedHeight) || 0.001);
+    const texture = sourceTexture && sourceTexture.isTexture ?
+        sourceTexture.clone() : new THREE.Texture(sourceTexture);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const rotationCenter = requestedRotationCenter || {};
+    const centerX = Number.isFinite(Number(rotationCenter.x)) ? Number(rotationCenter.x) : width / 2;
+    const centerY = Number.isFinite(Number(rotationCenter.y)) ? Number(rotationCenter.y) : height / 2;
+    geometry.translate((width / 2) - centerX, centerY - (height / 2), 0);
+
+    const material = new THREE.MeshBasicMaterial({
+        alphaTest: 1 / 255,
+        depthTest: true,
+        depthWrite: true,
+        map: texture,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+        // Alpha-tested planes stay in the opaque pass: visibility is decided by the GPU depth buffer, not by
+        // Three.js's transparent-object painter ordering. The render target still receives the texture alpha.
+        transparent: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'Movie image plane';
+    return mesh;
+};
+
 const loadBuildingTexture = (source, isColorTexture = true) => new Promise((resolve, reject) => {
     new THREE.TextureLoader().load(source, texture => {
         texture.colorSpace = isColorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -1227,6 +1257,7 @@ export {
     cameraLookAt,
     convertModelToGLB,
     createBuildingPrimitive,
+    createImagePlane,
     disableFullyTransparentMaterials,
     disposeObject,
     focalLengthFromFOV,

@@ -1508,6 +1508,86 @@ describe('MovieAssetManager rendering performance', () => {
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
     });
 
+    test('captures scene draws without changing or stamping the target', () => {
+        const manager = makeManager();
+        manager.applyObjectDrawConfiguration = jest.fn();
+        manager.stampTarget = jest.fn();
+        const target = makeTarget();
+        const capture = manager.createObjectSceneCapture(target);
+
+        expect(manager.drawObject(target, {
+            asset: 'image',
+            position: {x: 10, y: 20, z: 30},
+            sceneCapture: capture,
+            source: 'costume'
+        })).toBeUndefined();
+
+        expect(capture.entries).toEqual([expect.objectContaining({
+            asset: 'image',
+            position: {x: 10, y: 20, z: 30},
+            source: 'costume'
+        })]);
+        expect(capture.entries[0]).not.toHaveProperty('sceneCapture');
+        expect(manager.applyObjectDrawConfiguration).not.toHaveBeenCalled();
+        expect(manager.stampTarget).not.toHaveBeenCalled();
+    });
+
+    test('renders every captured plane and model through one depth-buffered scene and stamps once', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const plane = {name: 'plane'};
+        const model = {name: 'model'};
+        const canvas = {name: 'scene canvas'};
+        manager.camera = {name: 'camera'};
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        manager.modelRenderer = {
+            renderWorldScene: jest.fn(() => canvas)
+        };
+        manager.prepareObjectSceneItem = jest.fn()
+            .mockResolvedValueOnce({item: {sourceObject: plane}, resource: null})
+            .mockResolvedValueOnce({item: {sourceObject: model}, resource: null});
+        manager.applyBitmap = jest.fn();
+        manager.publishModelZBuffer = jest.fn();
+        manager.finishObjectDraw = jest.fn();
+
+        await manager.performObjectScene(target, {entries: [{asset: 'image'}, {asset: 'model'}]});
+
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledTimes(1);
+        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith(
+            [{sourceObject: plane}, {sourceObject: model}],
+            manager.camera,
+            [480, 360],
+            2
+        );
+        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'scene');
+        expect(manager.publishModelZBuffer).toHaveBeenCalledWith(target);
+        expect(manager.finishObjectDraw).toHaveBeenCalledWith(target, {}, 'model');
+    });
+
+    test('keeps a following draw behind an asynchronous scene render', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const sceneRender = deferred();
+        const events = [];
+        manager.performObjectScene = jest.fn(async () => {
+            events.push('scene start');
+            await sceneRender.promise;
+            events.push('scene end');
+        });
+        manager.performObjectDraw = jest.fn(() => events.push('draw'));
+        const capture = manager.createObjectSceneCapture(target);
+
+        const pendingScene = manager.renderObjectScene(target, capture);
+        const pendingDraw = manager.drawObject(target, {asset: 'image', source: 'costume'});
+        await Promise.resolve();
+        expect(events).toEqual(['scene start']);
+
+        sceneRender.resolve();
+        await pendingScene;
+        await pendingDraw;
+        expect(events).toEqual(['scene start', 'scene end', 'draw']);
+    });
+
     test.each(['polygon', 'star', 'flower'])('renders the %s shape directly into the Pen layer', shape => {
         const manager = makeManager();
         manager.setTargetPosition = jest.fn();

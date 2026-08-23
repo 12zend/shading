@@ -6,6 +6,7 @@ import {
     bindAnimationToMesh,
     cameraLookAt,
     createBuildingPrimitive,
+    createImagePlane,
     disableFullyTransparentMaterials,
     focalLengthFromFOV,
     fovFromFocalLength,
@@ -26,6 +27,25 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
+    test('uses depth-tested opaque-pass image planes instead of transparent painter ordering', () => {
+        const texture = new THREE.Texture();
+        const plane = createImagePlane(texture, 100, 50, {x: 25, y: 10});
+        plane.geometry.computeBoundingBox();
+
+        expect(plane.material.transparent).toBe(false);
+        expect(plane.material.depthTest).toBe(true);
+        expect(plane.material.depthWrite).toBe(true);
+        expect(plane.material.alphaTest).toBeCloseTo(1 / 255);
+        expect(plane.material.map).not.toBe(texture);
+        expect(plane.geometry.boundingBox.min.toArray()).toEqual([-25, -40, 0]);
+        expect(plane.geometry.boundingBox.max.toArray()).toEqual([75, 10, 0]);
+
+        plane.material.map.dispose();
+        plane.material.dispose();
+        plane.geometry.dispose();
+        texture.dispose();
+    });
+
     test('builds a diagonal wall with height and repeatable UV coordinates', () => {
         const wall = createBuildingPrimitive('wall', {
             x1: 0,

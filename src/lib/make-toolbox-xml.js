@@ -843,6 +843,7 @@ const objects = function (costumeName) {
         </block>
         <sep gap="36"/>
         <block type="objects_grouping"/>
+        <block type="objects_scene"/>
     </category>
     `;
 };

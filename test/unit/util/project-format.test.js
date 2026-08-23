@@ -44,11 +44,12 @@ describe('Movie project format', () => {
         })).toBe('shade');
     });
 
-    test('marks object drawing and grouping as Movie blocks', () => {
+    test('marks object drawing, grouping, and z-buffer scenes as Movie blocks', () => {
         const json = project({
             draw: block('objects_draw'),
             shape: block('objects_shape'),
-            grouping: block('objects_grouping')
+            grouping: block('objects_grouping'),
+            scene: block('objects_scene')
         });
 
         expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);

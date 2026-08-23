@@ -353,7 +353,7 @@ describe('Objects blocks', () => {
         const info = blocks.getInfo();
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
-            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping'
+            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene'
         ]);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
@@ -588,6 +588,123 @@ describe('Objects blocks', () => {
         expect(harness.sequencer.stepThread.mock.calls.every(call => call[0].peekStackFrame().warpMode)).toBe(true);
         expect(harness.sequencer.activeThread).toBe(harness.originalActiveThread);
         expect(util.startBranch).not.toHaveBeenCalled();
+    });
+
+    test('runs a scene branch atomically and queues one z-buffer render without returning a promise', () => {
+        const pending = new Promise(() => {});
+        const capture = {entries: [], targetId: 'sprite'};
+        let sceneThread;
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => blockId === 'scene' && branch === 1 ? 'scene-branch' : null)
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {
+            createObjectSceneCapture: jest.fn(() => capture),
+            renderObjectScene: jest.fn(() => pending),
+            runWithoutWaiting: jest.fn()
+        };
+        const runtime = {
+            movieAssetManager: manager,
+            sequencer: {
+                activeThread: {id: 'parent'},
+                stepThread: jest.fn(thread => {
+                    sceneThread = thread;
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const objectBlocks = new ObjectBlocks();
+        const util = {
+            stackFrame: {},
+            startBranch: jest.fn(),
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'scene'),
+                target
+            }
+        };
+
+        expect(objectBlocks.scene({}, util)).toBeUndefined();
+        expect(sceneThread.objectSceneCapture).toBe(capture);
+        expect(sceneThread.peekStackFrame().warpMode).toBe(true);
+        expect(manager.renderObjectScene).toHaveBeenCalledWith(target, capture);
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
+        expect(util.startBranch).not.toHaveBeenCalled();
+    });
+
+    test('passes the active scene capture to draw without returning asynchronous work', () => {
+        const capture = {entries: [], targetId: 'sprite'};
+        const manager = {drawObject: jest.fn(), runWithoutWaiting: jest.fn()};
+        const ObjectBlocks = createObjectBlocksClass({runtime: {movieAssetManager: manager}});
+        const objectBlocks = new ObjectBlocks();
+        const util = makeUtil();
+        util.thread.objectSceneCapture = capture;
+
+        expect(objectBlocks.draw({
+            ASSET: 'costume:image', SOURCE: 'costume', PX: 0, PY: 0, PZ: 480,
+            RX: 0, RY: 0, RZ: 0, SX: 1, SY: 1, SZ: 1, SIZE: 100,
+            WIDTH: 100, HEIGHT: 100, T1: 0, T2: Infinity
+        }, util)).toBeUndefined();
+        expect(manager.drawObject).toHaveBeenCalledWith(util.target, expect.objectContaining({
+            sceneCapture: capture
+        }));
+    });
+
+    test('finishes a scene branch and the following block in one compiled VM step', () => {
+        const vm = new VM();
+        installObjectBlocks(vm);
+        const runtime = vm.runtime;
+        const stageSprite = new Sprite(null, runtime);
+        stageSprite.name = 'Stage';
+        const stage = new RenderedTarget(stageSprite, runtime);
+        stage.isStage = true;
+        const sprite = new Sprite(null, runtime);
+        sprite.name = 'Sprite';
+        const target = new RenderedTarget(sprite, runtime);
+        runtime.targets = [stage, target];
+        const capture = {entries: [], targetId: target.id};
+        runtime.movieAssetManager = {
+            createObjectSceneCapture: jest.fn(() => capture),
+            renderObjectScene: jest.fn(),
+            runWithoutWaiting: jest.fn()
+        };
+
+        target.blocks.createBlock({
+            id: 'scene',
+            opcode: 'objects_scene',
+            inputs: {
+                SUBSTACK: {name: 'SUBSTACK', block: 'scene-branch', shadow: null}
+            },
+            fields: {},
+            next: 'after-scene',
+            parent: null,
+            shadow: false,
+            topLevel: true
+        });
+        for (const [id, parent] of [
+            ['scene-branch', 'scene'],
+            ['after-scene', 'scene']
+        ]) {
+            target.blocks.createBlock({
+                id,
+                opcode: 'control_incr_counter',
+                inputs: {},
+                fields: {},
+                next: null,
+                parent,
+                shadow: false,
+                topLevel: false
+            });
+        }
+
+        runtime.ext_scratch3_control.clearCounter();
+        const thread = runtime._pushThread('scene', target);
+        expect(thread.isCompiled).toBe(true);
+        runtime.sequencer.stepThread(thread);
+
+        expect(runtime.ext_scratch3_control.getCounter()).toBe(2);
+        expect(runtime.movieAssetManager.renderObjectScene).toHaveBeenCalledWith(target, capture);
     });
 
     test('finishes grouping and the following block in one compiled VM step', () => {

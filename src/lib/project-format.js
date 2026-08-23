@@ -35,6 +35,7 @@ const MOVIE_ASSET_BLOCKS = [
     'objects_circularSegment',
     'objects_line',
     'objects_grouping',
+    'objects_scene',
     'sound_playatframe',
     'sound_playattime'
 ];
@@ -70,7 +71,8 @@ const MOVIE_3D_BLOCKS = [
     'motion_setrotationorder',
     'motion_setscale',
     'motion_setz',
-    'objects_draw'
+    'objects_draw',
+    'objects_scene'
 ];
 
 const MOVIE_3D_REPORTER_BLOCKS = [

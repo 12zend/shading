@@ -19,6 +19,7 @@ import {
     cameraLookAt,
     convertModelToGLB,
     createBuildingPrimitive,
+    createImagePlane,
     disposeObject,
     focalLengthFromFOV,
     fovFromFocalLength,
@@ -2562,6 +2563,192 @@ class MovieAssetManager extends EventEmitter {
         return clone;
     }
 
+    createObjectSceneCapture (target) {
+        if (!target || target.isStage) return null;
+        return {
+            entries: [],
+            targetId: target.id
+        };
+    }
+
+    captureObjectSceneDraw (target, configuration) {
+        const capture = configuration && configuration.sceneCapture;
+        if (!capture || capture.targetId !== target.id || !Array.isArray(capture.entries)) return;
+        const entry = this.cloneObjectDrawConfiguration(configuration);
+        delete entry.sceneCapture;
+        capture.entries.push(entry);
+    }
+
+    getObjectSceneTransform (target, configuration, isPlane = false) {
+        const position = configuration.position || {};
+        const rotation = configuration.rotation || {};
+        const requestedScale = configuration.scale || {};
+        const state = this.getTargetState(target);
+        const scale = cloneScale(requestedScale);
+        if (isPlane) {
+            scale.x *= toNumber(configuration.width, 100) / 100;
+            scale.y *= toNumber(configuration.height, 100) / 100;
+        }
+        return {
+            rotation: {
+                x: toNumber(rotation.x),
+                y: toNumber(rotation.y),
+                z: toNumber(rotation.z)
+            },
+            rotationOrder: state.rotationOrder,
+            scale,
+            size: toNumber(configuration.size, 100),
+            worldX: toNumber(position.x),
+            worldY: toNumber(position.y),
+            worldZ: toNumber(position.z, DEFAULT_DEPTH)
+        };
+    }
+
+    getActiveObjectSceneConfiguration (target, configuration) {
+        const source = String(configuration.source || 'costume').toLowerCase();
+        const playsVideo = source === 'video' && String(configuration.videoMode || '').toLowerCase() === 'video';
+        if (playsVideo) {
+            const video = this.getVideoByName(target, configuration.asset);
+            if (!video) {
+                this.stopObjectVideoAudio(target, configuration);
+                return null;
+            }
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const playback = this.getObjectVideoPlayback(video, configuration, currentTime);
+            if (!playback || !playback.active) {
+                this.stopObjectVideoAudio(target, configuration);
+                return null;
+            }
+            this.syncObjectVideoAudio(target, video, configuration, playback, currentTime);
+            return {...configuration, frame: playback.frame};
+        }
+        this.stopObjectVideoAudio(target, configuration);
+        if (configuration.time) {
+            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
+            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
+            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            if (currentTime < startTime || currentTime > endTime) return null;
+        }
+        return configuration;
+    }
+
+    copyBitmapToCanvas (bitmap) {
+        const width = Math.max(1, Number(bitmap && (bitmap.videoWidth || bitmap.naturalWidth || bitmap.width)) || 1);
+        const height = Math.max(
+            1,
+            Number(bitmap && (bitmap.videoHeight || bitmap.naturalHeight || bitmap.height)) || 1
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Could not create an Objects scene image.');
+        context.drawImage(bitmap, 0, 0, width, height);
+        canvas.reusable = false;
+        return canvas;
+    }
+
+    async prepareObjectSceneItem (target, requestedConfiguration) {
+        const configuration = this.getActiveObjectSceneConfiguration(target, requestedConfiguration);
+        if (!configuration) return null;
+        const source = String(configuration.source || 'costume').toLowerCase();
+        if (source === 'model') {
+            const model = this.getModelByName(target, configuration.asset);
+            if (!model) return null;
+            return {
+                item: {
+                    animationName: model.activeMotion,
+                    frame: Math.max(1, toNumber(configuration.frame, 1)),
+                    sourceObject: await this.getModelObject(model),
+                    transform: this.getObjectSceneTransform(target, configuration)
+                },
+                resource: null
+            };
+        }
+
+        let bitmap;
+        let logicalWidth;
+        let logicalHeight;
+        let rotationCenter;
+        if (source === 'costume') {
+            const costume = this.getCostumeByName(target, configuration.asset);
+            if (!costume || !costume.asset || typeof costume.asset.encodeDataURI !== 'function') return null;
+            const cached = this.getBuildingTexture(costume, 'albedo');
+            const texture = cached.texture || await cached.promise;
+            const resolution = Math.max(1, toNumber(costume.bitmapResolution, 1));
+            const image = texture.image || {};
+            logicalWidth = costume.size ? toNumber(costume.size[0]) / resolution :
+                toNumber(image.naturalWidth || image.width, 1) / resolution;
+            logicalHeight = costume.size ? toNumber(costume.size[1]) / resolution :
+                toNumber(image.naturalHeight || image.height, 1) / resolution;
+            rotationCenter = {
+                x: toNumber(costume.rotationCenterX, (logicalWidth * resolution) / 2) / resolution,
+                y: toNumber(costume.rotationCenterY, (logicalHeight * resolution) / 2) / resolution
+            };
+            bitmap = texture;
+        } else if (source === 'video') {
+            const video = this.getVideoByName(target, configuration.asset);
+            if (!video) return null;
+            const state = this.getTargetState(target);
+            const frame = this.getVideoFrameNumber(video, configuration.frame);
+            bitmap = this.copyBitmapToCanvas(await this.decodeObjectVideoFrame(state, video, frame));
+            logicalWidth = bitmap.width / BITMAP_RESOLUTION;
+            logicalHeight = bitmap.height / BITMAP_RESOLUTION;
+        } else if (source === 'text') {
+            const font = this.getFont(configuration.asset);
+            const fontLoad = this.ensureFontLoaded(font.name);
+            if (fontLoad) await fontLoad;
+            bitmap = this.createTextCanvas(font, String(configuration.text));
+            logicalWidth = bitmap.width / BITMAP_RESOLUTION;
+            logicalHeight = bitmap.height / BITMAP_RESOLUTION;
+        } else {
+            return null;
+        }
+
+        const sourceObject = createImagePlane(bitmap, logicalWidth, logicalHeight, rotationCenter);
+        return {
+            item: {
+                animationName: '',
+                frame: 1,
+                sourceObject,
+                transform: this.getObjectSceneTransform(target, configuration, true)
+            },
+            resource: sourceObject
+        };
+    }
+
+    async performObjectScene (target, capture, requestedState, requestedVersion) {
+        const state = requestedState || this.getTargetState(target);
+        const version = typeof requestedVersion === 'number' ? requestedVersion : state.objectDrawVersion;
+        const prepared = [];
+        try {
+            // Resolve in block order. In particular, two frames from one video share a decoder element and must
+            // be copied before the following seek changes it.
+            for (const entry of capture.entries) {
+                const result = await this.prepareObjectSceneItem(target, entry);
+                if (result) prepared.push(result);
+                if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
+            }
+            if (!prepared.length) return;
+            if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
+            const renderArguments = [
+                prepared.map(result => result.item),
+                this.camera,
+                this.getStageSize(),
+                BITMAP_RESOLUTION
+            ];
+            if (Array.isArray(this.lights)) renderArguments.push(this.lights);
+            const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
+            this.applyBitmap(target, canvas, 'scene');
+            this.publishModelZBuffer(target);
+            this.finishObjectDraw(target, {}, 'model');
+        } finally {
+            prepared.forEach(result => {
+                if (result.resource) disposeObject(result.resource);
+            });
+        }
+    }
+
     applyObjectDrawConfiguration (target, configuration) {
         const position = configuration.position || {};
         const rotation = configuration.rotation || {};
@@ -2750,6 +2937,20 @@ class MovieAssetManager extends EventEmitter {
             configuration: this.cloneObjectDrawConfiguration(configuration),
             version: state.objectDrawVersion
         });
+        return this.startObjectDrawQueue(target, state);
+    }
+
+    renderObjectScene (target, capture) {
+        if (!target || target.isStage || !capture || capture.targetId !== target.id) return;
+        const state = this.getTargetState(target);
+        state.objectDrawQueue.push({
+            sceneCapture: capture,
+            version: state.objectDrawVersion
+        });
+        return this.startObjectDrawQueue(target, state);
+    }
+
+    startObjectDrawQueue (target, state) {
         if (state.objectDrawPromise) return state.objectDrawPromise;
 
         const renderPromise = Promise.resolve().then(() => this.renderQueuedObjectDraws(target, state));
@@ -2758,7 +2959,7 @@ class MovieAssetManager extends EventEmitter {
             if (state.objectDrawPromise !== renderPromise) return;
             state.objectDrawPromise = null;
             if (state.objectDrawQueue.length && this.targetStates.get(target.id) === state) {
-                this.runWithoutWaiting(this.queueObjectDraw(target, state.objectDrawQueue.shift().configuration));
+                this.runWithoutWaiting(this.startObjectDrawQueue(target, state));
             }
         };
         renderPromise.then(finish, finish);
@@ -2769,6 +2970,10 @@ class MovieAssetManager extends EventEmitter {
         while (state.objectDrawQueue.length && this.targetStates.get(target.id) === state) {
             const request = state.objectDrawQueue.shift();
             if (request.version !== state.objectDrawVersion) continue;
+            if (request.sceneCapture) {
+                await this.performObjectScene(target, request.sceneCapture, state, request.version);
+                continue;
+            }
             const configuration = request.configuration;
             const source = String(configuration.source || 'costume').toLowerCase();
 
@@ -2868,6 +3073,10 @@ class MovieAssetManager extends EventEmitter {
         if (!target || target.isStage) return;
         const source = String(configuration.source || 'costume').toLowerCase();
         if (!['costume', 'video', 'text', 'model'].includes(source)) return;
+        if (configuration.sceneCapture) {
+            this.captureObjectSceneDraw(target, configuration);
+            return;
+        }
         const playsVideo = source === 'video' && String(configuration.videoMode || '').toLowerCase() === 'video';
         let drawConfiguration = configuration;
         if (playsVideo) {
@@ -3731,7 +3940,7 @@ class MovieAssetManager extends EventEmitter {
             typeof this.runtime.renderer.updateDrawableVisible !== 'function'
         ) return;
         const state = this.getTargetState(target);
-        if (state.mode === 'model') {
+        if (state.mode === 'model' || state.mode === 'scene') {
             this.runtime.renderer.updateDrawablePosition(target.drawableID, [0, 0]);
             this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
             this.runtime.renderer.updateDrawableVisible(target.drawableID, target.visible && !state.penOnly);
@@ -4012,7 +4221,7 @@ class MovieAssetManager extends EventEmitter {
         }
     }
 
-    renderText (target, font, text) {
+    createTextCanvas (font, text) {
         const lines = text.split(/\r?\n/);
         const fontSize = 96;
         const padding = 16;
@@ -4028,6 +4237,11 @@ class MovieAssetManager extends EventEmitter {
         context.textBaseline = 'top';
         lines.forEach((line, index) => context.fillText(line, padding, padding + (index * lineHeight)));
         canvas.reusable = false;
+        return canvas;
+    }
+
+    renderText (target, font, text) {
+        const canvas = this.createTextCanvas(font, text);
         this.applyBitmap(target, canvas, 'text');
     }
 

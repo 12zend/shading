@@ -52,7 +52,12 @@ const getGroupingContext = util => {
     const blocks = parentThread && (parentThread.blockContainer || (target && target.blocks));
     const parentBlockId = parentThread && typeof parentThread.peekStack === 'function' ?
         parentThread.peekStack() : null;
-    return {blocks, parentBlockId, target};
+    return {
+        blocks,
+        objectSceneCapture: parentThread && parentThread.objectSceneCapture,
+        parentBlockId,
+        target
+    };
 };
 
 const runGroupingBranch = (runtime, context, branchNumber) => {
@@ -70,6 +75,7 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     branchThread.blockContainer = blocks;
     branchThread.pushStack(branchId);
     branchThread.peekStackFrame().warpMode = true;
+    if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
 
     const activeThread = sequencer.activeThread;
     try {
@@ -247,6 +253,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 2,
                     text: ['grouping', 'effects']
+                },
+                {
+                    opcode: 'scene',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'scene'
                 }
             ],
             menus: {
@@ -278,6 +290,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             volume: args.VOLUME,
             width: args.WIDTH
         };
+        if (util && util.thread && util.thread.objectSceneCapture) {
+            context.sceneCapture = util.thread.objectSceneCapture;
+        }
         if (Object.prototype.hasOwnProperty.call(args, 'T1') ||
             Object.prototype.hasOwnProperty.call(args, 'T2')) {
             context.time = {start: args.T1, end: args.T2};
@@ -409,6 +424,18 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         // Propagate nested grouping completion to the branch that owns this grouping. Without this, an outer
         // grouping can apply its effects and close the Pen capture before an asynchronous inner video draw is stamped.
         trackPendingDraw(pendingGrouping, util, this.runtime.movieAssetManager);
+    }
+
+    scene (args, util) {
+        const manager = this.runtime.movieAssetManager;
+        if (!manager || typeof manager.createObjectSceneCapture !== 'function' ||
+            typeof manager.renderObjectScene !== 'function') return;
+        const context = getGroupingContext(util);
+        const capture = manager.createObjectSceneCapture(context.target);
+        if (!capture) return;
+        context.objectSceneCapture = capture;
+        runGroupingBranch(this.runtime, context, 1);
+        trackPendingDraw(manager.renderObjectScene(context.target, capture), util, manager);
     }
 };
 

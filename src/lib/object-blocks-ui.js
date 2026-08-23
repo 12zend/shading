@@ -1524,6 +1524,21 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             });
         }
     };
+
+    ScratchBlocks.Blocks.objects_scene = {
+        init: function () {
+            this.jsonInit({
+                message0: 'scene',
+                message1: '%1',
+                args1: [{type: 'input_statement', name: 'SUBSTACK'}],
+                category: 'Objects',
+                colour: PRIMARY,
+                colourSecondary: SECONDARY,
+                colourTertiary: TERTIARY,
+                extensions: ['shape_statement']
+            });
+        }
+    };
 };
 
 export {
