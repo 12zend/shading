@@ -458,6 +458,7 @@ class MovieAssetManager extends EventEmitter {
         this.handleTargetRemoved = this.handleTargetRemoved.bind(this);
         this.handleFontsChanged = this.handleFontsChanged.bind(this);
         this.handleNativeSizeChanged = this.handleNativeSizeChanged.bind(this);
+        this.handleProjectChanged = this.handleProjectChanged.bind(this);
         this.handleProjectLoaded = this.handleProjectLoaded.bind(this);
         this.handleTimelineBeforeExecute = this.handleTimelineBeforeExecute.bind(this);
         this.handleTimelineAfterExecute = this.handleTimelineAfterExecute.bind(this);
@@ -469,6 +470,7 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.fontManager.on('change', this.handleFontsChanged);
         this.runtime.on('BEFORE_EXECUTE', this.handleTimelineBeforeExecute);
         this.runtime.on('AFTER_EXECUTE', this.handleTimelineAfterExecute);
+        this.runtime.on('PROJECT_CHANGED', this.handleProjectChanged);
         this.runtime.on('PROJECT_STOP_ALL', this.stopAllObjectVideoAudio);
         this.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
@@ -1035,6 +1037,14 @@ class MovieAssetManager extends EventEmitter {
             if (this.timeline.playing || this.timeline.recording) return;
             this.seekTimeline(this.timeline.currentTime);
         }, 0);
+    }
+
+    handleProjectChanged () {
+        // Render-frame scripts can update serializable Movie state themselves. Refreshing in response to those
+        // updates would continuously restart a paused preview, so only edits made outside the frame transaction
+        // should schedule another evaluation at the current timeline time.
+        if (this.timeline.renderedThisStep) return;
+        this.requestTimelinePreviewRefresh();
     }
 
     updateTimelineSettings (settings, options = {}) {

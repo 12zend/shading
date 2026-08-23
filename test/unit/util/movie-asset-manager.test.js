@@ -289,6 +289,31 @@ describe('MovieAssetManager rendering performance', () => {
         jest.useRealTimers();
     });
 
+    test('refreshes a paused timeline preview when the project changes', () => {
+        jest.useFakeTimers();
+        const manager = makeTimelineManager();
+        manager.timeline.currentTime = 2.5;
+
+        manager.handleProjectChanged();
+        jest.runOnlyPendingTimers();
+
+        expect(manager.runtime.stopAll).toHaveBeenCalledTimes(1);
+        expect(manager.timeline.currentTime).toBe(2.5);
+        expect(manager.timeline.pendingFrame).toBe(true);
+        expect(manager.runtime.ioDevices.clock._paused).toBe(true);
+        jest.useRealTimers();
+    });
+
+    test('does not recursively refresh for project changes made by a render frame', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.renderedThisStep = true;
+        manager.requestTimelinePreviewRefresh = jest.fn();
+
+        manager.handleProjectChanged();
+
+        expect(manager.requestTimelinePreviewRefresh).not.toHaveBeenCalled();
+    });
+
     test('does not interrupt timeline playback to refresh a preview', () => {
         jest.useFakeTimers();
         const manager = makeTimelineManager();
