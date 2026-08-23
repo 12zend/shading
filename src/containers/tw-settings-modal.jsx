@@ -6,6 +6,7 @@ import {connect} from 'react-redux';
 import {closeSettingsModal} from '../reducers/modals';
 import SettingsModalComponent from '../components/tw-settings-modal/settings-modal.jsx';
 import {defaultStageSize} from '../reducers/custom-stage-size';
+import storeProjectOptions from '../lib/project-options';
 
 const messages = defineMessages({
     newFramerate: {
@@ -83,7 +84,7 @@ class UsernameModal extends React.Component {
         this.props.vm.setStageSize(this.props.customStageSize.width, value);
     }
     handleStoreProjectOptions () {
-        this.props.vm.storeProjectOptions();
+        storeProjectOptions(this.props.vm, defaultStageSize);
     }
     render () {
         const {
