@@ -358,9 +358,12 @@ describe('Objects blocks', () => {
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
             'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene',
-            'group', 'transform', 'composite', 'matte', 'repeat', 'timeOffset',
+            'group', 'simulation', 'transform', 'composite', 'matte', 'renderPass', 'drawPass', 'clearPass',
+            'repeat', 'timeOffset',
+            'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
             'timelineTime', 'animate', 'loopValue', 'pingPongValue', 'wiggle',
-            'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector'
+            'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector',
+            'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
@@ -540,6 +543,51 @@ describe('Objects blocks', () => {
         expect(new Set(configurations.map(configuration => configuration.playbackId)).size).toBe(3);
     });
 
+    test('evaluates a time-scale branch at local time without yielding', () => {
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'scale' && branch === 1 ? 'scale-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const manager = {
+            drawObject: jest.fn(),
+            runWithoutWaiting: jest.fn(),
+            timeline: {currentTime: 4}
+        };
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    expect(objectBlocks.timelineTime({}, {target, thread})).toBe(2);
+                    objectBlocks.draw({
+                        ASSET: 'costume:Logo', SOURCE: 'costume', PX: 0, PY: 0, PZ: 0,
+                        RX: 0, RY: 0, RZ: 0, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100, T1: 1, T2: 3
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'scale'),
+                target
+            }
+        };
+
+        expect(objectBlocks.timeScale({SCALE: 0.5}, util)).toBeUndefined();
+        expect(manager.drawObject).toHaveBeenCalledWith(target, expect.objectContaining({
+            evaluationTime: 2,
+            time: {start: 1, end: 3}
+        }));
+    });
+
     test('composite closes an asynchronous isolated group with opacity and blend settings without yielding', async () => {
         let resolveDraw;
         const pendingDraw = new Promise(resolve => {
@@ -653,11 +701,21 @@ describe('Objects blocks', () => {
         util.thread.target = util.target;
 
         expect(blocks.group({}, util)).toBeUndefined();
+        expect(blocks.simulation({}, util)).toBeUndefined();
         expect(blocks.transform({}, util)).toBeUndefined();
         expect(blocks.composite({}, util)).toBeUndefined();
         expect(blocks.matte({}, util)).toBeUndefined();
+        expect(blocks.renderPass({}, util)).toBeUndefined();
+        expect(blocks.drawPass({}, util)).toBeUndefined();
+        expect(blocks.clearPass({}, util)).toBeUndefined();
         expect(blocks.repeat({COUNT: 2}, util)).toBeUndefined();
         expect(blocks.timeOffset({}, util)).toBeUndefined();
+        expect(blocks.timeRange({START: 0, END: 2}, util)).toBeUndefined();
+        expect(blocks.timeScale({}, util)).toBeUndefined();
+        expect(blocks.timeLoop({}, util)).toBeUndefined();
+        expect(blocks.timeFreeze({}, util)).toBeUndefined();
+        expect(blocks.timeReverse({}, util)).toBeUndefined();
+        expect(blocks.timeRemap({}, util)).toBeUndefined();
     });
 
     test.each([

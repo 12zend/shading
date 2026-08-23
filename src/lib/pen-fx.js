@@ -1738,6 +1738,7 @@ const createPenFXClass = vm => {
       this.framebuffers = [];
       this.bufferStack = [];
       this.groupStack = [];
+      this.renderPasses = new Map();
       this.matteStack = [];
       this.frameTransaction = null;
       this.blendOpacity = 1;
@@ -1822,6 +1823,7 @@ const createPenFXClass = vm => {
       this.clearBufferStack();
       this.clearGroupStack();
       this.clearMatteStack();
+      this.clearRenderPasses();
       for (const framebuffer of this.framebuffers) gl.deleteFramebuffer(framebuffer);
       for (const texture of this.textures) gl.deleteTexture(texture);
       this.width = width;
@@ -2040,6 +2042,8 @@ const createPenFXClass = vm => {
       const blendIndex = Math.max(0, BLEND_MODES.indexOf(blendMode));
       const requestedOpacity = Number(options.opacity);
       const opacity = Number.isFinite(requestedOpacity) ? Math.max(0, Math.min(1, requestedOpacity)) : 1;
+      const passName = String(options.passName || '').trim();
+      const shouldComposite = options.composite !== false;
       // The pen skin may have been resized or replaced while the group was open. Only composite when the
       // staged texture is still installed so we never render into a stale framebuffer.
       const stillStaged = Boolean(skin) && skin._texture === entry.texture;
@@ -2047,7 +2051,7 @@ const createPenFXClass = vm => {
         skin._texture = entry.baselineTexture;
         skin._framebuffer = entry.baselineFramebuffer;
         this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
-        if (this._prepare(false, false) === skin) {
+        if (shouldComposite && this._prepare(false, false) === skin) {
           // Composite the isolated group content over the untouched baseline instead of replacing it, so
           // the default pen backdrop and earlier drawings survive every group.
           this._render(this._program('groupOver'), this.framebuffers[0], [
@@ -2057,8 +2061,58 @@ const createPenFXClass = vm => {
           this._replaceSkin(skin, this.textures[0]);
         }
       }
+      if (passName && stillStaged) {
+        const previous = this.renderPasses.get(passName);
+        if (previous) {
+          gl.deleteFramebuffer(previous.framebuffer);
+          gl.deleteTexture(previous.texture);
+        }
+        this.renderPasses.set(passName, {
+          framebuffer: entry.framebuffer,
+          height: this.height,
+          texture: entry.texture,
+          width: this.width
+        });
+      } else {
+        gl.deleteFramebuffer(entry.framebuffer);
+        gl.deleteTexture(entry.texture);
+      }
+    }
+
+    drawRenderPass(name, options = {}) {
+      const entry = this.renderPasses.get(String(name || '').trim());
+      if (!entry) return false;
+      const skin = this._prepare(false, false);
+      if (!skin || entry.width !== this.width || entry.height !== this.height) return false;
+      const blendMode = String(options.blendMode || 'normal');
+      const blendIndex = Math.max(0, BLEND_MODES.indexOf(blendMode));
+      const requestedOpacity = Number(options.opacity);
+      const opacity = Number.isFinite(requestedOpacity) ? Math.max(0, Math.min(1, requestedOpacity)) : 1;
+      this._render(this._program('groupOver'), this.framebuffers[0], [
+        {name: 'u_base', texture: skin._texture},
+        {name: 'u_effect', texture: entry.texture}
+      ], {u_blend: blendIndex, u_opacity: opacity}, ['u_blend']);
+      this._replaceSkin(skin, this.textures[0]);
+      return true;
+    }
+
+    clearRenderPass(name) {
+      const key = String(name || '').trim();
+      const entry = this.renderPasses.get(key);
+      if (!entry) return false;
       gl.deleteFramebuffer(entry.framebuffer);
       gl.deleteTexture(entry.texture);
+      this.renderPasses.delete(key);
+      return true;
+    }
+
+    clearRenderPasses() {
+      if (!(this.renderPasses instanceof Map)) return;
+      for (const entry of this.renderPasses.values()) {
+        gl.deleteFramebuffer(entry.framebuffer);
+        gl.deleteTexture(entry.texture);
+      }
+      this.renderPasses.clear();
     }
 
     beginMatte() {
@@ -3647,6 +3701,20 @@ const createPenFXClass = vm => {
 
     endGroup(options) {
       this._safe(engine => engine.endGroup(options));
+    }
+
+    drawRenderPass(name, options) {
+      this._safe(engine => engine.drawRenderPass(name, options));
+    }
+
+    clearRenderPass(name) {
+      if (!this.engine) return;
+      this._safe(engine => engine.clearRenderPass(name));
+    }
+
+    clearRenderPasses() {
+      if (!this.engine) return;
+      this._safe(engine => engine.clearRenderPasses());
     }
 
     beginMatte() {

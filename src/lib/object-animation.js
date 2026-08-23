@@ -9,6 +9,119 @@ const finiteNumber = (value, fallback = 0) => {
 
 const positiveModulo = (value, divisor) => ((value % divisor) + divisor) % divisor;
 
+const TIME_SCOPE_TYPES = ['range', 'offset', 'scale', 'loop', 'pingpong', 'freeze', 'reverse', 'remap'];
+
+const parseCurvePoints = value => {
+    if (Array.isArray(value)) {
+        return value.map(point => {
+            if (Array.isArray(point)) return {time: finiteNumber(point[0]), value: point[1], easing: point[2]};
+            if (!point || typeof point !== 'object') return null;
+            return {
+                time: finiteNumber(Object.prototype.hasOwnProperty.call(point, 'time') ? point.time : point.t),
+                value: Object.prototype.hasOwnProperty.call(point, 'value') ? point.value : point.v,
+                easing: point.easing
+            };
+        })
+            .filter(Boolean)
+            .sort((a, b) => a.time - b.time);
+    }
+
+    const source = String(value || '').trim();
+    if (!source) return [];
+    if (source[0] === '[' || source[0] === '{') {
+        try {
+            const parsed = JSON.parse(source);
+            return parseCurvePoints(Array.isArray(parsed) ? parsed : parsed.points);
+        } catch (error) {
+            // Fall through to the compact, editor-friendly notation.
+        }
+    }
+    return source.split(/[;\n]+/).map(entry => {
+        const match = /^\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*(?::|=|->|→)\s*(.*?)\s*$/.exec(entry);
+        if (!match) return null;
+        const valueAndEasing = match[2].split(/\s*@\s*/);
+        const rawValue = valueAndEasing[0].trim();
+        const numericValue = Number(rawValue);
+        return {
+            time: Number(match[1]),
+            value: Number.isFinite(numericValue) ? numericValue : rawValue,
+            easing: valueAndEasing[1]
+        };
+    })
+        .filter(Boolean)
+        .sort((a, b) => a.time - b.time);
+};
+
+const getCurveSegment = (points, time) => {
+    if (!points.length) return null;
+    const currentTime = finiteNumber(time);
+    if (currentTime <= points[0].time) return {from: points[0], progress: 0, to: points[0]};
+    const last = points[points.length - 1];
+    if (currentTime >= last.time) return {from: last, progress: 1, to: last};
+    for (let index = 1; index < points.length; index++) {
+        const to = points[index];
+        if (currentTime <= to.time) {
+            const from = points[index - 1];
+            const duration = to.time - from.time;
+            const linearProgress = duration > 0 ? (currentTime - from.time) / duration : 1;
+            return {
+                from,
+                progress: calculateEasingProgress(normalizeEasingType(to.easing || 'Linear'), linearProgress),
+                to
+            };
+        }
+    }
+    return {from: last, progress: 1, to: last};
+};
+
+const evaluateNumberCurve = (curve, time) => {
+    const segment = getCurveSegment(parseCurvePoints(curve), time);
+    if (!segment) return 0;
+    const from = finiteNumber(segment.from.value);
+    const to = finiteNumber(segment.to.value, from);
+    return from + ((to - from) * segment.progress);
+};
+
+const evaluateStepCurve = (curve, time) => {
+    const points = parseCurvePoints(curve);
+    if (!points.length) return '';
+    const currentTime = finiteNumber(time);
+    let result = points[0].value;
+    for (const point of points) {
+        if (point.time > currentTime) break;
+        result = point.value;
+    }
+    return result;
+};
+
+const transformTimeByScope = (time, requestedScope) => {
+    const scope = requestedScope && typeof requestedScope === 'object' ? requestedScope : {};
+    const type = TIME_SCOPE_TYPES.includes(scope.type) ? scope.type : '';
+    const currentTime = finiteNumber(time);
+    if (type === 'range') return currentTime - finiteNumber(scope.start);
+    if (type === 'offset') return currentTime - finiteNumber(scope.offset);
+    if (type === 'scale') return currentTime * finiteNumber(scope.scale, 1);
+    if (type === 'loop') {
+        const duration = Math.abs(finiteNumber(scope.duration));
+        return duration > 0 ? positiveModulo(currentTime, duration) : 0;
+    }
+    if (type === 'pingpong') {
+        const duration = Math.abs(finiteNumber(scope.duration));
+        if (duration <= 0) return 0;
+        const cycle = positiveModulo(currentTime, duration * 2);
+        return cycle <= duration ? cycle : (duration * 2) - cycle;
+    }
+    if (type === 'freeze') return finiteNumber(scope.time);
+    if (type === 'reverse') return finiteNumber(scope.duration) - currentTime;
+    if (type === 'remap') return evaluateNumberCurve(scope.map, currentTime);
+    return currentTime;
+};
+
+const evaluateTimeScopes = (time, scopes) => {
+    if (!Array.isArray(scopes) || !scopes.length) return finiteNumber(time);
+    return scopes.reduce((result, scope) => transformTimeByScope(result, scope), finiteNumber(time));
+};
+
 const getObjectTime = (runtime, util) => {
     const manager = runtime && runtime.movieAssetManager;
     const timelineTime = manager && manager.timeline && Number(manager.timeline.currentTime);
@@ -16,8 +129,9 @@ const getObjectTime = (runtime, util) => {
     if (!Number.isFinite(timelineTime) && util && typeof util.ioQuery === 'function') {
         time = finiteNumber(util.ioQuery('clock', 'projectTimer'));
     }
-    const offset = util && util.thread ? finiteNumber(util.thread.objectTimeOffset) : 0;
-    return time - offset;
+    const thread = util && util.thread;
+    const offset = thread ? finiteNumber(thread.objectTimeOffset) : 0;
+    return evaluateTimeScopes(time - offset, thread && thread.objectTimeScopes);
 };
 
 const calculateAnimationValue = ({from, to, start, end, easing, power = 2}, time) => {
@@ -126,6 +240,18 @@ const interpolateAngle = (from, to, progress) => {
     return start + (delta * clamp(finiteNumber(progress), 0, 1));
 };
 
+const evaluateColorCurve = (curve, time) => {
+    const segment = getCurveSegment(parseCurvePoints(curve), time);
+    if (!segment) return '#000000';
+    return interpolateColor(segment.from.value, segment.to.value, segment.progress);
+};
+
+const evaluateAngleCurve = (curve, time) => {
+    const segment = getCurveSegment(parseCurvePoints(curve), time);
+    if (!segment) return 0;
+    return interpolateAngle(segment.from.value, segment.to.value, segment.progress);
+};
+
 const getAnimationProgress = ({start, end, easing, power = 2}, time) => calculateAnimationValue({
     from: 0,
     to: 1,
@@ -136,16 +262,24 @@ const getAnimationProgress = ({start, end, easing, power = 2}, time) => calculat
 }, time);
 
 export {
+    TIME_SCOPE_TYPES,
     calculateAnimationValue,
     calculateLoopValue,
     calculatePingPongValue,
     calculateWiggleValue,
+    evaluateAngleCurve,
+    evaluateColorCurve,
+    evaluateNumberCurve,
+    evaluateStepCurve,
+    evaluateTimeScopes,
     finiteNumber,
     getAnimationProgress,
     getObjectTime,
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
+    parseCurvePoints,
     posterizeTime,
-    seededNoise
+    seededNoise,
+    transformTimeByScope
 };

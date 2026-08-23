@@ -1,5 +1,7 @@
 import EventEmitter from 'events';
+import JSZip from '@turbowarp/jszip';
 import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
+import WavEncoder from 'wav-encoder';
 
 import {
     MOVIE_3D_BLOCKS,
@@ -31,12 +33,14 @@ import {
     spritePlaneMatrix
 } from './model-runtime';
 import downloadBlob from './download-blob';
+import analyzeMovieFrames from './movie-frame-analysis';
 
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
 const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';
+const RENDERING_FORMATS = ['mp4', 'webm', 'png-sequence', 'png-frame', 'audio-wav'];
 const RENDERING_MASTER_GAIN = 0.8912509381337456; // -1 dBFS headroom before encoding.
 const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
@@ -92,7 +96,43 @@ const MP4_AUDIO_MIME_TYPES = [
     'video/mp4'
 ];
 
+const WEBM_VIDEO_MIME_TYPES = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+];
+
+const WEBM_AUDIO_MIME_TYPES = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+];
+
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+const canvasToBlob = (canvas, type = 'image/png') => new Promise((resolve, reject) => {
+    if (!canvas) {
+        reject(new Error('Rendering frame is not available.'));
+        return;
+    }
+    if (typeof canvas.toBlob === 'function') {
+        canvas.toBlob(blob => {
+            if (blob) resolve(blob);
+            else reject(new Error('Could not encode the rendering frame.'));
+        }, type);
+        return;
+    }
+    try {
+        const dataUrl = canvas.toDataURL(type);
+        const encoded = dataUrl.slice(dataUrl.indexOf(',') + 1);
+        const binary = atob(encoded);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+        resolve(new Blob([bytes], {type}));
+    } catch (error) {
+        reject(error);
+    }
+});
 
 const now = () => (
     typeof performance !== 'undefined' && typeof performance.now === 'function' ?
@@ -418,12 +458,18 @@ class MovieAssetManager extends EventEmitter {
         this.shapeSkinCachePixels = 0;
         this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
+        this.renderingFrameNumbers = [];
+        this.renderingFrameErrors = [];
+        this.renderingFrameCache = new Map();
+        this.renderingSoundEventCache = new Map();
+        this.renderCacheGeneration = 0;
         this.renderingSoundEvents = [];
         this.playedTimelineSoundBlocks = new Set();
         this.timelineSoundSources = new Set();
         this.objectVideoAudio = new Map();
         this.objectVideoAudioSeen = new Set();
         this.previewRendererSize = null;
+        this.timelineDiagnostics = null;
         this.modelRenderer = null;
         this.flatDepthVersion = 0;
         this.penFrameTransactionActive = false;
@@ -436,12 +482,16 @@ class MovieAssetManager extends EventEmitter {
         this.timeline = {
             currentTime: 0,
             duration: TIMELINE_DEFAULT_DURATION,
+            exportFormat: 'mp4',
             framerate: RENDERING_DEFAULT_FRAME_RATE,
             height: stageHeight,
             pendingFrame: true,
             playing: false,
             recording: false,
+            rangeEnd: TIMELINE_DEFAULT_DURATION,
+            rangeStart: 0,
             renderFrameThreads: [],
+            reuseFrames: true,
             sound: '',
             waitingForFrame: false,
             waitingForVideo: false,
@@ -885,18 +935,31 @@ class MovieAssetManager extends EventEmitter {
     serializeTimeline () {
         return {
             duration: this.timeline.duration,
+            exportFormat: this.timeline.exportFormat,
             framerate: this.timeline.framerate,
             height: this.timeline.height,
+            rangeEnd: this.timeline.rangeEnd,
+            rangeStart: this.timeline.rangeStart,
+            reuseFrames: this.timeline.reuseFrames,
             sound: this.timeline.sound,
             width: this.timeline.width
         };
     }
 
     getTimelineSettings () {
+        const rangeStart = clamp(toNumber(this.timeline.rangeStart), 0, this.timeline.duration);
         return {
             duration: this.timeline.duration,
+            exportFormat: this.normalizeRenderingFormat(this.timeline.exportFormat),
             framerate: this.timeline.framerate,
             height: this.timeline.height,
+            rangeEnd: clamp(
+                toNumber(this.timeline.rangeEnd, this.timeline.duration),
+                rangeStart,
+                this.timeline.duration
+            ),
+            rangeStart,
+            reuseFrames: this.timeline.reuseFrames !== false,
             width: this.timeline.width
         };
     }
@@ -908,6 +971,7 @@ class MovieAssetManager extends EventEmitter {
         const currentFramerate = this.runtime.frameLoop && this.runtime.frameLoop.framerate;
         this.timeline.currentTime = 0;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
+        this.timeline.exportFormat = this.normalizeRenderingFormat(settings.exportFormat);
         this.timeline.framerate = this.normalizeRenderingFramerate(
             hasSettings ? settings.framerate : currentFramerate
         );
@@ -915,8 +979,15 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.rangeStart = clamp(toNumber(settings.rangeStart), 0, this.timeline.duration);
+        this.timeline.rangeEnd = clamp(
+            toNumber(settings.rangeEnd, this.timeline.duration),
+            this.timeline.rangeStart,
+            this.timeline.duration
+        );
         this.timeline.renderFrameThreads = [];
         this.timeline.sound = String(settings.sound || '');
+        this.timeline.reuseFrames = settings.reuseFrames !== false;
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.timeline.width = Math.max(1, Math.round(toNumber(settings.width, stageWidth)));
@@ -924,7 +995,9 @@ class MovieAssetManager extends EventEmitter {
         if (hasSettings) {
             this.vm.setFramerate(this.timeline.framerate);
         }
+        this.timelineDiagnostics = null;
         this.emitTimelineChanged();
+        this.emitTimelineDiagnosticsChanged(true);
     }
 
     normalizeTimelineDuration (value) {
@@ -934,17 +1007,46 @@ class MovieAssetManager extends EventEmitter {
     }
 
     getTimelineState () {
+        const rangeStart = clamp(toNumber(this.timeline.rangeStart), 0, this.timeline.duration);
         return {
             currentTime: this.timeline.currentTime,
             duration: this.timeline.duration,
+            exportFormat: this.normalizeRenderingFormat(this.timeline.exportFormat),
             frameCount: Array.isArray(this.renderingFrames) ? this.renderingFrames.length : 0,
             framerate: this.timeline.framerate,
             height: this.timeline.height,
             playing: this.timeline.playing,
+            rangeEnd: clamp(
+                toNumber(this.timeline.rangeEnd, this.timeline.duration),
+                rangeStart,
+                this.timeline.duration
+            ),
+            rangeStart,
             recording: this.timeline.recording,
+            reuseFrames: this.timeline.reuseFrames !== false,
             sound: this.timeline.sound,
             width: this.timeline.width
         };
+    }
+
+    getTimelineDiagnostics (force = false) {
+        if (force || !this.timelineDiagnostics) {
+            this.timelineDiagnostics = analyzeMovieFrames(this.runtime, {
+                currentTime: this.timeline.currentTime,
+                duration: this.timeline.duration,
+                framerate: this.timeline.framerate
+            });
+        }
+        return {
+            ...this.timelineDiagnostics,
+            currentTime: this.timeline.currentTime,
+            ranges: this.timelineDiagnostics.ranges.map(range => ({...range})),
+            warnings: this.timelineDiagnostics.warnings.map(warning => ({...warning}))
+        };
+    }
+
+    emitTimelineDiagnosticsChanged (force = false) {
+        this.emit('timelineDiagnosticsChanged', this.getTimelineDiagnostics(force));
     }
 
     emitTimelineChanged () {
@@ -1029,6 +1131,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.waitingForVideo = false;
         if (wasPlaying) this.playTimelineSounds(this.timeline.currentTime);
         this.emitTimelineChanged();
+        this.emitTimelineDiagnosticsChanged();
     }
 
     requestTimelinePreviewRefresh () {
@@ -1045,6 +1148,11 @@ class MovieAssetManager extends EventEmitter {
         // updates would continuously restart a paused preview, so only edits made outside the frame transaction
         // should schedule another evaluation at the current timeline time.
         if (this.timeline.renderedThisStep) return;
+        this.renderCacheGeneration = (Number(this.renderCacheGeneration) || 0) + 1;
+        if (this.renderingFrameCache instanceof Map) this.renderingFrameCache.clear();
+        if (this.renderingSoundEventCache instanceof Map) this.renderingSoundEventCache.clear();
+        this.timelineDiagnostics = null;
+        this.emitTimelineDiagnosticsChanged(true);
         this.requestTimelinePreviewRefresh();
     }
 
@@ -1052,11 +1160,29 @@ class MovieAssetManager extends EventEmitter {
         const previousSettings = this.getTimelineSettings();
         const previousDuration = this.timeline.duration;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
+        if (Object.prototype.hasOwnProperty.call(settings, 'exportFormat')) {
+            this.timeline.exportFormat = this.normalizeRenderingFormat(settings.exportFormat);
+        }
         this.timeline.framerate = this.normalizeRenderingFramerate(settings.framerate);
         this.timeline.height = Math.max(1, Math.min(4096, Math.round(toNumber(settings.height, this.timeline.height))));
         if (Object.prototype.hasOwnProperty.call(settings, 'sound')) {
             this.timeline.sound = String(settings.sound || '');
         }
+        if (Object.prototype.hasOwnProperty.call(settings, 'reuseFrames')) {
+            this.timeline.reuseFrames = settings.reuseFrames !== false;
+        }
+        const currentRangeStart = toNumber(this.timeline.rangeStart);
+        const currentRangeEnd = toNumber(this.timeline.rangeEnd, this.timeline.duration);
+        this.timeline.rangeStart = clamp(
+            toNumber(settings.rangeStart, currentRangeStart),
+            0,
+            this.timeline.duration
+        );
+        this.timeline.rangeEnd = clamp(
+            toNumber(settings.rangeEnd, Math.max(this.timeline.rangeStart, currentRangeEnd)),
+            this.timeline.rangeStart,
+            this.timeline.duration
+        );
         this.timeline.width = Math.max(1, Math.min(4096, Math.round(toNumber(settings.width, this.timeline.width))));
         this.vm.setFramerate(this.timeline.framerate);
         if (this.timeline.currentTime > this.timeline.duration || previousDuration !== this.timeline.duration) {
@@ -1066,32 +1192,63 @@ class MovieAssetManager extends EventEmitter {
             this.emitTimelineChanged();
         }
         const nextSettings = this.getTimelineSettings();
-        if (JSON.stringify(previousSettings) !== JSON.stringify(nextSettings)) {
+        const settingsChanged = JSON.stringify(previousSettings) !== JSON.stringify(nextSettings);
+        if (settingsChanged) {
             this.emit('timelineSettingsChanged', nextSettings, {
                 previousSettings,
                 remote: options.remote === true
             });
         }
-        this.runtime.emitProjectChanged();
+        this.timelineDiagnostics = null;
+        this.emitTimelineDiagnosticsChanged(true);
+        if (settingsChanged) this.runtime.emitProjectChanged();
     }
 
-    renderTimeline () {
+    getRenderingFrameCacheKey (frameIndex) {
+        return [
+            this.renderCacheGeneration,
+            this.timeline.width,
+            this.timeline.height,
+            this.timeline.framerate,
+            frameIndex
+        ].join(':');
+    }
+
+    getRenderEndTime () {
+        return Number.isFinite(Number(this.timeline.renderEndTime)) ?
+            Number(this.timeline.renderEndTime) : this.timeline.duration;
+    }
+
+    renderTimeline (options = {}) {
         this.cancelPenFrameTransaction();
         this.cancelPendingObjectDraws();
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
-        this.clearRenderingFrames();
+        const reuseFrames = options.reuseFrames === true;
+        this.clearRenderingFrames({preserveCache: reuseFrames});
         this.resizeRendererForTimeline();
-        this.timeline.currentTime = 0;
+        const rangeStart = clamp(
+            toNumber(options.start, this.timeline.rangeStart),
+            0,
+            this.timeline.duration
+        );
+        const rangeEnd = clamp(
+            toNumber(options.end, this.timeline.rangeEnd || this.timeline.duration),
+            rangeStart,
+            this.timeline.duration
+        );
+        this.timeline.currentTime = rangeStart;
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
         this.timeline.recording = true;
-        this.timeline.renderFrameIndex = 0;
+        this.timeline.renderEndTime = rangeEnd;
+        this.timeline.renderFrameIndex = Math.max(0, Math.ceil((rangeStart * this.timeline.framerate) - 1e-9));
         this.timeline.renderFrameThreads = [];
+        this.timeline.reuseFramesDuringRender = reuseFrames;
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
-        this.setTimelineClock(0, false);
+        this.setTimelineClock(this.timeline.renderFrameIndex / this.timeline.framerate, false);
         this.emitTimelineChanged();
     }
 
@@ -1122,7 +1279,7 @@ class MovieAssetManager extends EventEmitter {
         renderer.resize(size.width / pixelRatio, size.height / pixelRatio);
     }
 
-    renderAndExportTimeline () {
+    renderAndExportTimeline (options = {}) {
         let cancelled = false;
         let renderErrorEmitted = false;
         const rendering = new Promise((resolve, reject) => {
@@ -1153,7 +1310,7 @@ class MovieAssetManager extends EventEmitter {
             this.once('timelineRenderCancelled', handleCancelled);
             this.once('renderError', handleRenderError);
             try {
-                this.renderTimeline();
+                this.renderTimeline(options);
             } catch (error) {
                 this.restorePreviewRendererSize();
                 cleanup();
@@ -1162,7 +1319,7 @@ class MovieAssetManager extends EventEmitter {
         });
 
         return rendering
-            .then(() => this.exportTimeline())
+            .then(() => this.exportTimeline(options))
             .catch(error => {
                 if (!cancelled && !renderErrorEmitted) this.emit('renderError', error);
                 throw error;
@@ -1212,6 +1369,7 @@ class MovieAssetManager extends EventEmitter {
 
         if (this.timeline.recording) {
             this.renderingSoundEvents.push({
+                dedupeKey: key,
                 frame: requestedFrame,
                 pan: toNumber(util.target.soundEffects && util.target.soundEffects.pan),
                 pitch: toNumber(util.target.soundEffects && util.target.soundEffects.pitch),
@@ -1242,17 +1400,18 @@ class MovieAssetManager extends EventEmitter {
         const requestedTime = Math.max(0, toNumber(args && args.TIME));
         const blockId = util.thread && typeof util.thread.peekStack === 'function' ?
             util.thread.peekStack() : `${sound.name}:${requestedTime}`;
+        const key = `${util.target.id}:${blockId}`;
 
         // A render-frame script runs again on every frame. During timeline playback, let each block start once
         // so the sound can continue in real time instead of being restarted on every VM step.
         if (this.timeline.playing) {
-            const key = `${util.target.id}:${blockId}`;
             if (this.playedTimelineSoundBlocks.has(key)) return;
             this.playedTimelineSoundBlocks.add(key);
         }
 
         if (this.timeline.recording) {
             this.renderingSoundEvents.push({
+                dedupeKey: key,
                 frame: this.timeline.renderFrameIndex,
                 offset: requestedTime,
                 pan: toNumber(util.target.soundEffects && util.target.soundEffects.pan),
@@ -1436,9 +1595,20 @@ class MovieAssetManager extends EventEmitter {
             target.sprite.sounds.map(sound => sound.name) : [];
     }
 
-    exportTimeline () {
+    exportTimeline (options = {}) {
         const target = this.runtime.targets.find(item => item.isOriginal && !item.isStage);
-        return this.exportRenderingMp4(target, this.timeline.sound, this.timeline.framerate);
+        const format = this.normalizeRenderingFormat(options.format || this.timeline.exportFormat);
+        if (format === 'png-sequence') return this.exportRenderingPngSequence();
+        if (format === 'png-frame') return this.exportRenderingFramePng(options.frameIndex);
+        if (format === 'audio-wav') {
+            return this.exportRenderingAudioWav(target, this.timeline.sound, this.timeline.framerate);
+        }
+        return this.exportRenderingVideo(
+            target,
+            this.timeline.sound,
+            this.timeline.framerate,
+            format
+        );
     }
 
     handleTimelineBeforeExecute () {
@@ -1454,7 +1624,7 @@ class MovieAssetManager extends EventEmitter {
         if (!this.timeline.playing && !this.timeline.pendingFrame) return;
         if (this.timeline.recording) {
             this.setTimelineClock(
-                Math.min(this.timeline.renderFrameIndex / this.timeline.framerate, this.timeline.duration),
+                Math.min(this.timeline.renderFrameIndex / this.timeline.framerate, this.getRenderEndTime()),
                 false
             );
         } else if (this.timeline.playing) {
@@ -1464,6 +1634,30 @@ class MovieAssetManager extends EventEmitter {
         }
         this.timeline.pendingFrame = false;
         this.timeline.renderedThisStep = true;
+        if (this.timeline.recording && this.timeline.reuseFramesDuringRender &&
+            this.renderingFrameCache instanceof Map) {
+            const cachedFrame = this.renderingFrameCache.get(
+                this.getRenderingFrameCacheKey(this.timeline.renderFrameIndex)
+            );
+            if (cachedFrame) {
+                if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
+                if (!Array.isArray(this.renderingFrameNumbers)) this.renderingFrameNumbers = [];
+                this.renderingFrames.push(cachedFrame);
+                this.renderingFrameNumbers.push(this.timeline.renderFrameIndex);
+                if (this.renderingSoundEventCache instanceof Map) {
+                    const cachedEvents = this.renderingSoundEventCache.get(
+                        this.getRenderingFrameCacheKey(this.timeline.renderFrameIndex)
+                    ) || [];
+                    for (const event of cachedEvents) {
+                        this.renderingSoundEvents.push({...event});
+                        if (event.dedupeKey) this.playedTimelineSoundBlocks.add(event.dedupeKey);
+                    }
+                }
+                this.timeline.reusedFrameThisStep = true;
+                this.emit('renderingFramesChanged', this.renderingFrames.length);
+                return;
+            }
+        }
         this.beginObjectVideoAudioFrame();
         this.resetPenForRenderFrame();
         const threads = this.runtime.startHats('event_renderframe');
@@ -1482,20 +1676,31 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
-        this.finishObjectVideoAudioFrame();
-        this.commitPenFrameTransaction();
+        if (!this.timeline.reusedFrameThisStep) {
+            this.finishObjectVideoAudioFrame();
+            this.commitPenFrameTransaction();
+        }
         if (this.timeline.recording) {
-            try {
-                this.addRenderingFrame();
-            } catch (error) {
-                this.timeline.recording = false;
-                this.timeline.playing = false;
-                this.restorePreviewRendererSize();
-                this.setTimelineClock(this.timeline.currentTime, true);
-                this.runtime.stopAll();
-                this.emit('renderError', error);
+            if (!this.timeline.reusedFrameThisStep) {
+                try {
+                    this.addRenderingFrame();
+                } catch (error) {
+                    if (!Array.isArray(this.renderingFrameErrors)) this.renderingFrameErrors = [];
+                    this.renderingFrameErrors.push({
+                        frame: this.timeline.renderFrameIndex,
+                        message: error && error.message ? error.message : String(error),
+                        time: this.timeline.currentTime
+                    });
+                    this.timeline.recording = false;
+                    this.timeline.playing = false;
+                    this.restorePreviewRendererSize();
+                    this.setTimelineClock(this.timeline.currentTime, true);
+                    this.runtime.stopAll();
+                    this.emit('renderError', error);
+                }
             }
-            if (this.timeline.recording && this.timeline.currentTime < this.timeline.duration) {
+            this.timeline.reusedFrameThisStep = false;
+            if (this.timeline.recording && this.timeline.currentTime < this.getRenderEndTime()) {
                 this.timeline.renderFrameIndex++;
             }
         } else if (this.timeline.playing) {
@@ -1506,7 +1711,7 @@ class MovieAssetManager extends EventEmitter {
             );
         }
         this.emitTimelineChanged();
-        if (this.timeline.playing && this.timeline.currentTime >= this.timeline.duration) {
+        if (this.timeline.playing && this.timeline.currentTime >= this.getRenderEndTime()) {
             const completedRendering = this.timeline.recording;
             this.timeline.recording = false;
             this.pauseTimeline();
@@ -1860,15 +2065,36 @@ class MovieAssetManager extends EventEmitter {
 
     addRenderingFrame () {
         if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
+        if (!Array.isArray(this.renderingFrameNumbers)) this.renderingFrameNumbers = [];
         const frame = this.captureRenderingFrame();
         this.renderingFrames.push(frame);
+        const frameIndex = Number.isFinite(Number(this.timeline.renderFrameIndex)) ?
+            Number(this.timeline.renderFrameIndex) : this.renderingFrames.length - 1;
+        this.renderingFrameNumbers.push(frameIndex);
+        if (!(this.renderingFrameCache instanceof Map)) this.renderingFrameCache = new Map();
+        this.renderingFrameCache.set(this.getRenderingFrameCacheKey(frameIndex), frame);
+        if (!(this.renderingSoundEventCache instanceof Map)) this.renderingSoundEventCache = new Map();
+        this.renderingSoundEventCache.set(
+            this.getRenderingFrameCacheKey(frameIndex),
+            this.renderingSoundEvents.filter(event => Number(event.frame) === frameIndex).map(event => ({...event}))
+        );
         this.emit('renderingFramesChanged', this.renderingFrames.length);
         return frame;
     }
 
-    clearRenderingFrames () {
+    clearRenderingFrames (options = {}) {
         if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
         this.renderingFrames.length = 0;
+        if (!Array.isArray(this.renderingFrameNumbers)) this.renderingFrameNumbers = [];
+        this.renderingFrameNumbers.length = 0;
+        if (!Array.isArray(this.renderingFrameErrors)) this.renderingFrameErrors = [];
+        this.renderingFrameErrors.length = 0;
+        if (!options.preserveCache) {
+            if (!(this.renderingFrameCache instanceof Map)) this.renderingFrameCache = new Map();
+            this.renderingFrameCache.clear();
+            if (!(this.renderingSoundEventCache instanceof Map)) this.renderingSoundEventCache = new Map();
+            this.renderingSoundEventCache.clear();
+        }
         if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
         this.renderingSoundEvents.length = 0;
         this.emit('renderingFramesChanged', 0);
@@ -2019,11 +2245,19 @@ class MovieAssetManager extends EventEmitter {
         return Math.min(RENDERING_MAX_FRAME_RATE, Math.max(1, framerate));
     }
 
-    getRenderingMp4MimeType (includeAudio) {
+    normalizeRenderingFormat (value) {
+        const format = String(value || '').toLowerCase();
+        return RENDERING_FORMATS.includes(format) ? format : 'mp4';
+    }
+
+    getRenderingVideoMimeType (format, includeAudio) {
         if (typeof MediaRecorder === 'undefined') {
-            throw new Error('This browser does not support MP4 rendering.');
+            throw new Error('This browser does not support video rendering.');
         }
-        const candidates = includeAudio ? MP4_AUDIO_MIME_TYPES : MP4_VIDEO_MIME_TYPES;
+        const normalizedFormat = this.normalizeRenderingFormat(format);
+        const candidates = normalizedFormat === 'webm' ?
+            (includeAudio ? WEBM_AUDIO_MIME_TYPES : WEBM_VIDEO_MIME_TYPES) :
+            (includeAudio ? MP4_AUDIO_MIME_TYPES : MP4_VIDEO_MIME_TYPES);
         if (typeof MediaRecorder.isTypeSupported !== 'function') return candidates[candidates.length - 1];
         for (const candidate of candidates) {
             try {
@@ -2032,7 +2266,11 @@ class MovieAssetManager extends EventEmitter {
                 // Some browsers throw when they see a codec they do not recognize.
             }
         }
-        throw new Error('This browser cannot encode MP4 with MediaRecorder.');
+        throw new Error(`This browser cannot encode ${normalizedFormat.toUpperCase()} with MediaRecorder.`);
+    }
+
+    getRenderingMp4MimeType (includeAudio) {
+        return this.getRenderingVideoMimeType('mp4', includeAudio);
     }
 
     getRenderingAudioMasterGain (clips) {
@@ -2082,7 +2320,7 @@ class MovieAssetManager extends EventEmitter {
         return {input, nodes};
     }
 
-    async encodeRenderingFrames (frames, framerate, audio) {
+    async encodeRenderingFrames (frames, framerate, audio, format = 'mp4') {
         if (typeof document === 'undefined' || typeof MediaStream === 'undefined') {
             throw new Error('Rendering export is only available in a browser.');
         }
@@ -2164,7 +2402,7 @@ class MovieAssetManager extends EventEmitter {
             recordingStream.addTrack(audioTrack);
         }
 
-        const mimeType = this.getRenderingMp4MimeType(Boolean(audio));
+        const mimeType = this.getRenderingVideoMimeType(format, Boolean(audio));
         const recorder = new MediaRecorder(recordingStream, {mimeType});
         const chunks = [];
         let recordingError = null;
@@ -2263,23 +2501,127 @@ class MovieAssetManager extends EventEmitter {
         return recordingPromise;
     }
 
-    async exportRenderingMp4 (target, requestedSound, requestedFramerate) {
+    async exportRenderingVideo (target, requestedSound, requestedFramerate, requestedFormat = 'mp4') {
         const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames.slice() : [];
         if (frames.length === 0) {
             throw new Error('Add at least one rendering frame before exporting.');
         }
 
         const framerate = this.normalizeRenderingFramerate(requestedFramerate);
+        const format = this.normalizeRenderingFormat(requestedFormat) === 'webm' ? 'webm' : 'mp4';
         const audio = await this.decodeRenderingAudio(target, requestedSound, framerate);
-        const blob = await this.encodeRenderingFrames(frames, framerate, audio);
-        downloadBlob(RENDERING_FILE_NAME, blob);
+        const blob = await this.encodeRenderingFrames(frames, framerate, audio, format);
+        const filename = format === 'webm' ? 'rendering.webm' : RENDERING_FILE_NAME;
+        downloadBlob(filename, blob);
         this.emit('renderingExported', {
             blob,
+            errors: (this.renderingFrameErrors || []).slice(),
+            format,
             framerate,
             frameCount: frames.length,
             sound: requestedSound || '',
             soundCount: audio ? audio.clips.length : 0
         });
+        return blob;
+    }
+
+    exportRenderingMp4 (target, requestedSound, requestedFramerate) {
+        return this.exportRenderingVideo(target, requestedSound, requestedFramerate, 'mp4');
+    }
+
+    async exportRenderingPngSequence () {
+        const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames.slice() : [];
+        if (!frames.length) throw new Error('Add at least one rendering frame before exporting.');
+        const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
+        const zip = new JSZip();
+        const digits = Math.max(4, String(Math.max(...frameNumbers, frames.length - 1)).length);
+        for (let index = 0; index < frames.length; index++) {
+            const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? Number(frameNumbers[index]) : index;
+            const blob = await canvasToBlob(frames[index]);
+            zip.file(`frame-${String(frameNumber).padStart(digits, '0')}.png`, blob);
+        }
+        if (this.renderingFrameErrors && this.renderingFrameErrors.length) {
+            zip.file('render-errors.json', JSON.stringify(this.renderingFrameErrors, null, 2));
+        }
+        const blob = await zip.generateAsync({compression: 'DEFLATE', type: 'blob'});
+        downloadBlob('rendering-png.zip', blob);
+        this.emit('renderingExported', {
+            blob,
+            errors: (this.renderingFrameErrors || []).slice(),
+            format: 'png-sequence',
+            frameCount: frames.length
+        });
+        return blob;
+    }
+
+    async exportRenderingFramePng (requestedIndex) {
+        const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames : [];
+        if (!frames.length) throw new Error('Add at least one rendering frame before exporting.');
+        const numericIndex = Number(requestedIndex);
+        const index = Number.isFinite(numericIndex) ?
+            clamp(Math.round(numericIndex), 0, frames.length - 1) : frames.length - 1;
+        const blob = await canvasToBlob(frames[index]);
+        const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
+        const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? frameNumbers[index] : index;
+        downloadBlob(`rendering-frame-${String(frameNumber).padStart(4, '0')}.png`, blob);
+        this.emit('renderingExported', {blob, format: 'png-frame', frameCount: 1, frameNumber});
+        return blob;
+    }
+
+    async encodeRenderingAudioWav (audio, duration) {
+        if (!audio || !Array.isArray(audio.clips) || !audio.clips.length) {
+            throw new Error('Add a timeline audio event or select a rendering sound before exporting audio.');
+        }
+        const sampleRate = Math.max(8000, ...audio.clips.map(clip => (
+            toNumber(clip.buffer && clip.buffer.sampleRate, 48000)
+        )));
+        const frameCount = Math.max(1, Math.ceil(Math.max(0, duration) * sampleRate));
+        const left = new Float32Array(frameCount);
+        const right = new Float32Array(frameCount);
+        const masterGain = this.getRenderingAudioMasterGain(audio.clips);
+        for (const clip of audio.clips) {
+            const buffer = clip.buffer;
+            if (!buffer || typeof buffer.getChannelData !== 'function') continue;
+            const sourceRate = toNumber(buffer.sampleRate, sampleRate);
+            const sourceLeft = buffer.getChannelData(0);
+            const sourceRight = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : sourceLeft;
+            const startFrame = Math.max(0, Math.round(toNumber(clip.startTime) * sampleRate));
+            const playbackRate = Math.max(Number.EPSILON, toNumber(clip.playbackRate, 1));
+            const sourceOffset = Math.max(0, toNumber(clip.offset) * sourceRate);
+            const requestedDuration = Number(clip.duration);
+            const naturalDuration = Math.max(0, (sourceLeft.length - sourceOffset) / sourceRate / playbackRate);
+            const clipDuration = Number.isFinite(requestedDuration) ?
+                Math.min(naturalDuration, Math.max(0, requestedDuration)) : naturalDuration;
+            const outputFrames = Math.min(frameCount - startFrame, Math.ceil(clipDuration * sampleRate));
+            const pan = clamp(toNumber(clip.pan), -1, 1);
+            const volume = clamp(toNumber(clip.volume, 1), 0, 1) * masterGain;
+            const leftGain = volume * (pan > 0 ? 1 - pan : 1);
+            const rightGain = volume * (pan < 0 ? 1 + pan : 1);
+            for (let outputIndex = 0; outputIndex < outputFrames; outputIndex++) {
+                const sourcePosition = sourceOffset + ((outputIndex / sampleRate) * sourceRate * playbackRate);
+                const firstIndex = Math.floor(sourcePosition);
+                if (firstIndex >= sourceLeft.length) break;
+                const secondIndex = Math.min(sourceLeft.length - 1, firstIndex + 1);
+                const progress = sourcePosition - firstIndex;
+                const leftSample = sourceLeft[firstIndex] +
+                    ((sourceLeft[secondIndex] - sourceLeft[firstIndex]) * progress);
+                const rightSample = sourceRight[firstIndex] +
+                    ((sourceRight[secondIndex] - sourceRight[firstIndex]) * progress);
+                left[startFrame + outputIndex] += leftSample * leftGain;
+                right[startFrame + outputIndex] += rightSample * rightGain;
+            }
+        }
+        const buffer = await WavEncoder.encode({channelData: [left, right], sampleRate});
+        return new Blob([buffer], {type: 'audio/wav'});
+    }
+
+    async exportRenderingAudioWav (target, requestedSound, requestedFramerate) {
+        const framerate = this.normalizeRenderingFramerate(requestedFramerate);
+        const audio = await this.decodeRenderingAudio(target, requestedSound, framerate);
+        const duration = this.renderingFrames.length / framerate;
+        const blob = await this.encodeRenderingAudioWav(audio, duration);
+        downloadBlob('rendering-audio.wav', blob);
+        this.emit('renderingExported', {blob, format: 'audio-wav'});
         return blob;
     }
 
@@ -2563,6 +2905,12 @@ class MovieAssetManager extends EventEmitter {
         return clone;
     }
 
+    getObjectEvaluationTime (configuration) {
+        const localTime = Number(configuration && configuration.evaluationTime);
+        if (Number.isFinite(localTime)) return localTime;
+        return this.timeline ? toNumber(this.timeline.currentTime) : 0;
+    }
+
     createObjectSceneCapture (target) {
         if (!target || target.isStage) return null;
         return {
@@ -2613,7 +2961,7 @@ class MovieAssetManager extends EventEmitter {
                 this.stopObjectVideoAudio(target, configuration);
                 return null;
             }
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const currentTime = this.getObjectEvaluationTime(configuration);
             const playback = this.getObjectVideoPlayback(video, configuration, currentTime);
             if (!playback || !playback.active) {
                 this.stopObjectVideoAudio(target, configuration);
@@ -2626,7 +2974,7 @@ class MovieAssetManager extends EventEmitter {
         if (configuration.time) {
             const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
             const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const currentTime = this.getObjectEvaluationTime(configuration);
             if (currentTime < startTime || currentTime > endTime) return null;
         }
         return configuration;
@@ -2824,6 +3172,7 @@ class MovieAssetManager extends EventEmitter {
         if (this.playedTimelineSoundBlocks.has(key)) return;
         this.playedTimelineSoundBlocks.add(key);
         this.renderingSoundEvents.push({
+            dedupeKey: key,
             duration: Math.max(0, playback.end - currentTime),
             frame: this.timeline.renderFrameIndex,
             offset: playback.mediaTime,
@@ -3085,7 +3434,7 @@ class MovieAssetManager extends EventEmitter {
                 this.stopObjectVideoAudio(target, configuration);
                 return;
             }
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const currentTime = this.getObjectEvaluationTime(configuration);
             const playback = this.getObjectVideoPlayback(video, configuration, currentTime);
             if (!playback || !playback.active) {
                 this.stopObjectVideoAudio(target, configuration);
@@ -3099,7 +3448,7 @@ class MovieAssetManager extends EventEmitter {
         if (drawConfiguration.time && !playsVideo) {
             const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
             const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const currentTime = this.getObjectEvaluationTime(configuration);
             if (currentTime < startTime || currentTime > endTime) return;
         }
         if (source === 'video') {
@@ -3222,7 +3571,7 @@ class MovieAssetManager extends EventEmitter {
         if (configuration.time) {
             const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
             const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.timeline ? toNumber(this.timeline.currentTime) : 0;
+            const currentTime = this.getObjectEvaluationTime(configuration);
             if (currentTime < startTime || currentTime > endTime) return;
         }
         return this.renderShape(target, configuration);

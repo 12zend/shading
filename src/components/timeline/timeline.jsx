@@ -5,6 +5,7 @@ import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 import installCollaborationManager from '../../lib/collaboration-manager';
+import {evaluateTimeScopes} from '../../lib/object-animation';
 
 import {GearIcon, PauseIcon, PlayIcon, ZoomInIcon, ZoomOutIcon} from './icons.jsx';
 import styles from './timeline.css';
@@ -47,7 +48,9 @@ class Timeline extends React.Component {
         super(props);
         this.state = {
             draft: null,
+            diagnostics: {ranges: [], warnings: []},
             exporting: false,
+            exportError: '',
             markers: [],
             pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
             scrollLeft: 0,
@@ -66,6 +69,7 @@ class Timeline extends React.Component {
         };
         this.handleTimelineChanged = this.handleTimelineChanged.bind(this);
         this.handleRenderingFramesChanged = this.handleRenderingFramesChanged.bind(this);
+        this.handleTimelineDiagnosticsChanged = this.handleTimelineDiagnosticsChanged.bind(this);
         this.handleCollaborationChanged = this.handleCollaborationChanged.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handlePlayPause = this.handlePlayPause.bind(this);
@@ -77,6 +81,8 @@ class Timeline extends React.Component {
         this.handleExport = this.handleExport.bind(this);
         this.handleMarkerClick = this.handleMarkerClick.bind(this);
         this.handleMarkerMouseDown = this.handleMarkerMouseDown.bind(this);
+        this.handleRangeClick = this.handleRangeClick.bind(this);
+        this.handleWarningClick = this.handleWarningClick.bind(this);
         this.handleRulerMouseDown = this.handleRulerMouseDown.bind(this);
         this.handleScrubEnd = this.handleScrubEnd.bind(this);
         this.handleScrubMove = this.handleScrubMove.bind(this);
@@ -92,6 +98,7 @@ class Timeline extends React.Component {
         this.manager = installMovieAssetManager(this.props.vm);
         this.manager.on('timelineChanged', this.handleTimelineChanged);
         this.manager.on('renderingFramesChanged', this.handleRenderingFramesChanged);
+        this.manager.on('timelineDiagnosticsChanged', this.handleTimelineDiagnosticsChanged);
         this.collaborationManager = installCollaborationManager(this.props.vm);
         this.collaborationManager.on('stateChanged', this.handleCollaborationChanged);
         document.addEventListener('keydown', this.handleKeyDown);
@@ -103,6 +110,7 @@ class Timeline extends React.Component {
         }
         this.measureTimelineViewport();
         this.handleTimelineChanged(this.manager.getTimelineState());
+        this.handleTimelineDiagnosticsChanged(this.manager.getTimelineDiagnostics(true));
         this.handleCollaborationChanged(this.collaborationManager.getState());
     }
 
@@ -118,6 +126,7 @@ class Timeline extends React.Component {
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
+        this.manager.removeListener('timelineDiagnosticsChanged', this.handleTimelineDiagnosticsChanged);
         if (this.collaborationManager) {
             this.collaborationManager.removeListener('stateChanged', this.handleCollaborationChanged);
         }
@@ -144,6 +153,12 @@ class Timeline extends React.Component {
         this.setState(state => ({
             timeline: Object.assign({}, state.timeline, {frameCount})
         }));
+    }
+
+    handleTimelineDiagnosticsChanged (diagnostics) {
+        this.setState({
+            diagnostics: diagnostics || {ranges: [], warnings: []}
+        });
     }
 
     handleCollaborationChanged (collaborationState) {
@@ -255,6 +270,18 @@ class Timeline extends React.Component {
         event.stopPropagation();
     }
 
+    handleRangeClick (event) {
+        event.stopPropagation();
+        const index = Number(event.currentTarget.value);
+        const range = this.state.diagnostics.ranges[index];
+        if (range) this.manager.emit('focusMovieBlock', range);
+    }
+
+    handleWarningClick (event) {
+        const warning = this.state.diagnostics.warnings[Number(event.currentTarget.value)];
+        if (warning) this.manager.emit('focusMovieBlock', warning);
+    }
+
     handleScroll (event) {
         const scrollLeft = event.currentTarget.scrollLeft;
         if (Math.abs(scrollLeft - this.state.scrollLeft) > 0.5) this.setState({scrollLeft});
@@ -356,9 +383,14 @@ class Timeline extends React.Component {
 
     handleDraftChange (event) {
         const property = event.target.name;
-        const value = event.target.value;
+        const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+        const presets = {
+            'preview-720': {framerate: 24, height: 720, width: 1280},
+            'final-1080': {framerate: 30, height: 1080, width: 1920},
+            'final-4k': {framerate: 30, height: 2160, width: 3840}
+        };
         this.setState(state => ({
-            draft: Object.assign({}, state.draft, {[property]: value})
+            draft: Object.assign({}, state.draft, {[property]: value}, property === 'preset' ? presets[value] : null)
         }));
     }
 
@@ -366,8 +398,12 @@ class Timeline extends React.Component {
         const draft = this.state.draft;
         this.manager.updateTimelineSettings({
             duration: Number(draft.duration),
+            exportFormat: draft.exportFormat,
             framerate: Number(draft.framerate),
             height: Number(draft.height),
+            rangeEnd: Number(draft.rangeEnd),
+            rangeStart: Number(draft.rangeStart),
+            reuseFrames: draft.reuseFrames,
             width: Number(draft.width)
         });
         this.setState({settingsOpen: false});
@@ -377,15 +413,30 @@ class Timeline extends React.Component {
         const settings = this.state.draft || this.state.timeline;
         this.manager.updateTimelineSettings({
             duration: Number(settings.duration),
+            exportFormat: settings.exportFormat,
             framerate: Number(settings.framerate),
             height: Number(settings.height),
+            rangeEnd: Number(settings.rangeEnd),
+            rangeStart: Number(settings.rangeStart),
+            reuseFrames: settings.reuseFrames,
             width: Number(settings.width)
         });
-        this.setState({exporting: true});
-        const finish = () => {
-            if (!this.unmounted) this.setState({exporting: false});
+        this.setState({exportError: '', exporting: true});
+        const finish = error => {
+            if (!this.unmounted) {
+                this.setState({
+                    exportError: error && error.message ? error.message : '',
+                    exporting: false
+                });
+            }
         };
-        return this.manager.renderAndExportTimeline().then(finish, finish);
+        const singleFrame = settings.exportFormat === 'png-frame';
+        return this.manager.renderAndExportTimeline({
+            end: singleFrame ? this.state.timeline.currentTime : Number(settings.rangeEnd),
+            format: settings.exportFormat,
+            reuseFrames: settings.reuseFrames === true,
+            start: singleFrame ? this.state.timeline.currentTime : Number(settings.rangeStart)
+        }).then(() => finish(), finish);
     }
 
     renderSettings () {
@@ -409,6 +460,33 @@ class Timeline extends React.Component {
                     >{'×'}</button>
                 </div>
                 <div className={styles.settingsGrid}>
+                    <label>
+                        <span>{'Render preset'}</span>
+                        <select
+                            name="preset"
+                            value={this.state.draft.preset || 'custom'}
+                            onChange={this.handleDraftChange}
+                        >
+                            <option value="custom">{'Custom'}</option>
+                            <option value="preview-720">{'Preview · 720p / 24'}</option>
+                            <option value="final-1080">{'Final · 1080p / 30'}</option>
+                            <option value="final-4k">{'Final · 4K / 30'}</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>{'Export format'}</span>
+                        <select
+                            name="exportFormat"
+                            value={this.state.draft.exportFormat || 'mp4'}
+                            onChange={this.handleDraftChange}
+                        >
+                            <option value="mp4">{'MP4 video'}</option>
+                            <option value="webm">{'Transparent WebM'}</option>
+                            <option value="png-sequence">{'PNG sequence (.zip)'}</option>
+                            <option value="png-frame">{'Current frame PNG'}</option>
+                            <option value="audio-wav">{'Audio only (WAV)'}</option>
+                        </select>
+                    </label>
                     <label>
                         <span>{'Output width'}</span>
                         <input
@@ -455,7 +533,43 @@ class Timeline extends React.Component {
                             onChange={this.handleDraftChange}
                         />
                     </label>
+                    <label>
+                        <span>{'Range start (sec)'}</span>
+                        <input
+                            max={this.state.draft.duration}
+                            min="0"
+                            name="rangeStart"
+                            step="0.01"
+                            type="number"
+                            value={this.state.draft.rangeStart}
+                            onChange={this.handleDraftChange}
+                        />
+                    </label>
+                    <label>
+                        <span>{'Range end (sec)'}</span>
+                        <input
+                            max={this.state.draft.duration}
+                            min={this.state.draft.rangeStart}
+                            name="rangeEnd"
+                            step="0.01"
+                            type="number"
+                            value={this.state.draft.rangeEnd}
+                            onChange={this.handleDraftChange}
+                        />
+                    </label>
+                    <label className={styles.checkboxLabel}>
+                        <input
+                            checked={this.state.draft.reuseFrames !== false}
+                            name="reuseFrames"
+                            type="checkbox"
+                            onChange={this.handleDraftChange}
+                        />
+                        <span>{'Reuse unchanged frames and resume partial renders'}</span>
+                    </label>
                 </div>
+                {this.state.exportError ? (
+                    <p className={styles.exportError}>{this.state.exportError}</p>
+                ) : null}
                 <div className={styles.settingsActions}>
                     <button
                         className={styles.secondaryButton}
@@ -466,7 +580,9 @@ class Timeline extends React.Component {
                         type="button"
                         onClick={this.handleExport}
                     >{this.state.timeline.recording && this.state.exporting ? 'Rendering…' :
-                            (this.state.exporting ? 'Exporting…' : 'Export MP4')}</button>
+                            (this.state.exporting ? 'Exporting…' :
+                                (this.state.timeline.frameCount && this.state.draft.reuseFrames !== false ?
+                                    'Resume / export' : 'Render / export'))}</button>
                     <button
                         className={styles.primaryButton}
                         disabled={this.state.timeline.recording || this.state.exporting}
@@ -489,6 +605,12 @@ class Timeline extends React.Component {
         const zoomPercent = Math.round(
             (this.state.pixelsPerSecond / DEFAULT_PIXELS_PER_SECOND) * 100
         );
+        const diagnosticRanges = (this.state.diagnostics.ranges || []).filter(range => (
+            range.end >= 0 && range.start <= timeline.duration
+        ));
+        const warnings = this.state.diagnostics.warnings || [];
+        const laneHeight = 22;
+        const timelineCanvasHeight = Math.max(68, 38 + (diagnosticRanges.length * laneHeight));
         return (
             <section
                 aria-label="Timeline"
@@ -505,6 +627,12 @@ class Timeline extends React.Component {
                     <div className={styles.titleGroup}>
                         <strong>{'Timeline'}</strong>
                         <span>{timeline.framerate}{' FPS · frame '}{frame}</span>
+                        <span
+                            className={classNames(styles.frameSafety, {
+                                [styles.hasWarnings]: warnings.length > 0
+                            })}
+                        >{warnings.length ? `${warnings.length} frame warning${warnings.length === 1 ? '' : 's'}` :
+                                'Frame-safe'}</span>
                     </div>
                     <div className={styles.headerActions}>
                         <div
@@ -540,7 +668,7 @@ class Timeline extends React.Component {
                     >
                         <div
                             className={styles.timelineCanvas}
-                            style={{width: `${timelineWidth}px`}}
+                            style={{height: `${timelineCanvasHeight}px`, width: `${timelineWidth}px`}}
                         >
                             <div
                                 aria-hidden="true"
@@ -559,6 +687,51 @@ class Timeline extends React.Component {
                                         {tick.major ? <span>{formatRulerTime(tick.time)}</span> : null}
                                     </span>
                                 ))}
+                            </div>
+                            <div
+                                aria-label="Code-derived active ranges"
+                                className={styles.codeRanges}
+                            >
+                                {diagnosticRanges.map((range, index) => {
+                                    const start = clamp(range.start, 0, timeline.duration);
+                                    const end = clamp(range.end, start, timeline.duration);
+                                    const active = timeline.currentTime >= start && timeline.currentTime <= end;
+                                    const localTime = Array.isArray(range.timeScopes) ?
+                                        evaluateTimeScopes(timeline.currentTime, range.timeScopes) :
+                                        (Number.isFinite(range.localTime) ?
+                                            range.localTime : timeline.currentTime - start);
+                                    const hiddenReason = timeline.currentTime < start ?
+                                        `Starts at ${formatTime(start)}` :
+                                        (timeline.currentTime > end ? `Ended at ${formatTime(end)}` :
+                                            `Local time ${localTime.toFixed(2)}s`);
+                                    const width = Math.max(2, (end - start) * this.state.pixelsPerSecond);
+                                    const rangeAriaLabel = `${range.label}, ${formatTime(start)} to ${formatTime(end)}`;
+                                    const rangeKey = `${range.targetId}:${range.blockId}:${index}`;
+                                    const rangeTitle = `${range.label} · ${hiddenReason} · Click to show block`;
+                                    const localTimeLabel = `${localTime.toFixed(2)}s`;
+                                    return (
+                                        <button
+                                            aria-label={rangeAriaLabel}
+                                            className={classNames(styles.codeRange, styles[range.kind], {
+                                                [styles.isActiveRange]: active
+                                            })}
+                                            key={rangeKey}
+                                            style={{
+                                                left: `${start * this.state.pixelsPerSecond}px`,
+                                                top: `${36 + (index * laneHeight)}px`,
+                                                width: `${width}px`
+                                            }}
+                                            title={rangeTitle}
+                                            type="button"
+                                            value={this.state.diagnostics.ranges.indexOf(range)}
+                                            onClick={this.handleRangeClick}
+                                            onMouseDown={this.handleMarkerMouseDown}
+                                        >
+                                            <span>{range.label}</span>
+                                            {active && width > 108 ? <small>{localTimeLabel}</small> : null}
+                                        </button>
+                                    );
+                                })}
                             </div>
                             <div
                                 aria-disabled={timeline.recording}
@@ -661,6 +834,28 @@ class Timeline extends React.Component {
                         ><ZoomInIcon /></button>
                     </div>
                 </div>
+                {warnings.length ? (
+                    <div
+                        aria-label="Frame determinism warnings"
+                        className={styles.diagnostics}
+                        role="status"
+                    >
+                        <strong>{'Direct seeking may differ'}</strong>
+                        {warnings.slice(0, 2).map((warning, index) => {
+                            const warningKey = `${warning.targetId}:${warning.blockId}:${index}`;
+                            return (
+                                <button
+                                    key={warningKey}
+                                    title={warning.message}
+                                    type="button"
+                                    value={this.state.diagnostics.warnings.indexOf(warning)}
+                                    onClick={this.handleWarningClick}
+                                >{warning.message}</button>
+                            );
+                        })}
+                        {warnings.length > 2 ? <span>{`+${warnings.length - 2} more`}</span> : null}
+                    </div>
+                ) : null}
             </section>
         );
     }

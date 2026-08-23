@@ -8,6 +8,10 @@ import {
     calculateLoopValue,
     calculatePingPongValue,
     calculateWiggleValue,
+    evaluateAngleCurve,
+    evaluateColorCurve,
+    evaluateNumberCurve,
+    evaluateStepCurve,
     finiteNumber,
     getAnimationProgress,
     getObjectTime,
@@ -26,6 +30,7 @@ const SHAPE_TYPES = ['polygon', 'star', 'flower'];
 const BLEND_MODES = ['normal', 'add', 'mul', 'screen', 'overlay', 'darken', 'lighten', 'color dodge'];
 const MATTE_MODES = ['alpha', 'luma', 'alpha inverted', 'luma inverted'];
 const VECTOR_COMPONENTS = ['x', 'y', 'z'];
+const TIME_LOOP_MODES = ['loop', 'ping-pong'];
 const MAX_REPEAT_COUNT = 512;
 const OBJECT_REPORTER_OPCODES = new Set([
     'objects_timelineTime',
@@ -37,7 +42,13 @@ const OBJECT_REPORTER_OPCODES = new Set([
     'objects_posterizeTime',
     'objects_interpolateColor',
     'objects_interpolateAngle',
-    'objects_interpolateVector'
+    'objects_interpolateVector',
+    'objects_numberCurve',
+    'objects_colorCurve',
+    'objects_angleCurve',
+    'objects_stepCurve',
+    'objects_instanceId',
+    'objects_instanceSeed'
 ]);
 const REPORTER_STACK_CLICK_GUARD = '__movieObjectReporterStackClickGuard';
 
@@ -164,10 +175,13 @@ const applyTimeOffset = (time, util) => {
     };
 };
 
-const applyThreadComposition = (configuration, util) => {
+const applyThreadComposition = (configuration, util, runtime) => {
     const thread = util && util.thread;
     const transformed = applyObjectTransforms(configuration, thread && thread.objectTransformStack);
     if (!transformed.time) return transformed;
+    if (thread && Array.isArray(thread.objectTimeScopes) && thread.objectTimeScopes.length) {
+        return {...transformed, evaluationTime: getObjectTime(runtime, util)};
+    }
     return {...transformed, time: applyTimeOffset(transformed.time, util)};
 };
 
@@ -176,6 +190,24 @@ const getObjectPlaybackId = util => {
     const blockId = thread && typeof thread.peekStack === 'function' ? thread.peekStack() : '';
     const instancePath = thread && thread.objectInstancePath;
     return instancePath ? `${blockId}:${instancePath}` : blockId;
+};
+
+const hashString = value => {
+    let hash = 2166136261;
+    const source = String(value || '');
+    for (let index = 0; index < source.length; index++) {
+        hash ^= source.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+};
+
+const getObjectInstanceId = util => {
+    const thread = util && util.thread;
+    const targetId = util && util.target ? util.target.id : '';
+    const blockId = thread && typeof thread.peekStack === 'function' ? thread.peekStack() : '';
+    const path = thread && thread.objectInstancePath;
+    return [targetId, path || blockId || 'instance'].filter(Boolean).join(':');
 };
 
 const trackPendingDraw = (pendingDraw, util, manager) => {
@@ -204,7 +236,9 @@ const getGroupingContext = util => {
         blocks,
         objectInstancePath: parentThread && parentThread.objectInstancePath,
         objectSceneCapture: parentThread && parentThread.objectSceneCapture,
+        objectSimulationName: parentThread && parentThread.objectSimulationName,
         objectTimeOffset: parentThread && parentThread.objectTimeOffset,
+        objectTimeScopes: parentThread && parentThread.objectTimeScopes,
         objectTransformStack: parentThread && parentThread.objectTransformStack,
         parentBlockId,
         target
@@ -228,7 +262,9 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     branchThread.peekStackFrame().warpMode = true;
     if (context.objectInstancePath) branchThread.objectInstancePath = context.objectInstancePath;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
+    if (context.objectSimulationName) branchThread.objectSimulationName = context.objectSimulationName;
     if (context.objectTimeOffset) branchThread.objectTimeOffset = context.objectTimeOffset;
+    if (Array.isArray(context.objectTimeScopes)) branchThread.objectTimeScopes = context.objectTimeScopes.slice();
     if (Array.isArray(context.objectTransformStack)) {
         branchThread.objectTransformStack = context.objectTransformStack.slice();
     }
@@ -460,6 +496,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     text: 'group'
                 },
                 {
+                    opcode: 'simulation',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'stateful simulation [NAME]',
+                    arguments: {
+                        NAME: {type: ArgumentType.STRING, defaultValue: 'simulation'}
+                    }
+                },
+                {
                     opcode: 'transform',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
@@ -500,6 +545,33 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     }
                 },
                 {
+                    opcode: 'renderPass',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'render to pass [NAME]',
+                    arguments: {
+                        NAME: {type: ArgumentType.STRING, defaultValue: 'pass'}
+                    }
+                },
+                {
+                    opcode: 'drawPass',
+                    blockType: BlockType.COMMAND,
+                    text: 'draw pass [NAME] opacity [OPACITY] % blend [BLEND]',
+                    arguments: {
+                        NAME: {type: ArgumentType.STRING, defaultValue: 'pass'},
+                        OPACITY: numberArgument(100),
+                        BLEND: {type: ArgumentType.STRING, menu: 'blendMode', defaultValue: 'normal'}
+                    }
+                },
+                {
+                    opcode: 'clearPass',
+                    blockType: BlockType.COMMAND,
+                    text: 'clear render pass [NAME]',
+                    arguments: {
+                        NAME: {type: ArgumentType.STRING, defaultValue: 'pass'}
+                    }
+                },
+                {
                     opcode: 'repeat',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
@@ -517,6 +589,62 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     text: 'time offset [TIME] sec',
                     arguments: {
                         TIME: numberArgument(0)
+                    }
+                },
+                {
+                    opcode: 'timeRange',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'time range [START] to [END] sec',
+                    arguments: {
+                        START: numberArgument(0),
+                        END: numberArgument(2)
+                    }
+                },
+                {
+                    opcode: 'timeScale',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'time speed [SCALE] x',
+                    arguments: {
+                        SCALE: numberArgument(0.5)
+                    }
+                },
+                {
+                    opcode: 'timeLoop',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'time [MODE] every [DURATION] sec',
+                    arguments: {
+                        MODE: {type: ArgumentType.STRING, menu: 'timeLoopMode', defaultValue: 'loop'},
+                        DURATION: numberArgument(2)
+                    }
+                },
+                {
+                    opcode: 'timeFreeze',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'freeze time at [TIME] sec',
+                    arguments: {
+                        TIME: numberArgument(0)
+                    }
+                },
+                {
+                    opcode: 'timeReverse',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'reverse time within [DURATION] sec',
+                    arguments: {
+                        DURATION: numberArgument(2)
+                    }
+                },
+                {
+                    opcode: 'timeRemap',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: 'remap time [MAP]',
+                    arguments: {
+                        MAP: {type: ArgumentType.STRING, defaultValue: '0:0; 1:0.8; 2:0.2'}
                     }
                 },
                 {
@@ -624,6 +752,51 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         T2: numberArgument(1),
                         EASING: {type: ArgumentType.STRING, menu: 'easing', defaultValue: 'Linear'}
                     }
+                },
+                {
+                    opcode: 'numberCurve',
+                    blockType: BlockType.REPORTER,
+                    text: 'number curve [CURVE] at local time',
+                    arguments: {
+                        CURVE: {type: ArgumentType.STRING, defaultValue: '0:0; 0.4:120@ExpoOut; 1.2:90@BackOut; 2:100'}
+                    }
+                },
+                {
+                    opcode: 'colorCurve',
+                    blockType: BlockType.REPORTER,
+                    text: 'color curve [CURVE] at local time',
+                    arguments: {
+                        CURVE: {type: ArgumentType.STRING, defaultValue: '0:#ff3366; 1:#3366ff'}
+                    }
+                },
+                {
+                    opcode: 'angleCurve',
+                    blockType: BlockType.REPORTER,
+                    text: 'angle curve [CURVE] at local time',
+                    arguments: {
+                        CURVE: {type: ArgumentType.STRING, defaultValue: '0:350; 1:10'}
+                    }
+                },
+                {
+                    opcode: 'stepCurve',
+                    blockType: BlockType.REPORTER,
+                    text: 'step curve [CURVE] at local time',
+                    arguments: {
+                        CURVE: {type: ArgumentType.STRING, defaultValue: '0:one; 1:two'}
+                    }
+                },
+                {
+                    opcode: 'instanceId',
+                    blockType: BlockType.REPORTER,
+                    text: 'component instance id'
+                },
+                {
+                    opcode: 'instanceSeed',
+                    blockType: BlockType.REPORTER,
+                    text: 'component instance seed [SEED]',
+                    arguments: {
+                        SEED: numberArgument(1)
+                    }
                 }
             ],
             menus: {
@@ -642,6 +815,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 shapeType: {
                     acceptReporters: true,
                     items: SHAPE_TYPES
+                },
+                timeLoopMode: {
+                    acceptReporters: true,
+                    items: TIME_LOOP_MODES
                 },
                 vectorComponent: {
                     acceptReporters: true,
@@ -670,7 +847,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             width: args.WIDTH,
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
-        }, util);
+        }, util, this.runtime);
         if (util && util.thread && util.thread.objectSceneCapture) {
             context.sceneCapture = util.thread.objectSceneCapture;
         }
@@ -696,7 +873,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             opacity: args.OPACITY,
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
-        }, util);
+        }, util, this.runtime);
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {
@@ -712,7 +889,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             opacity: args.OPACITY,
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
-        }, configuration), util);
+        }, configuration), util, this.runtime);
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {
@@ -754,6 +931,13 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     group (args, util) {
         const branchThread = runGroupingBranch(this.runtime, getGroupingContext(util), 1);
+        propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+    }
+
+    simulation (args, util) {
+        const context = getGroupingContext(util);
+        context.objectSimulationName = String(args.NAME || '').trim() || 'simulation';
+        const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
 
@@ -846,6 +1030,50 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         this.queueGroupingWork(runMatte, util);
     }
 
+    renderPass (args, util) {
+        const context = getGroupingContext(util);
+        const generation = this.groupingGeneration;
+        const passName = String(args.NAME || '').trim() || 'pass';
+        const runPass = () => {
+            if (generation !== this.groupingGeneration) return null;
+            const penFX = this.runtime.penFX;
+            if (!penFX || typeof penFX.beginGroup !== 'function' || typeof penFX.endGroup !== 'function') {
+                const branchThread = runGroupingBranch(this.runtime, context, 1);
+                propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+                return null;
+            }
+            penFX.beginGroup();
+            const branchThread = runGroupingBranch(this.runtime, context, 1);
+            const pendingDraws = branchThread && Array.isArray(branchThread.objectPendingDraws) ?
+                branchThread.objectPendingDraws.slice() : [];
+            const finish = () => {
+                if (generation === this.groupingGeneration) {
+                    penFX.endGroup({composite: false, passName});
+                }
+            };
+            if (pendingDraws.length) return Promise.all(pendingDraws).finally(finish);
+            finish();
+            return null;
+        };
+        this.queueGroupingWork(runPass, util);
+    }
+
+    drawPass (args) {
+        const penFX = this.runtime.penFX;
+        if (!penFX || typeof penFX.drawRenderPass !== 'function') return;
+        penFX.drawRenderPass(String(args.NAME || '').trim() || 'pass', {
+            blendMode: normalizeBlendMode(args.BLEND),
+            opacity: Math.max(0, Math.min(1, finiteNumber(args.OPACITY, 100) / 100))
+        });
+    }
+
+    clearPass (args) {
+        const penFX = this.runtime.penFX;
+        if (penFX && typeof penFX.clearRenderPass === 'function') {
+            penFX.clearRenderPass(String(args.NAME || '').trim() || 'pass');
+        }
+    }
+
     repeat (args, util) {
         const count = Math.min(MAX_REPEAT_COUNT, Math.max(0, Math.floor(Math.abs(finiteNumber(args.COUNT)))));
         const angleOffset = finiteNumber(args.ANGLE);
@@ -877,6 +1105,45 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         context.objectTimeOffset = finiteNumber(context.objectTimeOffset) + finiteNumber(args.TIME);
         const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+    }
+
+    runTimeScope (scope, util) {
+        const context = getGroupingContext(util);
+        const inherited = Array.isArray(context.objectTimeScopes) ? context.objectTimeScopes : [];
+        context.objectTimeScopes = inherited.concat([scope]);
+        const branchThread = runGroupingBranch(this.runtime, context, 1);
+        propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+    }
+
+    timeRange (args, util) {
+        const start = finiteNumber(args.START);
+        const end = finiteNumber(args.END);
+        const minimum = Math.min(start, end);
+        const maximum = Math.max(start, end);
+        const parentTime = getObjectTime(this.runtime, util);
+        if (parentTime < minimum || parentTime > maximum) return;
+        this.runTimeScope({type: 'range', start: minimum, end: maximum}, util);
+    }
+
+    timeScale (args, util) {
+        this.runTimeScope({type: 'scale', scale: finiteNumber(args.SCALE, 1)}, util);
+    }
+
+    timeLoop (args, util) {
+        const mode = String(args.MODE || '').toLowerCase() === 'ping-pong' ? 'pingpong' : 'loop';
+        this.runTimeScope({type: mode, duration: Math.abs(finiteNumber(args.DURATION))}, util);
+    }
+
+    timeFreeze (args, util) {
+        this.runTimeScope({type: 'freeze', time: finiteNumber(args.TIME)}, util);
+    }
+
+    timeReverse (args, util) {
+        this.runTimeScope({type: 'reverse', duration: Math.abs(finiteNumber(args.DURATION))}, util);
+    }
+
+    timeRemap (args, util) {
+        this.runTimeScope({type: 'remap', map: args.MAP}, util);
     }
 
     timelineTime (args, util) {
@@ -946,6 +1213,30 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             end: args.T2,
             easing: args.EASING
         }, getObjectTime(this.runtime, util));
+    }
+
+    numberCurve (args, util) {
+        return evaluateNumberCurve(args.CURVE, getObjectTime(this.runtime, util));
+    }
+
+    colorCurve (args, util) {
+        return evaluateColorCurve(args.CURVE, getObjectTime(this.runtime, util));
+    }
+
+    angleCurve (args, util) {
+        return evaluateAngleCurve(args.CURVE, getObjectTime(this.runtime, util));
+    }
+
+    stepCurve (args, util) {
+        return evaluateStepCurve(args.CURVE, getObjectTime(this.runtime, util));
+    }
+
+    instanceId (args, util) {
+        return getObjectInstanceId(util);
+    }
+
+    instanceSeed (args, util) {
+        return (hashString(getObjectInstanceId(util)) ^ Math.trunc(finiteNumber(args.SEED))) >>> 0;
     }
 
     grouping (args, util) {
@@ -1020,6 +1311,7 @@ export {
     MATTE_MODES,
     OBJECT_REPORTER_OPCODES,
     SHAPE_TYPES,
+    TIME_LOOP_MODES,
     applyObjectTransforms,
     applyTransformScope,
     encodeDrawAsset,

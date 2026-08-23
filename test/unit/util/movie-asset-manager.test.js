@@ -228,14 +228,22 @@ describe('MovieAssetManager rendering performance', () => {
         expect(result).toBeUndefined();
         expect(manager.emit).toHaveBeenCalledWith('timelineSettingsChanged', {
             duration: 20,
+            exportFormat: 'mp4',
             framerate: 60,
             height: 1080,
+            rangeEnd: 20,
+            rangeStart: 0,
+            reuseFrames: true,
             width: 1920
         }, {
             previousSettings: {
                 duration: 10,
+                exportFormat: 'mp4',
                 framerate: 30,
                 height: 360,
+                rangeEnd: 10,
+                rangeStart: 0,
+                reuseFrames: true,
                 width: 480
             },
             remote: false
@@ -518,6 +526,7 @@ describe('MovieAssetManager rendering performance', () => {
         });
 
         expect(manager.renderingSoundEvents).toEqual([{
+            dedupeKey: 'main:play-at-time',
             frame: 12,
             offset: 0.25,
             pan: -25,
@@ -550,6 +559,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(playSound).not.toHaveBeenCalled();
         expect(manager.renderingSoundEvents).toEqual([{
+            dedupeKey: 'main:play-at-frame:12',
             frame: 12,
             pan: -25,
             pitch: 120,
@@ -672,6 +682,44 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.addRenderingFrame).toHaveBeenCalledTimes(1);
         expect(manager.timeline.currentTime).toBe(0.1);
         expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(9900);
+    });
+
+    test('renders only the requested frame range', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.framerate = 10;
+        manager.addRenderingFrame = jest.fn();
+
+        manager.renderTimeline({start: 2, end: 3});
+        manager.handleTimelineBeforeExecute();
+
+        expect(manager.timeline.renderFrameIndex).toBe(20);
+        expect(manager.timeline.currentTime).toBe(2);
+        expect(manager.getRenderEndTime()).toBe(3);
+        expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
+    });
+
+    test('reuses a cached deterministic frame without rerunning render-frame scripts', () => {
+        const manager = makeTimelineManager();
+        manager.renderCacheGeneration = 0;
+        manager.renderingFrameCache = new Map();
+        manager.renderingSoundEventCache = new Map();
+        manager.renderingFrameNumbers = [];
+        const cachedFrame = {cached: true};
+        const cacheKey = manager.getRenderingFrameCacheKey(0);
+        manager.renderingFrameCache.set(cacheKey, cachedFrame);
+        manager.renderingSoundEventCache.set(cacheKey, [{dedupeKey: 'sound:event', frame: 0}]);
+        manager.addRenderingFrame = jest.fn();
+
+        manager.renderTimeline({end: 0, reuseFrames: true, start: 0});
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.runtime.startHats).not.toHaveBeenCalled();
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.renderingFrames).toEqual([cachedFrame]);
+        expect(manager.renderingFrameNumbers).toEqual([0]);
+        expect(manager.renderingSoundEvents).toEqual([{dedupeKey: 'sound:event', frame: 0}]);
+        expect(manager.playedTimelineSoundBlocks.has('sound:event')).toBe(true);
     });
 
     test('waits for every render-frame thread to finish before capturing', () => {
@@ -2156,6 +2204,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.recordObjectVideoAudio(target, video, configuration, playback, 1);
 
         expect(manager.renderingSoundEvents).toEqual([{
+            dedupeKey: 'object-video:target:draw-video',
             duration: 1.5,
             frame: 30,
             offset: 0,

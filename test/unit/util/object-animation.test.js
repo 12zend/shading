@@ -3,6 +3,11 @@ import {
     calculateLoopValue,
     calculatePingPongValue,
     calculateWiggleValue,
+    evaluateAngleCurve,
+    evaluateColorCurve,
+    evaluateNumberCurve,
+    evaluateStepCurve,
+    evaluateTimeScopes,
     getAnimationProgress,
     getObjectTime,
     interpolateAngle,
@@ -82,5 +87,26 @@ describe('Objects animation values', () => {
         expect(interpolateColor('#f00', '#00f', 0.5)).toBe('#800080');
         expect(interpolateAngle(350, 10, 0.5)).toBe(360);
         expect(interpolateAngle(10, 350, 0.5)).toBe(0);
+    });
+
+    test('composes deterministic local-time scopes without evaluation history', () => {
+        const scopes = [
+            {type: 'range', start: 2},
+            {type: 'scale', scale: 0.5},
+            {type: 'loop', duration: 2}
+        ];
+        expect(evaluateTimeScopes(5, scopes)).toBe(1.5);
+        expect(evaluateTimeScopes(9, scopes)).toBe(1.5);
+        expect(evaluateTimeScopes(5, [{type: 'reverse', duration: 8}])).toBe(3);
+        expect(evaluateTimeScopes(5, [{type: 'freeze', time: 1.25}])).toBe(1.25);
+        expect(evaluateTimeScopes(1.5, [{type: 'remap', map: '0:0; 1:0.8; 2:0.2'}])).toBeCloseTo(0.5);
+    });
+
+    test('evaluates named curve values directly from local time', () => {
+        expect(evaluateNumberCurve('0:0; 1:100', 0.25)).toBe(25);
+        expect(evaluateColorCurve('0:#000000; 1:#ffffff', 0.5)).toBe('#808080');
+        expect(evaluateAngleCurve('0:350; 1:10', 0.5)).toBe(360);
+        expect(evaluateStepCurve('0:one; 1:two', 0.999)).toBe('one');
+        expect(evaluateStepCurve('0:one; 1:two', 1)).toBe('two');
     });
 });

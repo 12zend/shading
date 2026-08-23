@@ -784,6 +784,9 @@ const objects = function (costumeName) {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
+    const text = (name, value) => (
+        `<value name="${name}"><shadow type="text"><field name="TEXT">${xmlEscape(value)}</field></shadow></value>`
+    );
     return `
     <category name="Objects" id="objects" colour="#4968D4" secondaryColour="#334A99">
         <block type="objects_animate">
@@ -817,6 +820,12 @@ const objects = function (costumeName) {
             ${number('X2', 100)}${number('Y2', 100)}${number('Z2', 100)}
             ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
         </block>
+        <block type="objects_numberCurve">${text('CURVE', '0:0; 0.4:120@ExpoOut; 1.2:90@BackOut; 2:100')}</block>
+        <block type="objects_colorCurve">${text('CURVE', '0:#ff3366; 1:#3366ff')}</block>
+        <block type="objects_angleCurve">${text('CURVE', '0:350; 1:10')}</block>
+        <block type="objects_stepCurve">${text('CURVE', '0:one; 1:two')}</block>
+        <block type="objects_instanceId"/>
+        <block type="objects_instanceSeed">${number('SEED', 1)}</block>
         <sep gap="36"/>
         <block type="objects_draw">
             <field name="SOURCE">costume</field>
@@ -875,6 +884,7 @@ const objects = function (costumeName) {
         </block>
         <sep gap="36"/>
         <block type="objects_group"/>
+        <block type="objects_simulation">${text('NAME', 'simulation')}</block>
         <block type="objects_transform">
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
             ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}
@@ -885,10 +895,21 @@ const objects = function (costumeName) {
             ${number('OPACITY', 100)}<field name="BLEND">normal</field>
         </block>
         <block type="objects_matte"><field name="MODE">alpha</field></block>
+        <block type="objects_renderPass">${text('NAME', 'pass')}</block>
+        <block type="objects_drawPass">
+            ${text('NAME', 'pass')}${number('OPACITY', 100)}<field name="BLEND">normal</field>
+        </block>
+        <block type="objects_clearPass">${text('NAME', 'pass')}</block>
         <block type="objects_repeat">
             ${number('COUNT', 12)}${number('ANGLE', 30)}${number('TIME', 0.05)}
         </block>
         <block type="objects_timeOffset">${number('TIME', 0)}</block>
+        <block type="objects_timeRange">${number('START', 0)}${number('END', 2)}</block>
+        <block type="objects_timeScale">${number('SCALE', 0.5)}</block>
+        <block type="objects_timeLoop"><field name="MODE">loop</field>${number('DURATION', 2)}</block>
+        <block type="objects_timeFreeze">${number('TIME', 0)}</block>
+        <block type="objects_timeReverse">${number('DURATION', 2)}</block>
+        <block type="objects_timeRemap">${text('MAP', '0:0; 1:0.8; 2:0.2')}</block>
         <block type="objects_grouping"/>
         <block type="objects_scene"/>
     </category>
