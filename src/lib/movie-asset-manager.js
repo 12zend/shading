@@ -539,6 +539,9 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleProjectLoaded () {
+        for (const target of this.runtime.targets) {
+            if (!target.isStage) target.setVisible(false);
+        }
         this.ensureMainTarget();
         this.drawDefaultPenBackground();
     }

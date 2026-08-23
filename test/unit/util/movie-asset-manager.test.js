@@ -108,6 +108,39 @@ const makeTimelineManager = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('starts every sprite hidden when a project is loaded', () => {
+        const manager = makeManager();
+        const stage = {
+            isStage: true,
+            setVisible: jest.fn()
+        };
+        const visibleSprite = {
+            getName: () => 'main',
+            isOriginal: true,
+            isStage: false,
+            setVisible: jest.fn()
+        };
+        const hiddenSprite = {
+            getName: () => 'other',
+            isOriginal: true,
+            isStage: false,
+            setVisible: jest.fn()
+        };
+        manager.runtime.targets = [stage, visibleSprite, hiddenSprite];
+        manager.vm = {
+            editingTarget: visibleSprite,
+            renameSprite: jest.fn(),
+            setEditingTarget: jest.fn()
+        };
+        manager.drawDefaultPenBackground = jest.fn();
+
+        manager.handleProjectLoaded();
+
+        expect(stage.setVisible).not.toHaveBeenCalled();
+        expect(visibleSprite.setVisible).toHaveBeenCalledWith(false);
+        expect(hiddenSprite.setVisible).toHaveBeenCalledWith(false);
+    });
+
     test('routes unified imports by file extension', async () => {
         const manager = makeManager();
         manager.addModelsFromFiles = jest.fn(async () => [{name: 'scene'}]);
