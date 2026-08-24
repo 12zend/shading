@@ -324,6 +324,44 @@ describe('MovieAssetManager rendering performance', () => {
         });
     });
 
+    test('adds, orders, interpolates, and deletes timeline keyframes synchronously', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.keyframes = [8, 2];
+
+        const addResult = manager.addTimelineKeyframe(5);
+
+        expect(addResult).toBeUndefined();
+        expect(manager.getTimelineKeyframes()).toEqual([2, 5, 8]);
+        expect(manager.getKeyframeTime(1)).toBe(2);
+        expect(manager.getKeyframeTime(1.5)).toBe(3.5);
+        expect(manager.getKeyframeTime(99)).toBe(8);
+        expect(manager.getLeftKeyframeTime(3, 1.5)).toBe(3.5);
+
+        const removeResult = manager.removeTimelineKeyframe(2);
+
+        expect(removeResult).toBeUndefined();
+        expect(manager.getTimelineKeyframes()).toEqual([2, 8]);
+        expect(manager.runtime.emitProjectChanged).toHaveBeenCalledTimes(2);
+    });
+
+    test('serializes and restores ordered timeline keyframes', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.keyframes = [7, 1, 4];
+
+        expect(manager.serializeTimeline().keyframes).toEqual([1, 4, 7]);
+
+        manager.restoreTimeline({
+            duration: 6,
+            framerate: 30,
+            height: 360,
+            keyframes: [5, 2, 2, 20],
+            width: 480
+        });
+
+        expect(manager.getTimelineKeyframes()).toEqual([2, 5, 6]);
+        expect(manager.getTimelineState().keyframes).toEqual([2, 5, 6]);
+    });
+
     test('uses output resolution for render pixels without changing the logical stage size', () => {
         const manager = makeTimelineManager();
         const canvas = {height: 360, width: 640};

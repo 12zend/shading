@@ -54,6 +54,7 @@ class Timeline extends React.Component {
             markers: [],
             pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
             scrollLeft: 0,
+            selectedKeyframeTime: null,
             settingsOpen: false,
             viewportWidth: 0,
             timeline: {
@@ -62,6 +63,7 @@ class Timeline extends React.Component {
                 frameCount: 0,
                 framerate: props.framerate,
                 height: props.customStageSize.height,
+                keyframes: [],
                 playing: false,
                 recording: false,
                 width: props.customStageSize.width
@@ -81,6 +83,9 @@ class Timeline extends React.Component {
         this.handleExport = this.handleExport.bind(this);
         this.handleMarkerClick = this.handleMarkerClick.bind(this);
         this.handleMarkerMouseDown = this.handleMarkerMouseDown.bind(this);
+        this.handleAddKeyframe = this.handleAddKeyframe.bind(this);
+        this.handleDeleteKeyframe = this.handleDeleteKeyframe.bind(this);
+        this.handleKeyframeClick = this.handleKeyframeClick.bind(this);
         this.handleRangeClick = this.handleRangeClick.bind(this);
         this.handleWarningClick = this.handleWarningClick.bind(this);
         this.handleRulerMouseDown = this.handleRulerMouseDown.bind(this);
@@ -146,7 +151,16 @@ class Timeline extends React.Component {
     }
 
     handleTimelineChanged (timeline) {
-        this.setState({timeline});
+        this.setState(state => {
+            const keyframes = Array.isArray(timeline.keyframes) ? timeline.keyframes : [];
+            const selectedStillExists = state.selectedKeyframeTime !== null && keyframes.some(time => (
+                Math.abs(time - state.selectedKeyframeTime) <= 1e-9
+            ));
+            return {
+                selectedKeyframeTime: selectedStillExists ? state.selectedKeyframeTime : null,
+                timeline
+            };
+        });
     }
 
     handleRenderingFramesChanged (frameCount) {
@@ -268,6 +282,30 @@ class Timeline extends React.Component {
 
     handleMarkerMouseDown (event) {
         event.stopPropagation();
+    }
+
+    handleAddKeyframe () {
+        const time = this.state.timeline.currentTime;
+        this.manager.addTimelineKeyframe(time);
+        this.setState({selectedKeyframeTime: time});
+    }
+
+    handleDeleteKeyframe () {
+        const keyframes = Array.isArray(this.state.timeline.keyframes) ? this.state.timeline.keyframes : [];
+        if (this.state.selectedKeyframeTime === null) return;
+        const index = keyframes.findIndex(time => (
+            Math.abs(time - this.state.selectedKeyframeTime) <= 1e-9
+        ));
+        if (index < 0) return;
+        this.manager.removeTimelineKeyframe(index + 1);
+        this.setState({selectedKeyframeTime: null});
+    }
+
+    handleKeyframeClick (event) {
+        event.stopPropagation();
+        const time = Number(event.currentTarget.value);
+        this.setState({selectedKeyframeTime: time});
+        this.manager.seekTimeline(time);
     }
 
     handleRangeClick (event) {
@@ -612,6 +650,7 @@ class Timeline extends React.Component {
             range.end >= 0 && range.start <= timeline.duration
         ));
         const warnings = this.state.diagnostics.warnings || [];
+        const keyframes = Array.isArray(timeline.keyframes) ? timeline.keyframes : [];
         const laneHeight = 22;
         const timelineCanvasHeight = Math.max(68, 38 + (diagnosticRanges.length * laneHeight));
         return (
@@ -759,6 +798,34 @@ class Timeline extends React.Component {
                                 })}
                             </div>
                             <div
+                                aria-label="Timeline keyframes"
+                                className={styles.keyframeMarkers}
+                            >
+                                {keyframes.map((time, index) => {
+                                    const selected = this.state.selectedKeyframeTime !== null &&
+                                        Math.abs(time - this.state.selectedKeyframeTime) <= 1e-9;
+                                    const label = `Keyframe ${index + 1}, ${formatTime(time)}`;
+                                    return (
+                                        <button
+                                            aria-label={label}
+                                            aria-pressed={selected}
+                                            className={classNames(styles.keyframeMarker, {
+                                                [styles.atEndKeyframe]: time === timeline.duration,
+                                                [styles.atOriginKeyframe]: time === 0,
+                                                [styles.isSelectedKeyframe]: selected
+                                            })}
+                                            key={time}
+                                            style={{left: `${time * this.state.pixelsPerSecond}px`}}
+                                            title={[label, 'Click to select and seek'].join(' · ')}
+                                            type="button"
+                                            value={time}
+                                            onClick={this.handleKeyframeClick}
+                                            onMouseDown={this.handleMarkerMouseDown}
+                                        ><span><small>{index + 1}</small></span></button>
+                                    );
+                                })}
+                            </div>
+                            <div
                                 aria-disabled={timeline.recording}
                                 aria-label="Current timeline position"
                                 aria-valuemax={timeline.duration}
@@ -820,6 +887,24 @@ class Timeline extends React.Component {
                         {' at '}{timeline.currentTime.toFixed(2)}{'s'}
                     </span>
                     <span className={styles.frameCount}>{timeline.frameCount}{' rendered frames'}</span>
+                    <div
+                        aria-label="Keyframe controls"
+                        className={styles.keyframeControls}
+                        role="group"
+                    >
+                        <button
+                            disabled={timeline.recording}
+                            title={`Add a keyframe at ${formatTime(timeline.currentTime)}`}
+                            type="button"
+                            onClick={this.handleAddKeyframe}
+                        >{'Add keyframe'}</button>
+                        <button
+                            disabled={timeline.recording || this.state.selectedKeyframeTime === null}
+                            title="Delete the selected keyframe"
+                            type="button"
+                            onClick={this.handleDeleteKeyframe}
+                        >{'Delete'}</button>
+                    </div>
                     <div
                         aria-label="Timeline zoom"
                         className={styles.zoomControls}

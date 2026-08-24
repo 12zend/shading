@@ -36,6 +36,8 @@ const TIME_LOOP_MODES = ['loop', 'ping-pong'];
 const MAX_REPEAT_COUNT = 512;
 const OBJECT_REPORTER_OPCODES = new Set([
     'objects_timelineTime',
+    'objects_keyframeTime',
+    'objects_leftKeyframeTime',
     'objects_animate',
     'objects_loopValue',
     'objects_pingPongValue',
@@ -656,6 +658,23 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     text: 'timeline time'
                 },
                 {
+                    opcode: 'keyframeTime',
+                    blockType: BlockType.REPORTER,
+                    text: 'keyframe [ID] time',
+                    arguments: {
+                        ID: numberArgument(1)
+                    }
+                },
+                {
+                    opcode: 'leftKeyframeTime',
+                    blockType: BlockType.REPORTER,
+                    text: 'earlier time of keyframes [FIRST] and [SECOND]',
+                    arguments: {
+                        FIRST: numberArgument(1),
+                        SECOND: numberArgument(2)
+                    }
+                },
+                {
                     opcode: 'animate',
                     blockType: BlockType.REPORTER,
                     text: 'animate [A] to [B] from [T1] sec to [T2] sec easing [EASING]',
@@ -1168,6 +1187,17 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     timelineTime (args, util) {
         return getObjectTime(this.runtime, util);
+    }
+
+    keyframeTime (args) {
+        const manager = this.runtime && this.runtime.movieAssetManager;
+        return manager && typeof manager.getKeyframeTime === 'function' ? manager.getKeyframeTime(args.ID) : 0;
+    }
+
+    leftKeyframeTime (args) {
+        const manager = this.runtime && this.runtime.movieAssetManager;
+        return manager && typeof manager.getLeftKeyframeTime === 'function' ?
+            manager.getLeftKeyframeTime(args.FIRST, args.SECOND) : 0;
     }
 
     animate (args, util) {

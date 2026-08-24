@@ -43,6 +43,8 @@ const MOVIE_ASSET_BLOCKS = [
     'objects_interpolateAngle',
     'objects_interpolateColor',
     'objects_interpolateVector',
+    'objects_keyframeTime',
+    'objects_leftKeyframeTime',
     'objects_pass',
     'objects_numberCurve',
     'objects_colorCurve',

@@ -42,8 +42,10 @@ describe('Timeline keyboard controls', () => {
         );
         instance = component.instance();
         manager = {
+            addTimelineKeyframe: jest.fn(),
             pauseTimeline: jest.fn(),
             playTimeline: jest.fn(),
+            removeTimelineKeyframe: jest.fn(),
             renderAndExportTimeline: jest.fn(() => Promise.resolve()),
             seekTimeline: jest.fn(),
             updateTimelineSettings: jest.fn()
@@ -177,6 +179,40 @@ describe('Timeline keyboard controls', () => {
         expect(component.find('[role="slider"]')).toHaveLength(1);
         expect(component.find('input[type="range"]')).toHaveLength(0);
         expect(component.find('[aria-label="Timeline zoom"]')).toHaveLength(1);
+    });
+
+    test('adds, selects, seeks to, and deletes time-ordered keyframes', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {
+                currentTime: 4,
+                keyframes: [1, 4, 7]
+            })
+        });
+
+        instance.handleAddKeyframe();
+        expect(manager.addTimelineKeyframe).toHaveBeenCalledWith(4);
+
+        const marker = component.find('button[aria-label="Keyframe 2, 00:04.00"]');
+        marker.simulate('click', {
+            currentTarget: {value: '4'},
+            stopPropagation: jest.fn()
+        });
+        expect(manager.seekTimeline).toHaveBeenCalledWith(4);
+        expect(instance.state.selectedKeyframeTime).toBe(4);
+
+        instance.handleDeleteKeyframe();
+        expect(manager.removeTimelineKeyframe).toHaveBeenCalledWith(2);
+        expect(instance.state.selectedKeyframeTime).toBeNull();
+    });
+
+    test('does not treat an unselected keyframe at time zero as selected', () => {
+        component.setState({
+            selectedKeyframeTime: null,
+            timeline: Object.assign({}, instance.state.timeline, {keyframes: [0, 2]})
+        });
+
+        expect(component.find('button[aria-label="Keyframe 1, 00:00.00"]').prop('aria-pressed')).toBe(false);
+        expect(component.find('button[title="Delete the selected keyframe"]').prop('disabled')).toBe(true);
     });
 
     test('keeps fractional ruler labels accurate at high zoom', () => {

@@ -740,6 +740,8 @@ const objects = function (costumeName) {
         </block>
         <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
         <block type="objects_timelineTime"/>
+        <block type="objects_keyframeTime">${number('ID', 1)}</block>
+        <block type="objects_leftKeyframeTime">${number('FIRST', 1)}${number('SECOND', 2)}</block>
         <block type="objects_posterizeTime">${number('FPS', 12)}</block>
         <block type="objects_interpolateColor">
             <value name="A"><shadow type="colour_picker"><field name="COLOUR">#ff3366</field></shadow></value>

@@ -201,6 +201,20 @@ const installObjectCompositionBlockDefinitions = ScratchBlocks => {
         extensions: ['output_number']
     });
 
+    installObjectBlock('objects_keyframeTime', {
+        message0: 'keyframe %1 time',
+        args0: [numberInput('ID')],
+        inputsInline: true,
+        extensions: ['output_number']
+    });
+
+    installObjectBlock('objects_leftKeyframeTime', {
+        message0: 'earlier time of keyframes %1 and %2',
+        args0: [numberInput('FIRST'), numberInput('SECOND')],
+        inputsInline: true,
+        extensions: ['output_number']
+    });
+
     installObjectBlock('objects_animate', {
         message0: 'animate %1 to %2',
         args0: [numberInput('A'), numberInput('B')],

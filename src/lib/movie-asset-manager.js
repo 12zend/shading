@@ -44,6 +44,7 @@ const RENDERING_FORMATS = ['mp4', 'webm', 'png-sequence', 'png-frame', 'audio-wa
 const RENDERING_MASTER_GAIN = 0.8912509381337456; // -1 dBFS headroom before encoding.
 const TIMELINE_DEFAULT_DURATION = 10;
 const TIMELINE_MAX_DURATION = 3600;
+const KEYFRAME_TIME_EPSILON = 1e-9;
 const DEFAULT_BACKDROP_ASSET_ID = 'cd21514d0531fdffb22204e0ec5ed84a';
 const VIDEO_PROJECT_KEY = 'movieVideos';
 const COSTUME_GROUP_PROJECT_KEY = 'movieCostumeGroups';
@@ -259,6 +260,17 @@ const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const toNumber = (value, fallback = 0) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
+};
+
+const normalizeTimelineKeyframes = (keyframes, duration = TIMELINE_DEFAULT_DURATION) => {
+    const maximum = Math.max(0, toNumber(duration, TIMELINE_DEFAULT_DURATION));
+    return (Array.isArray(keyframes) ? keyframes : [])
+        .map(time => clamp(toNumber(time, NaN), 0, maximum))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b)
+        .filter((time, index, result) => (
+            index === 0 || Math.abs(time - result[index - 1]) > KEYFRAME_TIME_EPSILON
+        ));
 };
 
 const normalizeRotationOrder = value => {
@@ -512,6 +524,7 @@ class MovieAssetManager extends EventEmitter {
             initializePromises: new Set(),
             initializeThreads: [],
             initializing: false,
+            keyframes: [],
             pendingFrame: true,
             playing: false,
             recording: false,
@@ -988,6 +1001,7 @@ class MovieAssetManager extends EventEmitter {
             exportFormat: this.timeline.exportFormat,
             framerate: this.timeline.framerate,
             height: this.timeline.height,
+            keyframes: this.getTimelineKeyframes(),
             rangeEnd: this.timeline.rangeEnd,
             rangeStart: this.timeline.rangeStart,
             reuseFrames: this.timeline.reuseFrames,
@@ -1029,6 +1043,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.initializePromises = new Set();
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
+        this.timeline.keyframes = normalizeTimelineKeyframes(settings.keyframes, this.timeline.duration);
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
         this.timeline.recording = false;
@@ -1068,6 +1083,7 @@ class MovieAssetManager extends EventEmitter {
             frameCount: Array.isArray(this.renderingFrames) ? this.renderingFrames.length : 0,
             framerate: this.timeline.framerate,
             height: this.timeline.height,
+            keyframes: this.getTimelineKeyframes(),
             playing: this.timeline.playing,
             rangeEnd: clamp(
                 toNumber(this.timeline.rangeEnd, this.timeline.duration),
@@ -1104,6 +1120,47 @@ class MovieAssetManager extends EventEmitter {
 
     emitTimelineChanged () {
         this.emit('timelineChanged', this.getTimelineState());
+    }
+
+    getTimelineKeyframes () {
+        return normalizeTimelineKeyframes(this.timeline.keyframes, this.timeline.duration);
+    }
+
+    getKeyframeTime (id) {
+        const keyframes = this.getTimelineKeyframes();
+        if (!keyframes.length) return 0;
+        const position = clamp(toNumber(id, 1), 1, keyframes.length) - 1;
+        const leftIndex = Math.floor(position);
+        const rightIndex = Math.ceil(position);
+        if (leftIndex === rightIndex) return keyframes[leftIndex];
+        const progress = position - leftIndex;
+        return keyframes[leftIndex] + ((keyframes[rightIndex] - keyframes[leftIndex]) * progress);
+    }
+
+    getLeftKeyframeTime (firstId, secondId) {
+        return Math.min(this.getKeyframeTime(firstId), this.getKeyframeTime(secondId));
+    }
+
+    addTimelineKeyframe (seconds = this.timeline.currentTime) {
+        const time = clamp(toNumber(seconds), 0, this.timeline.duration);
+        const keyframes = normalizeTimelineKeyframes(
+            this.getTimelineKeyframes().concat([time]),
+            this.timeline.duration
+        );
+        if (keyframes.length === this.getTimelineKeyframes().length) return;
+        this.timeline.keyframes = keyframes;
+        this.emitTimelineChanged();
+        this.runtime.emitProjectChanged();
+    }
+
+    removeTimelineKeyframe (id) {
+        const keyframes = this.getTimelineKeyframes();
+        const index = Math.round(toNumber(id)) - 1;
+        if (index < 0 || index >= keyframes.length) return;
+        keyframes.splice(index, 1);
+        this.timeline.keyframes = keyframes;
+        this.emitTimelineChanged();
+        this.runtime.emitProjectChanged();
     }
 
     setTimelineClock (seconds, paused) {
@@ -1225,6 +1282,7 @@ class MovieAssetManager extends EventEmitter {
         const previousSettings = this.getTimelineSettings();
         const previousDuration = this.timeline.duration;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
+        this.timeline.keyframes = normalizeTimelineKeyframes(this.timeline.keyframes, this.timeline.duration);
         if (Object.prototype.hasOwnProperty.call(settings, 'exportFormat')) {
             this.timeline.exportFormat = this.normalizeRenderingFormat(settings.exportFormat);
         }

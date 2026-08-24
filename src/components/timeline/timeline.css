@@ -389,6 +389,76 @@
     outline-offset: 2px;
 }
 
+.keyframe-markers {
+    position: absolute;
+    z-index: 7;
+    top: 1.5rem;
+    right: 0;
+    left: 0;
+    height: 1rem;
+    pointer-events: none;
+}
+
+.keyframe-marker {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    margin-left: -0.5rem;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: $motion-primary;
+    cursor: pointer;
+    font: inherit;
+    pointer-events: auto;
+}
+
+.keyframe-marker > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 1px solid $ui-white;
+    border-radius: 0.125rem;
+    background: $motion-primary;
+    box-shadow: 0 0.125rem 0.25rem $shadow;
+    color: $ui-white;
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1;
+    transform: rotate(45deg);
+}
+
+.keyframe-marker > span small {
+    color: inherit;
+    font: inherit;
+    transform: rotate(-45deg);
+}
+
+.keyframe-marker:hover > span,
+.keyframe-marker.is-selected-keyframe > span {
+    width: 0.875rem;
+    height: 0.875rem;
+    background: $looks-secondary;
+}
+
+.keyframe-marker:focus-visible {
+    outline: 2px solid $looks-secondary;
+    outline-offset: 1px;
+}
+
+.keyframe-marker.at-origin-keyframe {
+    margin-left: 0;
+}
+
+.keyframe-marker.at-end-keyframe {
+    margin-left: -1rem;
+}
+
 .timeline-track {
     position: absolute;
     top: 2rem;
@@ -511,6 +581,40 @@
 .transport {
     gap: 0.375rem;
     margin-top: 0.5rem;
+}
+
+.keyframe-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.keyframe-controls button {
+    height: 1.75rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    padding: 0 0.5rem;
+    background: $ui-secondary;
+    color: $text-primary;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.keyframe-controls button:hover:not(:disabled) {
+    background: $ui-tertiary;
+}
+
+.keyframe-controls button:focus-visible {
+    outline: 2px solid $looks-secondary;
+    outline-offset: 1px;
+}
+
+.keyframe-controls button:disabled {
+    cursor: default;
+    opacity: 0.45;
 }
 
 .diagnostics {

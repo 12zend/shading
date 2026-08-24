@@ -419,7 +419,8 @@ describe('Objects blocks', () => {
             'group', 'simulation', 'transform', 'composite', 'matte', 'renderPass', 'drawPass', 'clearPass',
             'repeat', 'timeOffset',
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
-            'timelineTime', 'animate', 'loopValue', 'pingPongValue', 'wiggle',
+            'timelineTime', 'keyframeTime', 'leftKeyframeTime',
+            'animate', 'loopValue', 'pingPongValue', 'wiggle',
             'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector',
             'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
@@ -482,12 +483,18 @@ describe('Objects blocks', () => {
     });
 
     test('evaluates animation reporters from the deterministic timeline time', () => {
-        const runtime = {movieAssetManager: {timeline: {currentTime: 1}}};
+        const runtime = {movieAssetManager: {
+            getKeyframeTime: id => Number(id) * 2,
+            getLeftKeyframeTime: (first, second) => Math.min(Number(first), Number(second)) * 2,
+            timeline: {currentTime: 1}
+        }};
         const ObjectBlocks = createObjectBlocksClass({runtime});
         const blocks = new ObjectBlocks();
         const util = makeUtil();
 
         expect(blocks.timelineTime({}, util)).toBe(1);
+        expect(blocks.keyframeTime({ID: 1.5}, util)).toBe(3);
+        expect(blocks.leftKeyframeTime({FIRST: 3, SECOND: 1.5}, util)).toBe(3);
         expect(blocks.animate({A: 0, B: 100, T1: 0, T2: 2, EASING: 'Linear'}, util)).toBe(50);
         expect(blocks.loopValue({A: 0, B: 100, DURATION: 2}, util)).toBe(50);
         expect(blocks.pingPongValue({A: 0, B: 100, DURATION: 2}, util)).toBe(100);
