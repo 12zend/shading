@@ -116,6 +116,7 @@ describe('Movie toolbox categories', () => {
         const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
 
         expect(toolbox).not.toContain('type="event_whenflagclicked"');
+        expect(toolbox).toContain('<block type="event_initialize"/>');
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
         expect(toolbox).toContain('type="sound_playattime"');

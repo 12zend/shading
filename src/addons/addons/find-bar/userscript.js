@@ -2,7 +2,8 @@ import BlockItem from "./blockly/BlockItem.js";
 import BlockInstance from "./blockly/BlockInstance.js";
 import Utils from "./blockly/Utils.js";
 
-export const isSearchableEventBlock = type => type.substr(0, 10) === "event_when" || type === "event_renderframe";
+export const isSearchableEventBlock = type => type.substr(0, 10) === "event_when" ||
+  type === "event_initialize" || type === "event_renderframe";
 
 export default async function ({ addon, msg, console }) {
   const Blockly = await addon.tab.traps.getBlockly();

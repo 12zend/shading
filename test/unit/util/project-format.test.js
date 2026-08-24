@@ -189,8 +189,9 @@ describe('Movie project format', () => {
         })).toBe('shade');
     });
 
-    test('marks the render frame hat and timeline settings as Movie project data', () => {
+    test('marks the initialize and render frame hats as Movie project data', () => {
         const json = project({
+            initialize: block('event_initialize'),
             render: block('event_renderframe'),
             sound: block('sound_playattime')
         });

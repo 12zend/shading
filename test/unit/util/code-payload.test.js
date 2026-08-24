@@ -18,7 +18,7 @@ describe('codePayload', () => {
     });
 
     test('marks Movie blocks while preserving the standalone-blocks format', async () => {
-        const blocks = [{id: 'render', opcode: 'event_renderframe', topLevel: true}];
+        const blocks = [{id: 'initialize', opcode: 'event_initialize', topLevel: true}];
         const payload = await codePayload({blockObjects: blocks});
         const stored = JSON.parse(Base64.decode(payload.body));
 

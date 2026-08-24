@@ -509,6 +509,9 @@ class MovieAssetManager extends EventEmitter {
             exportFormat: 'mp4',
             framerate: RENDERING_DEFAULT_FRAME_RATE,
             height: stageHeight,
+            initializePromises: new Set(),
+            initializeThreads: [],
+            initializing: false,
             pendingFrame: true,
             playing: false,
             recording: false,
@@ -556,11 +559,14 @@ class MovieAssetManager extends EventEmitter {
         this.installPrimitives();
         this.installSerializationHooks();
         this.syncFontFaces();
-        this.installTimelineHat();
+        this.installTimelineHats();
         this.ensureMainTarget();
     }
 
-    installTimelineHat () {
+    installTimelineHats () {
+        this.runtime._hats.event_initialize = {
+            restartExistingThreads: true
+        };
         this.runtime._hats.event_renderframe = {
             restartExistingThreads: true
         };
@@ -841,8 +847,17 @@ class MovieAssetManager extends EventEmitter {
     }
 
     runWithoutWaiting (promise) {
-        if (!promise || typeof promise.catch !== 'function') return;
-        promise.catch(error => this.emit('renderError', error));
+        if (!promise || typeof promise.then !== 'function') return;
+        const initializePromises = this.timeline && this.timeline.initializing &&
+            this.timeline.initializePromises instanceof Set ? this.timeline.initializePromises : null;
+        if (initializePromises) initializePromises.add(promise);
+        const finish = () => {
+            if (initializePromises) initializePromises.delete(promise);
+        };
+        promise.then(finish, error => {
+            finish();
+            this.emit('renderError', error);
+        });
     }
 
     rerenderLightedModelScenes () {
@@ -897,6 +912,13 @@ class MovieAssetManager extends EventEmitter {
         const runtimeThreads = this.runtime && this.runtime.threads;
         if (!Array.isArray(renderFrameThreads) || !Array.isArray(runtimeThreads)) return false;
         return renderFrameThreads.some(thread => runtimeThreads.indexOf(thread) !== -1);
+    }
+
+    hasActiveInitializeThreads () {
+        const initializeThreads = this.timeline && this.timeline.initializeThreads;
+        const runtimeThreads = this.runtime && this.runtime.threads;
+        if (!Array.isArray(initializeThreads) || !Array.isArray(runtimeThreads)) return false;
+        return initializeThreads.some(thread => runtimeThreads.indexOf(thread) !== -1);
     }
 
     hasPendingVisualRenders () {
@@ -1004,6 +1026,9 @@ class MovieAssetManager extends EventEmitter {
             hasSettings ? settings.framerate : currentFramerate
         );
         this.timeline.height = Math.max(1, Math.round(toNumber(settings.height, stageHeight)));
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
         this.timeline.recording = false;
@@ -1099,6 +1124,9 @@ class MovieAssetManager extends EventEmitter {
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(this.timeline.currentTime, false);
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
         this.timeline.renderFrameThreads = [];
@@ -1116,6 +1144,9 @@ class MovieAssetManager extends EventEmitter {
             this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
         }
         this.timeline.playing = false;
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
@@ -1133,6 +1164,9 @@ class MovieAssetManager extends EventEmitter {
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
@@ -1153,6 +1187,9 @@ class MovieAssetManager extends EventEmitter {
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.setTimelineClock(seconds, !wasPlaying);
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
         this.timeline.pendingFrame = true;
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
@@ -1272,11 +1309,20 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.recording = true;
         this.timeline.renderEndTime = rangeEnd;
         this.timeline.renderFrameIndex = Math.max(0, Math.ceil((rangeStart * this.timeline.framerate) - 1e-9));
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = true;
         this.timeline.renderFrameThreads = [];
+        this.timeline.renderedThisStep = false;
         this.timeline.reuseFramesDuringRender = reuseFrames;
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.setTimelineClock(this.timeline.renderFrameIndex / this.timeline.framerate, false);
+        const initializeThreads = this.runtime.startHats('event_initialize');
+        this.timeline.initializeThreads = Array.isArray(initializeThreads) ? initializeThreads : [];
+        if (!this.timeline.initializeThreads.length && !this.timeline.initializePromises.size) {
+            this.timeline.initializing = false;
+        }
         this.emitTimelineChanged();
     }
 
@@ -1822,6 +1868,14 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleTimelineBeforeExecute () {
+        if (this.timeline.recording && this.timeline.initializing) {
+            const hasInitializePromises = this.timeline.initializePromises instanceof Set &&
+                this.timeline.initializePromises.size > 0;
+            if (this.hasActiveInitializeThreads() || hasInitializePromises ||
+                this.hasBlockingVideoRenders() || this.hasPendingVisualRenders()) return;
+            this.timeline.initializeThreads = [];
+            this.timeline.initializing = false;
+        }
         if (this.timeline.waitingForFrame || this.timeline.waitingForVideo) {
             if (this.hasBlockingVideoRenders() || this.hasPendingVisualRenders()) return;
             // Continue the frame's existing threads after every slow visual operation has completed. Do not

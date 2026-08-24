@@ -112,6 +112,20 @@ const makeTimelineManager = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('registers initialize and render frame as compiler-visible hats without command primitives', () => {
+        const manager = makeManager();
+        manager.runtime._hats = {};
+
+        manager.installTimelineHats();
+
+        expect(manager.runtime._hats).toEqual({
+            event_initialize: {restartExistingThreads: true},
+            event_renderframe: {restartExistingThreads: true}
+        });
+        expect(manager.runtime._primitives.event_initialize).toBeUndefined();
+        expect(manager.runtime._primitives.event_renderframe).toBeUndefined();
+    });
+
     test('starts every sprite hidden when a project is loaded', () => {
         const manager = makeManager();
         const stage = {
@@ -849,7 +863,58 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.timeline.renderFrameIndex).toBe(20);
         expect(manager.timeline.currentTime).toBe(2);
         expect(manager.getRenderEndTime()).toBe(3);
-        expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
+        expect(manager.runtime.startHats.mock.calls).toEqual([
+            ['event_initialize'],
+            ['event_renderframe']
+        ]);
+    });
+
+    test('runs initialize once before rendering frames and returns immediately', () => {
+        const manager = makeTimelineManager();
+        manager.runtime.startHats.mockReturnValue([]);
+        manager.addRenderingFrame = jest.fn();
+
+        const result = manager.renderTimeline();
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+        manager.handleTimelineBeforeExecute();
+
+        expect(result).toBeUndefined();
+        expect(manager.runtime.startHats.mock.calls).toEqual([
+            ['event_initialize'],
+            ['event_renderframe'],
+            ['event_renderframe']
+        ]);
+    });
+
+    test('waits for initialize threads and their asynchronous asset work before the first rendering frame', async () => {
+        const manager = makeTimelineManager();
+        const initializeThread = {};
+        const initializeAsset = deferred();
+        manager.runtime.startHats.mockImplementation(opcode => {
+            if (opcode === 'event_initialize') {
+                manager.runtime.threads = [initializeThread];
+                manager.runWithoutWaiting(initializeAsset.promise);
+                return [initializeThread];
+            }
+            return [];
+        });
+
+        manager.renderTimeline();
+        manager.handleTimelineBeforeExecute();
+        manager.runtime.threads = [];
+        manager.handleTimelineBeforeExecute();
+
+        expect(manager.runtime.startHats).toHaveBeenCalledTimes(1);
+
+        initializeAsset.resolve();
+        await Promise.resolve();
+        manager.handleTimelineBeforeExecute();
+
+        expect(manager.runtime.startHats.mock.calls).toEqual([
+            ['event_initialize'],
+            ['event_renderframe']
+        ]);
     });
 
     test('reuses a cached deterministic frame without rerunning render-frame scripts', () => {
@@ -868,7 +933,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.handleTimelineBeforeExecute();
         manager.handleTimelineAfterExecute();
 
-        expect(manager.runtime.startHats).not.toHaveBeenCalled();
+        expect(manager.runtime.startHats).not.toHaveBeenCalledWith('event_renderframe');
         expect(manager.addRenderingFrame).not.toHaveBeenCalled();
         expect(manager.renderingFrames).toEqual([cachedFrame]);
         expect(manager.renderingFrameNumbers).toEqual([0]);
@@ -879,12 +944,12 @@ describe('MovieAssetManager rendering performance', () => {
     test('waits for every render-frame thread to finish before capturing', () => {
         const manager = makeTimelineManager();
         const slowThread = {};
-        manager.runtime.startHats.mockReturnValue([slowThread]);
-        manager.runtime.threads = [slowThread];
+        manager.runtime.startHats.mockImplementation(opcode => opcode === 'event_renderframe' ? [slowThread] : []);
         manager.addRenderingFrame = jest.fn();
 
         manager.renderTimeline();
         manager.handleTimelineBeforeExecute();
+        manager.runtime.threads = [slowThread];
         manager.handleTimelineAfterExecute();
 
         expect(manager.addRenderingFrame).not.toHaveBeenCalled();
@@ -892,7 +957,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.timeline.waitingForFrame).toBe(true);
 
         manager.handleTimelineBeforeExecute();
-        expect(manager.runtime.startHats).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.startHats).toHaveBeenCalledTimes(2);
         manager.runtime.threads = [];
         manager.handleTimelineAfterExecute();
 

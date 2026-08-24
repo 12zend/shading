@@ -421,6 +421,7 @@ const events = function (isInitialSetup, isStage, targetId, soundName, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_EVENTS}" id="events" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
+        <block type="event_initialize"/>
         <block type="event_renderframe"/>
         ${blockSeparator}
         <block type="event_whenbroadcastreceived">

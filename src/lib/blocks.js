@@ -197,6 +197,16 @@ export default function (vm) {
 
     const eventColors = ScratchBlocks.Colours.event;
 
+    ScratchBlocks.Blocks.event_initialize = {
+        init: function () {
+            this.jsonInit({
+                message0: 'initialize',
+                category: ScratchBlocks.Categories.event,
+                extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
+
     ScratchBlocks.Blocks.event_renderframe = {
         init: function () {
             this.jsonInit({

@@ -15,19 +15,28 @@ const projectJSON = {
         lists: {},
         broadcasts: {},
         blocks: {
+            initialize: {
+                opcode: 'event_initialize',
+                next: 'command',
+                parent: null,
+                inputs: {},
+                fields: {},
+                shadow: false,
+                topLevel: true,
+                x: 10,
+                y: 20
+            },
             command: {
                 opcode: 'looks_settextfont',
                 next: null,
-                parent: null,
+                parent: 'initialize',
                 inputs: {
                     FONT: [1, [10, 'Movie Sans']],
                     TEXT: [1, [10, 'hello']]
                 },
                 fields: {},
                 shadow: false,
-                topLevel: true,
-                x: 10,
-                y: 20
+                topLevel: false
             }
         },
         comments: {},
@@ -144,6 +153,8 @@ describe('Movie project save and load', () => {
         const savedBlock = Object.values(savedJSON.targets[0].blocks)
             .find(item => item.opcode === 'looks_settextfont');
         expect(savedBlock).toBeDefined();
+        expect(Object.values(savedJSON.targets[0].blocks)
+            .some(item => item.opcode === 'event_initialize')).toBe(true);
 
         const reloadedVM = new VM();
         installMovieAssetManager(reloadedVM);
@@ -152,6 +163,7 @@ describe('Movie project save and load', () => {
         const loadedBlock = Object.values(reloadedVM.runtime.targets[0].blocks._blocks)
             .find(item => item.opcode === 'looks_settextfont');
         expect(loadedBlock.opcode).toBe('looks_settextfont');
+        expect(reloadedVM.runtime.getIsHat('event_initialize')).toBe(true);
         expect(reloadedVM.runtime._primitives.looks_settextfont).toEqual(expect.any(Function));
     });
 
