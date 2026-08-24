@@ -283,6 +283,7 @@ const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fall
 const SHAPE_TYPES = ['polygon', 'star', 'flower'];
 const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'line']);
 const MAX_SHAPE_SIZE = 4096;
+const MAX_SHAPE_BITMAP_PIXELS = 1024 * 1024;
 const SHAPE_RADIUS_SCALE = 0.5;
 const MAX_CACHED_SHAPE_SKINS = 256;
 const MAX_CACHED_SHAPE_SKIN_PIXELS = 4096 * 4096;
@@ -403,10 +404,21 @@ const createShapeBitmap = configuration => {
     // when a larger radius is requested instead of normalizing every shape back to the requested dimensions.
     const scale = SHAPE_RADIUS_SCALE;
     const diameter = Math.max(2, Math.ceil(outerRadius * scale * 2));
-    const width = Math.max(requestedWidth, diameter);
-    const height = Math.max(requestedHeight, diameter);
+    const logicalBitmapWidth = Math.max(requestedWidth, diameter);
+    const logicalBitmapHeight = Math.max(requestedHeight, diameter);
+    // Very large canvases are disproportionately expensive to clear, rasterize and upload to WebGL. Render the
+    // same geometry into a bounded texture and lower its bitmap resolution so Scratch Render keeps the original
+    // logical size. Using one uniform factor preserves circles and the shape's aspect ratio; limiting area instead
+    // of each axis also keeps thin shapes sharp without allocating unnecessary pixels.
+    const bitmapScale = Math.min(
+        1,
+        Math.sqrt(MAX_SHAPE_BITMAP_PIXELS / (logicalBitmapWidth * logicalBitmapHeight))
+    );
+    const width = Math.max(2, Math.round(logicalBitmapWidth * bitmapScale));
+    const height = Math.max(2, Math.round(logicalBitmapHeight * bitmapScale));
     canvas.width = width;
     canvas.height = height;
+    canvas.movieBitmapResolution = BITMAP_RESOLUTION * bitmapScale;
     const centerX = width / 2;
     const centerY = height / 2;
     const sides = Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6)))));
@@ -423,7 +435,7 @@ const createShapeBitmap = configuration => {
         for (let index = 0; index < count; index++) {
             const pathIndex = reverse ? count - index - 1 : index;
             const angle = (-Math.PI / 2) + ((pathIndex / count) * Math.PI * 2);
-            const distance = distanceAt(pathIndex) * scale;
+            const distance = distanceAt(pathIndex) * scale * bitmapScale;
             const x = centerX + (Math.cos(angle) * distance);
             const y = centerY + (Math.sin(angle) * distance);
             if (index === 0) context.moveTo(x, y);
@@ -440,12 +452,12 @@ const createShapeBitmap = configuration => {
         const end = (toNumber(angle.end, 360) - 90) * Math.PI / 180;
         // Keep the endpoints unwrapped so their order describes the sweep direction.
         const anticlockwise = end < start;
-        const outerStartX = centerX + (Math.cos(start) * outerRadius * scale);
-        const outerStartY = centerY + (Math.sin(start) * outerRadius * scale);
+        const outerStartX = centerX + (Math.cos(start) * outerRadius * scale * bitmapScale);
+        const outerStartY = centerY + (Math.sin(start) * outerRadius * scale * bitmapScale);
         context.moveTo(outerStartX, outerStartY);
-        context.arc(centerX, centerY, outerRadius * scale, start, end, anticlockwise);
+        context.arc(centerX, centerY, outerRadius * scale * bitmapScale, start, end, anticlockwise);
         if (shape === 'arc' && innerRadius > 0) {
-            context.arc(centerX, centerY, innerRadius * scale, end, start, !anticlockwise);
+            context.arc(centerX, centerY, innerRadius * scale * bitmapScale, end, start, !anticlockwise);
         } else {
             context.lineTo(outerStartX, outerStartY);
         }
@@ -4027,7 +4039,8 @@ class MovieAssetManager extends EventEmitter {
         const bitmap = normalizeShapeType(configuration.shape) === 'line' ?
             createLineBitmap(configuration) : createShapeBitmap(configuration);
         if (!bitmap) return null;
-        const skinId = this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION);
+        const bitmapResolution = toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION);
+        const skinId = this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution);
         if (skinId === null || typeof skinId === 'undefined') return null;
         const pixels = Math.max(1, toNumber(bitmap.width, 1) * toNumber(bitmap.height, 1));
         this.shapeSkinCache.set(key, {pixels, skinId});

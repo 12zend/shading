@@ -2068,6 +2068,51 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });
 
+    test.each(['polygon', 'arc', 'circular segment'])(
+        'bounds the %s bitmap while preserving its logical size',
+        shape => {
+            const manager = makeManager();
+            manager.runtime._primitives.pen_stamp = jest.fn();
+            const context = {
+                arc: jest.fn(),
+                beginPath: jest.fn(),
+                clearRect: jest.fn(),
+                closePath: jest.fn(),
+                fill: jest.fn(),
+                lineTo: jest.fn(),
+                moveTo: jest.fn()
+            };
+            const canvas = {getContext: jest.fn(() => context)};
+            const originalDocument = global.document;
+            global.document = {createElement: jest.fn(() => canvas)};
+            const target = {
+                drawableID: 1,
+                id: 'target',
+                isStage: false,
+                visible: false
+            };
+
+            try {
+                expect(manager.drawShape(target, {
+                    angle: {start: 0, end: 270},
+                    height: 10000,
+                    n: 6,
+                    radius: {inner: 2000, outer: 10000},
+                    shape,
+                    size: 10000,
+                    width: 10000
+                })).toBeUndefined();
+            } finally {
+                global.document = originalDocument;
+            }
+
+            expect(canvas.width).toBe(1024);
+            expect(canvas.height).toBe(1024);
+            expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(canvas, 0.5);
+            expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(1);
+        }
+    );
+
     test('renders a line between its two positions with the requested thickness', () => {
         const manager = makeManager();
         manager.runtime._primitives.pen_stamp = jest.fn();
