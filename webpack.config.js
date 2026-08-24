@@ -194,7 +194,7 @@ module.exports = [
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'index.html',
-                title: `${APP_NAME} - Collaborative movie editor`,
+                title: APP_NAME,
                 isEditor: true,
                 ...htmlWebpackPluginCommon
             }),
@@ -202,7 +202,7 @@ module.exports = [
                 chunks: ['player'],
                 template: 'src/playground/index.ejs',
                 filename: 'player.html',
-                title: `${APP_NAME} - Collaborative movie editor`,
+                title: APP_NAME,
                 ...htmlWebpackPluginCommon
             }),
             // Keep old editor.html links working while the editor's canonical entry point is the site root.
@@ -210,7 +210,7 @@ module.exports = [
                 chunks: ['editor'],
                 template: 'src/playground/index.ejs',
                 filename: 'editor.html',
-                title: `${APP_NAME} - Collaborative movie editor`,
+                title: APP_NAME,
                 isEditor: true,
                 ...htmlWebpackPluginCommon
             }),
@@ -218,7 +218,7 @@ module.exports = [
                 chunks: ['fullscreen'],
                 template: 'src/playground/index.ejs',
                 filename: 'fullscreen.html',
-                title: `${APP_NAME} - Collaborative movie editor`,
+                title: APP_NAME,
                 ...htmlWebpackPluginCommon
             }),
             new HtmlWebpackPlugin({
