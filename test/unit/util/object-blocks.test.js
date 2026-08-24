@@ -504,8 +504,8 @@ describe('Objects blocks', () => {
             T1: 0, T2: 2, EASING: 'Linear'
         }, util)).toBe(30);
         expect(blocks.pass({
-            POINTS: '0 0 0 100 100 100 100 0', COMPONENT: 'y', TIME: 0.5
-        }, util)).toBe(75);
+            POINTS: '0 0 100 0 100 100', COMPONENT: 'x', TIME: 0.5
+        }, util)).toBe(50);
         expect(blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)).toBe(
             blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)
         );

@@ -111,20 +111,21 @@ describe('Objects animation values', () => {
         expect(evaluateStepCurve('0:one; 1:two', 1)).toBe('two');
     });
 
-    test('evaluates connected cubic Bezier segments from space-separated Scratch list values', () => {
-        const path = '0 0 0 100 100 100 100 0 100 -100 200 -100 200 0';
+    test('builds connected cubic Bezier segments through space-separated Scratch list points', () => {
+        const path = '0 0 100 0 100 100';
 
         expect(evaluateBezierPath(path, 'x', 0)).toBe(0);
         expect(evaluateBezierPath(path, 'x', 0.5)).toBe(50);
-        expect(evaluateBezierPath(path, 'y', 0.5)).toBe(75);
+        expect(evaluateBezierPath(path, 'y', 0.5)).toBe(-6.25);
         expect(evaluateBezierPath(path, 'x', 1)).toBe(100);
-        expect(evaluateBezierPath(path, 'x', 1.5)).toBe(150);
-        expect(evaluateBezierPath(path, 'y', 1.5)).toBe(-75);
-        expect(evaluateBezierPath(path, 'x', 2)).toBe(200);
+        expect(evaluateBezierPath(path, 'x', 1.5)).toBe(106.25);
+        expect(evaluateBezierPath(path, 'y', 1.5)).toBe(50);
+        expect(evaluateBezierPath(path, 'x', 2)).toBe(100);
+        expect(evaluateBezierPath(path, 'y', 2)).toBe(100);
     });
 
     test('accepts array path values and clamps malformed or out-of-range input safely', () => {
-        const path = [[0, 10], [0, 20], [30, 20], [30, 10]];
+        const path = [[0, 10], [0, 20], [30, 20]];
 
         expect(evaluateBezierPath(path, 'y', -1)).toBe(10);
         expect(evaluateBezierPath(path, 'x', 10)).toBe(30);

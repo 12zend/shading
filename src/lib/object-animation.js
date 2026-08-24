@@ -44,18 +44,21 @@ const evaluateBezierPath = (path, component, time) => {
     const points = parseBezierPathPoints(path);
     if (!points.length) return 0;
     const axis = String(component || '').toLowerCase() === 'y' ? 'y' : 'x';
-    const segmentCount = Math.floor((points.length - 1) / 3);
-    if (segmentCount < 1) return points[0][axis];
+    const segmentCount = points.length - 1;
+    if (!segmentCount) return points[0][axis];
 
     const pathTime = clamp(finiteNumber(time), 0, segmentCount);
     const segmentIndex = pathTime >= segmentCount ? segmentCount - 1 : Math.floor(pathTime);
     const progress = pathTime >= segmentCount ? 1 : pathTime - segmentIndex;
-    const pointIndex = segmentIndex * 3;
     const inverse = 1 - progress;
-    const start = points[pointIndex][axis];
-    const control1 = points[pointIndex + 1][axis];
-    const control2 = points[pointIndex + 2][axis];
-    const end = points[pointIndex + 3][axis];
+    const start = points[segmentIndex][axis];
+    const end = points[segmentIndex + 1][axis];
+    const previous = points[Math.max(0, segmentIndex - 1)][axis];
+    const next = points[Math.min(points.length - 1, segmentIndex + 2)][axis];
+    // Convert a uniform Catmull-Rom segment into cubic Bezier control points. This lets creators list
+    // only the positions the path must pass through while retaining a smooth tangent at every join.
+    const control1 = start + ((end - previous) / 6);
+    const control2 = end - ((next - start) / 6);
     return (inverse * inverse * inverse * start) +
         (3 * inverse * inverse * progress * control1) +
         (3 * inverse * progress * progress * control2) +
