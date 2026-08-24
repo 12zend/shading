@@ -4,6 +4,13 @@ import Thread from 'scratch-vm/src/engine/thread';
 
 import {ANIMATION_EASING_TYPES} from './movie-easing';
 import {
+    FRAME_GRAPH_NODE_TYPES,
+    applyObjectTransforms,
+    applyTransformScope,
+    rotatePoint,
+    transformPoint
+} from './movie-frame-graph';
+import {
     calculateAnimationValue,
     calculateLoopValue,
     calculatePingPongValue,
@@ -92,80 +99,6 @@ const normalizeVectorComponent = value => {
     return VECTOR_COMPONENTS.includes(component) ? component : VECTOR_COMPONENTS[0];
 };
 
-const degreesToRadians = value => finiteNumber(value) * Math.PI / 180;
-
-const rotatePoint = (point, rotation) => {
-    const xRotation = degreesToRadians(rotation && rotation.x);
-    const yRotation = degreesToRadians(rotation && rotation.y);
-    const zRotation = degreesToRadians(rotation && rotation.z);
-    let {x, y, z} = point;
-
-    const xCosine = Math.cos(xRotation);
-    const xSine = Math.sin(xRotation);
-    [y, z] = [(y * xCosine) - (z * xSine), (y * xSine) + (z * xCosine)];
-
-    const yCosine = Math.cos(yRotation);
-    const ySine = Math.sin(yRotation);
-    [x, z] = [(x * yCosine) + (z * ySine), (-x * ySine) + (z * yCosine)];
-
-    const zCosine = Math.cos(zRotation);
-    const zSine = Math.sin(zRotation);
-    [x, y] = [(x * zCosine) - (y * zSine), (x * zSine) + (y * zCosine)];
-    return {x, y, z};
-};
-
-const transformPoint = (point, transform) => {
-    const source = point || {};
-    const anchor = transform.anchor || {};
-    const scale = transform.scale || {};
-    const scaled = {
-        x: (finiteNumber(source.x) - finiteNumber(anchor.x)) * finiteNumber(scale.x, 1),
-        y: (finiteNumber(source.y) - finiteNumber(anchor.y)) * finiteNumber(scale.y, 1),
-        z: (finiteNumber(source.z) - finiteNumber(anchor.z)) * finiteNumber(scale.z, 1)
-    };
-    const rotated = rotatePoint(scaled, transform.rotation);
-    const position = transform.position || {};
-    return {
-        x: rotated.x + finiteNumber(position.x),
-        y: rotated.y + finiteNumber(position.y),
-        z: rotated.z + finiteNumber(position.z)
-    };
-};
-
-const applyTransformScope = (configuration, transform) => {
-    const result = {...configuration};
-    if (configuration.position) result.position = transformPoint(configuration.position, transform);
-    if (configuration.position1) result.position1 = transformPoint(configuration.position1, transform);
-    if (configuration.position2) result.position2 = transformPoint(configuration.position2, transform);
-    if (configuration.rotation) {
-        const rotation = transform.rotation || {};
-        result.rotation = {
-            x: finiteNumber(configuration.rotation.x) + finiteNumber(rotation.x),
-            y: finiteNumber(configuration.rotation.y) + finiteNumber(rotation.y),
-            z: finiteNumber(configuration.rotation.z) + finiteNumber(rotation.z)
-        };
-    }
-    if (configuration.scale) {
-        const scale = transform.scale || {};
-        result.scale = {
-            x: finiteNumber(configuration.scale.x, 1) * finiteNumber(scale.x, 1),
-            y: finiteNumber(configuration.scale.y, 1) * finiteNumber(scale.y, 1),
-            z: finiteNumber(configuration.scale.z, 1) * finiteNumber(scale.z, 1)
-        };
-    }
-    return result;
-};
-
-const applyObjectTransforms = (configuration, stack) => {
-    if (!Array.isArray(stack) || !stack.length) return configuration;
-    let result = configuration;
-    // The innermost component owns local coordinates; outer transforms are applied afterwards.
-    for (let index = stack.length - 1; index >= 0; index--) {
-        result = applyTransformScope(result, stack[index]);
-    }
-    return result;
-};
-
 const getThreadTimeOffset = util => finiteNumber(util && util.thread && util.thread.objectTimeOffset);
 
 const applyTimeOffset = (time, util) => {
@@ -182,7 +115,11 @@ const applyTimeOffset = (time, util) => {
 
 const applyThreadComposition = (configuration, util, runtime) => {
     const thread = util && util.thread;
-    const transformed = applyObjectTransforms(configuration, thread && thread.objectTransformStack);
+    const manager = runtime && runtime.movieAssetManager;
+    const graphCollecting = manager && typeof manager.isCollectingFrameGraph === 'function' &&
+        manager.isCollectingFrameGraph();
+    const transformed = graphCollecting ? configuration :
+        applyObjectTransforms(configuration, thread && thread.objectTransformStack);
     if (!transformed.time) return transformed;
     if (thread && Array.isArray(thread.objectTimeScopes) && thread.objectTimeScopes.length) {
         return {...transformed, evaluationTime: getObjectTime(runtime, util)};
@@ -240,6 +177,7 @@ const getGroupingContext = util => {
     return {
         blocks,
         objectInstancePath: parentThread && parentThread.objectInstancePath,
+        objectFrameGraphParent: parentThread && parentThread.objectFrameGraphParent,
         objectSceneCapture: parentThread && parentThread.objectSceneCapture,
         objectSimulationName: parentThread && parentThread.objectSimulationName,
         objectTimeOffset: parentThread && parentThread.objectTimeOffset,
@@ -266,6 +204,7 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     branchThread.pushStack(branchId);
     branchThread.peekStackFrame().warpMode = true;
     if (context.objectInstancePath) branchThread.objectInstancePath = context.objectInstancePath;
+    if (context.objectFrameGraphParent) branchThread.objectFrameGraphParent = context.objectFrameGraphParent;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
     if (context.objectSimulationName) branchThread.objectSimulationName = context.objectSimulationName;
     if (context.objectTimeOffset) branchThread.objectTimeOffset = context.objectTimeOffset;
@@ -277,7 +216,12 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     const activeThread = sequencer.activeThread;
     try {
         sequencer.activeThread = branchThread;
-        sequencer.stepThread(branchThread);
+        const manager = runtime.movieAssetManager;
+        if (context.objectFrameGraphParent && manager && typeof manager.withFrameGraphParent === 'function') {
+            manager.withFrameGraphParent(context.objectFrameGraphParent, () => sequencer.stepThread(branchThread));
+        } else {
+            sequencer.stepThread(branchThread);
+        }
     } finally {
         sequencer.activeThread = activeThread;
     }
@@ -335,8 +279,16 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     cancelPendingGroupings () {
         this.groupingGeneration++;
         this.pendingGrouping = null;
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.discardFrameGraph === 'function') manager.discardFrameGraph();
         const penFX = this.runtime.penFX;
         if (penFX && typeof penFX.cancelGroups === 'function') penFX.cancelGroups();
+    }
+
+    createFrameGraphNode (type, properties, context) {
+        const manager = this.runtime.movieAssetManager;
+        if (!manager || typeof manager.createFrameGraphNode !== 'function') return null;
+        return manager.createFrameGraphNode(type, properties, context && context.objectFrameGraphParent);
     }
 
     getInfo () {
@@ -893,7 +845,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawObject === 'function') {
-            trackPendingDraw(manager.drawObject(util.target, context), util, manager);
+            const graphParent = util && util.thread && util.thread.objectFrameGraphParent;
+            const pendingDraw = graphParent ? manager.drawObject(util.target, context, graphParent) :
+                manager.drawObject(util.target, context);
+            trackPendingDraw(pendingDraw, util, manager);
         }
     }
 
@@ -916,7 +871,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {
-            trackPendingDraw(manager.drawShape(util.target, context), util, manager);
+            const graphParent = util && util.thread && util.thread.objectFrameGraphParent;
+            const pendingDraw = graphParent ? manager.drawShape(util.target, context, graphParent) :
+                manager.drawShape(util.target, context);
+            trackPendingDraw(pendingDraw, util, manager);
         }
     }
 
@@ -932,7 +890,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {
-            trackPendingDraw(manager.drawShape(util.target, context), util, manager);
+            const graphParent = util && util.thread && util.thread.objectFrameGraphParent;
+            const pendingDraw = graphParent ? manager.drawShape(util.target, context, graphParent) :
+                manager.drawShape(util.target, context);
+            trackPendingDraw(pendingDraw, util, manager);
         }
     }
 
@@ -969,13 +930,20 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     group (args, util) {
-        const branchThread = runGroupingBranch(this.runtime, getGroupingContext(util), 1);
+        const context = getGroupingContext(util);
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {}, context);
+        if (node) context.objectFrameGraphParent = node;
+        const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
 
     simulation (args, util) {
         const context = getGroupingContext(util);
         context.objectSimulationName = String(args.NAME || '').trim() || 'simulation';
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {
+            simulation: context.objectSimulationName
+        }, context);
+        if (node) context.objectFrameGraphParent = node;
         const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
@@ -983,12 +951,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     transform (args, util) {
         const context = getGroupingContext(util);
         const inherited = Array.isArray(context.objectTransformStack) ? context.objectTransformStack : [];
-        context.objectTransformStack = inherited.concat([{
+        const transform = {
             anchor: {x: args.AX, y: args.AY, z: args.AZ},
             position: {x: args.PX, y: args.PY, z: args.PZ},
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ}
-        }]);
+        };
+        context.objectTransformStack = inherited.concat([transform]);
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {transform}, context);
+        if (node) context.objectFrameGraphParent = node;
         const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
@@ -1011,6 +982,16 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const generation = this.groupingGeneration;
         const blendMode = normalizeBlendMode(args.BLEND);
         const opacity = Math.max(0, Math.min(1, finiteNumber(args.OPACITY, 100) / 100));
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            blendMode,
+            opacity,
+            operation: 'blend'
+        }, context);
+        if (node) {
+            context.objectFrameGraphParent = node;
+            runGroupingBranch(this.runtime, context, 1);
+            return;
+        }
         const runGrouping = () => {
             if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
@@ -1035,6 +1016,23 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const generation = this.groupingGeneration;
         const requestedMode = String(args.MODE || '').toLowerCase();
         const mode = MATTE_MODES.includes(requestedMode) ? requestedMode : MATTE_MODES[0];
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            mode,
+            operation: 'matte'
+        }, context);
+        if (node) {
+            const source = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {role: 'source'}, {
+                objectFrameGraphParent: node
+            });
+            const mask = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {role: 'mask'}, {
+                objectFrameGraphParent: node
+            });
+            context.objectFrameGraphParent = source;
+            runGroupingBranch(this.runtime, context, 1);
+            context.objectFrameGraphParent = mask;
+            runGroupingBranch(this.runtime, context, 2);
+            return;
+        }
         const runMatte = () => {
             if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
@@ -1073,6 +1071,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const context = getGroupingContext(util);
         const generation = this.groupingGeneration;
         const passName = String(args.NAME || '').trim() || 'pass';
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            operation: 'render-pass',
+            passName
+        }, context);
+        if (node) {
+            context.objectFrameGraphParent = node;
+            runGroupingBranch(this.runtime, context, 1);
+            return;
+        }
         const runPass = () => {
             if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
@@ -1098,6 +1105,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     drawPass (args) {
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.enqueueFrameGraphDrawPass === 'function' &&
+            manager.enqueueFrameGraphDrawPass(String(args.NAME || '').trim() || 'pass', {
+                blendMode: normalizeBlendMode(args.BLEND),
+                opacity: Math.max(0, Math.min(1, finiteNumber(args.OPACITY, 100) / 100))
+            })) return;
         const penFX = this.runtime.penFX;
         if (!penFX || typeof penFX.drawRenderPass !== 'function') return;
         penFX.drawRenderPass(String(args.NAME || '').trim() || 'pass', {
@@ -1107,6 +1120,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     clearPass (args) {
+        const manager = this.runtime.movieAssetManager;
+        if (manager && typeof manager.enqueueFrameGraphClearPass === 'function' &&
+            manager.enqueueFrameGraphClearPass(String(args.NAME || '').trim() || 'pass')) return;
         const penFX = this.runtime.penFX;
         if (penFX && typeof penFX.clearRenderPass === 'function') {
             penFX.clearRenderPass(String(args.NAME || '').trim() || 'pass');
@@ -1123,17 +1139,20 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const inheritedTimeOffset = finiteNumber(baseContext.objectTimeOffset);
         const inheritedPath = String(baseContext.objectInstancePath || '');
         for (let index = 0; index < count; index++) {
+            const transform = {
+                anchor: {x: 0, y: 0, z: 0},
+                position: {x: 0, y: 0, z: 0},
+                rotation: {x: 0, y: 0, z: angleOffset * index},
+                scale: {x: 1, y: 1, z: 1}
+            };
             const context = {
                 ...baseContext,
                 objectInstancePath: inheritedPath ? `${inheritedPath}.${index}` : String(index),
                 objectTimeOffset: inheritedTimeOffset + (timeOffset * index),
-                objectTransformStack: inheritedTransforms.concat([{
-                    anchor: {x: 0, y: 0, z: 0},
-                    position: {x: 0, y: 0, z: 0},
-                    rotation: {x: 0, y: 0, z: angleOffset * index},
-                    scale: {x: 1, y: 1, z: 1}
-                }])
+                objectTransformStack: inheritedTransforms.concat([transform])
             };
+            const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {transform}, context);
+            if (node) context.objectFrameGraphParent = node;
             const branchThread = runGroupingBranch(this.runtime, context, 1);
             propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
         }
@@ -1296,6 +1315,24 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     grouping (args, util) {
         const context = getGroupingContext(util);
         const generation = this.groupingGeneration;
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            effects: [],
+            operation: 'effects'
+        }, context);
+        if (node) {
+            context.objectFrameGraphParent = node;
+            runGroupingBranch(this.runtime, context, 1);
+            const penFX = this.runtime.penFX;
+            if (penFX && typeof penFX.beginEffectCapture === 'function' &&
+                typeof penFX.endEffectCapture === 'function') {
+                penFX.beginEffectCapture();
+                runGroupingBranch(this.runtime, context, 2);
+                node.effects = penFX.endEffectCapture();
+            } else {
+                runGroupingBranch(this.runtime, context, 2);
+            }
+            return;
+        }
         const runGrouping = () => {
             if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
@@ -1335,6 +1372,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (!manager || typeof manager.createObjectSceneCapture !== 'function' ||
             typeof manager.renderObjectScene !== 'function') return;
         const context = getGroupingContext(util);
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target: context.target
+        }, context);
+        if (node) {
+            context.objectFrameGraphParent = node;
+            runGroupingBranch(this.runtime, context, 1);
+            return;
+        }
         const capture = manager.createObjectSceneCapture(context.target);
         if (!capture) return;
         context.objectSceneCapture = capture;

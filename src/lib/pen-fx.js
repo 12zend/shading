@@ -3403,6 +3403,13 @@ const createPenFXClass = vm => {
         });
         return;
       }
+      const movieAssetManager = vm.runtime.movieAssetManager;
+      if (movieAssetManager && typeof movieAssetManager.enqueueFrameGraphEffect === 'function' &&
+        movieAssetManager.enqueueFrameGraphEffect({
+          blendMode: this.blendMode,
+          blendOpacity: this.blendOpacity,
+          callback
+        })) return;
       this._executeSafe(callback, this.blendMode, this.blendOpacity);
     }
 

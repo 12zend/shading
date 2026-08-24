@@ -5,6 +5,7 @@ import {
     COSTUME_GROUP_SOURCE,
     MovieAssetManager
 } from '../../../src/lib/movie-asset-manager';
+import {MovieFrameGraphRenderer} from '../../../src/lib/movie-frame-graph';
 
 const makeManager = () => {
     const manager = Object.create(MovieAssetManager.prototype);
@@ -51,6 +52,16 @@ const deferred = () => {
         resolve = resolvePromise;
     });
     return {promise, resolve};
+};
+
+const enableFrameGraph = manager => {
+    manager.frameGraphCollectionParents = [];
+    manager.frameGraphRenderPromise = null;
+    manager.frameGraphRenderer = new MovieFrameGraphRenderer(
+        manager.runtime.renderer,
+        graph => manager.renderFrameGraph(graph)
+    );
+    return manager.frameGraphRenderer;
 };
 
 const makePatchableTarget = manager => {
@@ -112,6 +123,154 @@ const makeTimelineManager = () => {
 };
 
 describe('MovieAssetManager rendering performance', () => {
+    test('collects object draws without touching the renderer until the frame graph is flushed', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const configuration = {
+            asset: 'logo',
+            position: {x: 10, y: 20, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            source: 'costume'
+        };
+        manager.drawObjectImmediately = jest.fn();
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(manager.drawObjectImmediately).not.toHaveBeenCalled();
+
+        expect(manager.flushFrameGraph()).toBeUndefined();
+        expect(manager.drawObjectImmediately).toHaveBeenCalledWith(target, configuration, null);
+        expect(manager.frameGraphRenderer.lastGraph.children[0]).toEqual(expect.objectContaining({
+            drawKind: 'object',
+            type: 'Draw'
+        }));
+    });
+
+    test('captures the camera at each draw instead of using the last camera in the frame', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const configuration = {
+            asset: 'logo',
+            position: {x: 10, y: 20, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            source: 'costume'
+        };
+        manager.camera = {
+            fov: 45,
+            focalLength: 480,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        manager.cameraVersion = 0;
+        manager.runtime.emitProjectChanged = jest.fn();
+        manager.drawObjectImmediately = jest.fn((drawTarget, drawConfiguration, camera) => {
+            const state = manager.getTargetState(drawTarget);
+            state.worldX = drawConfiguration.position.x;
+            state.worldY = drawConfiguration.position.y;
+            state.worldZ = drawConfiguration.position.z;
+            manager.applyProjection(drawTarget, camera);
+        });
+        manager.applyFrameGraphCamera = jest.fn();
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+
+        expect(manager.setCameraPosition(10, 20, 30)).toBeUndefined();
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(manager.setCameraPosition(100, 200, 300)).toBeUndefined();
+        expect(manager.drawObjectImmediately).not.toHaveBeenCalled();
+
+        expect(manager.flushFrameGraph()).toBeUndefined();
+        expect(manager.drawObjectImmediately).toHaveBeenCalledWith(
+            target,
+            configuration,
+            expect.objectContaining({position: {x: 10, y: 20, z: 30}})
+        );
+        expect(manager.applyFrameGraphCamera).toHaveBeenCalledWith(
+            expect.objectContaining({position: {x: 100, y: 200, z: 300}})
+        );
+        expect(manager.frameGraphRenderer.lastGraph.children[0].camera.position).toEqual({
+            x: 10,
+            y: 20,
+            z: 30
+        });
+        expect(manager.runtime.renderer.updateDrawablePosition).toHaveBeenLastCalledWith(
+            target.drawableID,
+            [0, 0]
+        );
+    });
+
+    test('batches consecutive 3D scene mutations into one model render', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const render = deferred();
+        manager.clearModelScene = jest.fn(() => true);
+        manager.renderBuildingPrimitive = jest.fn(() => true);
+        manager.renderModelToScene = jest.fn(() => true);
+        manager.queueModelSceneRender = jest.fn(() => render.promise);
+        const nodes = [
+            {operation: 'clear-models', target},
+            {operation: 'render-model', model: 'Cube', target},
+            {operation: 'render-building', primitive: 'wall', arguments: {MATERIAL: 'brick'}, target}
+        ];
+
+        const pending = manager.executeFrameGraphSceneBatch(nodes);
+
+        expect(manager.clearModelScene).toHaveBeenCalledWith(target, false);
+        expect(manager.renderModelToScene).toHaveBeenCalledWith(target, 'Cube', false);
+        expect(manager.renderBuildingPrimitive).toHaveBeenCalledWith(
+            'wall',
+            {MATERIAL: 'brick'},
+            target,
+            false
+        );
+        expect(manager.queueModelSceneRender).toHaveBeenCalledWith(target);
+        expect(manager.queueModelSceneRender).toHaveBeenCalledTimes(1);
+        expect(pending).toBe(render.promise);
+    });
+
+    test('compiled and interpreter Pen commands enqueue clear and stamp nodes and return immediately', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const compiledClear = jest.fn();
+        const compiledStamp = jest.fn();
+        const interpreterClear = jest.fn();
+        const interpreterStamp = jest.fn();
+        manager.runtime.ext_pen = {
+            _stamp: compiledStamp,
+            clear: compiledClear
+        };
+        manager.runtime._primitives = {
+            pen_clear: interpreterClear,
+            pen_stamp: interpreterStamp
+        };
+        manager.runtime.targets = [];
+        manager.drawDefaultPenBackground = jest.fn();
+        enableFrameGraph(manager);
+        manager.attachPenFrameTransactions({});
+        manager.beginFrameGraph();
+
+        expect(manager.runtime.ext_pen.clear()).toBeUndefined();
+        expect(manager.runtime._primitives.pen_clear()).toBeUndefined();
+        expect(manager.runtime.ext_pen._stamp(target)).toBeUndefined();
+        expect(manager.runtime._primitives.pen_stamp({}, {target})).toBeUndefined();
+        expect(compiledClear).not.toHaveBeenCalled();
+        expect(interpreterClear).not.toHaveBeenCalled();
+        expect(compiledStamp).not.toHaveBeenCalled();
+        expect(interpreterStamp).not.toHaveBeenCalled();
+
+        manager.flushFrameGraph();
+
+        // Both execution paths share the same renderer backend after collection.
+        expect(compiledClear).toHaveBeenCalledTimes(2);
+        expect(compiledStamp).toHaveBeenCalledTimes(2);
+        expect(interpreterClear).not.toHaveBeenCalled();
+        expect(interpreterStamp).not.toHaveBeenCalled();
+    });
+
     test('registers initialize and render frame as compiler-visible hats without command primitives', () => {
         const manager = makeManager();
         manager.runtime._hats = {};
@@ -1900,7 +2059,13 @@ describe('MovieAssetManager rendering performance', () => {
         );
         expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'scene');
         expect(manager.publishModelZBuffer).toHaveBeenCalledWith(target);
-        expect(manager.finishObjectDraw).toHaveBeenCalledWith(target, {}, 'model');
+        expect(manager.finishObjectDraw).toHaveBeenCalledWith(
+            target,
+            {},
+            'model',
+            false,
+            expect.objectContaining({name: 'camera'})
+        );
     });
 
     test('keeps a following draw behind an asynchronous scene render', async () => {

@@ -34,6 +34,11 @@ import {
 } from './model-runtime';
 import downloadBlob from './download-blob';
 import analyzeMovieFrames from './movie-frame-analysis';
+import installMovieFrameGraphRenderer, {
+    FRAME_GRAPH_NODE_TYPES,
+    applyObjectTransforms,
+    executeSequence
+} from './movie-frame-graph';
 
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
@@ -479,13 +484,13 @@ const cloneScale = scale => ({
     z: normalizeScale(scale && scale.z)
 });
 
-const cloneCamera = camera => ({
-    fov: camera.fov,
-    focalLength: camera.focalLength,
-    position: {...camera.position},
-    rotation: {...camera.rotation},
-    rotationOrder: camera.rotationOrder
-});
+const cloneCamera = camera => {
+    if (!camera) return null;
+    const clone = {...camera};
+    if (camera.position) clone.position = {...camera.position};
+    if (camera.rotation) clone.rotation = {...camera.rotation};
+    return clone;
+};
 
 class MovieAssetManager extends EventEmitter {
     constructor (vm) {
@@ -520,6 +525,9 @@ class MovieAssetManager extends EventEmitter {
         this.timelineDiagnostics = null;
         this.modelRenderer = null;
         this.flatDepthVersion = 0;
+        this.frameGraphCollectionParents = [];
+        this.frameGraphRenderPromise = null;
+        this.cameraVersion = 0;
         this.penFrameTransactionActive = false;
         this.penFrameTransactionsInstalled = false;
         this.defaultStageBackgroundColor = null;
@@ -556,6 +564,10 @@ class MovieAssetManager extends EventEmitter {
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
         };
+        this.frameGraphRenderer = installMovieFrameGraphRenderer(
+            this.runtime.renderer,
+            graph => this.renderFrameGraph(graph)
+        );
 
         this.handleTargetCreated = this.handleTargetCreated.bind(this);
         this.handleTargetRemoved = this.handleTargetRemoved.bind(this);
@@ -575,6 +587,7 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.on('AFTER_EXECUTE', this.handleTimelineAfterExecute);
         this.runtime.on('PROJECT_CHANGED', this.handleProjectChanged);
         this.runtime.on('PROJECT_STOP_ALL', this.stopAllObjectVideoAudio);
+        this.runtime.on('PROJECT_STOP_ALL', () => this.discardFrameGraph());
         this.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
             this.runtime.renderer.on('NativeSizeChanged', this.handleNativeSizeChanged);
@@ -597,6 +610,364 @@ class MovieAssetManager extends EventEmitter {
         };
     }
 
+    isCollectingFrameGraph () {
+        return Boolean(this.frameGraphRenderer && this.frameGraphRenderer.collecting);
+    }
+
+    ensureFrameGraphRenderer () {
+        const renderer = this.runtime.renderer;
+        if (this.frameGraphRenderer && this.frameGraphRenderer.renderer === renderer) {
+            return this.frameGraphRenderer;
+        }
+        this.frameGraphRenderer = installMovieFrameGraphRenderer(
+            renderer,
+            graph => this.renderFrameGraph(graph)
+        );
+        return this.frameGraphRenderer;
+    }
+
+    beginFrameGraph () {
+        if (!this.ensureFrameGraphRenderer()) return null;
+        return this.frameGraphRenderer.beginFrame({
+            timelineFrame: this.timeline && this.timeline.renderFrameIndex,
+            timelineTime: this.timeline && this.timeline.currentTime
+        });
+    }
+
+    createFrameGraphNode (type, properties = {}, parent = null) {
+        if (!this.frameGraphRenderer || !this.frameGraphRenderer.collecting) return null;
+        const collectionParent = parent ||
+            this.frameGraphCollectionParents[this.frameGraphCollectionParents.length - 1];
+        const capturesCamera = type === FRAME_GRAPH_NODE_TYPES.DRAW || type === FRAME_GRAPH_NODE_TYPES.SCENE;
+        const nodeProperties = capturesCamera ? {
+            camera: cloneCamera(this.camera),
+            cameraVersion: this.cameraVersion,
+            ...properties
+        } : properties;
+        return this.frameGraphRenderer.append(type, nodeProperties, collectionParent);
+    }
+
+    withFrameGraphParent (parent, callback) {
+        if (!parent) return callback();
+        this.frameGraphCollectionParents.push(parent);
+        try {
+            return callback();
+        } finally {
+            this.frameGraphCollectionParents.pop();
+        }
+    }
+
+    enqueueFrameGraphDraw (drawKind, target, configuration, parent = null) {
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            configuration: this.cloneObjectDrawConfiguration(configuration),
+            drawKind,
+            target
+        }, parent);
+        return Boolean(node);
+    }
+
+    enqueueFrameGraphEffect (effect, parent = null) {
+        return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            effect,
+            operation: 'effect'
+        }, parent));
+    }
+
+    enqueueFrameGraphDrawPass (passName, options) {
+        return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            drawKind: 'render-pass',
+            options,
+            passName
+        }));
+    }
+
+    enqueueFrameGraphClearPass (passName) {
+        return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            operation: 'clear-pass',
+            passName
+        }));
+    }
+
+    enqueueFrameGraphPenOperation (drawKind, target = null) {
+        return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            drawKind,
+            target
+        }));
+    }
+
+    enqueueFrameGraphSceneOperation (operation, target, properties = {}) {
+        return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            ...properties,
+            operation,
+            sceneKind: 'mutation',
+            target
+        }));
+    }
+
+    flushFrameGraph () {
+        if (!this.frameGraphRenderer) return;
+        const render = this.frameGraphRenderer.flush();
+        if (!render || typeof render.then !== 'function') return;
+        const tracked = Promise.resolve(render);
+        this.frameGraphRenderPromise = tracked;
+        const clear = () => {
+            if (this.frameGraphRenderPromise === tracked) this.frameGraphRenderPromise = null;
+        };
+        tracked.then(clear, clear);
+        this.runWithoutWaiting(tracked);
+        return tracked;
+    }
+
+    discardFrameGraph () {
+        if (this.frameGraphRenderer) this.frameGraphRenderer.discardFrame();
+        if (Array.isArray(this.frameGraphCollectionParents)) this.frameGraphCollectionParents.length = 0;
+        this.cancelPendingObjectDraws();
+        this.frameGraphRenderPromise = null;
+    }
+
+    finishFrameGraphScope (pending, finish, generation) {
+        const finishIfCurrent = () => {
+            if (!this.frameGraphRenderer || this.frameGraphRenderer.generation === generation) finish();
+        };
+        if (!pending || typeof pending.then !== 'function') {
+            finishIfCurrent();
+            return;
+        }
+        return pending.then(value => {
+            finishIfCurrent();
+            return value;
+        }, error => {
+            finishIfCurrent();
+            throw error;
+        });
+    }
+
+    executeWithFrameGraphCamera (requestedCamera, callback) {
+        if (!requestedCamera) return callback();
+        const previousCamera = this.camera;
+        const renderingCamera = cloneCamera(requestedCamera);
+        this.camera = renderingCamera;
+        let result;
+        try {
+            result = callback();
+        } catch (error) {
+            if (this.camera === renderingCamera) this.camera = previousCamera;
+            throw error;
+        }
+        const restore = value => {
+            if (this.camera === renderingCamera) this.camera = previousCamera;
+            return value;
+        };
+        if (result && typeof result.then === 'function') {
+            return result.then(restore, error => {
+                restore();
+                throw error;
+            });
+        }
+        return restore(result);
+    }
+
+    executeFrameGraphChildren (node, context) {
+        const executionItems = [];
+        for (const child of node.children) {
+            const previous = executionItems[executionItems.length - 1];
+            if (child.type === FRAME_GRAPH_NODE_TYPES.SCENE && child.sceneKind === 'mutation' &&
+                previous && previous.sceneBatch && previous.target === child.target &&
+                previous.cameraVersion === child.cameraVersion) {
+                previous.nodes.push(child);
+            } else if (child.type === FRAME_GRAPH_NODE_TYPES.SCENE && child.sceneKind === 'mutation') {
+                executionItems.push({
+                    cameraVersion: child.cameraVersion,
+                    nodes: [child],
+                    sceneBatch: true,
+                    target: child.target
+                });
+            } else {
+                executionItems.push({node: child});
+            }
+        }
+        return executeSequence(executionItems, item => (
+            item.sceneBatch ? this.executeFrameGraphSceneBatch(item.nodes) :
+                this.executeFrameGraphNode(item.node, context)
+        ));
+    }
+
+    executeFrameGraphSceneBatch (nodes) {
+        const target = nodes[0] && nodes[0].target;
+        if (!target) return;
+        const camera = nodes[nodes.length - 1].camera;
+        return this.executeWithFrameGraphCamera(camera, () => {
+            let shouldRender = false;
+            for (const node of nodes) {
+                let changed = false;
+                if (node.operation === 'clear-models') changed = this.clearModelScene(target, false);
+                if (node.operation === 'render-model') changed = this.renderModelToScene(target, node.model, false);
+                if (node.operation === 'set-model-frame') changed = this.setModelFrame(target, node.frame, false);
+                if (node.operation === 'render-building') {
+                    changed = this.renderBuildingPrimitive(node.primitive, node.arguments, target, false);
+                }
+                shouldRender = changed === true || shouldRender;
+            }
+            if (shouldRender) {
+                return camera ? this.queueModelSceneRender(target, camera) : this.queueModelSceneRender(target);
+            }
+        });
+    }
+
+    executeFrameGraphComposite (node, context) {
+        const penFX = this.penFX || this.runtime.penFX;
+        if (node.operation === 'effect') {
+            const effect = node.effect;
+            if (penFX && effect && typeof penFX.applyCapturedEffects === 'function') {
+                penFX.applyCapturedEffects([effect]);
+            }
+            return;
+        }
+        if (node.operation === 'clear-pass') {
+            if (penFX && typeof penFX.clearRenderPass === 'function') penFX.clearRenderPass(node.passName);
+            return;
+        }
+        if (node.operation === 'matte') {
+            const source = node.children[0];
+            const mask = node.children[1];
+            if (!penFX || typeof penFX.beginMatte !== 'function' || penFX.beginMatte() === false) {
+                if (source) return this.executeFrameGraphNode(source, context);
+                return;
+            }
+            const renderSource = source ? this.executeFrameGraphNode(source, context) : null;
+            const renderMask = () => {
+                if (this.frameGraphRenderer &&
+                    this.frameGraphRenderer.generation !== context.generation) return;
+                if (typeof penFX.beginMatteMask !== 'function' || penFX.beginMatteMask() === false) return;
+                if (mask) return this.executeFrameGraphNode(mask, context);
+            };
+            const finish = () => {
+                if (typeof penFX.endMatte === 'function') penFX.endMatte({mode: node.mode});
+            };
+            if (renderSource && typeof renderSource.then === 'function') {
+                return this.finishFrameGraphScope(renderSource.then(renderMask), finish, context.generation);
+            }
+            return this.finishFrameGraphScope(renderMask(), finish, context.generation);
+        }
+        if (!penFX || typeof penFX.beginGroup !== 'function') {
+            return this.executeFrameGraphChildren(node, context);
+        }
+        penFX.beginGroup();
+        const pending = this.executeFrameGraphChildren(node, context);
+        const finish = () => {
+            if (node.operation === 'effects' && typeof penFX.applyCapturedEffects === 'function') {
+                penFX.applyCapturedEffects(node.effects);
+            }
+            if (typeof penFX.endGroup !== 'function') return;
+            if (node.operation === 'blend') {
+                penFX.endGroup({blendMode: node.blendMode, opacity: node.opacity});
+            } else if (node.operation === 'render-pass') {
+                penFX.endGroup({composite: false, passName: node.passName});
+            } else {
+                penFX.endGroup();
+            }
+        };
+        return this.finishFrameGraphScope(pending, finish, context.generation);
+    }
+
+    collectObjectSceneEntries (node, transforms = [], entries = []) {
+        if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
+            const nextTransforms = transforms.concat([node.transform]);
+            node.children.forEach(child => this.collectObjectSceneEntries(child, nextTransforms, entries));
+            return entries;
+        }
+        if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW && node.drawKind === 'object') {
+            entries.push(applyObjectTransforms(node.configuration, transforms));
+            return entries;
+        }
+        node.children.forEach(child => this.collectObjectSceneEntries(child, transforms, entries));
+        return entries;
+    }
+
+    executeFrameGraphScene (node, context) {
+        if (node.sceneKind === 'frame') return this.executeFrameGraphChildren(node, context);
+        return this.executeWithFrameGraphCamera(node.camera, () => {
+            if (node.sceneKind === 'camera') {
+                return this.applyFrameGraphCamera(node.camera, node.rerenderModels);
+            }
+            if (node.sceneKind === 'mutation') {
+                if (node.operation === 'clear-models') return this.clearModelScene(node.target, true, node.camera);
+                if (node.operation === 'render-model') {
+                    return this.renderModelToScene(node.target, node.model, true, node.camera);
+                }
+                if (node.operation === 'set-model-frame') {
+                    return this.setModelFrame(node.target, node.frame, true, node.camera);
+                }
+                if (node.operation === 'render-building') {
+                    return this.renderBuildingPrimitive(
+                        node.primitive,
+                        node.arguments,
+                        node.target,
+                        true,
+                        node.camera
+                    );
+                }
+                return;
+            }
+            if (node.sceneKind !== 'objects' || !node.target) return this.executeFrameGraphChildren(node, context);
+            const capture = this.createObjectSceneCapture(node.target, node.camera);
+            if (!capture) return;
+            capture.entries = this.collectObjectSceneEntries(node, context.transforms);
+            if (!capture.entries.length) return;
+            return this.renderObjectScene(node.target, capture);
+        });
+    }
+
+    executeFrameGraphDraw (node, context) {
+        return this.executeWithFrameGraphCamera(node.camera, () => {
+            if (node.drawKind === 'pen-clear') {
+                this.beginPenFrameTransaction();
+                if (typeof this.directPenClear === 'function') this.directPenClear();
+                this.drawDefaultPenBackground();
+                return;
+            }
+            if (node.drawKind === 'pen-stamp') {
+                this.applyProjection(node.target, node.camera);
+                this.stampTarget(node.target);
+                return;
+            }
+            if (node.drawKind === 'render-pass') {
+                const penFX = this.penFX || this.runtime.penFX;
+                if (penFX && typeof penFX.drawRenderPass === 'function') {
+                    penFX.drawRenderPass(node.passName, node.options);
+                }
+                return;
+            }
+            const configuration = applyObjectTransforms(node.configuration, context.transforms);
+            if (node.drawKind === 'shape') {
+                return this.drawShapeImmediately(node.target, configuration, node.camera);
+            }
+            return this.drawObjectImmediately(node.target, configuration, node.camera);
+        });
+    }
+
+    executeFrameGraphNode (node, context = {transforms: []}) {
+        if (this.frameGraphRenderer && typeof context.generation === 'number' &&
+            this.frameGraphRenderer.generation !== context.generation) return;
+        if (node.type === FRAME_GRAPH_NODE_TYPES.SCENE) return this.executeFrameGraphScene(node, context);
+        if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) return this.executeFrameGraphDraw(node, context);
+        if (node.type === FRAME_GRAPH_NODE_TYPES.COMPOSITE) return this.executeFrameGraphComposite(node, context);
+        if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
+            return this.executeFrameGraphChildren(node, {
+                ...context,
+                transforms: context.transforms.concat([node.transform])
+            });
+        }
+        return this.executeFrameGraphChildren(node, context);
+    }
+
+    renderFrameGraph (graph) {
+        return this.executeFrameGraphNode(graph, {
+            generation: graph.generation,
+            transforms: []
+        });
+    }
+
     attachPenFrameTransactions (penFX) {
         this.penFX = penFX;
         if (this.penFrameTransactionsInstalled) return;
@@ -607,7 +978,9 @@ class MovieAssetManager extends EventEmitter {
 
         const manager = this;
         const compiledClear = pen.clear;
+        this.directPenClear = () => compiledClear.call(pen);
         pen.clear = function (...args) {
+            if (manager.enqueueFrameGraphPenOperation('pen-clear')) return;
             manager.beginPenFrameTransaction();
             const result = compiledClear.apply(this, args);
             manager.drawDefaultPenBackground();
@@ -615,11 +988,27 @@ class MovieAssetManager extends EventEmitter {
         };
         const interpreterClear = primitives.pen_clear;
         primitives.pen_clear = function (...args) {
+            if (manager.enqueueFrameGraphPenOperation('pen-clear')) return;
             manager.beginPenFrameTransaction();
             const result = interpreterClear.apply(this, args);
             manager.drawDefaultPenBackground();
             return result;
         };
+        if (typeof pen._stamp === 'function') {
+            const compiledStamp = pen._stamp;
+            this.directPenStamp = target => compiledStamp.call(pen, target);
+            pen._stamp = function (target) {
+                if (manager.enqueueFrameGraphPenOperation('pen-stamp', target)) return;
+                return compiledStamp.call(this, target);
+            };
+        }
+        if (typeof primitives.pen_stamp === 'function') {
+            const interpreterStamp = primitives.pen_stamp;
+            primitives.pen_stamp = function (args, util) {
+                if (manager.enqueueFrameGraphPenOperation('pen-stamp', util && util.target)) return;
+                return interpreterStamp.call(this, args, util);
+            };
+        }
         this.penFrameTransactionsInstalled = true;
         this.drawDefaultPenBackground();
     }
@@ -728,21 +1117,35 @@ class MovieAssetManager extends EventEmitter {
         };
         // Queue the empty scene without displaying it before a following render model block.
         primitives.looks_clearscene = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('clear-models', util.target)) return;
             this.runWithoutWaiting(this.clearModelScene(util.target));
         };
         // Timeline playback tracks pending visual work separately. Never put the render-frame script into
         // promise-wait mode, or repeated hats can prevent the model from appearing during playback.
         primitives.looks_rendermodel = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('render-model', util.target, {model: args.MODEL})) return;
             this.runWithoutWaiting(this.renderModelToScene(util.target, args.MODEL));
         };
         // Building blocks must not yield between erase-all and stamp; otherwise the cleared pen frame flashes.
         primitives.looks_renderwall = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('render-building', util.target, {
+                arguments: {...args},
+                primitive: 'wall'
+            })) return;
             this.runWithoutWaiting(this.renderBuildingPrimitive('wall', args, util.target));
         };
         primitives.looks_renderfloor = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('render-building', util.target, {
+                arguments: {...args},
+                primitive: 'floor'
+            })) return;
             this.runWithoutWaiting(this.renderBuildingPrimitive('floor', args, util.target));
         };
         primitives.looks_renderbox = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('render-building', util.target, {
+                arguments: {...args},
+                primitive: 'box'
+            })) return;
             this.runWithoutWaiting(this.renderBuildingPrimitive('box', args, util.target));
         };
         primitives.looks_clearmaterial = () => this.clearBuildingMaterials();
@@ -782,6 +1185,7 @@ class MovieAssetManager extends EventEmitter {
         // Frame selection itself is synchronous. Rendering can continue in the background so a render-frame hat
         // is not restarted before it reaches a following render-model block.
         primitives.looks_setmodelframeto = (args, util) => {
+            if (this.enqueueFrameGraphSceneOperation('set-model-frame', util.target, {frame: args.FRAME})) return;
             this.runWithoutWaiting(this.setModelFrame(util.target, args.FRAME));
         };
         primitives.looks_clearlight = () => this.clearLights();
@@ -947,6 +1351,8 @@ class MovieAssetManager extends EventEmitter {
     }
 
     hasPendingVisualRenders () {
+        if (this.frameGraphRenderPromise ||
+            (this.frameGraphRenderer && this.frameGraphRenderer.pendingRender)) return true;
         if (!(this.targetStates instanceof Map)) return false;
         for (const state of this.targetStates.values()) {
             if (state.objectDrawPromise || state.objectDrawQueue.length > 0) return true;
@@ -1938,6 +2344,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleTimelineBeforeExecute () {
+        this.beginFrameGraph();
         if (this.timeline.recording && this.timeline.initializing) {
             const hasInitializePromises = this.timeline.initializePromises instanceof Set &&
                 this.timeline.initializePromises.size > 0;
@@ -2000,6 +2407,7 @@ class MovieAssetManager extends EventEmitter {
     }
 
     handleTimelineAfterExecute () {
+        this.flushFrameGraph();
         if (!this.timeline.renderedThisStep) return;
         this.timeline.renderedThisStep = false;
         const waitingForVideo = this.hasBlockingVideoRenders();
@@ -3132,14 +3540,18 @@ class MovieAssetManager extends EventEmitter {
         };
     }
 
-    clearModelScene (target) {
+    clearModelScene (target, render = true, requestedCamera = null) {
         const state = this.getTargetState(target);
         state.modelAssetId = null;
         state.modelScene = [];
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelSceneRender(target);
+        if (render) {
+            return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
+                this.queueModelSceneRender(target);
+        }
+        return true;
     }
 
     normalizeBuildingMaterialName (requestedName) {
@@ -3335,7 +3747,7 @@ class MovieAssetManager extends EventEmitter {
         return pending;
     }
 
-    renderBuildingPrimitive (type, args, target) {
+    renderBuildingPrimitive (type, args, target, render = true, requestedCamera = null) {
         const record = this.getBuildingMaterialRecord(args.MATERIAL);
         const sourceObject = createBuildingPrimitive(type, {
             x1: args.X1,
@@ -3360,12 +3772,16 @@ class MovieAssetManager extends EventEmitter {
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelSceneRender(target);
+        if (render) {
+            return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
+                this.queueModelSceneRender(target);
+        }
+        return true;
     }
 
-    renderModelToScene (target, requestedModel) {
+    renderModelToScene (target, requestedModel, render = true, requestedCamera = null) {
         const model = this.getModelByName(target, requestedModel);
-        if (!model) return Promise.resolve();
+        if (!model) return render ? Promise.resolve() : false;
         const state = this.getTargetState(target);
         state.modelAssetId = model.assetId;
         state.modelScene.push({
@@ -3375,11 +3791,19 @@ class MovieAssetManager extends EventEmitter {
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelSceneRender(target);
+        if (render) {
+            return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
+                this.queueModelSceneRender(target);
+        }
+        return true;
     }
 
     stampTarget (target) {
         if (!target) return;
+        if (typeof this.directPenStamp === 'function') {
+            this.directPenStamp(target);
+            return;
+        }
         const pen = this.runtime.ext_pen;
         if (pen && typeof pen._stamp === 'function') {
             pen._stamp(target);
@@ -3406,9 +3830,10 @@ class MovieAssetManager extends EventEmitter {
         return this.timeline ? toNumber(this.timeline.currentTime) : 0;
     }
 
-    createObjectSceneCapture (target) {
+    createObjectSceneCapture (target, requestedCamera = null) {
         if (!target || target.isStage) return null;
         return {
+            camera: requestedCamera || cloneCamera(this.camera),
             entries: [],
             targetId: target.id
         };
@@ -3568,6 +3993,7 @@ class MovieAssetManager extends EventEmitter {
     async performObjectScene (target, capture, requestedState, requestedVersion) {
         const state = requestedState || this.getTargetState(target);
         const version = typeof requestedVersion === 'number' ? requestedVersion : state.objectDrawVersion;
+        const camera = capture.camera || cloneCamera(this.camera);
         const prepared = [];
         try {
             // Resolve in block order. In particular, two frames from one video share a decoder element and must
@@ -3581,7 +4007,7 @@ class MovieAssetManager extends EventEmitter {
             if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
             const renderArguments = [
                 prepared.map(result => result.item),
-                this.camera,
+                camera,
                 this.getStageSize(),
                 BITMAP_RESOLUTION
             ];
@@ -3589,7 +4015,7 @@ class MovieAssetManager extends EventEmitter {
             const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
             this.applyBitmap(target, canvas, 'scene');
             this.publishModelZBuffer(target);
-            this.finishObjectDraw(target, {}, 'model');
+            this.finishObjectDraw(target, {}, 'model', false, camera);
         } finally {
             prepared.forEach(result => {
                 if (result.resource) disposeObject(result.resource);
@@ -3613,18 +4039,26 @@ class MovieAssetManager extends EventEmitter {
         }
     }
 
-    finishObjectDraw (target, configuration, source, reapplyConfiguration = false) {
+    finishObjectDraw (target, configuration, source, reapplyConfiguration = false, requestedCamera = null) {
         if (reapplyConfiguration) this.applyObjectDrawConfiguration(target, configuration);
         const state = this.getTargetState(target);
         // Objects video is a Pen source. Keep its drawable available for stamping, but do not leave the
         // unprocessed video visible above the Pen layer where it would cover the grouped Pen FX result.
-        state.penOnly = source === 'video' || source === 'shape';
+        // Every Objects draw is a Pen stamp. Keeping its temporary source drawable visible would let a later
+        // camera operation move that source above the already-stamped pixels, which looks like the later camera
+        // changed an earlier Draw node.
+        state.penOnly = true;
         // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
         // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
         // the corresponding Motion and Looks blocks, including Z perspective.
-        this.applyProjection(target);
+        const camera = requestedCamera || cloneCamera(this.camera);
+        if (camera) this.applyProjection(target, camera);
+        else this.applyProjection(target);
         this.stampTarget(target);
-        if (source !== 'model') this.publishFlatZBuffer(target);
+        if (source !== 'model') {
+            if (camera) this.publishFlatZBuffer(target, camera);
+            else this.publishFlatZBuffer(target);
+        }
     }
 
     getVideoFrameNumber (video, requestedFrame) {
@@ -3780,9 +4214,10 @@ class MovieAssetManager extends EventEmitter {
             !state.videoRenderPromise;
     }
 
-    queueObjectDraw (target, configuration) {
+    queueObjectDraw (target, configuration, requestedCamera = null) {
         const state = this.getTargetState(target);
         state.objectDrawQueue.push({
+            camera: requestedCamera || cloneCamera(this.camera),
             configuration: this.cloneObjectDrawConfiguration(configuration),
             version: state.objectDrawVersion
         });
@@ -3841,11 +4276,11 @@ class MovieAssetManager extends EventEmitter {
                 state.videoAssetId = video.assetId;
                 state.displayedFrame = frame;
                 state.displayedVideoAssetId = video.assetId;
-                this.finishObjectDraw(target, configuration, source);
+                this.finishObjectDraw(target, configuration, source, false, request.camera);
                 continue;
             }
 
-            const render = this.performObjectDraw(target, configuration);
+            const render = this.performObjectDraw(target, configuration, request.camera);
             if (render && typeof render.then === 'function') await render;
         }
     }
@@ -3885,7 +4320,7 @@ class MovieAssetManager extends EventEmitter {
         return element;
     }
 
-    performObjectDraw (target, configuration) {
+    performObjectDraw (target, configuration, requestedCamera = null) {
         this.applyObjectDrawConfiguration(target, configuration);
         const source = String(configuration.source || 'costume').toLowerCase();
         let render;
@@ -3912,7 +4347,8 @@ class MovieAssetManager extends EventEmitter {
             const state = this.getTargetState(target);
             const frame = Number(configuration.frame);
             state.modelFrame = Number.isFinite(frame) ? Math.max(1, frame) : 1;
-            render = this.replaceModelScene(target, configuration.asset);
+            render = requestedCamera ? this.replaceModelScene(target, configuration.asset, requestedCamera) :
+                this.replaceModelScene(target, configuration.asset);
         } else {
             return;
         }
@@ -3921,14 +4357,21 @@ class MovieAssetManager extends EventEmitter {
             target,
             configuration,
             source,
-            Boolean(render && typeof render.then === 'function')
+            Boolean(render && typeof render.then === 'function'),
+            requestedCamera
         );
         if (render && typeof render.then === 'function') return render.then(finishDraw);
         finishDraw();
     }
 
-    drawObject (target, configuration = {}) {
+    drawObject (target, configuration = {}, graphParent = null) {
+        if (this.enqueueFrameGraphDraw('object', target, configuration, graphParent)) return;
+        return this.drawObjectImmediately(target, configuration);
+    }
+
+    drawObjectImmediately (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage) return;
+        const camera = requestedCamera || cloneCamera(this.camera);
         const source = String(configuration.source || 'costume').toLowerCase();
         if (!['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model'].includes(source)) return;
         if (configuration.sceneCapture) {
@@ -3967,18 +4410,21 @@ class MovieAssetManager extends EventEmitter {
             const frame = this.getVideoFrameNumber(video, drawConfiguration.frame);
             if (!state.objectDrawPromise && this.hasDisplayedObjectVideoFrame(state, video, frame)) {
                 this.applyObjectDrawConfiguration(target, drawConfiguration);
-                this.finishObjectDraw(target, drawConfiguration, source);
+                this.finishObjectDraw(target, drawConfiguration, source, false, camera);
                 return;
             }
-            return this.queueObjectDraw(target, drawConfiguration);
+            return camera ? this.queueObjectDraw(target, drawConfiguration, camera) :
+                this.queueObjectDraw(target, drawConfiguration);
         }
         const state = this.getTargetState(target);
-        if (state.objectDrawPromise) return this.queueObjectDraw(target, drawConfiguration);
-        if (source === 'model') return this.queueObjectDraw(target, drawConfiguration);
-        return this.performObjectDraw(target, drawConfiguration);
+        if (state.objectDrawPromise || source === 'model') {
+            return camera ? this.queueObjectDraw(target, drawConfiguration, camera) :
+                this.queueObjectDraw(target, drawConfiguration);
+        }
+        return this.performObjectDraw(target, drawConfiguration, camera);
     }
 
-    renderShape (target, configuration = {}) {
+    renderShape (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage || !this.runtime.renderer) return;
         const shape = normalizeShapeType(configuration.shape);
         let drawConfiguration = configuration;
@@ -4018,7 +4464,7 @@ class MovieAssetManager extends EventEmitter {
         // Cached procedural skins follow the same cheap stamp path as costume skins. Geometry, color and opacity
         // select the skin; position, rotation and scale only update the drawable transform.
         this.runtime.renderer.updateDrawableSkinId(target.drawableID, skinId);
-        this.finishObjectDraw(target, drawConfiguration, 'shape');
+        this.finishObjectDraw(target, drawConfiguration, 'shape', false, requestedCamera);
         this.trimShapeSkinCache(skinId);
     }
 
@@ -4076,7 +4522,12 @@ class MovieAssetManager extends EventEmitter {
         }
     }
 
-    drawShape (target, configuration = {}) {
+    drawShape (target, configuration = {}, graphParent = null) {
+        if (this.enqueueFrameGraphDraw('shape', target, configuration, graphParent)) return;
+        return this.drawShapeImmediately(target, configuration);
+    }
+
+    drawShapeImmediately (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage) return;
         if (configuration.time) {
             const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
@@ -4084,10 +4535,10 @@ class MovieAssetManager extends EventEmitter {
             const currentTime = this.getObjectEvaluationTime(configuration);
             if (currentTime < startTime || currentTime > endTime) return;
         }
-        return this.renderShape(target, configuration);
+        return this.renderShape(target, configuration, requestedCamera || cloneCamera(this.camera));
     }
 
-    replaceModelScene (target, requestedModel) {
+    replaceModelScene (target, requestedModel, requestedCamera = null) {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return Promise.resolve();
         const state = this.getTargetState(target);
@@ -4099,15 +4550,24 @@ class MovieAssetManager extends EventEmitter {
         state.requestedMode = 'model';
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
-        return this.queueModelSceneRender(target) || Promise.resolve();
+        const render = requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
+            this.queueModelSceneRender(target);
+        return render || Promise.resolve();
     }
 
-    setModelFrame (target, requestedFrame) {
+    setModelFrame (target, requestedFrame, render = true, requestedCamera = null) {
         const state = this.getTargetState(target);
         const frame = Number(requestedFrame);
         state.modelFrame = Number.isFinite(frame) ? Math.max(1, frame) : 1;
-        if (state.requestedMode !== 'model' || !state.modelScene.length) return Promise.resolve();
-        return this.queueModelSceneRender(target) || Promise.resolve();
+        if (state.requestedMode !== 'model' || !state.modelScene.length) {
+            return render ? Promise.resolve() : false;
+        }
+        if (render) {
+            const pending = requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
+                this.queueModelSceneRender(target);
+            return pending || Promise.resolve();
+        }
+        return true;
     }
 
     // Internal compatibility alias used by project restoration and older UI integrations.
@@ -4115,8 +4575,11 @@ class MovieAssetManager extends EventEmitter {
         return this.replaceModelScene(target, requestedModel);
     }
 
-    queueModelSceneRender (target) {
+    queueModelSceneRender (target, requestedCamera = null, preservePenOnly = false) {
         const state = this.getTargetState(target);
+        const camera = requestedCamera || cloneCamera(this.camera);
+        const penOnly = preservePenOnly && state.penOnly;
+        state.modelRenderCamera = camera;
         state.modelRenderVersion++;
 
         const cachedItems = state.modelScene.map(item => {
@@ -4148,10 +4611,10 @@ class MovieAssetManager extends EventEmitter {
         });
         if (cachedItems.length && cachedItems.every(Boolean) && state.requestedMode === 'model') {
             if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
-            const renderArguments = [cachedItems, this.camera, this.getStageSize(), BITMAP_RESOLUTION];
+            const renderArguments = [cachedItems, camera, this.getStageSize(), BITMAP_RESOLUTION];
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
             const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-            this.applyBitmap(target, canvas, 'model');
+            this.applyBitmap(target, canvas, 'model', null, penOnly);
             this.publishModelZBuffer(target);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
@@ -4162,6 +4625,7 @@ class MovieAssetManager extends EventEmitter {
         const renderPromise = Promise.resolve().then(async () => {
             while (this.targetStates.get(target.id) === state) {
                 const version = state.modelRenderVersion;
+                const renderCamera = state.modelRenderCamera || camera;
                 const sceneItems = state.modelScene.map(item => ({
                     assetId: item.assetId,
                     sourceObject: item.sourceObject,
@@ -4194,13 +4658,13 @@ class MovieAssetManager extends EventEmitter {
                 if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
                 const renderArguments = [
                     loadedItems.filter(Boolean),
-                    this.camera,
+                    renderCamera,
                     this.getStageSize(),
                     BITMAP_RESOLUTION
                 ];
                 if (Array.isArray(this.lights)) renderArguments.push(this.lights);
                 const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-                this.applyBitmap(target, canvas, 'model');
+                this.applyBitmap(target, canvas, 'model', null, penOnly);
                 this.publishModelZBuffer(target);
                 return;
             }
@@ -4226,10 +4690,10 @@ class MovieAssetManager extends EventEmitter {
         if (state) state.zBuffer = published;
     }
 
-    publishFlatZBuffer (target) {
+    publishFlatZBuffer (target, requestedCamera = null) {
         if (!target) return;
         const state = this.getTargetState(target);
-        const camera = this.camera || {
+        const camera = requestedCamera || this.camera || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
@@ -4537,6 +5001,7 @@ class MovieAssetManager extends EventEmitter {
                 mode: 'costume',
                 modelAssetId: null,
                 modelFrame: 1,
+                modelRenderCamera: null,
                 modelScene: [],
                 modelRenderPromise: null,
                 modelRenderVersion: 0,
@@ -4772,26 +5237,55 @@ class MovieAssetManager extends EventEmitter {
     }
 
     cameraChanged (rerenderModels = true) {
+        this.cameraVersion = (Number(this.cameraVersion) || 0) + 1;
         this.runtime.emitProjectChanged();
+        if (this.isCollectingFrameGraph()) {
+            // Camera changes are ordered scene-state operations. Appending the snapshot here preserves
+            // set-camera A -> Draw -> set-camera B exactly; no final camera is retroactively applied at flush.
+            this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+                operation: 'camera',
+                rerenderModels,
+                sceneKind: 'camera'
+            });
+            this.emit('cameraChanged', cloneCamera(this.camera));
+            return;
+        }
         this.applyCamera(rerenderModels);
         this.emit('cameraChanged', cloneCamera(this.camera));
     }
 
-    applyCamera (rerenderModels = true) {
-        for (const target of this.runtime.targets) {
+    applyCamera (rerenderModels = true, requestedCamera = null) {
+        const camera = requestedCamera || this.camera;
+        for (const target of this.runtime.targets || []) {
             if (target.isStage) continue;
-            this.applyProjection(target);
+            this.applyProjection(target, camera);
             if (rerenderModels) {
                 const state = this.getTargetState(target);
                 if (state.mode === 'model') {
-                    this.runWithoutWaiting(this.queueModelSceneRender(target));
+                    this.runWithoutWaiting(this.queueModelSceneRender(target, camera, true));
                 }
             }
         }
         this.runtime.requestRedraw();
     }
 
-    applyProjection (target) {
+    applyFrameGraphCamera (requestedCamera, rerenderModels = true) {
+        const camera = requestedCamera || cloneCamera(this.camera);
+        const renders = [];
+        for (const target of this.runtime.targets || []) {
+            if (target.isStage) continue;
+            this.applyProjection(target, camera);
+            if (!rerenderModels) continue;
+            const state = this.getTargetState(target);
+            if (state.mode !== 'model') continue;
+            const render = this.queueModelSceneRender(target, camera, true);
+            if (render && typeof render.then === 'function') renders.push(render);
+        }
+        this.runtime.requestRedraw();
+        if (renders.length) return Promise.all(renders);
+    }
+
+    applyProjection (target, requestedCamera = null) {
         if (!target || target.isStage || !this.runtime.renderer || target.drawableID === null) return;
         if (
             typeof this.runtime.renderer.updateDrawablePosition !== 'function' ||
@@ -4799,6 +5293,12 @@ class MovieAssetManager extends EventEmitter {
             typeof this.runtime.renderer.updateDrawableVisible !== 'function'
         ) return;
         const state = this.getTargetState(target);
+        const camera = requestedCamera || this.camera || {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
         if (state.mode === 'model' || state.mode === 'scene') {
             this.runtime.renderer.updateDrawablePosition(target.drawableID, [0, 0]);
             this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
@@ -4818,15 +5318,10 @@ class MovieAssetManager extends EventEmitter {
             x: state.worldX,
             y: state.worldY,
             z: state.worldZ
-        }, this.camera || {
-            focalLength: DEFAULT_FOCAL_LENGTH,
-            position: {x: 0, y: 0, z: 0},
-            rotation: {x: 0, y: 0, z: 0},
-            rotationOrder: 'XYZ'
-        });
+        }, camera);
         this.runtime.renderer.updateDrawablePosition(target.drawableID, [projection.x, projection.y]);
         const cameraRotationZ = state.ignoreCamera ? 0 :
-            toNumber(this.camera && this.camera.rotation && this.camera.rotation.z);
+            toNumber(camera.rotation && camera.rotation.z);
         const direction = state.mode === 'model' ? 90 : 90 - state.rotation.z + cameraRotationZ;
         const renderedScale = typeof target._getRenderedDirectionAndScale === 'function' ?
             target._getRenderedDirectionAndScale().scale : [target.size, target.size];
@@ -4835,7 +5330,7 @@ class MovieAssetManager extends EventEmitter {
             renderedScale[0] * state.scale.x * perspective,
             renderedScale[1] * state.scale.y * perspective
         ]);
-        this.applySpritePlaneMatrix(target, state, renderedScale);
+        this.applySpritePlaneMatrix(target, state, renderedScale, camera);
         this.runtime.renderer.updateDrawableVisible(
             target.drawableID,
             target.visible && projection.inFront && !state.penOnly
@@ -4846,7 +5341,7 @@ class MovieAssetManager extends EventEmitter {
         }
     }
 
-    applySpritePlaneMatrix (target, state, renderedScale) {
+    applySpritePlaneMatrix (target, state, renderedScale, requestedCamera = null) {
         const renderer = this.runtime.renderer;
         const drawable = renderer && renderer._allDrawables && renderer._allDrawables[target.drawableID];
         if (!drawable || !drawable.skin || typeof drawable.getUniforms !== 'function') return;
@@ -4855,7 +5350,7 @@ class MovieAssetManager extends EventEmitter {
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
-        } : (this.camera || {
+        } : (requestedCamera || this.camera || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},

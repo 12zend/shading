@@ -16,6 +16,10 @@ import installObjectBlocks, {
     decodeDrawAsset,
     encodeDrawAsset
 } from '../../../src/lib/object-blocks';
+import {
+    FRAME_GRAPH_NODE_TYPES,
+    MovieFrameGraphRenderer
+} from '../../../src/lib/movie-frame-graph';
 import installObjectBlockDefinitions, {
     deleteAsset,
     drawSelectionUsesFrame,
@@ -563,6 +567,83 @@ describe('Objects blocks', () => {
             scale: {x: 2, y: 2, z: 1}
         }));
         expect(util.thread).not.toHaveProperty('objectTransformStack');
+    });
+
+    test('records a Transform node and keeps child Draw coordinates local until renderer execution', () => {
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'transform' && branch === 1 ? 'transform-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const frameGraph = new MovieFrameGraphRenderer({}, jest.fn());
+        const parents = [];
+        const manager = {
+            createFrameGraphNode: (type, properties, parent) => frameGraph.append(
+                type,
+                properties,
+                parent || parents[parents.length - 1]
+            ),
+            drawObject: (drawTarget, configuration, parent) => frameGraph.append(
+                FRAME_GRAPH_NODE_TYPES.DRAW,
+                {configuration, drawKind: 'object', target: drawTarget},
+                parent || parents[parents.length - 1]
+            ),
+            isCollectingFrameGraph: () => frameGraph.collecting,
+            runWithoutWaiting: jest.fn(),
+            withFrameGraphParent: (parent, callback) => {
+                parents.push(parent);
+                try {
+                    return callback();
+                } finally {
+                    parents.pop();
+                }
+            }
+        };
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    objectBlocks.draw({
+                        ASSET: 'costume:Logo', SOURCE: 'costume', PX: 20, PY: 10, PZ: 0,
+                        RX: 0, RY: 0, RZ: 5, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100, T1: 0, T2: 1
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'transform'),
+                target
+            }
+        };
+        frameGraph.beginFrame();
+
+        expect(objectBlocks.transform({
+            PX: 100, PY: 50, PZ: 0,
+            AX: 10, AY: 10, AZ: 0,
+            RX: 0, RY: 0, RZ: 90,
+            SX: 2, SY: 2, SZ: 1
+        }, util)).toBeUndefined();
+
+        const transformNode = frameGraph.currentFrame.children[0];
+        expect(transformNode.type).toBe(FRAME_GRAPH_NODE_TYPES.TRANSFORM);
+        expect(transformNode.children).toHaveLength(1);
+        expect(transformNode.children[0]).toEqual(expect.objectContaining({
+            configuration: expect.objectContaining({
+                position: {x: 20, y: 10, z: 0},
+                rotation: {x: 0, y: 0, z: 5},
+                scale: {x: 1, y: 1, z: 1}
+            }),
+            type: FRAME_GRAPH_NODE_TYPES.DRAW
+        }));
     });
 
     test('repeat creates rotated, time-shifted component instances in the same VM tick', () => {
