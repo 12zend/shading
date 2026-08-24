@@ -1343,7 +1343,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.runtime.targets = [];
         manager.installPrimitives();
 
-        manager.runtime._primitives.looks_addpointlight({
+        const pointResult = manager.runtime._primitives.looks_addpointlight({
             COLOR: '#ff8040',
             INTENSITY: 3,
             RADIUS: 800,
@@ -1352,7 +1352,7 @@ describe('MovieAssetManager rendering performance', () => {
             Y: 20,
             Z: 30
         });
-        manager.runtime._primitives.looks_addlight({
+        const spotResult = manager.runtime._primitives.looks_addlight({
             ANGLE: 35,
             COLOR: '#ffffff',
             INTENSITY: 2,
@@ -1376,7 +1376,10 @@ describe('MovieAssetManager rendering performance', () => {
             })
         ]);
 
-        manager.runtime._primitives.looks_clearlight();
+        const clearResult = manager.runtime._primitives.looks_clearlight();
+        expect(pointResult).toBeUndefined();
+        expect(spotResult).toBeUndefined();
+        expect(clearResult).toBeUndefined();
         expect(manager.lights).toEqual([]);
     });
 

@@ -242,26 +242,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
                 </shadow>
             </value>
         </block>
-        <block type="looks_clearlight"/>
-        <block type="looks_addpointlight">
-            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
-            <value name="Z"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
-            <value name="RADIUS"><shadow type="math_number"><field name="NUM">1000</field></shadow></value>
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            <value name="INTENSITY"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
-            <value name="SHADOW"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
-        </block>
-        <block type="looks_addlight">
-            <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-            <value name="Y"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
-            <value name="Z"><shadow type="math_number"><field name="NUM">200</field></shadow></value>
-            <value name="RADIUS"><shadow type="math_number"><field name="NUM">1000</field></shadow></value>
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            <value name="INTENSITY"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
-            <value name="ANGLE"><shadow type="math_angle"><field name="NUM">45</field></shadow></value>
-            <value name="SHADOW"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
-        </block>
         ${blockSeparator}
         <block id="${targetId}_rendervideo" type="looks_rendervideo">
             <value name="VIDEO">
@@ -837,6 +817,21 @@ const objects = function (costumeName) {
             ${number('T1', 0)}${number('T2', 'Infinity')}
             <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
             ${number('OPACITY', 100)}
+        </block>
+        <sep gap="36"/>
+        <!-- Lighting keeps its legacy opcode IDs so saved projects continue to load. -->
+        <block type="looks_clearlight"/>
+        <block type="looks_addpointlight">
+            ${number('X', 0)}${number('Y', 200)}${number('Z', 200)}${number('RADIUS', 1000)}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('INTENSITY', 2)}${number('SHADOW', 1)}
+        </block>
+        <block type="looks_addlight">
+            ${number('X', 0)}${number('Y', 200)}${number('Z', 200)}${number('RADIUS', 1000)}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+            ${number('INTENSITY', 2)}
+            <value name="ANGLE"><shadow type="math_angle"><field name="NUM">45</field></shadow></value>
+            ${number('SHADOW', 1)}
         </block>
         <sep gap="36"/>
         <block type="objects_group"/>

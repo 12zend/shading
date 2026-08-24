@@ -35,6 +35,11 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox).toContain('<block type="objects_scene"/>');
+        expect(toolbox).toContain('<block type="looks_clearlight"/>');
+        expect(toolbox).toContain('<block type="looks_addpointlight">');
+        expect(toolbox).toContain('<block type="looks_addlight">');
+        expect(toolbox.indexOf('type="looks_clearlight"')).toBeGreaterThan(toolbox.indexOf('id="objects"'));
+        expect(toolbox.indexOf('type="looks_addlight"')).toBeLessThan(toolbox.indexOf('</category>'));
         expect(toolbox.indexOf('<block type="objects_grouping"/>'))
             .toBeLessThan(toolbox.indexOf('<block type="objects_scene"/>'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="motion"'));

@@ -8,6 +8,9 @@ import installObjectBlocks, {
     BLEND_MODES,
     COSTUME_GROUP_SOURCE,
     MATTE_MODES,
+    PRIMARY,
+    SECONDARY,
+    TERTIARY,
     applyObjectTransforms,
     createObjectBlocksClass,
     decodeDrawAsset,
@@ -65,6 +68,22 @@ const makeGroupingHarness = onStep => {
 };
 
 describe('Objects blocks', () => {
+    test('styles the legacy lighting opcodes as Objects blocks', () => {
+        const ScratchBlocks = {Blocks: {}};
+        installObjectBlockDefinitions(ScratchBlocks, {runtime: {}});
+
+        ['looks_clearlight', 'looks_addpointlight', 'looks_addlight'].forEach(opcode => {
+            const block = {jsonInit: jest.fn()};
+            ScratchBlocks.Blocks[opcode].init.call(block);
+            expect(block.jsonInit).toHaveBeenCalledWith(expect.objectContaining({
+                category: 'Objects',
+                colour: PRIMARY,
+                colourSecondary: SECONDARY,
+                colourTertiary: TERTIARY
+            }));
+        });
+    });
+
     test('persists and restores the dynamic text input for duplicated and shared font draw blocks', () => {
         const originalDocument = global.document;
         global.document = {
