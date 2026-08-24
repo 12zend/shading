@@ -20,6 +20,7 @@ import styles from './object-blocks-ui.css';
 const IMPORT_VALUE = '__movie_import__';
 const INLINE_PAINT_REFERENCE_HEIGHT = 700;
 const INLINE_PAINT_REFERENCE_WIDTH = 1249;
+const INLINE_PAINT_EDITOR_BODY_CLASS = 'object-blocks-inline-paint-editor-open';
 const SOURCE_LABELS = {
     costume: 'Costume',
     [COSTUME_GROUP_SOURCE]: 'Costume group',
@@ -435,6 +436,9 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
         }
 
         disposeInlineEditorOverlay_ () {
+            if (typeof document !== 'undefined' && document.body) {
+                document.body.classList.remove(INLINE_PAINT_EDITOR_BODY_CLASS);
+            }
             if (this.inlineEditorDropdownContainer_) {
                 this.inlineEditorDropdownContainer_.classList.remove(styles.mediaDropdownHidden);
                 this.inlineEditorDropdownContainer_ = null;
@@ -926,6 +930,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 if (!editing) {
                     this.disposeInlineEditor_();
                     if (this.inlineEditorOverlay_) {
+                        document.body.classList.remove(INLINE_PAINT_EDITOR_BODY_CLASS);
                         picker.hidden = false;
                         if (this.inlineEditorDropdownContainer_) {
                             this.inlineEditorDropdownContainer_.classList.remove(styles.mediaDropdownHidden);
@@ -941,6 +946,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     return;
                 }
                 if (typeof document !== 'undefined' && document.body) {
+                    document.body.classList.add(INLINE_PAINT_EDITOR_BODY_CLASS);
                     editorView.insertBefore(header, editorLayout);
                     editorView.insertBefore(viewSwitchBar, editorLayout);
                     document.body.appendChild(editorView);

@@ -16,6 +16,7 @@ const createFakeDocument = () => {
         const element = {
             _listeners: listeners,
             appendChild: child => {
+                if (child.parentNode) child.parentNode.removeChild(child);
                 child.parentNode = element;
                 element.children.push(child);
                 return child;
@@ -23,6 +24,7 @@ const createFakeDocument = () => {
             children: [],
             classList: {
                 add: (...names) => names.filter(Boolean).forEach(name => classNames.add(name)),
+                contains: name => classNames.has(name),
                 remove: (...names) => names.filter(Boolean).forEach(name => classNames.delete(name)),
                 toggle: (name, force) => {
                     if (!name) return false;
@@ -41,6 +43,13 @@ const createFakeDocument = () => {
             },
             getAttribute: name => attributes.has(name) ? attributes.get(name) : null,
             parentNode: null,
+            insertBefore: (child, reference) => {
+                if (child.parentNode) child.parentNode.removeChild(child);
+                const index = element.children.indexOf(reference);
+                child.parentNode = element;
+                element.children.splice(index < 0 ? element.children.length : index, 0, child);
+                return child;
+            },
             removeChild: child => {
                 const index = element.children.indexOf(child);
                 if (index >= 0) element.children.splice(index, 1);
@@ -71,12 +80,16 @@ const createFakeDocument = () => {
                 }
             }
         });
+        Object.defineProperty(element, 'firstChild', {
+            get: () => element.children[0] || null
+        });
         element.addEventListener = (name, listener) => {
             listeners[name] = listener;
         };
         return element;
     };
     fakeDocument.createElement = createElement;
+    fakeDocument.body = createElement('body');
     fakeDocument.createElementNS = (namespace, tagName) => createElement(tagName);
     fakeDocument.createTextNode = value => {
         const node = createElement('#text');
@@ -209,6 +222,7 @@ describe('Objects draw media picker', () => {
             editButton.click();
             expect(editor.hidden).toBe(false);
             expect(editButton.getAttribute('aria-pressed')).toBe('true');
+            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(true);
             expect(mountInlinePaintEditor).toHaveBeenCalledWith(
                 expect.any(Object),
                 1,
@@ -216,6 +230,7 @@ describe('Objects draw media picker', () => {
             );
             mediaButton.click();
             expect(editor.hidden).toBe(true);
+            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(false);
             expect(unmountInlinePaintEditor).toHaveBeenCalledTimes(1);
 
             const dataTransfer = {
@@ -250,6 +265,11 @@ describe('Objects draw media picker', () => {
 
             closeButton.click();
             expect(ScratchBlocks.DropDownDiv.hide).toHaveBeenCalledTimes(2);
+
+            editButton.click();
+            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(true);
+            field.onHide();
+            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(false);
         } finally {
             global.document = originalDocument;
         }
