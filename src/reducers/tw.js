@@ -23,7 +23,7 @@ export const initialState = {
     interpolation: false,
     cloud: true,
     username: '',
-    highQualityPen: false,
+    highQualityPen: true,
     compilerOptions: {
         enabled: true,
         warpTimer: false

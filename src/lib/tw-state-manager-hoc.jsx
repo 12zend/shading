@@ -379,7 +379,7 @@ const TWStateManager = function (WrappedComponent) {
                 }
             }
 
-            if (urlParams.has('hqpen')) {
+            if (this.props.highQualityPen || urlParams.has('hqpen')) {
                 this.props.vm.renderer.setUseHighQualityRender(true);
             }
 
