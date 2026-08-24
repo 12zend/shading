@@ -55,6 +55,10 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['3d-engine', 'movie-blocks']);
     });
 
+    test('marks the connected Bezier pass reporter as a Movie block', () => {
+        expect(getMovieProjectFeatures(project({pass: block('objects_pass')}))).toEqual(['movie-blocks']);
+    });
+
     test('marks built-in Pen FX blocks as Movie project data', () => {
         const json = project({contrast: block('penfx_contrast')});
 

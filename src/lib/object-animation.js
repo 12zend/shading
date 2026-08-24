@@ -9,6 +9,59 @@ const finiteNumber = (value, fallback = 0) => {
 
 const positiveModulo = (value, divisor) => ((value % divisor) + divisor) % divisor;
 
+const parseBezierPathPoints = value => {
+    let values = value;
+    if (!Array.isArray(values)) {
+        const source = String(value || '').trim();
+        if (!source) return [];
+        if (source[0] === '[') {
+            try {
+                values = JSON.parse(source);
+            } catch (error) {
+                // Scratch list reporters expose their items as an editor-friendly, space-separated string.
+            }
+        }
+        if (!Array.isArray(values)) values = source.split(/[\s,]+/);
+    }
+
+    const flattened = [];
+    values.forEach(item => {
+        if (Array.isArray(item)) flattened.push(...item);
+        else if (item && typeof item === 'object') flattened.push(item.x, item.y);
+        else flattened.push(item);
+    });
+    const points = [];
+    for (let index = 0; index + 1 < flattened.length; index += 2) {
+        points.push({
+            x: finiteNumber(flattened[index]),
+            y: finiteNumber(flattened[index + 1])
+        });
+    }
+    return points;
+};
+
+const evaluateBezierPath = (path, component, time) => {
+    const points = parseBezierPathPoints(path);
+    if (!points.length) return 0;
+    const axis = String(component || '').toLowerCase() === 'y' ? 'y' : 'x';
+    const segmentCount = Math.floor((points.length - 1) / 3);
+    if (segmentCount < 1) return points[0][axis];
+
+    const pathTime = clamp(finiteNumber(time), 0, segmentCount);
+    const segmentIndex = pathTime >= segmentCount ? segmentCount - 1 : Math.floor(pathTime);
+    const progress = pathTime >= segmentCount ? 1 : pathTime - segmentIndex;
+    const pointIndex = segmentIndex * 3;
+    const inverse = 1 - progress;
+    const start = points[pointIndex][axis];
+    const control1 = points[pointIndex + 1][axis];
+    const control2 = points[pointIndex + 2][axis];
+    const end = points[pointIndex + 3][axis];
+    return (inverse * inverse * inverse * start) +
+        (3 * inverse * inverse * progress * control1) +
+        (3 * inverse * progress * progress * control2) +
+        (progress * progress * progress * end);
+};
+
 const TIME_SCOPE_TYPES = ['range', 'offset', 'scale', 'loop', 'pingpong', 'freeze', 'reverse', 'remap'];
 
 const parseCurvePoints = value => {
@@ -268,6 +321,7 @@ export {
     calculatePingPongValue,
     calculateWiggleValue,
     evaluateAngleCurve,
+    evaluateBezierPath,
     evaluateColorCurve,
     evaluateNumberCurve,
     evaluateStepCurve,
@@ -278,6 +332,7 @@ export {
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
+    parseBezierPathPoints,
     parseCurvePoints,
     posterizeTime,
     seededNoise,

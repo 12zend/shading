@@ -756,6 +756,10 @@ const objects = function (costumeName) {
             ${number('X2', 100)}${number('Y2', 100)}${number('Z2', 100)}
             ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
         </block>
+        <block type="objects_pass">
+            ${text('POINTS', '')}
+            <field name="COMPONENT">x</field>${number('TIME', 0)}
+        </block>
         <block type="objects_numberCurve">${text('CURVE', '0:0; 0.4:120@ExpoOut; 1.2:90@BackOut; 2:100')}</block>
         <block type="objects_colorCurve">${text('CURVE', '0:#ff3366; 1:#3366ff')}</block>
         <block type="objects_angleCurve">${text('CURVE', '0:350; 1:10')}</block>

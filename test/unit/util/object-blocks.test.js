@@ -421,7 +421,7 @@ describe('Objects blocks', () => {
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
             'timelineTime', 'animate', 'loopValue', 'pingPongValue', 'wiggle',
             'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector',
-            'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
+            'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
         expect(Object.keys(info.blocks[0].arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
@@ -444,6 +444,7 @@ describe('Objects blocks', () => {
         expect(info.menus.blendMode.items).toEqual(BLEND_MODES);
         expect(info.menus.easing.items).toEqual(ANIMATION_EASING_TYPES);
         expect(info.menus.matteMode.items).toEqual(MATTE_MODES);
+        expect(info.menus.pathComponent.items).toEqual(['x', 'y']);
         expect(info.blocks[1].text).toContain('\ncolor: [COLOR] opacity: [OPACITY] %');
         expect(info.blocks[0].arguments.T2.defaultValue).toBe(Infinity);
         expect(info.blocks[1].arguments.T2.defaultValue).toBe(Infinity);
@@ -502,6 +503,9 @@ describe('Objects blocks', () => {
             COMPONENT: 'y', X1: 0, Y1: 20, Z1: 0, X2: 100, Y2: 40, Z2: 100,
             T1: 0, T2: 2, EASING: 'Linear'
         }, util)).toBe(30);
+        expect(blocks.pass({
+            POINTS: '0 0 0 100 100 100 100 0', COMPONENT: 'y', TIME: 0.5
+        }, util)).toBe(75);
         expect(blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)).toBe(
             blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)
         );

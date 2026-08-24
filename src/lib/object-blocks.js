@@ -9,6 +9,7 @@ import {
     calculatePingPongValue,
     calculateWiggleValue,
     evaluateAngleCurve,
+    evaluateBezierPath,
     evaluateColorCurve,
     evaluateNumberCurve,
     evaluateStepCurve,
@@ -44,6 +45,7 @@ const OBJECT_REPORTER_OPCODES = new Set([
     'objects_interpolateColor',
     'objects_interpolateAngle',
     'objects_interpolateVector',
+    'objects_pass',
     'objects_numberCurve',
     'objects_colorCurve',
     'objects_angleCurve',
@@ -755,6 +757,19 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     }
                 },
                 {
+                    opcode: 'pass',
+                    blockType: BlockType.REPORTER,
+                    text: 'pass [POINTS] [COMPONENT] [TIME]',
+                    arguments: {
+                        POINTS: {
+                            type: ArgumentType.STRING,
+                            defaultValue: ''
+                        },
+                        COMPONENT: {type: ArgumentType.STRING, menu: 'pathComponent', defaultValue: 'x'},
+                        TIME: numberArgument(0)
+                    }
+                },
+                {
                     opcode: 'numberCurve',
                     blockType: BlockType.REPORTER,
                     text: 'number curve [CURVE] at local time',
@@ -824,6 +839,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 vectorComponent: {
                     acceptReporters: true,
                     items: VECTOR_COMPONENTS
+                },
+                pathComponent: {
+                    acceptReporters: true,
+                    items: ['x', 'y']
                 }
             }
         };
@@ -1214,6 +1233,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             end: args.T2,
             easing: args.EASING
         }, getObjectTime(this.runtime, util));
+    }
+
+    pass (args) {
+        return evaluateBezierPath(args.POINTS, args.COMPONENT, args.TIME);
     }
 
     numberCurve (args, util) {

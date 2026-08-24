@@ -282,6 +282,21 @@ const installObjectCompositionBlockDefinitions = ScratchBlocks => {
         extensions: ['output_number']
     });
 
+    installObjectBlock('objects_pass', {
+        message0: 'pass %1 %2 %3',
+        args0: [
+            numberInput('POINTS'),
+            {
+                type: 'field_dropdown',
+                name: 'COMPONENT',
+                options: [['x', 'x'], ['y', 'y']]
+            },
+            numberInput('TIME')
+        ],
+        inputsInline: true,
+        extensions: ['output_number']
+    });
+
     installObjectBlock('objects_numberCurve', {
         message0: 'number curve %1 at local time',
         args0: [numberInput('CURVE')],

@@ -4,6 +4,7 @@ import {
     calculatePingPongValue,
     calculateWiggleValue,
     evaluateAngleCurve,
+    evaluateBezierPath,
     evaluateColorCurve,
     evaluateNumberCurve,
     evaluateStepCurve,
@@ -108,5 +109,26 @@ describe('Objects animation values', () => {
         expect(evaluateAngleCurve('0:350; 1:10', 0.5)).toBe(360);
         expect(evaluateStepCurve('0:one; 1:two', 0.999)).toBe('one');
         expect(evaluateStepCurve('0:one; 1:two', 1)).toBe('two');
+    });
+
+    test('evaluates connected cubic Bezier segments from space-separated Scratch list values', () => {
+        const path = '0 0 0 100 100 100 100 0 100 -100 200 -100 200 0';
+
+        expect(evaluateBezierPath(path, 'x', 0)).toBe(0);
+        expect(evaluateBezierPath(path, 'x', 0.5)).toBe(50);
+        expect(evaluateBezierPath(path, 'y', 0.5)).toBe(75);
+        expect(evaluateBezierPath(path, 'x', 1)).toBe(100);
+        expect(evaluateBezierPath(path, 'x', 1.5)).toBe(150);
+        expect(evaluateBezierPath(path, 'y', 1.5)).toBe(-75);
+        expect(evaluateBezierPath(path, 'x', 2)).toBe(200);
+    });
+
+    test('accepts array path values and clamps malformed or out-of-range input safely', () => {
+        const path = [[0, 10], [0, 20], [30, 20], [30, 10]];
+
+        expect(evaluateBezierPath(path, 'y', -1)).toBe(10);
+        expect(evaluateBezierPath(path, 'x', 10)).toBe(30);
+        expect(evaluateBezierPath('4 5', 'x', 0.5)).toBe(4);
+        expect(evaluateBezierPath('', 'x', 0.5)).toBe(0);
     });
 });
