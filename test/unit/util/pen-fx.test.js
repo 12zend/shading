@@ -57,6 +57,12 @@ describe('built-in Pen FX category', () => {
         expect(stroke).toBeDefined();
         expect(stroke.arguments.COLOR.defaultValue).toBe('#000000');
         expect(stroke.arguments.WIDTH.defaultValue).toBe(4);
+        const blob = info.blocks.find(block => block.opcode === 'blob');
+        expect(blob).toBeDefined();
+        expect(blob.arguments.COLOR.defaultValue).toBe('#00ffff');
+        expect(blob.arguments.THRESHOLD.defaultValue).toBe(50);
+        expect(info.menus.blobMode.items).toEqual(['bright', 'dark', 'color', 'motion', 'alpha']);
+        expect(info.menus.blobShape.items).toEqual(['rectangle', 'ellipse']);
         const depthOfField = info.blocks.find(block => block.opcode === 'depthOfField');
         expect(depthOfField).toBeDefined();
         expect(depthOfField.arguments.FOCUS.defaultValue).toBe(480);
@@ -120,6 +126,110 @@ describe('built-in Pen FX category', () => {
 
         expect(result).toBeUndefined();
         expect(penFX.engine.stroke).toHaveBeenCalledWith([32 / 255, 64 / 255, 128 / 255], 12, 'normal');
+    });
+
+    test('routes synchronous blob detection and bounding-box overlay controls', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {blob: jest.fn()};
+
+        const result = penFX.blob({
+            BLUR: 3,
+            COLOR: '#00ffff',
+            FILL: 20,
+            KEY: '#ff0000',
+            MARKER: 'true',
+            MAX: 80,
+            MIN: 2,
+            MODE: 'color',
+            OPACITY: 75,
+            SHAPE: 'ellipse',
+            THRESHOLD: 40,
+            WIDTH: 4
+        });
+
+        expect(result).toBeUndefined();
+        expect(penFX.engine.blob).toHaveBeenCalledWith({
+            blurRadius: 3,
+            color: [0, 1, 1],
+            fillOpacity: 0.2,
+            marker: true,
+            maximumSize: 80,
+            minimumSize: 2,
+            mode: 'color',
+            shape: 'ellipse',
+            strokeOpacity: 0.75,
+            strokeWidth: 4,
+            targetColor: [1, 0, 0],
+            threshold: 40
+        }, 'normal');
+    });
+
+    test('reads the current drawing and uploads multiple blob boxes in the same tick', () => {
+        const gl = {
+            ARRAY_BUFFER: 1,
+            FRAMEBUFFER: 2,
+            RGBA: 3,
+            STATIC_DRAW: 4,
+            TEXTURE_2D: 5,
+            UNSIGNED_BYTE: 6,
+            VERTEX_SHADER: 7,
+            bindBuffer: jest.fn(),
+            bindFramebuffer: jest.fn(),
+            bindTexture: jest.fn(),
+            bufferData: jest.fn(),
+            compileShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            createShader: jest.fn(() => ({})),
+            deleteShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            readPixels: jest.fn((x, y, width, height, format, type, output) => {
+                for (let offset = 0; offset < output.length; offset += 4) {
+                    output.set([0, 0, 0, 255], offset);
+                }
+                output.set([255, 255, 255, 255], 0);
+                output.set([255, 255, 255, 255], 6 * 4);
+            }),
+            shaderSource: jest.fn(),
+            texSubImage2D: jest.fn()
+        };
+        const skin = {_texture: 'pen-texture'};
+        const renderer = {_gl: gl};
+        const PenFX = createPenFXClass({runtime: {renderer}});
+        const engine = new PenFX()._getEngine();
+        engine.blendOpacity = 1;
+        engine.framebuffers = ['source-framebuffer'];
+        engine.height = 2;
+        engine.textures = ['source-texture'];
+        engine.width = 4;
+        engine._canRenderDirectly = jest.fn(() => true);
+        engine._markSkinChanged = jest.fn();
+        engine._prepare = jest.fn(() => skin);
+
+        const result = engine.blob({
+            blurRadius: 0,
+            color: [0, 1, 1],
+            fillOpacity: 0,
+            marker: false,
+            maximumSize: 100,
+            minimumSize: 0,
+            mode: 'bright',
+            shape: 'rectangle',
+            strokeOpacity: 1,
+            strokeWidth: 1,
+            targetColor: [1, 1, 1],
+            threshold: 200
+        }, 'normal');
+
+        expect(result).toBeUndefined();
+        expect(gl.readPixels).toHaveBeenCalledWith(0, 0, 4, 2, gl.RGBA, gl.UNSIGNED_BYTE,
+            expect.any(Uint8Array));
+        expect(gl.texSubImage2D).toHaveBeenCalledTimes(1);
+        const uploaded = gl.texSubImage2D.mock.calls[0][8];
+        expect(Array.from(uploaded.slice(0, 4))).toEqual([0, 255, 255, 255]);
+        expect(Array.from(uploaded.slice(24, 28))).toEqual([0, 255, 255, 255]);
+        expect(engine._markSkinChanged).toHaveBeenCalledWith(skin);
     });
 
     test('provides a bounded GPU stroke shader which preserves the original over the outline', () => {

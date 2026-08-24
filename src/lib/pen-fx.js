@@ -12,6 +12,7 @@
 import ArgumentType from 'scratch-vm/src/extension-support/argument-type';
 import BlockType from 'scratch-vm/src/extension-support/block-type';
 import Cast from 'scratch-vm/src/util/cast';
+import detectMovieBlobs, {drawMovieBlobOverlay} from './movie-blob-detection';
 
 const createPenFXClass = vm => {
   const renderer = vm.runtime.renderer;
@@ -1750,6 +1751,8 @@ const createPenFXClass = vm => {
       this.pixelSortSelected = null;
       this.pixelSortIndices = [];
       this.pixelSortLine = [];
+      this.blobSource = null;
+      this.previousBlobFrame = null;
       this.depthTexture = null;
       this.depthSource = null;
       this.depthVersion = -1;
@@ -2473,6 +2476,31 @@ const createPenFXClass = vm => {
         u_color: strokeColor,
         u_width: safeWidth
       }, [], blendMode);
+    }
+
+    blob(options, blendMode) {
+      if (this.blendOpacity <= 0) return;
+      const skin = this._prepare();
+      if (!skin) return;
+      const pixelLength = this.width * this.height * 4;
+      if (!this.blobSource || this.blobSource.length !== pixelLength) {
+        this.blobSource = new Uint8Array(pixelLength);
+      }
+      const source = this.blobSource;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+      gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      const frame = {data: source, height: this.height, width: this.width};
+      const boxes = detectMovieBlobs(frame, options, this.previousBlobFrame);
+      // Keep the unannotated frame as the motion baseline so the debugger overlay never detects itself.
+      this.previousBlobFrame = {data: new Uint8Array(source), height: this.height, width: this.width};
+      if (!boxes.length) return;
+      const output = drawMovieBlobOverlay(frame, boxes, options);
+      const direct = this._canRenderDirectly(blendMode);
+      if (!direct) this._ensureSecondaryBuffer();
+      gl.bindTexture(gl.TEXTURE_2D, direct ? skin._texture : this.textures[1]);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, output);
+      if (direct) this._markSkinChanged(skin);
+      else this._finish(skin, this.textures[1], blendMode);
     }
 
     gradationOverlay(stops, direction, mixValue, blendMode) {
@@ -3237,6 +3265,7 @@ const createPenFXClass = vm => {
           {opcode: 'colorOverlay', blockType: BlockType.COMMAND, text: 'color overlay [COLOR] mix: [MIX] %', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'gradationOverlay', blockType: BlockType.COMMAND, text: 'gradation overlay [GRADIENT] dir: [DIR] mix: [MIX] %', arguments: {GRADIENT: {type: ArgumentType.STRING, defaultValue: '{"stops":[{"color":"#000000","position":0},{"color":"#ffffff","position":1}]}'}, DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'stroke', blockType: BlockType.COMMAND, text: 'stroke color: [COLOR] width: [WIDTH]', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#000000'}, WIDTH: {type: ArgumentType.NUMBER, defaultValue: 4}}},
+          {opcode: 'blob', blockType: BlockType.COMMAND, text: 'blob [MODE] key: [KEY] threshold: [THRESHOLD] blur: [BLUR] min: [MIN] % max: [MAX] % boxes: [SHAPE] color: [COLOR] width: [WIDTH] opacity: [OPACITY] % fill: [FILL] % markers: [MARKER]', arguments: {MODE: {type: ArgumentType.STRING, menu: 'blobMode', defaultValue: 'bright'}, KEY: {type: ArgumentType.COLOR, defaultValue: '#ffffff'}, THRESHOLD: {type: ArgumentType.NUMBER, defaultValue: 50}, BLUR: {type: ArgumentType.NUMBER, defaultValue: 1}, MIN: {type: ArgumentType.NUMBER, defaultValue: 1}, MAX: {type: ArgumentType.NUMBER, defaultValue: 100}, SHAPE: {type: ArgumentType.STRING, menu: 'blobShape', defaultValue: 'rectangle'}, COLOR: {type: ArgumentType.COLOR, defaultValue: '#00ffff'}, WIDTH: {type: ArgumentType.NUMBER, defaultValue: 2}, OPACITY: {type: ArgumentType.NUMBER, defaultValue: 100}, FILL: {type: ArgumentType.NUMBER, defaultValue: 0}, MARKER: {type: ArgumentType.STRING, menu: 'boolean', defaultValue: 'true'}}},
           '---',
           {opcode: 'rgbShift', blockType: BlockType.COMMAND, text: 'rgb shift dir: [DIR] value: [VALUE] color: [COLOR] mix: [MIX] %', arguments: {DIR: {type: ArgumentType.ANGLE, defaultValue: 90}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, COLOR: {type: ArgumentType.STRING, menu: 'rgbPair'}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
           {opcode: 'gaussianBlur', blockType: BlockType.COMMAND, text: 'gaussian blur type: [TYPE] value: [VALUE] mix: [MIX] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'gaussianType'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 5}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -3329,6 +3358,8 @@ const createPenFXClass = vm => {
           fractalNoiseType: {acceptReporters: true, items: FRACTAL_NOISE_TYPES},
           fractalOverflowType: {acceptReporters: true, items: FRACTAL_OVERFLOW_TYPES},
           mapChannel: {acceptReporters: true, items: ['luminance', 'r', 'g', 'b', 'a']},
+          blobMode: {acceptReporters: true, items: ['bright', 'dark', 'color', 'motion', 'alpha']},
+          blobShape: {acceptReporters: true, items: ['rectangle', 'ellipse']},
           bufferMode: {acceptReporters: true, items: ['average', 'add', 'lighten', 'darken']},
           mirrorType: {acceptReporters: true, items: ['x', 'y', 'xy']},
           boolean: {acceptReporters: true, items: ['false', 'true']},
@@ -3439,6 +3470,26 @@ const createPenFXClass = vm => {
 
     stroke(args) {
       this._safe(engine => engine.stroke(color(args.COLOR || '#000000'), numberOr(args.WIDTH, 4), this.blendMode));
+    }
+
+    blob(args) {
+      const mode = ['alpha', 'bright', 'color', 'dark', 'motion'].includes(String(args.MODE)) ?
+        String(args.MODE) : 'dark';
+      const shape = String(args.SHAPE) === 'ellipse' ? 'ellipse' : 'rectangle';
+      this._safe(engine => engine.blob({
+        blurRadius: Math.max(0, number(args.BLUR)),
+        color: color(args.COLOR || '#00ffff'),
+        fillOpacity: Math.min(1, Math.max(0, number(args.FILL) / 100)),
+        marker: boolean(args.MARKER),
+        maximumSize: Math.min(100, Math.max(0, numberOr(args.MAX, 100))),
+        minimumSize: Math.min(100, Math.max(0, number(args.MIN))),
+        mode,
+        shape,
+        strokeOpacity: Math.min(1, Math.max(0, numberOr(args.OPACITY, 100) / 100)),
+        strokeWidth: Math.max(1, numberOr(args.WIDTH, 2)),
+        targetColor: color(args.KEY || '#ffffff'),
+        threshold: Math.min(255, Math.max(0, numberOr(args.THRESHOLD, 50)))
+      }, this.blendMode));
     }
 
     chromaKey(args) {
