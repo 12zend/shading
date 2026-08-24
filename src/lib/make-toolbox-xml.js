@@ -381,82 +381,37 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
     `;
 };
 
-const sound = function (isInitialSetup, isStage, targetId, soundName, colors) {
+const sound = function (soundName, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_SOUND}" id="sound" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        <block type="sound_play">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
-                </shadow>
-            </value>
-        </block>
-        <block id="${targetId}_sound_playuntildone" type="sound_playuntildone">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
-                </shadow>
-            </value>
-        </block>
         <block type="sound_playattime">
             <value name="SOUND_MENU">
                 <shadow type="sound_sounds_menu">
                     <field name="SOUND_MENU">${soundName}</field>
                 </shadow>
             </value>
-            <value name="TIME">
+            <value name="T1">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
                 </shadow>
             </value>
-        </block>
-        <block type="sound_playatframe">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
+            <value name="T2">
+                <shadow type="math_number">
+                    <field name="NUM">Infinity</field>
                 </shadow>
             </value>
-            <value name="FRAME">
+            <value name="SPEED">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
-        </block>
-        ${blockSeparator}
-        <block type="sound_stopallsounds"/>
-        ${blockSeparator}
-        <block type="sound_seteffectto">
             <value name="VOLUME">
                 <shadow type="math_number">
                     <field name="NUM">100</field>
                 </shadow>
             </value>
         </block>
-        <block type="sound_changeeffectby">
-            <value name="VOLUME">
-                <shadow type="math_number">
-                    <field name="NUM">10</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sound_cleareffects"/>
-        ${blockSeparator}
-        <block type="sound_changevolumeby">
-            <value name="VOLUME">
-                <shadow type="math_number">
-                    <field name="NUM">-10</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sound_setvolumeto">
-            <value name="VOLUME">
-                <shadow type="math_number">
-                    <field name="NUM">100</field>
-                </shadow>
-            </value>
-        </block>
-        <block id="${targetId}_volume" type="sound_volume"/>
         ${categorySeparator}
     </category>
     `;
@@ -985,7 +940,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     moveCategory('looks');
     const objectsXML = moveCategory('objects') ? objects(costumeName) : null;
     const penFXXML = withPenFXGradientField(moveCategory('penfx'));
-    const soundXML = moveCategory('sound') || sound(isInitialSetup, isStage, targetId, soundName, colors.sounds);
+    const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
     const sensingXML = moveCategory('sensing') || sensing(isInitialSetup, isStage, targetId, colors.sensing);

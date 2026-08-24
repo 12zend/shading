@@ -271,10 +271,41 @@ const analyzeRenderScript = (target, blocks, firstId, duration, framerate, resul
                     timeScopes: context.timeScopes
                 });
             }
-        } else if (block.opcode === 'sound_playattime' || block.opcode === 'sound_playatframe') {
-            const requestedTime = block.opcode === 'sound_playatframe' ?
-                finiteNumber(readConstantInput(blocks, block, 'FRAME', 0), 0) / Math.max(1, framerate) :
-                finiteNumber(readConstantInput(blocks, block, 'TIME', 0), 0);
+        } else if (block.opcode === 'sound_playattime') {
+            const hasNewRange = block.inputs && (block.inputs.T1 || block.inputs.T2);
+            if (hasNewRange) {
+                const start = finiteNumber(readConstantInput(blocks, block, 'T1', 0), 0);
+                const end = finiteNumber(readConstantInput(blocks, block, 'T2', duration), duration);
+                const globalRange = clampRange(localRangeToGlobal(start, end, context), duration);
+                result.ranges.push({
+                    blockId: block.id || id,
+                    end: globalRange.end,
+                    kind: 'audio',
+                    label: describeRangeBlock(block, targetName),
+                    localTime: context.affine ? (result.currentTime * context.scale) + context.offset : null,
+                    start: globalRange.start,
+                    targetId: target.id,
+                    timeScopes: context.timeScopes
+                });
+            } else {
+                const requestedTime = finiteNumber(readConstantInput(blocks, block, 'TIME', 0), 0);
+                const globalTime = localToGlobal(requestedTime, context);
+                if (globalTime !== null && globalTime >= 0 && globalTime <= duration) {
+                    result.ranges.push({
+                        blockId: block.id || id,
+                        end: Math.min(duration, globalTime + (1 / Math.max(1, framerate))),
+                        kind: 'event',
+                        label: describeRangeBlock(block, targetName),
+                        localTime: requestedTime,
+                        start: globalTime,
+                        targetId: target.id,
+                        timeScopes: context.timeScopes
+                    });
+                }
+            }
+        } else if (block.opcode === 'sound_playatframe') {
+            const requestedTime = finiteNumber(readConstantInput(blocks, block, 'FRAME', 0), 0) /
+                Math.max(1, framerate);
             const globalTime = localToGlobal(requestedTime, context);
             if (globalTime !== null && globalTime >= 0 && globalTime <= duration) {
                 result.ranges.push({

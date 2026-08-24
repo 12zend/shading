@@ -225,10 +225,13 @@ export default function (vm) {
     ScratchBlocks.Blocks.sound_playattime = {
         init: function () {
             this.jsonInit({
-                message0: 'play sound at %1 time: %2',
+                message0: 'play sound at %1 time: %2 ~ %3 speed: %4 volume: %5',
                 args0: [
                     {type: 'input_value', name: 'SOUND_MENU'},
-                    {type: 'input_value', name: 'TIME'}
+                    {type: 'input_value', name: 'T1'},
+                    {type: 'input_value', name: 'T2'},
+                    {type: 'input_value', name: 'SPEED'},
+                    {type: 'input_value', name: 'VOLUME'}
                 ],
                 inputsInline: true,
                 category: ScratchBlocks.Categories.sound,

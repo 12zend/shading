@@ -597,6 +597,100 @@ describe('MovieAssetManager rendering performance', () => {
         }]);
     });
 
+    test('plays the ranged sound from its timeline position and updates eased volume in place', () => {
+        const manager = makeTimelineManager();
+        const source = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            playbackRate: {value: 1},
+            start: jest.fn(),
+            stop: jest.fn()
+        };
+        const gain = {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            gain: {value: 1}
+        };
+        const input = {};
+        const sound = {name: 'Beat', soundId: 'beat'};
+        const target = {
+            id: 'main',
+            sprite: {
+                soundBank: {getSoundPlayer: jest.fn(() => ({buffer: {duration: 8}}))},
+                sounds: [sound]
+            }
+        };
+        const util = {target, thread: {peekStack: () => 'ranged-sound'}};
+        manager.runtime.audioEngine = {
+            audioContext: {
+                createBufferSource: jest.fn(() => source),
+                createGain: jest.fn(() => gain)
+            },
+            getInputNode: jest.fn(() => input)
+        };
+        manager.timeline.currentTime = 2;
+        manager.timeline.playing = true;
+
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', T1: 1, T2: 4, SPEED: 2, VOLUME: 25}, util);
+        manager.playSoundAtTime({SOUND_MENU: 'Beat', T1: 1, T2: 4, SPEED: 2, VOLUME: 80}, util);
+
+        expect(manager.runtime.audioEngine.audioContext.createBufferSource).toHaveBeenCalledTimes(1);
+        expect(source.start).toHaveBeenCalledWith(0, 2, 4);
+        expect(source.playbackRate.value).toBe(2);
+        expect(gain.gain.value).toBe(0.8);
+        expect(gain.connect).toHaveBeenCalledWith(input);
+    });
+
+    test('records one ranged sound segment per frame with speed, cut, and block volume', () => {
+        const manager = makeTimelineManager();
+        const sound = {name: 'Beat', soundId: 'beat'};
+        const target = {id: 'main', sprite: {sounds: [sound]}};
+        manager.timeline.currentTime = 2.99;
+        manager.timeline.playing = true;
+        manager.timeline.recording = true;
+        manager.timeline.renderFrameIndex = 90;
+
+        manager.playSoundAtTime({
+            SOUND_MENU: 'Beat',
+            T1: 1,
+            T2: 3,
+            SPEED: 1.5,
+            VOLUME: 42
+        }, {target, thread: {peekStack: () => 'ranged-sound'}});
+
+        expect(manager.renderingSoundEvents).toEqual([{
+            dedupeKey: 'main:ranged-sound:90',
+            duration: 3 - 2.99,
+            frame: 90,
+            offset: (2.99 - 1) * 1.5,
+            pan: 0,
+            playbackRate: 1.5,
+            sound,
+            target,
+            volume: 42
+        }]);
+    });
+
+    test('the ranged sound primitive returns immediately without a Promise', () => {
+        const manager = makeTimelineManager();
+        const target = {id: 'main', sprite: {sounds: [{name: 'Beat', soundId: 'beat'}]}};
+        manager.installPrimitives();
+        manager.timeline.playing = true;
+        manager.timeline.currentTime = 0;
+        manager.startRangedSoundPlayback = jest.fn();
+
+        const result = manager.runtime._primitives.sound_playattime({
+            SOUND_MENU: 'Beat',
+            T1: 0,
+            T2: Infinity,
+            SPEED: 1,
+            VOLUME: 100
+        }, {target, thread: {peekStack: () => 'ranged-sound'}});
+
+        expect(result).toBeUndefined();
+        expect(manager.startRangedSoundPlayback).toHaveBeenCalled();
+    });
+
     test('records frame-based sounds for deterministic export without playing them', () => {
         const manager = makeTimelineManager();
         const playSound = jest.fn();

@@ -101,4 +101,24 @@ describe('Movie frame analysis', () => {
             expect.objectContaining({blockId: 'draw', start: 2, end: 4})
         ]);
     });
+
+    test('describes the ranged sound block as an audio range', () => {
+        const blocks = makeBlocks([
+            {id: 'hat', inputs: {}, next: 'sound', opcode: 'event_renderframe'},
+            {
+                id: 'sound',
+                inputs: {T1: {block: 'sound-start'}, T2: {block: 'sound-end'}},
+                next: null,
+                opcode: 'sound_playattime'
+            },
+            numberBlock('sound-start', 1.5),
+            numberBlock('sound-end', 4)
+        ]);
+        const target = {blocks, id: 'sprite', isOriginal: true};
+        const analysis = analyzeMovieFrames({targets: [target]}, {duration: 10, framerate: 30});
+
+        expect(analysis.ranges).toEqual([
+            expect.objectContaining({blockId: 'sound', kind: 'audio', start: 1.5, end: 4})
+        ]);
+    });
 });

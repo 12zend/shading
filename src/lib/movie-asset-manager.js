@@ -488,6 +488,8 @@ class MovieAssetManager extends EventEmitter {
         this.renderingSoundEvents = [];
         this.playedTimelineSoundBlocks = new Set();
         this.timelineSoundSources = new Set();
+        this.timelineSoundPlaybacks = new Map();
+        this.timelineSoundPlaybacksSeen = new Set();
         this.objectVideoAudio = new Map();
         this.objectVideoAudioSeen = new Set();
         this.previewRendererSize = null;
@@ -1411,6 +1413,16 @@ class MovieAssetManager extends EventEmitter {
 
     playSoundAtTime (args, util) {
         if (!util || !util.target) return;
+        // Projects saved before the ranged sound block used TIME as an offset into the source audio.
+        if (!Object.prototype.hasOwnProperty.call(args || {}, 'T1') &&
+            !Object.prototype.hasOwnProperty.call(args || {}, 'T2')) {
+            this.playLegacySoundAtTime(args, util);
+            return;
+        }
+        this.playRangedSound(args, util);
+    }
+
+    playLegacySoundAtTime (args, util) {
         if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
         if (!(this.playedTimelineSoundBlocks instanceof Set)) this.playedTimelineSoundBlocks = new Set();
 
@@ -1449,6 +1461,161 @@ class MovieAssetManager extends EventEmitter {
             return;
         }
         this.startSoundAtTime(util.target, sound, requestedTime);
+    }
+
+    getTimelineSoundBlockKey (target, sound, util) {
+        const blockId = util && util.thread && typeof util.thread.peekStack === 'function' ?
+            util.thread.peekStack() : sound.name;
+        return `${target.id}:${blockId}`;
+    }
+
+    getRangedSoundConfiguration (args) {
+        const start = Math.max(0, toNumber(args && args.T1));
+        const requestedEnd = Number(args && args.T2);
+        const end = Number.isFinite(requestedEnd) ? Math.max(start, requestedEnd) : Number.POSITIVE_INFINITY;
+        const requestedSpeed = Number(args && args.SPEED);
+        return {
+            end,
+            speed: Number.isFinite(requestedSpeed) && requestedSpeed > 0 ? requestedSpeed : 1,
+            start,
+            volume: clamp(toNumber(args && args.VOLUME, 100), 0, 100)
+        };
+    }
+
+    playRangedSound (args, util) {
+        const target = util.target;
+        const sound = this.getRenderingSound(target, args && args.SOUND_MENU);
+        if (!sound) return;
+        const configuration = this.getRangedSoundConfiguration(args);
+        const key = this.getTimelineSoundBlockKey(target, sound, util);
+        const thread = util.thread;
+        const blocks = thread && (thread.blockContainer || target.blocks);
+        const topBlock = blocks && typeof blocks.getBlock === 'function' ? blocks.getBlock(thread.topBlock) : null;
+
+        // A paused render-frame evaluation is only a visual scrub. Clicking the block directly still auditions it.
+        if (!this.timeline.playing) {
+            if (topBlock && topBlock.opcode === 'event_renderframe') return;
+            const duration = Number.isFinite(configuration.end) ? configuration.end - configuration.start : Infinity;
+            this.startRangedSoundPlayback(target, sound, {
+                ...configuration,
+                duration,
+                offset: 0
+            });
+            return;
+        }
+
+        const currentTime = toNumber(this.timeline.currentTime);
+        const active = currentTime >= configuration.start && currentTime < configuration.end;
+        if (!active) {
+            this.stopTimelineSoundPlayback(key);
+            return;
+        }
+
+        const offset = Math.max(0, (currentTime - configuration.start) * configuration.speed);
+        const remaining = Number.isFinite(configuration.end) ? configuration.end - currentTime : Infinity;
+        if (this.timeline.recording) {
+            if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
+            const frameDuration = 1 / Math.max(1, toNumber(this.timeline.framerate, RENDERING_DEFAULT_FRAME_RATE));
+            this.renderingSoundEvents.push({
+                dedupeKey: `${key}:${this.timeline.renderFrameIndex}`,
+                duration: Math.min(frameDuration, remaining),
+                frame: this.timeline.renderFrameIndex,
+                offset,
+                pan: 0,
+                playbackRate: configuration.speed,
+                sound,
+                target,
+                volume: configuration.volume
+            });
+            this.stopTimelineSoundPlayback(key);
+            return;
+        }
+
+        if (!(this.timelineSoundPlaybacksSeen instanceof Set)) this.timelineSoundPlaybacksSeen = new Set();
+        this.timelineSoundPlaybacksSeen.add(key);
+        if (!(this.timelineSoundPlaybacks instanceof Map)) this.timelineSoundPlaybacks = new Map();
+        let playback = this.timelineSoundPlaybacks.get(key);
+        if (playback && playback.soundId !== sound.soundId) {
+            this.stopTimelineSoundPlayback(key, playback);
+            playback = null;
+        }
+        if (!playback) {
+            playback = this.startRangedSoundPlayback(target, sound, {
+                ...configuration,
+                duration: remaining,
+                key,
+                offset
+            });
+        }
+        if (!playback) return;
+        playback.source.playbackRate.value = configuration.speed;
+        if (playback.gain) playback.gain.gain.value = configuration.volume / 100;
+    }
+
+    startRangedSoundPlayback (target, sound, configuration) {
+        const audioEngine = this.runtime.audioEngine;
+        const context = audioEngine && audioEngine.audioContext;
+        const soundBank = target && target.sprite && target.sprite.soundBank;
+        const player = soundBank && typeof soundBank.getSoundPlayer === 'function' ?
+            soundBank.getSoundPlayer(sound.soundId) : null;
+        const buffer = player && player.buffer;
+        if (!context || typeof context.createBufferSource !== 'function' || !buffer) return null;
+
+        const offset = Math.max(0, toNumber(configuration.offset));
+        if (Number.isFinite(buffer.duration) && offset >= buffer.duration) return null;
+        if (!(this.timelineSoundSources instanceof Set)) this.timelineSoundSources = new Set();
+        if (!(this.timelineSoundPlaybacks instanceof Map)) this.timelineSoundPlaybacks = new Map();
+
+        const source = context.createBufferSource();
+        const nodes = [source];
+        source.buffer = buffer;
+        source.playbackRate.value = configuration.speed;
+        let output = source;
+        let gain = null;
+        if (typeof context.createGain === 'function') {
+            gain = context.createGain();
+            gain.gain.value = configuration.volume / 100;
+            output.connect(gain);
+            output = gain;
+            nodes.push(gain);
+        }
+        output.connect(typeof audioEngine.getInputNode === 'function' ?
+            audioEngine.getInputNode() : audioEngine.inputNode);
+
+        const playback = {gain, key: configuration.key, nodes, soundId: sound.soundId, source};
+        source.onended = () => {
+            this.timelineSoundSources.delete(playback);
+            if (playback.key && this.timelineSoundPlaybacks.get(playback.key) === playback) {
+                this.timelineSoundPlaybacks.delete(playback.key);
+            }
+            nodes.forEach(node => {
+                if (typeof node.disconnect === 'function') node.disconnect();
+            });
+        };
+        this.timelineSoundSources.add(playback);
+        if (playback.key) this.timelineSoundPlaybacks.set(playback.key, playback);
+        const requestedDuration = Number(configuration.duration);
+        const sourceDuration = Number.isFinite(requestedDuration) ? requestedDuration * configuration.speed : Infinity;
+        if (Number.isFinite(sourceDuration)) source.start(0, offset, sourceDuration);
+        else source.start(0, offset);
+        return playback;
+    }
+
+    stopTimelineSoundPlayback (key, requestedPlayback) {
+        if (!(this.timelineSoundPlaybacks instanceof Map)) this.timelineSoundPlaybacks = new Map();
+        const playback = requestedPlayback || this.timelineSoundPlaybacks.get(key);
+        if (!playback) return;
+        playback.source.onended = null;
+        try {
+            playback.source.stop(0);
+        } catch (error) {
+            // The source may have ended between render-frame evaluations.
+        }
+        playback.nodes.forEach(node => {
+            if (typeof node.disconnect === 'function') node.disconnect();
+        });
+        this.timelineSoundSources.delete(playback);
+        if (this.timelineSoundPlaybacks.get(key) === playback) this.timelineSoundPlaybacks.delete(key);
     }
 
     startSoundAtTime (target, sound, seconds) {
@@ -1568,7 +1735,24 @@ class MovieAssetManager extends EventEmitter {
             });
         }
         this.timelineSoundSources.clear();
+        if (!(this.timelineSoundPlaybacks instanceof Map)) this.timelineSoundPlaybacks = new Map();
+        this.timelineSoundPlaybacks.clear();
+        if (!(this.timelineSoundPlaybacksSeen instanceof Set)) this.timelineSoundPlaybacksSeen = new Set();
+        this.timelineSoundPlaybacksSeen.clear();
         this.stopAllObjectVideoAudio();
+    }
+
+    beginTimelineSoundFrame () {
+        if (!(this.timelineSoundPlaybacksSeen instanceof Set)) this.timelineSoundPlaybacksSeen = new Set();
+        this.timelineSoundPlaybacksSeen.clear();
+    }
+
+    finishTimelineSoundFrame () {
+        if (!(this.timelineSoundPlaybacks instanceof Map)) this.timelineSoundPlaybacks = new Map();
+        if (!(this.timelineSoundPlaybacksSeen instanceof Set)) this.timelineSoundPlaybacksSeen = new Set();
+        for (const [key, playback] of this.timelineSoundPlaybacks) {
+            if (!this.timelineSoundPlaybacksSeen.has(key)) this.stopTimelineSoundPlayback(key, playback);
+        }
     }
 
     beginObjectVideoAudioFrame () {
@@ -1685,6 +1869,7 @@ class MovieAssetManager extends EventEmitter {
             }
         }
         this.beginObjectVideoAudioFrame();
+        this.beginTimelineSoundFrame();
         this.resetPenForRenderFrame();
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
@@ -1704,6 +1889,7 @@ class MovieAssetManager extends EventEmitter {
         this.timeline.waitingForVideo = false;
         if (!this.timeline.reusedFrameThisStep) {
             this.finishObjectVideoAudioFrame();
+            this.finishTimelineSoundFrame();
             this.commitPenFrameTransaction();
         }
         if (this.timeline.recording) {

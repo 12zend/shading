@@ -119,11 +119,15 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
         expect(toolbox).toContain('type="sound_playattime"');
-        expect(toolbox).toContain('type="sound_playatframe"');
         expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
-        expect(toolbox.indexOf('type="sound_play"')).toBeLessThan(
-            toolbox.indexOf('type="sound_playattime"')
-        );
+        expect(toolbox).toContain('<value name="T1">');
+        expect(toolbox).toContain('<value name="T2">');
+        expect(toolbox).toContain('<field name="NUM">Infinity</field>');
+        expect(toolbox).toContain('<value name="SPEED">');
+        expect(toolbox).toContain('<value name="VOLUME">');
+        expect(toolbox).not.toContain('type="sound_play"');
+        expect(toolbox).not.toContain('type="sound_playuntildone"');
+        expect(toolbox).not.toContain('type="sound_playatframe"');
     });
 
     test('curates core categories around compositing while legacy opcodes remain loadable', () => {
@@ -148,10 +152,17 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_effectweight"');
         expect(toolbox).not.toContain('type="looks_hideallsprites"');
         // Sound.
-        expect(toolbox).toContain('type="sound_play"');
-        expect(toolbox).toContain('type="sound_stopallsounds"');
-        expect(toolbox).toContain('type="sound_seteffectto"');
-        expect(toolbox).toContain('type="sound_cleareffects"');
+        expect(toolbox).toContain('type="sound_playattime"');
+        expect(toolbox).not.toContain('type="sound_play"');
+        expect(toolbox).not.toContain('type="sound_playuntildone"');
+        expect(toolbox).not.toContain('type="sound_playatframe"');
+        expect(toolbox).not.toContain('type="sound_stopallsounds"');
+        expect(toolbox).not.toContain('type="sound_seteffectto"');
+        expect(toolbox).not.toContain('type="sound_changeeffectby"');
+        expect(toolbox).not.toContain('type="sound_cleareffects"');
+        expect(toolbox).not.toContain('type="sound_setvolumeto"');
+        expect(toolbox).not.toContain('type="sound_changevolumeby"');
+        expect(toolbox).not.toContain('type="sound_volume"');
         // Events.
         expect(toolbox).not.toContain('type="event_whenkeypressed"');
         expect(toolbox).not.toContain('type="event_whenthisspriteclicked"');
