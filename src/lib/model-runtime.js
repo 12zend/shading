@@ -56,6 +56,12 @@ let loaderModulesPromise;
 let cloneModelObject = object => object.clone(true);
 let MMDAnimationHelperClass = null;
 
+// Image planes never contain bones. Avoid SkeletonUtils' hierarchy walk for the large number of
+// text, costume, and procedural planes which can be submitted by one Objects scene.
+const cloneRenderableObject = object => (
+    object && object.userData && object.userData.movieStaticPlane ? object.clone(true) : cloneModelObject(object)
+);
+
 const loadLoaderModules = () => {
     if (!loaderModulesPromise) {
         loaderModulesPromise = Promise.all([
@@ -556,13 +562,19 @@ const makeBuildingPlaneGeometry = (positions, requestedUV) => {
     return geometry;
 };
 
-const makeBuildingMaterial = () => new THREE.MeshPhysicalMaterial({
-    color: DEFAULT_BUILDING_MATERIAL.albedo,
-    emissive: DEFAULT_BUILDING_MATERIAL.emission,
-    ior: DEFAULT_BUILDING_MATERIAL.ior,
-    roughness: DEFAULT_BUILDING_MATERIAL.roughness,
-    side: THREE.DoubleSide
-});
+const makeBuildingMaterial = () => {
+    const material = new THREE.MeshStandardMaterial({
+        color: DEFAULT_BUILDING_MATERIAL.albedo,
+        emissive: DEFAULT_BUILDING_MATERIAL.emission,
+        metalness: 0,
+        roughness: DEFAULT_BUILDING_MATERIAL.roughness,
+        side: THREE.DoubleSide
+    });
+    // Keep the runtime material shape stable. IOR has no visual effect without transmission,
+    // while MeshStandardMaterial avoids the heavier physical-material shader.
+    material.ior = DEFAULT_BUILDING_MATERIAL.ior;
+    return material;
+};
 
 const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = makeBuildingMaterial()) => {
     const bounds = requestedBounds || {};
@@ -599,6 +611,7 @@ const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = 
     }
 
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData.movieStaticPlane = true;
     mesh.name = `Movie ${type}`;
     return mesh;
 };
@@ -609,6 +622,11 @@ const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, reques
     const texture = sourceTexture && sourceTexture.isTexture ?
         sourceTexture.clone() : new THREE.Texture(sourceTexture);
     texture.colorSpace = THREE.SRGBColorSpace;
+    // These planes are refreshed frequently (especially video). Mipmap generation would rebuild the full
+    // chain for every new frame, while stage-sized Movie output only needs linear sampling.
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
     texture.needsUpdate = true;
 
     const geometry = new THREE.PlaneGeometry(width, height);
@@ -629,6 +647,7 @@ const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, reques
         transparent: false
     });
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData.movieStaticPlane = true;
     mesh.name = 'Movie image plane';
     return mesh;
 };
@@ -640,7 +659,7 @@ const loadBuildingTexture = (source, isColorTexture = true) => new Promise((reso
         texture.wrapT = THREE.RepeatWrapping;
         texture.needsUpdate = true;
         resolve(texture);
-    }, undefined, reject);
+    }, null, reject);
 });
 
 const worldToCamera = (position, camera) => {
@@ -781,8 +800,11 @@ class ModelRenderer {
         this.canvas.reusable = false;
         this.renderer = new THREE.WebGLRenderer({
             alpha: true,
-            antialias: true,
+            // Movie already renders at the configured bitmap resolution. Disabling MSAA avoids a second
+            // full-frame color/depth sample set and is considerably faster for video and text planes.
+            antialias: false,
             canvas: this.canvas,
+            powerPreference: 'high-performance',
             preserveDrawingBuffer: true
         });
         this.renderer.setClearColor(0x000000, 0);
@@ -805,6 +827,7 @@ class ModelRenderer {
             stencilBuffer: false
         });
         this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+        this.renderTarget.texture.generateMipmaps = false;
         this.renderTarget.depthTexture = new THREE.DepthTexture(
             MODEL_RENDER_SIZE,
             MODEL_RENDER_SIZE,
@@ -812,7 +835,9 @@ class ModelRenderer {
         );
         this.renderTarget.depthTexture.magFilter = THREE.NearestFilter;
         this.renderTarget.depthTexture.minFilter = THREE.NearestFilter;
-        if (this.renderer.capabilities.isWebGL2) this.renderTarget.samples = 4;
+        // The render target follows the non-MSAA context. Resolving a 4x target before every canvas copy
+        // costs more than it improves the stage-sized Movie output.
+        this.renderTarget.samples = 0;
 
         this.depthCanvas = document.createElement('canvas');
         this.depthCanvas.width = MODEL_RENDER_SIZE;
@@ -828,7 +853,7 @@ class ModelRenderer {
             blending: THREE.NoBlending,
             depthTest: false,
             depthWrite: false,
-            transparent: true,
+            transparent: false,
             uniforms: {u_image: {value: this.renderTarget.texture}},
             vertexShader: `
                 varying vec2 v_uv;
@@ -875,7 +900,7 @@ class ModelRenderer {
         this.camera.position.set(0, 0, 310);
         this.camera.lookAt(0, 0, 0);
         this.lightObjects = [];
-        this.lightConfiguration = undefined;
+        this.lightConfiguration = {};
         this.usesShadows = false;
         this.setLights(null);
 
@@ -885,7 +910,77 @@ class ModelRenderer {
         this.currentObjects = [];
         this.currentSources = [];
         this.currentAnimationNames = [];
+        this.currentFrames = [];
+        this.sourceIds = new WeakMap();
+        this.nextSourceId = 1;
+        this.depthBounds = new THREE.Box3();
+        this.depthPoint = new THREE.Vector3();
+        this.lastRenderKey = null;
+        this.lastRenderWasCached = false;
+        this.renderVersion = 0;
         this.animationStates = new WeakMap();
+    }
+
+    invalidateRenderCache () {
+        this.lastRenderKey = null;
+    }
+
+    getSourceId (source) {
+        if (!source || typeof source !== 'object') return String(source);
+        if (!this.sourceIds) this.sourceIds = new WeakMap();
+        let id = this.sourceIds.get(source);
+        if (!id) {
+            id = this.nextSourceId || 1;
+            this.nextSourceId = id + 1;
+            this.sourceIds.set(source, id);
+        }
+        return id;
+    }
+
+    getRenderCacheKey (sceneItems, cameraTransform, width, height, bitmapResolution, lights) {
+        const camera = cameraTransform || {};
+        const position = camera.position || {};
+        const rotation = camera.rotation || {};
+        const parts = [
+            width,
+            height,
+            bitmapResolution,
+            camera.focalLength,
+            camera.rotationOrder,
+            position.x,
+            position.y,
+            position.z,
+            rotation.x,
+            rotation.y,
+            rotation.z,
+            Array.isArray(lights) ? JSON.stringify(lights) : 'studio'
+        ];
+        for (const item of sceneItems || []) {
+            const transform = item.transform || {};
+            const itemPosition = transform.position || {};
+            const itemRotation = transform.rotation || {};
+            const scale = transform.scale || {};
+            parts.push(
+                this.getSourceId(item.sourceObject),
+                item.animationName,
+                item.frame,
+                transform.rotationOrder,
+                transform.size,
+                transform.worldX,
+                transform.worldY,
+                transform.worldZ,
+                itemPosition.x,
+                itemPosition.y,
+                itemPosition.z,
+                itemRotation.x,
+                itemRotation.y,
+                itemRotation.z,
+                scale.x,
+                scale.y,
+                scale.z
+            );
+        }
+        return parts.join('|');
     }
 
     clearLightObjects () {
@@ -952,19 +1047,11 @@ class ModelRenderer {
     setLights (requestedLights) {
         if (this.lightConfiguration === requestedLights) return;
         this.lightConfiguration = requestedLights;
+        this.invalidateRenderCache();
         this.clearLightObjects();
 
         // A null configuration keeps existing projects and model previews using the original studio lighting.
-        if (!Array.isArray(requestedLights)) {
-            this.addLightObject(new THREE.HemisphereLight(0xffffff, 0x303848, 1.8));
-            const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-            keyLight.position.set(2, 3, 4);
-            this.addLightObject(keyLight);
-            const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
-            fillLight.position.set(-4, 1, 2);
-            this.addLightObject(fillLight);
-            this.usesShadows = false;
-        } else {
+        if (Array.isArray(requestedLights)) {
             const configurations = requestedLights.map(normalizeLight);
             this.usesShadows = configurations.some(light => light.shadow > 0 && light.intensity > 0);
             configurations.forEach(configuration => {
@@ -979,6 +1066,15 @@ class ModelRenderer {
                     this.addLightObject(this.makeLight(configuration, shadowedIntensity, true));
                 }
             });
+        } else {
+            this.addLightObject(new THREE.HemisphereLight(0xffffff, 0x303848, 1.8));
+            const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+            keyLight.position.set(2, 3, 4);
+            this.addLightObject(keyLight);
+            const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
+            fillLight.position.set(-4, 1, 2);
+            this.addLightObject(fillLight);
+            this.usesShadows = false;
         }
         if (this.renderer.shadowMap) this.renderer.shadowMap.enabled = this.usesShadows;
         (this.currentObjects || []).forEach(object => this.setObjectShadowState(object));
@@ -986,6 +1082,7 @@ class ModelRenderer {
 
     setOutputSize (width, height) {
         if (this.canvas.width === width && this.canvas.height === height) return;
+        this.invalidateRenderCache();
         this.renderer.setSize(width, height, false);
         if (this.renderTarget) this.renderTarget.setSize(width, height);
         if (this.depthCanvas) {
@@ -998,8 +1095,8 @@ class ModelRenderer {
 
     updateCameraDepthRange () {
         this.camera.updateMatrixWorld(true);
-        const bounds = new THREE.Box3();
-        const point = new THREE.Vector3();
+        const bounds = this.depthBounds || (this.depthBounds = new THREE.Box3());
+        const point = this.depthPoint || (this.depthPoint = new THREE.Vector3());
         let closest = Infinity;
         let farthest = 0;
         for (const object of this.currentObjects) {
@@ -1030,10 +1127,9 @@ class ModelRenderer {
     }
 
     renderSceneWithZBuffer () {
-        if (!this.renderTarget || typeof this.renderer.setRenderTarget !== 'function') return this.renderer.render(
-            this.scene,
-            this.camera
-        );
+        if (!this.renderTarget || typeof this.renderer.setRenderTarget !== 'function') {
+            return this.renderer.render(this.scene, this.camera);
+        }
         const outputColorSpace = this.renderer.outputColorSpace;
         try {
             this.renderer.setRenderTarget(this.renderTarget);
@@ -1124,20 +1220,24 @@ class ModelRenderer {
     }
 
     syncObjects (sceneItems) {
+        if (!Array.isArray(this.currentFrames)) this.currentFrames = [];
         for (let index = 0; index < sceneItems.length; index++) {
             const item = sceneItems[index];
             const canReuse = this.currentSources[index] === item.sourceObject &&
                 this.currentAnimationNames[index] === item.animationName;
             if (!canReuse) {
                 if (this.currentObjects[index]) this.removeObject(this.currentObjects[index]);
-                const object = cloneModelObject(item.sourceObject);
+                const object = cloneRenderableObject(item.sourceObject);
                 this.currentObjects[index] = object;
                 this.currentSources[index] = item.sourceObject;
                 this.currentAnimationNames[index] = item.animationName;
                 this.scene.add(object);
                 this.setObjectShadowState(object);
             }
-            this.applyAnimation(this.currentObjects[index], item.animationName, item.frame);
+            if (this.currentFrames[index] !== item.frame || !canReuse) {
+                this.applyAnimation(this.currentObjects[index], item.animationName, item.frame);
+            }
+            this.currentFrames[index] = item.frame;
         }
         for (let index = sceneItems.length; index < this.currentObjects.length; index++) {
             this.removeObject(this.currentObjects[index]);
@@ -1145,16 +1245,19 @@ class ModelRenderer {
         this.currentObjects.length = sceneItems.length;
         this.currentSources.length = sceneItems.length;
         this.currentAnimationNames.length = sceneItems.length;
+        this.currentFrames.length = sceneItems.length;
         this.currentObject = this.currentObjects.length === 1 ? this.currentObjects[0] : null;
         return this.currentObjects;
     }
 
     clearObjects () {
         if (this.currentObjects) this.currentObjects.forEach(object => this.removeObject(object));
+        this.invalidateRenderCache();
         this.currentObject = null;
         this.currentObjects = [];
         this.currentSources = [];
         this.currentAnimationNames = [];
+        this.currentFrames = [];
     }
 
     render (sourceObject, transform, cameraTransform, animationName, frame) {
@@ -1191,6 +1294,19 @@ class ModelRenderer {
         const height = Math.max(1, stageSize[1]);
         this.setOutputSize(Math.round(width * bitmapResolution), Math.round(height * bitmapResolution));
         this.setLights(lights);
+        const renderKey = this.getRenderCacheKey(
+            sceneItems,
+            cameraTransform,
+            width,
+            height,
+            bitmapResolution,
+            lights
+        );
+        if (this.lastRenderKey === renderKey) {
+            this.lastRenderWasCached = true;
+            return this.canvas;
+        }
+        this.lastRenderWasCached = false;
         this.syncObjects(sceneItems);
         this.currentObjects.forEach((object, index) => {
             const item = sceneItems[index];
@@ -1228,6 +1344,8 @@ class ModelRenderer {
 
         if (this.usesShadows && this.renderer.shadowMap) this.renderer.shadowMap.needsUpdate = true;
         this.renderSceneWithZBuffer();
+        this.lastRenderKey = renderKey;
+        this.renderVersion++;
         return this.canvas;
     }
 

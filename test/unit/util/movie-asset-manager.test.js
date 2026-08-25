@@ -3133,6 +3133,30 @@ describe('MovieAssetManager rendering performance', () => {
         });
     });
 
+    test('downscales high-resolution video frames to the stage transfer size', async () => {
+        const manager = makeManager();
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        const bitmap = {close: jest.fn(), height: 540, width: 960};
+        const createImageBitmap = jest.fn(() => Promise.resolve(bitmap));
+        const originalWindow = global.window;
+        global.window = {createImageBitmap};
+
+        try {
+            const result = await manager.createVideoBitmap({height: 2160, videoHeight: 2160, videoWidth: 3840});
+
+            expect(createImageBitmap).toHaveBeenCalledWith(expect.any(Object), {
+                resizeHeight: 540,
+                resizeQuality: 'medium',
+                resizeWidth: 960
+            });
+            expect(result.bitmap).toBe(bitmap);
+            expect(result.bitmapResolution).toBeCloseTo(0.5);
+        } finally {
+            if (originalWindow) global.window = originalWindow;
+            else delete global.window;
+        }
+    });
+
     test('renders every loaded-font text request synchronously and in order', () => {
         const manager = makeManager();
         const target = makeTarget();

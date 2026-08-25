@@ -16,6 +16,8 @@ import {
     getOriginalTarget
 } from './movie-asset-manager-utils';
 
+const MAX_BUILDING_PRIMITIVES = 512;
+
 const MovieAssetManagerModelMethods = {
     getModelTransform (target, state = this.getTargetState(target)) {
         return {
@@ -34,6 +36,8 @@ const MovieAssetManagerModelMethods = {
         state.modelAssetId = null;
         state.modelScene = [];
         state.requestedMode = 'model';
+        state.textKey = null;
+        state.projectionKey = null;
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
         if (render) {
@@ -88,6 +92,11 @@ const MovieAssetManagerModelMethods = {
 
     syncBuildingMaterial (record) {
         const material = record.material;
+        const mapsChanged = material.map !== record.albedoTexture ||
+            material.displacementMap !== record.displacementTexture ||
+            material.emissiveMap !== record.emissionTexture ||
+            material.normalMap !== record.normalTexture ||
+            material.roughnessMap !== record.roughnessTexture;
         try {
             material.color.set(record.albedoTexture ? '#ffffff' : record.albedo);
         } catch (error) {
@@ -105,7 +114,12 @@ const MovieAssetManagerModelMethods = {
         material.ior = record.ior;
         material.roughness = record.roughness;
         material.roughnessMap = record.roughnessTexture;
-        material.needsUpdate = true;
+        if (mapsChanged) {
+            material.needsUpdate = true;
+        }
+        if (this.modelRenderer && typeof this.modelRenderer.invalidateRenderCache === 'function') {
+            this.modelRenderer.invalidateRenderCache();
+        }
     },
 
     rerenderBuildingScenes () {
@@ -152,6 +166,48 @@ const MovieAssetManagerModelMethods = {
         const name = this.normalizeBuildingMaterialName(requestedName);
         if (this.buildingMaterials.has(name)) return;
         this.getBuildingMaterialRecord(name);
+    },
+
+    getBuildingPrimitive (type, args, material, materialName) {
+        if (!(this.buildingPrimitiveCache instanceof Map)) this.buildingPrimitiveCache = new Map();
+        const key = JSON.stringify([
+            materialName,
+            type,
+            args.X1,
+            args.X2,
+            args.Y1,
+            args.Y2,
+            args.Z1,
+            args.Z2,
+            args.U1,
+            args.U2,
+            args.V1,
+            args.V2
+        ]);
+        const cached = this.buildingPrimitiveCache.get(key);
+        if (cached) {
+            this.buildingPrimitiveCache.delete(key);
+            this.buildingPrimitiveCache.set(key, cached);
+            return cached;
+        }
+        const primitive = createBuildingPrimitive(type, {
+            x1: args.X1,
+            x2: args.X2,
+            y1: args.Y1,
+            y2: args.Y2,
+            z1: args.Z1,
+            z2: args.Z2
+        }, {
+            u1: args.U1,
+            u2: args.U2,
+            v1: args.V1,
+            v2: args.V2
+        }, material);
+        this.buildingPrimitiveCache.set(key, primitive);
+        while (this.buildingPrimitiveCache.size > MAX_BUILDING_PRIMITIVES) {
+            this.buildingPrimitiveCache.delete(this.buildingPrimitiveCache.keys().next().value);
+        }
+        return primitive;
     },
 
     setBuildingMaterialColor (requestedName, channel, requestedColor) {
@@ -238,19 +294,7 @@ const MovieAssetManagerModelMethods = {
 
     renderBuildingPrimitive (type, args, target, render = true, requestedCamera = null) {
         const record = this.getBuildingMaterialRecord(args.MATERIAL);
-        const sourceObject = createBuildingPrimitive(type, {
-            x1: args.X1,
-            x2: args.X2,
-            y1: args.Y1,
-            y2: args.Y2,
-            z1: args.Z1,
-            z2: args.Z2
-        }, {
-            u1: args.U1,
-            u2: args.U2,
-            v1: args.V1,
-            v2: args.V2
-        }, record.material);
+        const sourceObject = this.getBuildingPrimitive(type, args, record.material, record.name);
         const state = this.getTargetState(target);
         state.modelAssetId = null;
         state.modelScene.push({
@@ -278,6 +322,7 @@ const MovieAssetManagerModelMethods = {
             transform: this.getModelTransform(target, state)
         });
         state.requestedMode = 'model';
+        state.textKey = null;
         state.pendingVideoFrame = null;
         state.textQueue.length = 0;
         if (render) {
@@ -378,8 +423,14 @@ const MovieAssetManagerModelMethods = {
             const renderArguments = [cachedItems, camera, this.getStageSize(), BITMAP_RESOLUTION];
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
             const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-            if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
-            else this.applyBitmap(target, canvas, 'model');
+            const shouldApplyBitmap = state.modelCanvas !== canvas || this.modelRenderer.lastRenderWasCached !== true;
+            if (shouldApplyBitmap) {
+                if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
+                else this.applyBitmap(target, canvas, 'model');
+                state.modelCanvas = canvas;
+            } else {
+                this.applyProjection(target);
+            }
             this.publishModelZBuffer(target);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
@@ -429,8 +480,15 @@ const MovieAssetManagerModelMethods = {
                 ];
                 if (Array.isArray(this.lights)) renderArguments.push(this.lights);
                 const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-                if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
-                else this.applyBitmap(target, canvas, 'model');
+                const shouldApplyBitmap = state.modelCanvas !== canvas ||
+                    this.modelRenderer.lastRenderWasCached !== true;
+                if (shouldApplyBitmap) {
+                    if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
+                    else this.applyBitmap(target, canvas, 'model');
+                    state.modelCanvas = canvas;
+                } else {
+                    this.applyProjection(target);
+                }
                 this.publishModelZBuffer(target);
                 return;
             }

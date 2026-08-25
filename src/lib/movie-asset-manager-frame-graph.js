@@ -50,11 +50,21 @@ const MovieAssetManagerFrameGraphMethods = {
             this.frameGraphCollectionParents[this.frameGraphCollectionParents.length - 1];
         const capturesCamera = type === FRAME_GRAPH_NODE_TYPES.DRAW || type === FRAME_GRAPH_NODE_TYPES.SCENE;
         const nodeProperties = capturesCamera ? {
-            camera: cloneCamera(this.camera),
+            camera: this.getFrameGraphCameraSnapshot(),
             cameraVersion: this.cameraVersion,
             ...properties
         } : properties;
         return this.frameGraphRenderer.append(type, nodeProperties, collectionParent);
+    },
+
+    getFrameGraphCameraSnapshot () {
+        if (this.frameGraphCameraSnapshot &&
+            this.frameGraphCameraSnapshotVersion === this.cameraVersion) {
+            return this.frameGraphCameraSnapshot;
+        }
+        this.frameGraphCameraSnapshot = cloneCamera(this.camera);
+        this.frameGraphCameraSnapshotVersion = this.cameraVersion;
+        return this.frameGraphCameraSnapshot;
     },
 
     withFrameGraphParent (parent, callback) {
@@ -202,18 +212,19 @@ const MovieAssetManagerFrameGraphMethods = {
         ));
     },
 
-    collectFrameGraphThreeDraws (node, transforms = []) {
+    collectFrameGraphThreeDraws (node, transforms = [], draws = []) {
         // An explicit Objects scene opts its children into one Three.js depth buffer. Ordinary Draw nodes stay on
         // Scratch's existing 2D/Pen path so their color and screen-space text semantics do not change.
         if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) {
             if (!THREE_DRAW_KINDS.has(node.drawKind)) return null;
-            return [{
+            draws.push({
                 camera: node.camera,
                 cameraVersion: node.cameraVersion,
                 configuration: applyObjectTransforms(node.configuration, transforms),
                 drawKind: node.drawKind,
                 target: node.target
-            }];
+            });
+            return draws;
         }
         let childTransforms = transforms;
         if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
@@ -223,11 +234,9 @@ const MovieAssetManagerFrameGraphMethods = {
         )) {
             return null;
         }
-        const draws = [];
         for (const child of node.children) {
-            const childDraws = this.collectFrameGraphThreeDraws(child, childTransforms);
+            const childDraws = this.collectFrameGraphThreeDraws(child, childTransforms, draws);
             if (!childDraws) return null;
-            draws.push(...childDraws);
         }
         return draws;
     },

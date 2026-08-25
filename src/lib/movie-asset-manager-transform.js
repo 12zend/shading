@@ -27,6 +27,7 @@ const MovieAssetManagerTransformMethods = {
                 displayedVideoAssetId: null,
                 ignoreCamera: false,
                 mode: 'costume',
+                modelCanvas: null,
                 modelAssetId: null,
                 modelFrame: 1,
                 modelRenderCamera: null,
@@ -40,6 +41,7 @@ const MovieAssetManagerTransformMethods = {
                 objectVideoAssetId: null,
                 penOnly: false,
                 pendingVideoFrame: null,
+                projectionKey: null,
                 renderVersion: 0,
                 rotation: {x: 0, y: 0, z: 90 - (target.direction || 90)},
                 rotationOrder: 'XYZ',
@@ -47,9 +49,11 @@ const MovieAssetManagerTransformMethods = {
                 requestedMode: 'costume',
                 shapeSkinId: null,
                 skinId: null,
+                textKey: null,
                 textQueue: [],
                 textRenderPromise: null,
                 video: null,
+                videoBitmap: null,
                 videoAssetId: null,
                 videoElementAssetId: null,
                 videoRenderPromise: null,
@@ -168,6 +172,7 @@ const MovieAssetManagerTransformMethods = {
     setTargetRotationOrder (target, order) {
         const state = this.getTargetState(target);
         state.rotationOrder = normalizeRotationOrder(order);
+        state.projectionKey = null;
         this.refreshTargetRotation(target);
     },
 
@@ -321,12 +326,45 @@ const MovieAssetManagerTransformMethods = {
             typeof this.runtime.renderer.updateDrawableVisible !== 'function'
         ) return;
         const state = this.getTargetState(target);
+        if ((this.projectionBatchDepth || 0) > 0) return;
         const camera = requestedCamera || this.camera || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
         };
+        const cameraPosition = camera.position || {};
+        const cameraRotation = camera.rotation || {};
+        const projectionKey = [
+            state.mode,
+            state.penOnly,
+            target.visible,
+            state.worldX,
+            state.worldY,
+            state.worldZ,
+            state.ignoreCamera,
+            state.rotation.x,
+            state.rotation.y,
+            state.rotation.z,
+            state.rotationOrder,
+            state.scale.x,
+            state.scale.y,
+            state.scale.z,
+            target.size,
+            target.currentCostume,
+            state.skinId,
+            state.shapeSkinId,
+            camera.focalLength,
+            camera.rotationOrder,
+            cameraPosition.x,
+            cameraPosition.y,
+            cameraPosition.z,
+            cameraRotation.x,
+            cameraRotation.y,
+            cameraRotation.z
+        ].join('|');
+        if (state.projectionKey === projectionKey) return;
+        state.projectionKey = projectionKey;
         if (state.mode === 'model' || state.mode === 'scene') {
             this.runtime.renderer.updateDrawablePosition(target.drawableID, [0, 0]);
             this.runtime.renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);

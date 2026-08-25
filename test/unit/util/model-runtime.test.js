@@ -217,6 +217,52 @@ describe('Movie 3D projection', () => {
         expect(renderer.renderer.render).toHaveBeenCalledTimes(2);
     });
 
+    test('reuses a completed scene without submitting another GPU render', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.canvas = {height: 0, reusable: true, width: 0};
+        renderer.renderer = {
+            render: jest.fn(),
+            setSize: jest.fn((width, height) => {
+                renderer.canvas.width = width;
+                renderer.canvas.height = height;
+            })
+        };
+        renderer.scene = new THREE.Scene();
+        renderer.camera = new THREE.PerspectiveCamera();
+        renderer.currentObjects = [];
+        renderer.currentSources = [];
+        renderer.currentAnimationNames = [];
+        renderer.currentFrames = [];
+        renderer.animationStates = new WeakMap();
+        const sourceObject = new THREE.Group();
+        const cameraTransform = {
+            focalLength: DEFAULT_FOCAL_LENGTH,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        const sceneItem = {
+            animationName: '',
+            frame: 1,
+            sourceObject,
+            transform: {
+                rotation: {x: 0, y: 0, z: 0},
+                rotationOrder: 'XYZ',
+                scale: {x: 1, y: 1, z: 1},
+                size: 100,
+                worldX: 0,
+                worldY: 0,
+                worldZ: 480
+            }
+        };
+
+        renderer.renderWorldScene([sceneItem], cameraTransform, [480, 360], 2);
+        renderer.renderWorldScene([sceneItem], cameraTransform, [480, 360], 2);
+
+        expect(renderer.renderer.render).toHaveBeenCalledTimes(1);
+        expect(renderer.lastRenderWasCached).toBe(true);
+    });
+
     test('tightens the zBuffer camera range around visible 3D geometry', () => {
         const renderer = Object.create(ModelRenderer.prototype);
         renderer.camera = new THREE.PerspectiveCamera();

@@ -36,6 +36,10 @@ class MovieAssetManager extends EventEmitter {
         this.targetStates = new Map();
         this.fontFaces = new Map();
         this.modelObjects = new Map();
+        this.objectImagePlanes = new Map();
+        this.textCanvasCache = new Map();
+        this.textCanvasCachePixels = 0;
+        this.buildingPrimitiveCache = new Map();
         this.buildingMaterials = new Map();
         this.buildingTextures = new Map();
         this.shapeSkinCache = new Map();
@@ -61,6 +65,9 @@ class MovieAssetManager extends EventEmitter {
         this.frameGraphCollectionParents = [];
         this.frameGraphRenderPromise = null;
         this.cameraVersion = 0;
+        this.frameGraphCameraSnapshot = null;
+        this.frameGraphCameraSnapshotVersion = -1;
+        this.projectionBatchDepth = 0;
         this.penFrameTransactionActive = false;
         this.penFrameTransactionsInstalled = false;
         this.defaultStageBackgroundColor = null;

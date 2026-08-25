@@ -54,6 +54,8 @@ const MovieAssetManagerAssetMethods = {
         };
         target.setVisible = visible => {
             const result = originalSetVisible(visible);
+            const state = this.getTargetState(target);
+            state.projectionKey = null;
             this.applyProjection(target);
             return result;
         };
@@ -61,6 +63,8 @@ const MovieAssetManagerAssetMethods = {
         const originalUpdateAll = target.updateAllDrawableProperties.bind(target);
         target.updateAllDrawableProperties = () => {
             const result = originalUpdateAll();
+            const state = this.getTargetState(target);
+            state.projectionKey = null;
             this.restoreCustomSkin(target);
             this.applyProjection(target);
             return result;

@@ -23,6 +23,9 @@ import {
     unusedName
 } from './movie-asset-manager-utils';
 
+const MAX_TEXT_CANVAS_CACHE = 128;
+const MAX_TEXT_CANVAS_PIXELS = 16 * 1024 * 1024;
+
 const MovieAssetManagerMediaMethods = {
     async addVideoFromFile (targetId, file) {
         const dataFormat = getExtension(file.name);
@@ -387,7 +390,22 @@ const MovieAssetManagerMediaMethods = {
                 continue;
             }
 
-            this.applyBitmap(target, element, 'video');
+            const frameBitmap = await this.createVideoBitmap(element);
+            const isStale = this.targetStates.get(target.id) !== state ||
+                state.renderVersion !== request.renderVersion ||
+                state.pendingVideoFrame;
+            if (isStale) {
+                this.closeVideoBitmap(frameBitmap.bitmap);
+                continue;
+            }
+            this.applyBitmap(
+                target,
+                frameBitmap.bitmap,
+                'video',
+                null,
+                false,
+                frameBitmap.bitmapResolution
+            );
             state.displayedFrame = request.frame;
             state.displayedVideoAssetId = request.video.assetId;
         }
@@ -407,6 +425,89 @@ const MovieAssetManagerMediaMethods = {
         return element;
     },
 
+    getVideoBitmapScale (element) {
+        const sourceWidth = Number(element && (element.videoWidth || element.width));
+        const sourceHeight = Number(element && (element.videoHeight || element.height));
+        if (!(sourceWidth > 0) || !(sourceHeight > 0) || typeof this.getStageSize !== 'function') return 1;
+        const stageSize = this.timeline && this.timeline.recording ?
+            [this.timeline.width, this.timeline.height] : this.getStageSize();
+        const maxWidth = Math.max(1, Math.round(Number(stageSize[0]) * BITMAP_RESOLUTION));
+        const maxHeight = Math.max(1, Math.round(Number(stageSize[1]) * BITMAP_RESOLUTION));
+        return Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+    },
+
+    async createVideoBitmap (element) {
+        const factory = typeof window === 'object' && window.createImageBitmap;
+        if (typeof factory !== 'function') {
+            return {
+                bitmap: element,
+                bitmapResolution: BITMAP_RESOLUTION
+            };
+        }
+        const sourceWidth = Number(element && (element.videoWidth || element.width));
+        const sourceHeight = Number(element && (element.videoHeight || element.height));
+        const scale = this.getVideoBitmapScale(element);
+        if (!(sourceWidth > 0) || !(sourceHeight > 0) || scale >= 1) {
+            return {
+                bitmap: element,
+                bitmapResolution: BITMAP_RESOLUTION
+            };
+        }
+        try {
+            const bitmap = await factory(element, {
+                resizeHeight: Math.max(1, Math.round(sourceHeight * scale)),
+                resizeQuality: 'medium',
+                resizeWidth: Math.max(1, Math.round(sourceWidth * scale))
+            });
+            return {
+                bitmap,
+                bitmapResolution: BITMAP_RESOLUTION * (bitmap.width / sourceWidth)
+            };
+        } catch (error) {
+            // Some browsers expose createImageBitmap but cannot resize a video frame.
+            return {
+                bitmap: element,
+                bitmapResolution: BITMAP_RESOLUTION
+            };
+        }
+    },
+
+    closeVideoBitmap (bitmap) {
+        if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+    },
+
+    async snapshotVideoFrame (element) {
+        const sourceWidth = Number(element && (element.videoWidth || element.width));
+        const sourceHeight = Number(element && (element.videoHeight || element.height));
+        if (!(sourceWidth > 0) || !(sourceHeight > 0)) {
+            return {
+                bitmap: element,
+                bitmapResolution: BITMAP_RESOLUTION
+            };
+        }
+        const factory = typeof window === 'object' && window.createImageBitmap;
+        if (typeof factory === 'function') {
+            const scale = this.getVideoBitmapScale(element);
+            try {
+                const bitmap = scale < 1 ? await factory(element, {
+                    resizeHeight: Math.max(1, Math.round(sourceHeight * scale)),
+                    resizeQuality: 'medium',
+                    resizeWidth: Math.max(1, Math.round(sourceWidth * scale))
+                }) : await factory(element);
+                return {
+                    bitmap,
+                    bitmapResolution: BITMAP_RESOLUTION * (bitmap.width / Math.max(1, sourceWidth))
+                };
+            } catch (error) {
+                // Fall back to a canvas snapshot for older video implementations.
+            }
+        }
+        return {
+            bitmap: this.copyBitmapToCanvas(element),
+            bitmapResolution: BITMAP_RESOLUTION
+        };
+    },
+
     getFont (requestedFont) {
         const fonts = this.runtime.fontManager.getFonts();
         const requested = String(requestedFont || 'sans-serif');
@@ -421,8 +522,12 @@ const MovieAssetManagerMediaMethods = {
         const state = this.getTargetState(target);
         const font = this.getFont(requestedFont);
         const text = String(requestedText);
+        const textKey = `${font.name}:${font.family}:${text}`;
+        if (state.mode === 'text' && state.textKey === textKey &&
+            !state.textRenderPromise && state.textQueue.length === 0) return;
         if (state.requestedMode !== 'text') state.renderVersion++;
         state.requestedMode = 'text';
+        state.textKey = textKey;
         state.pendingVideoFrame = null;
 
         const fontLoad = this.ensureFontLoaded(font.name);
@@ -476,6 +581,17 @@ const MovieAssetManagerMediaMethods = {
     },
 
     createTextCanvas (font, text) {
+        if (!(this.textCanvasCache instanceof Map)) {
+            this.textCanvasCache = new Map();
+            this.textCanvasCachePixels = 0;
+        }
+        const cacheKey = `${font.name}:${font.family}:${text}`;
+        const cached = this.textCanvasCache.get(cacheKey);
+        if (cached) {
+            this.textCanvasCache.delete(cacheKey);
+            this.textCanvasCache.set(cacheKey, cached);
+            return cached.canvas;
+        }
         const lines = text.split(/\r?\n/);
         const fontSize = 96;
         const padding = 16;
@@ -491,6 +607,16 @@ const MovieAssetManagerMediaMethods = {
         context.textBaseline = 'top';
         lines.forEach((line, index) => context.fillText(line, padding, padding + (index * lineHeight)));
         canvas.reusable = false;
+        const pixels = canvas.width * canvas.height;
+        this.textCanvasCache.set(cacheKey, {canvas, pixels});
+        this.textCanvasCachePixels += pixels;
+        while (this.textCanvasCache.size > MAX_TEXT_CANVAS_CACHE ||
+            this.textCanvasCachePixels > MAX_TEXT_CANVAS_PIXELS) {
+            const oldestKey = this.textCanvasCache.keys().next().value;
+            const oldest = this.textCanvasCache.get(oldestKey);
+            this.textCanvasCache.delete(oldestKey);
+            this.textCanvasCachePixels -= oldest ? oldest.pixels : 0;
+        }
         return canvas;
     },
 
@@ -499,17 +625,23 @@ const MovieAssetManagerMediaMethods = {
         this.applyBitmap(target, canvas, 'text');
     },
 
-    applyBitmap (target, bitmap, mode, rotationCenter, penOnly = false) {
+    applyBitmap (target, bitmap, mode, rotationCenter, penOnly = false, bitmapResolution = BITMAP_RESOLUTION) {
         const state = this.getTargetState(target);
+        state.projectionKey = null;
         const hasRotationCenter = rotationCenter !== null && typeof rotationCenter !== 'undefined';
         if (state.skinId === null) {
             state.skinId = hasRotationCenter ?
-                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION, rotationCenter) :
-                this.runtime.renderer.createBitmapSkin(bitmap, BITMAP_RESOLUTION);
+                this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution, rotationCenter) :
+                this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution);
         } else if (hasRotationCenter) {
-            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION, rotationCenter);
+            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, bitmapResolution, rotationCenter);
         } else {
-            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, BITMAP_RESOLUTION);
+            this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, bitmapResolution);
+        }
+        const previousVideoBitmap = state.videoBitmap;
+        state.videoBitmap = bitmap && typeof bitmap.close === 'function' ? bitmap : null;
+        if (previousVideoBitmap && previousVideoBitmap !== state.videoBitmap) {
+            this.closeVideoBitmap(previousVideoBitmap);
         }
         state.mode = mode;
         state.penOnly = penOnly;
@@ -525,13 +657,18 @@ const MovieAssetManagerMediaMethods = {
         const state = this.getTargetState(target);
         state.renderVersion++;
         state.requestedMode = 'costume';
+        state.textKey = null;
         state.textQueue.length = 0;
         state.pendingVideoFrame = null;
         state.modelRenderVersion++;
         state.modelScene = [];
+        state.modelCanvas = null;
         state.modelAssetId = null;
         state.mode = 'costume';
+        state.projectionKey = null;
         state.penOnly = false;
+        this.closeVideoBitmap(state.videoBitmap);
+        state.videoBitmap = null;
         if (updateRenderer && this.runtime.renderer) {
             const costume = target.getCostumes()[target.currentCostume];
             if (costume) this.runtime.renderer.updateDrawableSkinId(target.drawableID, costume.skinId);
@@ -549,6 +686,7 @@ const MovieAssetManagerMediaMethods = {
         if (state && state.mode !== 'costume' && skinId !== null && this.runtime.renderer) {
             this.runtime.renderer.updateDrawableSkinId(target.drawableID, skinId);
         }
+        if (state) state.projectionKey = null;
         if (state) this.applyProjection(target);
     },
 
@@ -575,6 +713,7 @@ const MovieAssetManagerMediaMethods = {
             state.objectVideo.removeAttribute('src');
             state.objectVideo.load();
         }
+        this.closeVideoBitmap(state.videoBitmap);
         if (state.skinId !== null && this.runtime.renderer) {
             this.runtime.renderer.destroySkin(state.skinId);
         }

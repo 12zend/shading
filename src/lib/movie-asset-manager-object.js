@@ -17,7 +17,26 @@ import {
     MAX_CACHED_SHAPE_SKIN_PIXELS
 } from './movie-asset-manager-utils';
 
+const MAX_OBJECT_IMAGE_PLANES = 256;
+
 const MovieAssetManagerObjectMethods = {
+    getCachedObjectImagePlane (key, bitmap, width, height, rotationCenter) {
+        if (!(this.objectImagePlanes instanceof Map)) this.objectImagePlanes = new Map();
+        const cached = this.objectImagePlanes.get(key);
+        if (cached) {
+            // Map insertion order is the LRU order. Reusing the plane also reuses its GPU texture and geometry.
+            this.objectImagePlanes.delete(key);
+            this.objectImagePlanes.set(key, cached);
+            return cached;
+        }
+        const plane = createImagePlane(bitmap, width, height, rotationCenter);
+        this.objectImagePlanes.set(key, plane);
+        while (this.objectImagePlanes.size > MAX_OBJECT_IMAGE_PLANES) {
+            this.objectImagePlanes.delete(this.objectImagePlanes.keys().next().value);
+        }
+        return plane;
+    },
+
     cloneObjectDrawConfiguration (configuration) {
         const clone = {
             ...configuration,
@@ -149,15 +168,20 @@ const MovieAssetManagerObjectMethods = {
             const currentTime = this.getObjectEvaluationTime(configuration);
             if (currentTime < startTime || currentTime > endTime) return null;
         }
-        const bitmap = configuration.shape === 'line' ?
-            createLineBitmap(configuration) : createShapeBitmap(configuration);
-        if (!bitmap) return null;
-        const bitmapResolution = Math.max(0.001, toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION));
-        const sourceObject = createImagePlane(
-            bitmap,
-            bitmap.width / bitmapResolution,
-            bitmap.height / bitmapResolution
-        );
+        const cacheKey = `shape:${getShapeBitmapCacheKey(configuration)}`;
+        let sourceObject = this.objectImagePlanes instanceof Map ? this.objectImagePlanes.get(cacheKey) : null;
+        if (!sourceObject) {
+            const bitmap = configuration.shape === 'line' ?
+                createLineBitmap(configuration) : createShapeBitmap(configuration);
+            if (!bitmap) return null;
+            const bitmapResolution = Math.max(0.001, toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION));
+            sourceObject = this.getCachedObjectImagePlane(
+                cacheKey,
+                bitmap,
+                bitmap.width / bitmapResolution,
+                bitmap.height / bitmapResolution
+            );
+        }
         return {
             item: {
                 animationName: '',
@@ -165,11 +189,12 @@ const MovieAssetManagerObjectMethods = {
                 sourceObject,
                 transform: this.getObjectSceneTransform(target, configuration)
             },
-            resource: sourceObject
+            resource: sourceObject,
+            ownsResource: false
         };
     },
 
-    async prepareObjectSceneItem (target, requestedConfiguration) {
+    async prepareObjectSceneItem (target, requestedConfiguration, videoFrameBitmaps = null) {
         if (requestedConfiguration.movieDrawKind === 'shape') {
             return this.prepareShapeSceneItem(target, requestedConfiguration);
         }
@@ -194,6 +219,7 @@ const MovieAssetManagerObjectMethods = {
         let logicalWidth;
         let logicalHeight;
         let rotationCenter;
+        let planeCacheKey = null;
         if (source === 'costume' || source === COSTUME_GROUP_SOURCE) {
             const costume = this.getCostumeForObjectDraw(
                 target,
@@ -215,26 +241,48 @@ const MovieAssetManagerObjectMethods = {
                 y: toNumber(costume.rotationCenterY, (logicalHeight * resolution) / 2) / resolution
             };
             bitmap = texture;
+            planeCacheKey = `costume:${costume.assetId || costume.name}:${logicalWidth}:${logicalHeight}:` +
+                `${rotationCenter.x}:${rotationCenter.y}`;
         } else if (source === 'video') {
             const video = this.getVideoByName(target, configuration.asset);
             if (!video) return null;
             const state = this.getTargetState(target);
             const frame = this.getVideoFrameNumber(video, configuration.frame);
-            bitmap = this.copyBitmapToCanvas(await this.decodeObjectVideoFrame(state, video, frame));
-            logicalWidth = bitmap.width / BITMAP_RESOLUTION;
-            logicalHeight = bitmap.height / BITMAP_RESOLUTION;
+            const frameKey = `${video.assetId}:${frame}`;
+            const cachedFrame = videoFrameBitmaps && videoFrameBitmaps.get(frameKey);
+            if (cachedFrame) {
+                bitmap = cachedFrame.bitmap;
+            } else {
+                const element = await this.decodeObjectVideoFrame(state, video, frame);
+                const frameBitmap = await this.snapshotVideoFrame(element);
+                bitmap = frameBitmap.bitmap;
+                if (videoFrameBitmaps) videoFrameBitmaps.set(frameKey, frameBitmap);
+            }
+            const videoElement = state.objectVideo || {};
+            const sourceWidth = Number(video.width || videoElement.videoWidth || bitmap.width || 1);
+            const sourceHeight = Number(video.height || videoElement.videoHeight || bitmap.height || 1);
+            logicalWidth = sourceWidth / BITMAP_RESOLUTION;
+            logicalHeight = sourceHeight / BITMAP_RESOLUTION;
         } else if (source === 'text') {
             const font = this.getFont(configuration.asset);
             const fontLoad = this.ensureFontLoaded(font.name);
             if (fontLoad) await fontLoad;
-            bitmap = this.createTextCanvas(font, String(configuration.text));
+            const text = String(configuration.text);
+            bitmap = this.createTextCanvas(font, text);
             logicalWidth = bitmap.width / BITMAP_RESOLUTION;
             logicalHeight = bitmap.height / BITMAP_RESOLUTION;
+            planeCacheKey = `text:${font.name}:${font.family}:${text}`;
         } else {
             return null;
         }
 
-        const sourceObject = createImagePlane(bitmap, logicalWidth, logicalHeight, rotationCenter);
+        const sourceObject = planeCacheKey ? this.getCachedObjectImagePlane(
+            planeCacheKey,
+            bitmap,
+            logicalWidth,
+            logicalHeight,
+            rotationCenter
+        ) : createImagePlane(bitmap, logicalWidth, logicalHeight, rotationCenter);
         return {
             item: {
                 animationName: '',
@@ -242,7 +290,8 @@ const MovieAssetManagerObjectMethods = {
                 sourceObject,
                 transform: this.getObjectSceneTransform(target, configuration, true)
             },
-            resource: sourceObject
+            resource: sourceObject,
+            ownsResource: !planeCacheKey
         };
     },
 
@@ -251,11 +300,12 @@ const MovieAssetManagerObjectMethods = {
         const version = typeof requestedVersion === 'number' ? requestedVersion : state.objectDrawVersion;
         const camera = capture.camera || cloneCamera(this.camera);
         const prepared = [];
+        const videoFrameBitmaps = new Map();
         try {
             // Resolve in block order. In particular, two frames from one video share a decoder element and must
             // be copied before the following seek changes it.
             for (const entry of capture.entries) {
-                const result = await this.prepareObjectSceneItem(target, entry);
+                const result = await this.prepareObjectSceneItem(target, entry, videoFrameBitmaps);
                 if (result) prepared.push(result);
                 if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
             }
@@ -274,8 +324,9 @@ const MovieAssetManagerObjectMethods = {
             this.finishObjectDraw(target, {}, 'model', false, camera);
         } finally {
             prepared.forEach(result => {
-                if (result.resource) disposeObject(result.resource);
+                if (result.resource && result.ownsResource !== false) disposeObject(result.resource);
             });
+            videoFrameBitmaps.forEach(frameBitmap => this.closeVideoBitmap(frameBitmap.bitmap));
         }
     },
 
@@ -283,15 +334,22 @@ const MovieAssetManagerObjectMethods = {
         const position = configuration.position || {};
         const rotation = configuration.rotation || {};
         const scale = configuration.scale || {};
-        this.setTargetPosition(target, position.x, position.y, position.z);
-        this.setTargetRotation(target, rotation.x, rotation.y, rotation.z);
-        this.setTargetScale(target, scale.x, scale.y, scale.z);
-        if (typeof target.setSize === 'function') target.setSize(toNumber(configuration.size, 100));
+        const state = this.getTargetState(target);
+        state.projectionKey = null;
+        this.projectionBatchDepth = (this.projectionBatchDepth || 0) + 1;
+        try {
+            this.setTargetPosition(target, position.x, position.y, position.z);
+            this.setTargetRotation(target, rotation.x, rotation.y, rotation.z);
+            this.setTargetScale(target, scale.x, scale.y, scale.z);
+            if (typeof target.setSize === 'function') target.setSize(toNumber(configuration.size, 100));
 
-        const graphicEffects = this.runtime.graphicEffectsManager;
-        if (graphicEffects && typeof graphicEffects.setScale === 'function') {
-            graphicEffects.setScale(target, 'width', configuration.width);
-            graphicEffects.setScale(target, 'height', configuration.height);
+            const graphicEffects = this.runtime.graphicEffectsManager;
+            if (graphicEffects && typeof graphicEffects.setScale === 'function') {
+                graphicEffects.setScale(target, 'width', configuration.width);
+                graphicEffects.setScale(target, 'height', configuration.height);
+            }
+        } finally {
+            this.projectionBatchDepth--;
         }
     },
 
@@ -522,12 +580,23 @@ const MovieAssetManagerObjectMethods = {
                 if (!video) continue;
                 const frame = this.getVideoFrameNumber(video, configuration.frame);
                 const element = await this.decodeObjectVideoFrame(state, video, frame);
+                const frameBitmap = await this.snapshotVideoFrame(element);
                 if (
                     this.targetStates.get(target.id) !== state ||
                     request.version !== state.objectDrawVersion
-                ) continue;
+                ) {
+                    this.closeVideoBitmap(frameBitmap.bitmap);
+                    continue;
+                }
                 this.applyObjectDrawConfiguration(target, configuration);
-                this.applyBitmap(target, element, 'video', null, true);
+                this.applyBitmap(
+                    target,
+                    frameBitmap.bitmap,
+                    'video',
+                    null,
+                    true,
+                    frameBitmap.bitmapResolution
+                );
                 state.currentFrame = frame;
                 state.videoAssetId = video.assetId;
                 state.displayedFrame = frame;
@@ -695,8 +764,11 @@ const MovieAssetManagerObjectMethods = {
         state.textQueue.length = 0;
         state.modelRenderVersion++;
         state.modelScene = [];
+        state.modelCanvas = null;
         state.modelAssetId = null;
         state.mode = 'shape';
+        state.textKey = null;
+        state.projectionKey = null;
         state.penOnly = true;
         state.shapeSkinId = skinId;
 

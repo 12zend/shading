@@ -110,7 +110,12 @@ const optimizeNode = node => {
     const children = [];
     for (const child of node.children || []) {
         const optimized = optimizeNode(child);
-        if (optimized) children.push(optimized);
+        if (optimized && optimized.type === FRAME_GRAPH_NODE_TYPES.GROUP && optimized.flattened &&
+            !optimized.name && !optimized.simulation) {
+            children.push(...optimized.children);
+        } else if (optimized) {
+            children.push(optimized);
+        }
     }
     const optimized = {...node, children};
 
@@ -126,7 +131,7 @@ const optimizeNode = node => {
     // Structural groups do not need their own render target. Flattening them reduces traversal and allocations
     // while preserving the authored node order. Named groups remain available for diagnostics.
     if (node.type === FRAME_GRAPH_NODE_TYPES.GROUP && !node.name && !node.simulation) {
-        return {...optimized, flattened: true};
+        return children.length === 1 ? children[0] : {...optimized, children, flattened: true};
     }
     return optimized;
 };
