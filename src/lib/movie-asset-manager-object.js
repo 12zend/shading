@@ -10,6 +10,7 @@ import {
     createLineBitmap,
     createShapeBitmap,
     getShapeBitmapCacheKey,
+    isWithinTimeWindow,
     normalizeShapeType,
     once,
     toNumber,
@@ -135,11 +136,11 @@ const MovieAssetManagerObjectMethods = {
             return {...configuration, frame: playback.frame};
         }
         this.stopObjectVideoAudio(target, configuration);
-        if (configuration.time) {
-            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
-            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.getObjectEvaluationTime(configuration);
-            if (currentTime < startTime || currentTime > endTime) return null;
+        if (
+            configuration.time &&
+            !isWithinTimeWindow(configuration.time, this.getObjectEvaluationTime(configuration))
+        ) {
+            return null;
         }
         return configuration;
     },
@@ -162,11 +163,9 @@ const MovieAssetManagerObjectMethods = {
 
     prepareShapeSceneItem (target, requestedConfiguration) {
         const configuration = this.getShapeSceneConfiguration(requestedConfiguration);
-        if (configuration.time) {
-            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
-            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.getObjectEvaluationTime(configuration);
-            if (currentTime < startTime || currentTime > endTime) return null;
+        if (configuration.time &&
+            !isWithinTimeWindow(configuration.time, this.getObjectEvaluationTime(configuration))) {
+            return null;
         }
         const cacheKey = `shape:${getShapeBitmapCacheKey(configuration)}`;
         let sourceObject = this.objectImagePlanes instanceof Map ? this.objectImagePlanes.get(cacheKey) : null;
@@ -723,11 +722,9 @@ const MovieAssetManagerObjectMethods = {
         } else {
             this.stopObjectVideoAudio(target, configuration);
         }
-        if (drawConfiguration.time && !playsVideo) {
-            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
-            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.getObjectEvaluationTime(configuration);
-            if (currentTime < startTime || currentTime > endTime) return;
+        if (drawConfiguration.time && !playsVideo &&
+            !isWithinTimeWindow(drawConfiguration.time, this.getObjectEvaluationTime(drawConfiguration))) {
+            return;
         }
         if (source === 'video') {
             const video = this.getVideoByName(target, drawConfiguration.asset);
@@ -846,11 +843,9 @@ const MovieAssetManagerObjectMethods = {
             this.captureObjectSceneDraw(target, configuration, 'shape');
             return;
         }
-        if (configuration.time) {
-            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
-            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
-            const currentTime = this.getObjectEvaluationTime(configuration);
-            if (currentTime < startTime || currentTime > endTime) return;
+        if (configuration.time &&
+            !isWithinTimeWindow(configuration.time, this.getObjectEvaluationTime(configuration))) {
+            return;
         }
         return this.renderShape(target, configuration, requestedCamera || cloneCamera(this.camera));
     }

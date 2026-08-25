@@ -256,4 +256,53 @@ describe('My Blocks Shader', () => {
         expect(manager.engine.apply).toHaveBeenCalledTimes(1);
         expect(installMyBlocksShader(vm)).toBe(manager);
     });
+
+    test('reuses one compiled artifact while the definition is unchanged', () => {
+        const vm = {runtime: {renderer: {}}};
+        const manager = new MyBlocksShaderManager(vm);
+        manager.engine.apply = jest.fn();
+        const util = {target: makeTarget()};
+
+        manager.call({mutation: {shaderid: 'shader-id'}, 'arg-v': 1}, util);
+        manager.call({mutation: {shaderid: 'shader-id'}, 'arg-v': 2}, util);
+
+        expect(manager.engine.apply).toHaveBeenCalledTimes(2);
+        const sources = manager.engine.apply.mock.calls.map(call => call[0]);
+        expect(sources[1]).toBe(sources[0]);
+        expect(manager.compiledShaders.size).toBe(1);
+        expect(Object.values(manager.engine.apply.mock.calls[1][1])).toContain(2);
+    });
+
+    test('recompiles when the definition body changes', () => {
+        const vm = {runtime: {renderer: {}}};
+        const manager = new MyBlocksShaderManager(vm);
+        manager.engine.apply = jest.fn();
+        const target = makeTarget();
+        const util = {target};
+
+        manager.call({mutation: {shaderid: 'shader-id'}, 'arg-v': 1}, util);
+        target.blocks._blocks['red-times-value'].opcode = 'operator_subtract';
+        manager.call({mutation: {shaderid: 'shader-id'}, 'arg-v': 1}, util);
+
+        expect(manager.engine.apply).toHaveBeenCalledTimes(2);
+        const sources = manager.engine.apply.mock.calls.map(call => call[0]);
+        expect(sources[1]).not.toBe(sources[0]);
+        expect(manager.compiledShaders.size).toBe(2);
+    });
+
+    test('clears deduplicated errors when a new project loads', () => {
+        const listeners = {};
+        const vm = {
+            on: (name, handler) => {
+                listeners[name] = handler;
+            },
+            runtime: {renderer: {}}
+        };
+        const manager = new MyBlocksShaderManager(vm);
+        manager.errors.add('boom');
+
+        listeners['project-loaded']();
+
+        expect(manager.errors.size).toBe(0);
+    });
 });

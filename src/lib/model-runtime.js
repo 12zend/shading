@@ -463,7 +463,25 @@ const attachMotionToGLB = async (modelData, motionData, format, requestedName) =
     }
 };
 
-const degreesToEuler = (rotation, order) => new THREE.Euler(
+// Shared temporaries for the per-frame math below. Every helper that uses one consumes it fully
+// before returning, so no temporary escapes into stored state. This keeps steady-state rendering
+// from allocating Quaternions, Eulers and Matrix4s for every drawable on every frame.
+const scratchEuler = new THREE.Euler();
+const scratchRotationFlipZ = new THREE.Matrix4().makeScale(1, 1, -1);
+const scratchRotationMatrixA = new THREE.Matrix4();
+const scratchRotationMatrixB = new THREE.Matrix4();
+const scratchInverseCameraRotation = new THREE.Quaternion();
+const scratchPlaneObjectRotation = new THREE.Quaternion();
+const scratchPlaneInverseCameraRotation = new THREE.Quaternion();
+const scratchPlaneOrigin = new THREE.Vector3();
+const scratchPlaneOffset = new THREE.Vector3();
+const scratchPlaneAxisX = new THREE.Vector3();
+const scratchPlaneAxisY = new THREE.Vector3();
+const scratchPlaneAxisZ = new THREE.Vector3();
+const scratchPreviewObjectRotation = new THREE.Quaternion();
+const scratchPreviewCameraRotation = new THREE.Quaternion();
+
+const degreesToEuler = (rotation, order) => scratchEuler.set(
     THREE.MathUtils.degToRad(rotation.x),
     THREE.MathUtils.degToRad(rotation.y),
     THREE.MathUtils.degToRad(rotation.z),
@@ -471,11 +489,10 @@ const degreesToEuler = (rotation, order) => new THREE.Euler(
 );
 
 const movieRotationToThreeQuaternion = (rotation, order) => {
-    const movieRotation = new THREE.Matrix4().makeRotationFromEuler(degreesToEuler(rotation, order));
-    const invertZ = new THREE.Matrix4().makeScale(1, 1, -1);
-    const threeRotation = invertZ.clone()
+    const movieRotation = scratchRotationMatrixA.makeRotationFromEuler(degreesToEuler(rotation, order));
+    const threeRotation = scratchRotationMatrixB.copy(scratchRotationFlipZ)
         .multiply(movieRotation)
-        .multiply(invertZ);
+        .multiply(scratchRotationFlipZ);
     return new THREE.Quaternion().setFromRotationMatrix(threeRotation);
 };
 
@@ -668,7 +685,7 @@ const worldToCamera = (position, camera) => {
         position.y - camera.position.y,
         position.z - camera.position.z
     );
-    const inverseCamera = new THREE.Quaternion()
+    const inverseCamera = scratchInverseCameraRotation
         .setFromEuler(degreesToEuler(camera.rotation, camera.rotationOrder))
         .invert();
     return result.applyQuaternion(inverseCamera);
@@ -716,33 +733,37 @@ const spritePlaneMatrix = (transform, cameraTransform, skinSize, rotationCenter,
     const scaleX = modelScale(transformScale.x);
     const scaleY = modelScale(transformScale.y);
     const scaleZ = modelScale(transformScale.z);
-    const objectRotation = new THREE.Quaternion().setFromEuler(
+    const objectRotation = scratchPlaneObjectRotation.setFromEuler(
         degreesToEuler(transform.rotation, transform.rotationOrder)
     );
-    const inverseCameraRotation = new THREE.Quaternion()
+    const inverseCameraRotation = scratchPlaneInverseCameraRotation
         .setFromEuler(degreesToEuler(cameraTransform.rotation, cameraTransform.rotationOrder))
         .invert();
-    const toCameraVector = vector => vector
-        .applyQuaternion(objectRotation)
-        .applyQuaternion(inverseCameraRotation);
 
-    const origin = new THREE.Vector3(
-        (centerX - (width / 2)) * scratchScaleX * scaleX,
-        -(centerY - (height / 2)) * scratchScaleY * scaleY,
-        0
-    )
+    const origin = scratchPlaneOrigin
+        .set(
+            (centerX - (width / 2)) * scratchScaleX * scaleX,
+            -(centerY - (height / 2)) * scratchScaleY * scaleY,
+            0
+        )
         .applyQuaternion(objectRotation)
-        .add(new THREE.Vector3(
+        .add(scratchPlaneOffset.set(
             transform.position.x - cameraTransform.position.x,
             transform.position.y - cameraTransform.position.y,
             transform.position.z - cameraTransform.position.z
         ))
         .applyQuaternion(inverseCameraRotation);
-    const xAxis = toCameraVector(new THREE.Vector3(-width * scratchScaleX * scaleX, 0, 0));
-    const yAxis = toCameraVector(new THREE.Vector3(0, -height * scratchScaleY * scaleY, 0));
+    const xAxis = scratchPlaneAxisX.set(-width * scratchScaleX * scaleX, 0, 0)
+        .applyQuaternion(objectRotation)
+        .applyQuaternion(inverseCameraRotation);
+    const yAxis = scratchPlaneAxisY.set(0, -height * scratchScaleY * scaleY, 0)
+        .applyQuaternion(objectRotation)
+        .applyQuaternion(inverseCameraRotation);
     // The sprite currently has no vertices away from its XY plane, but retaining its transformed Z basis makes
     // set-scale X/Y/Z a complete 3D transform and keeps the matrix ready for non-flat sprite geometry.
-    const zAxis = toCameraVector(new THREE.Vector3(0, 0, scaleZ));
+    const zAxis = scratchPlaneAxisZ.set(0, 0, scaleZ)
+        .applyQuaternion(objectRotation)
+        .applyQuaternion(inverseCameraRotation);
     const safeDepth = origin.z > 0.001 ? origin.z : 0.001;
     const focalScale = cameraTransform.focalLength / safeDepth;
     const depthScale = 1 / safeDepth;
@@ -919,6 +940,8 @@ class ModelRenderer {
         this.lastRenderWasCached = false;
         this.renderVersion = 0;
         this.animationStates = new WeakMap();
+        this.lightsKeySource = null;
+        this.lightsKeyValue = 'studio';
     }
 
     invalidateRenderCache () {
@@ -937,6 +960,17 @@ class ModelRenderer {
         return id;
     }
 
+    getLightsKey (lights) {
+        if (!Array.isArray(lights)) return 'studio';
+        // Light configurations are compared by identity in setLights, so serializing them again only
+        // when the array identity changes produces the same key while skipping a per-frame JSON pass.
+        if (this.lightsKeySource !== lights) {
+            this.lightsKeySource = lights;
+            this.lightsKeyValue = JSON.stringify(lights);
+        }
+        return this.lightsKeyValue;
+    }
+
     getRenderCacheKey (sceneItems, cameraTransform, width, height, bitmapResolution, lights) {
         const camera = cameraTransform || {};
         const position = camera.position || {};
@@ -953,7 +987,7 @@ class ModelRenderer {
             rotation.x,
             rotation.y,
             rotation.z,
-            Array.isArray(lights) ? JSON.stringify(lights) : 'studio'
+            this.getLightsKey(lights)
         ];
         for (const item of sceneItems || []) {
             const transform = item.transform || {};
@@ -1265,10 +1299,10 @@ class ModelRenderer {
         this.setObject(sourceObject, animationName, frame);
         this.currentObject.position.set(0, 0, 0);
         this.currentObject.scale.set(1, 1, 1);
-        const objectQuaternion = new THREE.Quaternion().setFromEuler(
+        const objectQuaternion = scratchPreviewObjectRotation.setFromEuler(
             degreesToEuler(transform.rotation, transform.rotationOrder)
         );
-        const cameraQuaternion = new THREE.Quaternion().setFromEuler(
+        const cameraQuaternion = scratchPreviewCameraRotation.setFromEuler(
             degreesToEuler(cameraTransform.rotation, cameraTransform.rotationOrder)
         );
         this.currentObject.quaternion.copy(cameraQuaternion.invert().multiply(objectQuaternion));
@@ -1361,13 +1395,11 @@ class ModelRenderer {
 }
 
 export {
-    DEFAULT_BUILDING_MATERIAL,
     DEFAULT_DEPTH,
     DEFAULT_FOV,
     DEFAULT_FOCAL_LENGTH,
     DEFAULT_STAGE_HEIGHT,
     DEFAULT_STAGE_WIDTH,
-    MODEL_RENDER_SIZE,
     ROTATION_ORDERS,
     ModelRenderer,
     attachMotionToGLB,

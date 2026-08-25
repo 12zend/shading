@@ -9,7 +9,27 @@ const finiteNumber = (value, fallback = 0) => {
 
 const positiveModulo = (value, divisor) => ((value % divisor) + divisor) % divisor;
 
-const parseBezierPathPoints = value => {
+// Parsed curves are pure functions of their source string, and the same strings are re-evaluated
+// every frame for every placed block. Memoize the parse so repeated evaluation skips the regex
+// work. The cache is bounded: curve text that changes every frame must not grow it without end.
+// Cached point arrays are shared between evaluations, so callers must treat them as read-only.
+const PARSE_CACHE_LIMIT = 512;
+
+const memoizedStringParser = parse => {
+    const cache = new Map();
+    return value => {
+        if (typeof value !== 'string') return parse(value);
+        let points = cache.get(value);
+        if (!points) {
+            points = parse(value);
+            if (cache.size >= PARSE_CACHE_LIMIT) cache.delete(cache.keys().next().value);
+            cache.set(value, points);
+        }
+        return points;
+    };
+};
+
+const parseBezierPathPoints = memoizedStringParser(value => {
     let values = value;
     if (!Array.isArray(values)) {
         const source = String(value || '').trim();
@@ -38,7 +58,7 @@ const parseBezierPathPoints = value => {
         });
     }
     return points;
-};
+});
 
 const evaluateBezierPath = (path, component, time) => {
     const points = parseBezierPathPoints(path);
@@ -67,7 +87,7 @@ const evaluateBezierPath = (path, component, time) => {
 
 const TIME_SCOPE_TYPES = ['range', 'offset', 'scale', 'loop', 'pingpong', 'freeze', 'reverse', 'remap'];
 
-const parseCurvePoints = value => {
+const parseCurvePoints = memoizedStringParser(value => {
     if (Array.isArray(value)) {
         return value.map(point => {
             if (Array.isArray(point)) return {time: finiteNumber(point[0]), value: point[1], easing: point[2]};
@@ -106,7 +126,7 @@ const parseCurvePoints = value => {
     })
         .filter(Boolean)
         .sort((a, b) => a.time - b.time);
-};
+});
 
 const getCurveSegment = (points, time) => {
     if (!points.length) return null;
@@ -318,7 +338,6 @@ const getAnimationProgress = ({start, end, easing, power = 2}, time) => calculat
 }, time);
 
 export {
-    TIME_SCOPE_TYPES,
     calculateAnimationValue,
     calculateLoopValue,
     calculatePingPongValue,
@@ -335,9 +354,5 @@ export {
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
-    parseBezierPathPoints,
-    parseCurvePoints,
-    posterizeTime,
-    seededNoise,
-    transformTimeByScope
+    posterizeTime
 };

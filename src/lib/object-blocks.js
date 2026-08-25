@@ -5,10 +5,7 @@ import Thread from 'scratch-vm/src/engine/thread';
 import {ANIMATION_EASING_TYPES} from './movie-easing';
 import {
     FRAME_GRAPH_NODE_TYPES,
-    applyObjectTransforms,
-    applyTransformScope,
-    rotatePoint,
-    transformPoint
+    applyObjectTransforms
 } from './movie-frame-graph';
 import {
     calculateAnimationValue,
@@ -1416,19 +1413,13 @@ export {
     COSTUME_GROUP_SOURCE,
     DRAW_SOURCES,
     MATTE_MODES,
-    OBJECT_REPORTER_OPCODES,
     SHAPE_TYPES,
     TIME_LOOP_MODES,
     applyObjectTransforms,
-    applyTransformScope,
     encodeDrawAsset,
     decodeDrawAsset,
     normalizeBlendMode,
     normalizeShapeType,
-    normalizeVectorComponent,
-    installReporterStackClickGuard,
-    rotatePoint,
-    transformPoint,
     createObjectBlocksClass,
     installObjectBlocks as default
 };

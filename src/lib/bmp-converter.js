@@ -1,7 +1,8 @@
-export default (bmpImage, type = 'image/bmp') => new Promise(resolve => {
-    // If the input is an ArrayBuffer, we need to convert it to a `Blob` and give it a URL so we can use it as an <img>
-    // `src`. If it's a data URI, we can use it as-is.
-    const imageUrl = bmpImage instanceof String ?
+export default (bmpImage, type = 'image/bmp') => new Promise((resolve, reject) => {
+    // If the input is a URI string, we can use it as-is. Anything else (ArrayBuffer, TypedArray, ...)
+    // is converted to a `Blob` and given a URL so we can use it as an <img> `src`.
+    const isUri = typeof bmpImage === 'string';
+    const imageUrl = isUri ?
         bmpImage :
         window.URL.createObjectURL(new Blob([bmpImage], {type}));
 
@@ -10,18 +11,36 @@ export default (bmpImage, type = 'image/bmp') => new Promise(resolve => {
 
     const image = document.createElement('img');
 
-    image.addEventListener('load', () => {
+    const revokeBlobUrl = () => {
+        if (!isUri) {
+            // Revoke URL. This allows the blob to be GC'd and prevents a memory leak.
+            window.URL.revokeObjectURL(imageUrl);
+        }
+    };
+
+    const cleanup = () => {
+        // eslint-disable-next-line no-use-before-define
+        image.removeEventListener('load', handleLoad);
+        // eslint-disable-next-line no-use-before-define
+        image.removeEventListener('error', handleError);
+        revokeBlobUrl();
+    };
+
+    const handleLoad = () => {
+        cleanup();
         canvas.width = image.naturalWidth;
         canvas.height = image.naturalHeight;
         ctx.drawImage(image, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+    };
 
-        const dataUrl = canvas.toDataURL('image/png');
+    const handleError = () => {
+        cleanup();
+        reject(new Error('Could not decode the image from the provided data.'));
+    };
 
-        // Revoke URL. If a blob URL was generated earlier, this allows the blob to be GC'd and prevents a memory leak.
-        window.URL.revokeObjectURL(imageUrl);
-
-        resolve(dataUrl);
-    });
+    image.addEventListener('load', handleLoad);
+    image.addEventListener('error', handleError);
 
     image.setAttribute('src', imageUrl);
 });

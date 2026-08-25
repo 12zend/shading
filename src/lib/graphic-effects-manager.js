@@ -389,6 +389,17 @@ class GraphicEffectsManager {
         return skin ? skin.getTexture([100, 100]) : null;
     }
 
+    getTargetState (target) {
+        let state = this.targetStates.get(target.id);
+        if (!state) {
+            // Targets normally receive a state when patched, but an effect opcode can run before
+            // patchTarget fires (for example during deserialization). Recover instead of crashing.
+            state = defaultTargetState();
+            this.targetStates.set(target.id, state);
+        }
+        return state;
+    }
+
     restoreExtraUniforms (target) {
         const state = this.targetStates.get(target.id);
         if (!state) return;
@@ -440,7 +451,7 @@ class GraphicEffectsManager {
     rgbShift (target, args) {
         const amount = clamp(number(args.VALUE), -100, 100);
         const colorCodes = {RG: 0, GB: 1, BR: 2};
-        const state = this.targetStates.get(target.id);
+        const state = this.getTargetState(target);
         state.rgbShiftColor = colorCodes[args.COLOR] || 0;
         this.updateExtraUniforms(target, {u_rgbShiftColor: state.rgbShiftColor});
         target.setEffect('rgbshift', amount === 0 ? 0 : [amount, radians(args.DIR)]);
@@ -462,7 +473,7 @@ class GraphicEffectsManager {
 
     pixelStretch (target, args) {
         const offset = clamp(number(args.OFFSET), -200, 200);
-        const state = this.targetStates.get(target.id);
+        const state = this.getTargetState(target);
         state.pixelStretchB = [
             clamp(number(args.X) / 100, -2, 2),
             clamp(number(args.Y) / 100, -2, 2),
@@ -490,7 +501,7 @@ class GraphicEffectsManager {
     displacementMap (target, args) {
         const typeCodes = {x: 0, y: 1, size: 2, dir: 3};
         const value = clamp(number(args.VALUE), -360, 360);
-        const state = this.targetStates.get(target.id);
+        const state = this.getTargetState(target);
         state.displacementCostume = String(args.COSTUME);
         const texture = this.getCostumeTexture(target, args.COSTUME);
         this.updateExtraUniforms(target, {u_displacementMap: texture});
@@ -498,7 +509,7 @@ class GraphicEffectsManager {
     }
 
     effectWeight (target, requestedCostume) {
-        const state = this.targetStates.get(target.id);
+        const state = this.getTargetState(target);
         state.effectWeightCostume = String(requestedCostume);
         const texture = this.getCostumeTexture(target, requestedCostume);
         this.updateExtraUniforms(target, {u_effectWeight: texture});
@@ -514,10 +525,4 @@ const installGraphicEffectsManager = vm => {
     return vm.__graphicEffectsManager;
 };
 
-export {
-    EFFECT_INFO,
-    GraphicEffectsManager,
-    calculateEffectPadding,
-    installRendererEffects,
-    installGraphicEffectsManager as default
-};
+export {installGraphicEffectsManager as default};

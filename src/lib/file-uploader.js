@@ -129,9 +129,11 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
     case 'image/bmp': {
         // Convert .bmp files to .png to compress them. .bmps are completely uncompressed,
         // and would otherwise take up a lot of storage space and take much longer to upload and download.
-        bmpConverter(fileData).then(dataUrl => {
-            costumeUpload(dataUrl, 'image/png', vm, handleCostume);
-        });
+        bmpConverter(fileData)
+            .then(dataUrl => {
+                costumeUpload(dataUrl, 'image/png', vm, handleCostume);
+            })
+            .catch(handleError);
         return; // Return early because we're triggering another proper costumeUpload
     }
     case 'image/png': {
@@ -142,9 +144,11 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
     case 'image/webp': {
         // Scratch does not natively support webp, so convert to png
         // see image/bmp logic above
-        bmpConverter(fileData, 'image/webp').then(dataUrl => {
-            costumeUpload(dataUrl, 'image/png', vm, handleCostume);
-        });
+        bmpConverter(fileData, 'image/webp')
+            .then(dataUrl => {
+                costumeUpload(dataUrl, 'image/png', vm, handleCostume);
+            })
+            .catch(handleError);
         return;
     }
     case 'image/gif': {
@@ -161,9 +165,11 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
     }
     case 'image/exr':
     case 'image/x-exr': {
-        exrConverter(fileData).then(dataUrl => {
-            costumeUpload(dataUrl, 'image/png', vm, handleCostume, handleError);
-        }).catch(handleError);
+        exrConverter(fileData)
+            .then(dataUrl => {
+                costumeUpload(dataUrl, 'image/png', vm, handleCostume, handleError);
+            })
+            .catch(handleError);
         return;
     }
     default:

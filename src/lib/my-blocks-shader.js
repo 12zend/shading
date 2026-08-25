@@ -16,6 +16,7 @@ const SHADER_GET_OPCODES = {
     myblocksshader_get_b: 'b'
 };
 const MAX_SHADER_LOOP = 256;
+const MAX_COMPILED_SHADERS = 64;
 
 // Scratch VM derives extension IDs from the part of an opcode before the
 // first underscore. My Blocks Shader owns native-looking Blockly blocks and
@@ -749,21 +750,60 @@ class MyBlocksShaderManager {
         this.engine = new MyBlocksShaderEngine(this.runtime.renderer);
         this.errors = new Set();
         this.randomSeed = 0;
+        // Compiled GLSL artifacts keyed by a content signature of the definition subtree, so editing
+        // the definition misses the cache naturally while steady per-frame execution reuses it.
+        this.compiledShaders = new Map();
+        // Self-validating definition locations per blocks store, avoiding a full scan per execution.
+        this.definitionIndexes = new WeakMap();
+        if (vm && typeof vm.on === 'function') {
+            // Deduplicated error messages must not suppress reporting the same failure after a
+            // different project has been loaded into the same runtime.
+            vm.on('project-loaded', () => this.errors.clear());
+        }
+    }
+
+    _prototypeMatches (prototype, shaderId, userProcCode) {
+        const mutation = prototype && prototype.mutation;
+        if (!mutation || mutation[SHADER_MARKER] !== 'true') return false;
+        return Boolean((shaderId && mutation.shaderid === shaderId) ||
+            (userProcCode && mutation.shaderuserproccode === userProcCode));
+    }
+
+    _scanForPrototype (blocks, shaderId, userProcCode) {
+        for (const block of Object.values(blocks)) {
+            if (block.opcode !== 'procedures_prototype' || !block.mutation) continue;
+            if (this._prototypeMatches(block, shaderId, userProcCode)) return block;
+        }
+        return null;
+    }
+
+    _definitionFromPrototype (blocks, prototype) {
+        if (!prototype) return null;
+        const definition = blocks[prototype.parent];
+        return definition && definition.opcode === 'procedures_definition' ? definition : null;
     }
 
     _findDefinition (target, shaderId, userProcCode) {
         const blocks = target && target.blocks && target.blocks._blocks;
         if (!blocks) return null;
-        for (const block of Object.values(blocks)) {
-            if (block.opcode !== 'procedures_prototype' || !block.mutation) continue;
-            const matchesId = shaderId && block.mutation.shaderid === shaderId;
-            const matchesCode = userProcCode && block.mutation.shaderuserproccode === userProcCode;
-            if (block.mutation[SHADER_MARKER] === 'true' && (matchesId || matchesCode)) {
-                const definition = blocks[block.parent];
-                return definition && definition.opcode === 'procedures_definition' ? definition : null;
+        let index = this.definitionIndexes.get(blocks);
+        if (!index) {
+            index = {byCode: new Map(), byId: null};
+            this.definitionIndexes.set(blocks, index);
+        }
+        let prototype;
+        if (shaderId) {
+            if (!this._prototypeMatches(index.byId, shaderId, null)) index.byId = null;
+            if (!index.byId) index.byId = this._scanForPrototype(blocks, shaderId, null);
+            prototype = index.byId;
+        } else {
+            prototype = index.byCode.get(userProcCode);
+            if (!this._prototypeMatches(prototype, null, userProcCode)) {
+                prototype = this._scanForPrototype(blocks, null, userProcCode);
+                index.byCode.set(userProcCode, prototype);
             }
         }
-        return null;
+        return this._definitionFromPrototype(blocks, prototype);
     }
 
     _findReturn (blocks, definition) {
@@ -969,9 +1009,40 @@ ${statements}
         return 0;
     }
 
-    _applyDefinition (definition, values, util) {
-        try {
-            const blocks = util.target.blocks._blocks;
+    // Serialize every block reachable from a definition (opcodes, fields, mutations, input
+    // descriptors) into a comparable signature. Any edit to the definition changes the signature,
+    // while unchanged per-frame executions keep reusing one compiled artifact.
+    _definitionSignature (blocks, startId, parts) {
+        const block = blocks[startId];
+        if (!block) {
+            parts.push('<missing>');
+            return;
+        }
+        parts.push(block.opcode || '');
+        if (block.mutation) parts.push(JSON.stringify(block.mutation));
+        if (block.fields) parts.push(JSON.stringify(block.fields));
+        const inputs = block.inputs;
+        if (inputs) {
+            for (const name of Object.keys(inputs)) {
+                const input = inputs[name];
+                parts.push(name);
+                this._definitionSignature(blocks, input && input.block, parts);
+                this._definitionSignature(blocks, input && input.shadow, parts);
+            }
+        }
+        if (block.next) {
+            parts.push('->');
+            this._definitionSignature(blocks, block.next, parts);
+        }
+    }
+
+    _compileDefinition (blocks, definition) {
+        const signatureParts = [];
+        this._definitionSignature(blocks, definition.inputs.custom_block.block, signatureParts);
+        this._definitionSignature(blocks, definition.next, signatureParts);
+        const signature = signatureParts.join('\u0000');
+        let compiled = this.compiledShaders.get(signature);
+        if (!compiled) {
             const prototype = blocks[definition.inputs.custom_block.block];
             const returnInfo = this._findReturn(blocks, definition);
             if (!returnInfo) throw new Error('A shader definition needs a return RGB block.');
@@ -980,18 +1051,29 @@ ${statements}
             const userIds = parseJSON(prototype.mutation.shaderuserargumentids);
             const compiler = new ShaderExpressionCompiler(blocks, userNames, userIds);
             const uniformNames = userIds.map(id => safeIdentifier(id));
-            const uniforms = {};
-            for (let i = 0; i < userIds.length; i++) {
-                const value = Number(values[userIds[i]]);
-                uniforms[uniformNames[i]] = Number.isFinite(value) ? value : 0;
-            }
             const source = this._source(definition, returnInfo, compiler, uniformNames);
-            for (const [name, descriptor] of compiler.externalUniforms) {
+            compiled = {externalUniforms: compiler.externalUniforms, source, uniformNames, userIds};
+            if (this.compiledShaders.size >= MAX_COMPILED_SHADERS) this.compiledShaders.clear();
+            this.compiledShaders.set(signature, compiled);
+        }
+        return compiled;
+    }
+
+    _applyDefinition (definition, values, util) {
+        try {
+            const blocks = util.target.blocks._blocks;
+            const compiled = this._compileDefinition(blocks, definition);
+            const uniforms = {};
+            for (let i = 0; i < compiled.userIds.length; i++) {
+                const value = Number(values[compiled.userIds[i]]);
+                uniforms[compiled.uniformNames[i]] = Number.isFinite(value) ? value : 0;
+            }
+            for (const [name, descriptor] of compiled.externalUniforms) {
                 uniforms[name] = this._externalUniformValue(descriptor, util);
             }
             this.randomSeed = (this.randomSeed + 1) % 1000000;
             uniforms.u_random_seed = this.randomSeed;
-            this.engine.apply(source, uniforms);
+            this.engine.apply(compiled.source, uniforms);
         } catch (error) {
             const message = error && error.message ? error.message : String(error);
             if (!this.errors.has(message)) {
@@ -1088,6 +1170,5 @@ export {
     SHADER_RETURN_FROM_OPCODE,
     SHADER_RETURN_OPCODE,
     MyBlocksShaderManager,
-    ShaderExpressionCompiler,
     installMyBlocksShader as default
 };
