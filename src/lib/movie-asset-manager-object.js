@@ -525,6 +525,7 @@ const MovieAssetManagerObjectMethods = {
             state.displayedVideoAssetId === video.assetId &&
             state.displayedFrame === frame &&
             !state.pendingVideoFrame &&
+            (!Array.isArray(state.videoFrameQueue) || state.videoFrameQueue.length === 0) &&
             !state.videoRenderPromise;
     },
 
@@ -760,7 +761,7 @@ const MovieAssetManagerObjectMethods = {
         const state = this.getTargetState(target);
         state.renderVersion++;
         state.requestedMode = 'shape';
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         state.modelRenderVersion++;
         state.modelScene = [];

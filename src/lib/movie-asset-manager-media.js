@@ -289,6 +289,12 @@ const MovieAssetManagerMediaMethods = {
         return this.queueVideoFrame(target, video, Number.isFinite(frame) ? frame : 1) || Promise.resolve();
     },
 
+    clearPendingVideoFrames (state) {
+        if (!state) return;
+        state.pendingVideoFrame = null;
+        if (Array.isArray(state.videoFrameQueue)) state.videoFrameQueue.length = 0;
+    },
+
     setVideoFrame (target, requestedFrame) {
         const state = this.getTargetState(target);
         const videos = this.getVideos(target);
@@ -329,6 +335,7 @@ const MovieAssetManagerMediaMethods = {
     queueVideoFrame (target, video, requestedFrame) {
         if (!target || !this.runtime.renderer) return;
         const state = this.getTargetState(target);
+        if (!Array.isArray(state.videoFrameQueue)) state.videoFrameQueue = [];
         const maximumFrame = video.duration > 0 ?
             Math.max(1, Math.floor(video.duration * video.frameRate) + 1) : Number.MAX_SAFE_INTEGER;
         const frame = Math.round(clamp(requestedFrame, 1, maximumFrame));
@@ -341,6 +348,7 @@ const MovieAssetManagerMediaMethods = {
             state.displayedVideoAssetId === video.assetId &&
             state.displayedFrame === frame &&
             !state.pendingVideoFrame &&
+            state.videoFrameQueue.length === 0 &&
             !state.videoRenderPromise
         ) {
             state.penOnly = false;
@@ -348,26 +356,29 @@ const MovieAssetManagerMediaMethods = {
             return Promise.resolve();
         }
 
-        if (state.requestedMode !== 'video') state.renderVersion++;
+        if (state.requestedMode !== 'video') {
+            this.clearPendingVideoFrames(state);
+            state.renderVersion++;
+        }
         state.requestedMode = 'video';
         state.textQueue.length = 0;
-        state.pendingVideoFrame = {
+        state.videoFrameQueue.push({
             frame,
             renderVersion: state.renderVersion,
             video
-        };
+        });
         return this.startVideoRender(target, state);
     },
 
     startVideoRender (target, state) {
         if (state.videoRenderPromise) return state.videoRenderPromise;
-        // Start after the VM's current execution burst so several frame changes collapse into one seek.
+        // Start after the VM's current execution burst, then drain every queued frame in order.
         const renderPromise = Promise.resolve().then(() => this.renderPendingVideoFrames(target, state));
         state.videoRenderPromise = renderPromise;
         const finish = () => {
             if (state.videoRenderPromise !== renderPromise) return;
             state.videoRenderPromise = null;
-            if (state.pendingVideoFrame && this.targetStates.get(target.id) === state) {
+            if (state.videoFrameQueue.length && this.targetStates.get(target.id) === state) {
                 this.runWithoutWaiting(this.startVideoRender(target, state));
             }
         };
@@ -376,38 +387,38 @@ const MovieAssetManagerMediaMethods = {
     },
 
     async renderPendingVideoFrames (target, state) {
-        while (state.pendingVideoFrame && this.targetStates.get(target.id) === state) {
-            const request = state.pendingVideoFrame;
-            state.pendingVideoFrame = null;
-            const element = await this.decodeVideoFrame(state, request.video, request.frame);
+        while (state.videoFrameQueue.length && this.targetStates.get(target.id) === state) {
+            const request = state.videoFrameQueue.shift();
+            state.pendingVideoFrame = request;
+            try {
+                const element = await this.decodeVideoFrame(state, request.video, request.frame);
 
-            // Decoding can be slower than the VM. Skip stale frames instead of building up visible lag.
-            if (
-                this.targetStates.get(target.id) !== state ||
-                state.renderVersion !== request.renderVersion ||
-                state.pendingVideoFrame
-            ) {
-                continue;
-            }
+                // Preserve every accepted request. Only discard work when the target changed mode or was removed.
+                if (
+                    this.targetStates.get(target.id) !== state ||
+                    state.renderVersion !== request.renderVersion
+                ) continue;
 
-            const frameBitmap = await this.createVideoBitmap(element);
-            const isStale = this.targetStates.get(target.id) !== state ||
-                state.renderVersion !== request.renderVersion ||
-                state.pendingVideoFrame;
-            if (isStale) {
-                this.closeVideoBitmap(frameBitmap.bitmap);
-                continue;
+                const frameBitmap = await this.createVideoBitmap(element);
+                const isStale = this.targetStates.get(target.id) !== state ||
+                    state.renderVersion !== request.renderVersion;
+                if (isStale) {
+                    this.closeVideoBitmap(frameBitmap.bitmap);
+                    continue;
+                }
+                this.applyBitmap(
+                    target,
+                    frameBitmap.bitmap,
+                    'video',
+                    null,
+                    false,
+                    frameBitmap.bitmapResolution
+                );
+                state.displayedFrame = request.frame;
+                state.displayedVideoAssetId = request.video.assetId;
+            } finally {
+                if (state.pendingVideoFrame === request) state.pendingVideoFrame = null;
             }
-            this.applyBitmap(
-                target,
-                frameBitmap.bitmap,
-                'video',
-                null,
-                false,
-                frameBitmap.bitmapResolution
-            );
-            state.displayedFrame = request.frame;
-            state.displayedVideoAssetId = request.video.assetId;
         }
     },
 
@@ -528,7 +539,7 @@ const MovieAssetManagerMediaMethods = {
         if (state.requestedMode !== 'text') state.renderVersion++;
         state.requestedMode = 'text';
         state.textKey = textKey;
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
 
         const fontLoad = this.ensureFontLoaded(font.name);
         if (!fontLoad && !state.textRenderPromise && state.textQueue.length === 0) {
@@ -659,7 +670,7 @@ const MovieAssetManagerMediaMethods = {
         state.requestedMode = 'costume';
         state.textKey = null;
         state.textQueue.length = 0;
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.modelRenderVersion++;
         state.modelScene = [];
         state.modelCanvas = null;
@@ -701,7 +712,7 @@ const MovieAssetManagerMediaMethods = {
         state.renderVersion++;
         state.requestedMode = 'costume';
         state.textQueue.length = 0;
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.objectDrawQueue.length = 0;
         state.objectDrawVersion++;
         state.modelRenderVersion++;

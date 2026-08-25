@@ -41,6 +41,7 @@ const MovieAssetManagerTransformMethods = {
                 objectVideoAssetId: null,
                 penOnly: false,
                 pendingVideoFrame: null,
+                videoFrameQueue: [],
                 projectionKey: null,
                 renderVersion: 0,
                 rotation: {x: 0, y: 0, z: 90 - (target.direction || 90)},

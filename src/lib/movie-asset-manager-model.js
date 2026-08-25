@@ -33,12 +33,13 @@ const MovieAssetManagerModelMethods = {
 
     clearModelScene (target, render = true, requestedCamera = null) {
         const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model') state.renderVersion++;
         state.modelAssetId = null;
         state.modelScene = [];
         state.requestedMode = 'model';
         state.textKey = null;
         state.projectionKey = null;
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         if (render) {
             return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
@@ -296,6 +297,7 @@ const MovieAssetManagerModelMethods = {
         const record = this.getBuildingMaterialRecord(args.MATERIAL);
         const sourceObject = this.getBuildingPrimitive(type, args, record.material, record.name);
         const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model') state.renderVersion++;
         state.modelAssetId = null;
         state.modelScene.push({
             materialName: record.name,
@@ -303,7 +305,7 @@ const MovieAssetManagerModelMethods = {
             transform: this.getModelTransform(target, state)
         });
         state.requestedMode = 'model';
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         if (render) {
             return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
@@ -316,6 +318,7 @@ const MovieAssetManagerModelMethods = {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return render ? Promise.resolve() : false;
         const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model') state.renderVersion++;
         state.modelAssetId = model.assetId;
         state.modelScene.push({
             assetId: model.assetId,
@@ -323,7 +326,7 @@ const MovieAssetManagerModelMethods = {
         });
         state.requestedMode = 'model';
         state.textKey = null;
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         if (render) {
             return requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
@@ -351,13 +354,14 @@ const MovieAssetManagerModelMethods = {
         const model = this.getModelByName(target, requestedModel);
         if (!model) return Promise.resolve();
         const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model') state.renderVersion++;
         state.modelAssetId = model.assetId;
         state.modelScene = [{
             assetId: model.assetId,
             transform: this.getModelTransform(target, state)
         }];
         state.requestedMode = 'model';
-        state.pendingVideoFrame = null;
+        this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         const render = requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
             this.queueModelSceneRender(target);
@@ -541,12 +545,14 @@ const MovieAssetManagerModelMethods = {
 
     queueModelRender (target, model) {
         const state = this.getTargetState(target);
+        if (state.requestedMode !== 'model') state.renderVersion++;
         state.modelAssetId = model.assetId;
         state.modelScene = [{
             assetId: model.assetId,
             transform: this.getModelTransform(target, state)
         }];
         state.requestedMode = 'model';
+        this.clearPendingVideoFrames(state);
         return this.queueModelSceneRender(target) || Promise.resolve();
     },
 

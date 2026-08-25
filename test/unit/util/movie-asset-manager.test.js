@@ -1139,6 +1139,31 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(9900);
     });
 
+    test('keeps rendering frame numbers sequential while visual work is pending', () => {
+        const manager = makeTimelineManager();
+        manager.timeline.framerate = 10;
+        manager.renderingFrameNumbers = [];
+        manager.addRenderingFrame = jest.fn(() => {
+            manager.renderingFrameNumbers.push(manager.timeline.renderFrameIndex);
+        });
+
+        let visualWorkPending = false;
+        manager.hasPendingVisualRenders = jest.fn(() => visualWorkPending);
+        manager.renderTimeline({end: 0.2});
+
+        for (let index = 0; index < 3; index++) {
+            manager.handleTimelineBeforeExecute();
+            visualWorkPending = true;
+            manager.handleTimelineAfterExecute();
+            visualWorkPending = false;
+            manager.handleTimelineBeforeExecute();
+            manager.handleTimelineAfterExecute();
+        }
+
+        expect(manager.renderingFrameNumbers).toEqual([0, 1, 2]);
+        expect(manager.addRenderingFrame).toHaveBeenCalledTimes(3);
+    });
+
     test('renders only the requested frame range', () => {
         const manager = makeTimelineManager();
         manager.timeline.framerate = 10;
@@ -3099,7 +3124,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.queueVideoFrame).toHaveBeenCalledWith(target, video, 24);
     });
 
-    test('collapses queued video seeks to the latest requested frame', async () => {
+    test('renders queued video frames in order without dropping intermediate frames', async () => {
         const manager = makeManager();
         const target = makeTarget();
         const video = {
@@ -3108,11 +3133,18 @@ describe('MovieAssetManager rendering performance', () => {
             frameRate: 30
         };
         const firstDecode = deferred();
+        const firstBitmap = deferred();
         const firstElement = {name: 'frame 1'};
-        const latestElement = {name: 'frame 3'};
+        const secondElement = {name: 'frame 2'};
+        const thirdElement = {name: 'frame 3'};
         manager.decodeVideoFrame = jest.fn()
             .mockImplementationOnce(() => firstDecode.promise)
-            .mockResolvedValueOnce(latestElement);
+            .mockResolvedValueOnce(secondElement)
+            .mockResolvedValueOnce(thirdElement);
+        manager.createVideoBitmap = jest.fn()
+            .mockImplementationOnce(() => firstBitmap.promise)
+            .mockResolvedValueOnce({bitmap: secondElement, bitmapResolution: 2})
+            .mockResolvedValueOnce({bitmap: thirdElement, bitmapResolution: 2});
 
         const renderPromise = manager.queueVideoFrame(target, video, 1);
         await Promise.resolve();
@@ -3121,11 +3153,15 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.queueVideoFrame(target, video, 2)).toBe(renderPromise);
         expect(manager.queueVideoFrame(target, video, 3)).toBe(renderPromise);
         firstDecode.resolve(firstElement);
+        await Promise.resolve();
+        firstBitmap.resolve({bitmap: firstElement, bitmapResolution: 2});
         await renderPromise;
 
-        expect(manager.decodeVideoFrame.mock.calls.map(call => call[2])).toEqual([1, 3]);
+        expect(manager.decodeVideoFrame.mock.calls.map(call => call[2])).toEqual([1, 2, 3]);
         expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledTimes(1);
-        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(latestElement, 2);
+        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(firstElement, 2);
+        expect(manager.runtime.renderer.updateBitmapSkin).toHaveBeenNthCalledWith(1, 1, secondElement, 2);
+        expect(manager.runtime.renderer.updateBitmapSkin).toHaveBeenNthCalledWith(2, 1, thirdElement, 2);
         expect(manager.getTargetState(target)).toMatchObject({
             currentFrame: 3,
             displayedFrame: 3,

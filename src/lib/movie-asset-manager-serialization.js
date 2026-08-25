@@ -385,7 +385,9 @@ const MovieAssetManagerSerializationMethods = {
                 }).filter(Boolean);
                 if (state.modelScene.length) {
                     state.modelAssetId = state.modelScene[state.modelScene.length - 1].assetId;
+                    if (state.requestedMode !== 'model') state.renderVersion++;
                     state.requestedMode = 'model';
+                    this.clearPendingVideoFrames(state);
                     this.runWithoutWaiting(this.queueModelSceneRender(target));
                 }
             } else if (transform.model) {

@@ -273,7 +273,8 @@ const MovieAssetManagerPrimitiveMethods = {
             if (state.requestedMode === 'text' && (state.textRenderPromise || state.textQueue.length > 0)) return true;
             if (
                 state.requestedMode === 'video' &&
-                (state.videoRenderPromise || state.pendingVideoFrame)
+                (state.videoRenderPromise || state.pendingVideoFrame ||
+                    (Array.isArray(state.videoFrameQueue) && state.videoFrameQueue.length > 0))
             ) return true;
         }
         return false;
