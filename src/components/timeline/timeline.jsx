@@ -687,16 +687,7 @@ class Timeline extends React.Component {
                                 onClick={this.handleStop}
                             ><span /></button>
                         </div>
-                        <div className={styles.titleGroup}>
-                            <strong>{'Timeline'}</strong>
-                            <span>{timeline.framerate}{' FPS · frame '}{frame}</span>
-                            <span
-                                className={classNames(styles.frameSafety, {
-                                    [styles.hasWarnings]: warnings.length > 0
-                                })}
-                            >{warnings.length ? `${warnings.length} frame warning${warnings.length === 1 ? '' : 's'}` :
-                                    'Frame-safe'}</span>
-                        </div>
+
                     </div>
                     <div className={styles.headerActions}>
                         <div
@@ -883,10 +874,8 @@ class Timeline extends React.Component {
                 <div className={styles.transport}>
                     <span className={styles.status}>
                         {timeline.recording ? (timeline.playing ? 'Rendering' : 'Render paused') :
-                            (timeline.playing ? 'Playing' : 'Paused')}
-                        {' at '}{timeline.currentTime.toFixed(2)}{'s'}
+                            'keyframe'}
                     </span>
-                    <span className={styles.frameCount}>{timeline.frameCount}{' rendered frames'}</span>
                     <div
                         aria-label="Keyframe controls"
                         className={styles.keyframeControls}
@@ -897,13 +886,13 @@ class Timeline extends React.Component {
                             title={`Add a keyframe at ${formatTime(timeline.currentTime)}`}
                             type="button"
                             onClick={this.handleAddKeyframe}
-                        >{'Add keyframe'}</button>
+                        >{'+'}</button>
                         <button
                             disabled={timeline.recording || this.state.selectedKeyframeTime === null}
                             title="Delete the selected keyframe"
                             type="button"
                             onClick={this.handleDeleteKeyframe}
-                        >{'Delete'}</button>
+                        >{'-'}</button>
                     </div>
                     <div
                         aria-label="Timeline zoom"

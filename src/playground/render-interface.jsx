@@ -11,7 +11,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import {connect} from 'react-redux';
 import {compose} from 'redux';
-import {defineMessages, injectIntl, intlShape} from 'react-intl';
+import {injectIntl, intlShape} from 'react-intl';
 
 import SettingsStore from '../addons/settings-store-singleton';
 import AddonChannels from '../addons/channels';
@@ -37,14 +37,6 @@ const handleClickAddonSettings = addonId => {
     window.open(url);
 };
 
-const messages = defineMessages({
-    defaultTitle: {
-        defaultMessage: 'Collaborative movie editor',
-        description: 'Default editor title',
-        id: 'movie.guiDefaultTitle'
-    }
-});
-
 if (AddonChannels.reloadChannel) {
     AddonChannels.reloadChannel.addEventListener('message', () => location.reload());
 }
@@ -69,7 +61,7 @@ class Interface extends React.Component {
 
     handleUpdateProjectTitle (title, isDefault) {
         if (isDefault || !title) {
-            document.title = `${APP_NAME} - ${this.props.intl.formatMessage(messages.defaultTitle)}`;
+            document.title = APP_NAME;
         } else {
             document.title = `${title} - ${APP_NAME}`;
         }

@@ -725,50 +725,6 @@ const objects = function (costumeName) {
     );
     return `
     <category name="Objects" id="objects" colour="#4968D4" secondaryColour="#334A99">
-        <block type="objects_animate">
-            ${number('A', 0)}${number('B', 100)}${number('T1', 1)}${number('T2', 2)}
-            <field name="EASING">ExpoOut</field>
-        </block>
-        <block type="objects_loopValue">
-            ${number('A', 0)}${number('B', 100)}${number('DURATION', 2)}
-        </block>
-        <block type="objects_pingPongValue">
-            ${number('A', 0)}${number('B', 100)}${number('DURATION', 2)}
-        </block>
-        <block type="objects_wiggle">
-            ${number('FREQUENCY', 2)}${number('AMOUNT', 20)}${number('SEED', 1)}
-        </block>
-        <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
-        <block type="objects_timelineTime"/>
-        <block type="objects_keyframeTime">${number('ID', 1)}</block>
-        <block type="objects_leftKeyframeTime">${number('FIRST', 1)}${number('SECOND', 2)}</block>
-        <block type="objects_posterizeTime">${number('FPS', 12)}</block>
-        <block type="objects_interpolateColor">
-            <value name="A"><shadow type="colour_picker"><field name="COLOUR">#ff3366</field></shadow></value>
-            <value name="B"><shadow type="colour_picker"><field name="COLOUR">#3366ff</field></shadow></value>
-            ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
-        </block>
-        <block type="objects_interpolateAngle">
-            ${number('A', 0)}${number('B', 360)}${number('T1', 0)}${number('T2', 1)}
-            <field name="EASING">Linear</field>
-        </block>
-        <block type="objects_interpolateVector">
-            <field name="COMPONENT">x</field>
-            ${number('X1', 0)}${number('Y1', 0)}${number('Z1', 0)}
-            ${number('X2', 100)}${number('Y2', 100)}${number('Z2', 100)}
-            ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
-        </block>
-        <block type="objects_pass">
-            ${text('POINTS', '')}
-            <field name="COMPONENT">x</field>${number('TIME', 0)}
-        </block>
-        <block type="objects_numberCurve">${text('CURVE', '0:0; 0.4:120@ExpoOut; 1.2:90@BackOut; 2:100')}</block>
-        <block type="objects_colorCurve">${text('CURVE', '0:#ff3366; 1:#3366ff')}</block>
-        <block type="objects_angleCurve">${text('CURVE', '0:350; 1:10')}</block>
-        <block type="objects_stepCurve">${text('CURVE', '0:one; 1:two')}</block>
-        <block type="objects_instanceId"/>
-        <block type="objects_instanceSeed">${number('SEED', 1)}</block>
-        <sep gap="36"/>
         <block type="objects_draw">
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
@@ -782,47 +738,30 @@ const objects = function (costumeName) {
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${number('T1', 0)}${number('T2', 'Infinity')}
         </block>
-        <block type="objects_shape">
-            <field name="SHAPE">polygon</field>
-            ${number('N', 6)}
-            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+        <block type="objects_grouping"/>
+        <block type="objects_transform">
+            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
+            ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}
             ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
-            ${number('INNER', 50)}${number('OUTER', 100)}
-            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 'Infinity')}
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            ${number('OPACITY', 100)}
         </block>
-        <block type="objects_arc">
-            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
-            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
-            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
-            ${number('INNER', 50)}${number('OUTER', 100)}
-            ${number('START', 0)}${number('END', 360)}
-            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 'Infinity')}
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            ${number('OPACITY', 100)}
+        <block type="objects_composite">
+            ${number('OPACITY', 100)}<field name="BLEND">normal</field>
         </block>
-        <block type="objects_circularSegment">
-            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
-            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
-            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
-            ${number('OUTER', 100)}
-            ${number('START', 0)}${number('END', 360)}
-            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 'Infinity')}
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            ${number('OPACITY', 100)}
+        <block type="objects_scene"/>
+        <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
+        <block type="objects_timelineTime"/>
+        <block type="objects_keyframeTime">${number('ID', 1)}</block>
+        <block type="objects_leftKeyframeTime">${number('FIRST', 1)}${number('SECOND', 2)}</block>
+        <block type="objects_posterizeTime">${number('FPS', 12)}</block>
+        <block type="objects_interpolateColor">
+            <value name="A"><shadow type="colour_picker"><field name="COLOUR">#ff3366</field></shadow></value>
+            <value name="B"><shadow type="colour_picker"><field name="COLOUR">#3366ff</field></shadow></value>
+            ${number('T1', 0)}${number('T2', 1)}<field name="EASING">Linear</field>
         </block>
-        <block type="objects_line">
-            ${number('P1X', 0)}${number('P1Y', 0)}${number('P1Z', 480)}
-            ${number('P2X', 100)}${number('P2Y', 100)}${number('P2Z', 480)}
-            ${number('THICKNESS', 5)}
-            ${number('T1', 0)}${number('T2', 'Infinity')}
-            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
-            ${number('OPACITY', 100)}
+        <block type="objects_pass">
+            ${text('POINTS', '')}
+            <field name="COMPONENT">x</field>${number('TIME', 0)}
         </block>
         <sep gap="36"/>
         <!-- Lighting keeps its legacy opcode IDs so saved projects continue to load. -->
@@ -840,35 +779,6 @@ const objects = function (costumeName) {
             ${number('SHADOW', 1)}
         </block>
         <sep gap="36"/>
-        <block type="objects_group"/>
-        <block type="objects_simulation">${text('NAME', 'simulation')}</block>
-        <block type="objects_transform">
-            ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
-            ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}
-            ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
-            ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
-        </block>
-        <block type="objects_composite">
-            ${number('OPACITY', 100)}<field name="BLEND">normal</field>
-        </block>
-        <block type="objects_matte"><field name="MODE">alpha</field></block>
-        <block type="objects_renderPass">${text('NAME', 'pass')}</block>
-        <block type="objects_drawPass">
-            ${text('NAME', 'pass')}${number('OPACITY', 100)}<field name="BLEND">normal</field>
-        </block>
-        <block type="objects_clearPass">${text('NAME', 'pass')}</block>
-        <block type="objects_repeat">
-            ${number('COUNT', 12)}${number('ANGLE', 30)}${number('TIME', 0.05)}
-        </block>
-        <block type="objects_timeOffset">${number('TIME', 0)}</block>
-        <block type="objects_timeRange">${number('START', 0)}${number('END', 2)}</block>
-        <block type="objects_timeScale">${number('SCALE', 0.5)}</block>
-        <block type="objects_timeLoop"><field name="MODE">loop</field>${number('DURATION', 2)}</block>
-        <block type="objects_timeFreeze">${number('TIME', 0)}</block>
-        <block type="objects_timeReverse">${number('DURATION', 2)}</block>
-        <block type="objects_timeRemap">${text('MAP', '0:0; 1:0.8; 2:0.2')}</block>
-        <block type="objects_grouping"/>
-        <block type="objects_scene"/>
     </category>
     `;
 };
@@ -966,8 +876,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const everything = [
         xmlOpen,
         ...(objectsXML ? [objectsXML, gap] : []),
-        motionXML, gap,
         ...(penFXXML ? [penFXXML, gap] : []),
+        motionXML, gap,
         soundXML, gap,
         eventsXML, gap,
         controlXML, gap,
@@ -975,7 +885,6 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         operatorsXML, gap,
         variablesXML, gap,
         myBlocksXML, gap,
-        myBlocksShaderXML
     ];
 
     if (turbowarpXML) {
