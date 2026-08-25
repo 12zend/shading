@@ -1,11 +1,12 @@
 import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
+import * as THREE from 'three';
 
 import {
     COSTUME_GROUP_PROJECT_KEY,
     COSTUME_GROUP_SOURCE,
     MovieAssetManager
 } from '../../../src/lib/movie-asset-manager';
-import {MovieFrameGraphRenderer} from '../../../src/lib/movie-frame-graph';
+import {FRAME_GRAPH_NODE_TYPES, MovieFrameGraphRenderer} from '../../../src/lib/movie-frame-graph';
 
 const makeManager = () => {
     const manager = Object.create(MovieAssetManager.prototype);
@@ -134,6 +135,7 @@ describe('MovieAssetManager rendering performance', () => {
             source: 'costume'
         };
         manager.drawObjectImmediately = jest.fn();
+        manager.renderObjectScene = jest.fn();
         enableFrameGraph(manager);
         manager.beginFrameGraph();
 
@@ -142,6 +144,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(manager.flushFrameGraph()).toBeUndefined();
         expect(manager.drawObjectImmediately).toHaveBeenCalledWith(target, configuration, null);
+        expect(manager.renderObjectScene).not.toHaveBeenCalled();
         expect(manager.frameGraphRenderer.lastGraph.children[0]).toEqual(expect.objectContaining({
             drawKind: 'object',
             type: 'Draw'
@@ -167,13 +170,8 @@ describe('MovieAssetManager rendering performance', () => {
         };
         manager.cameraVersion = 0;
         manager.runtime.emitProjectChanged = jest.fn();
-        manager.drawObjectImmediately = jest.fn((drawTarget, drawConfiguration, camera) => {
-            const state = manager.getTargetState(drawTarget);
-            state.worldX = drawConfiguration.position.x;
-            state.worldY = drawConfiguration.position.y;
-            state.worldZ = drawConfiguration.position.z;
-            manager.applyProjection(drawTarget, camera);
-        });
+        manager.drawObjectImmediately = jest.fn();
+        manager.renderObjectScene = jest.fn();
         manager.applyFrameGraphCamera = jest.fn();
         enableFrameGraph(manager);
         manager.beginFrameGraph();
@@ -189,6 +187,7 @@ describe('MovieAssetManager rendering performance', () => {
             configuration,
             expect.objectContaining({position: {x: 10, y: 20, z: 30}})
         );
+        expect(manager.renderObjectScene).not.toHaveBeenCalled();
         expect(manager.applyFrameGraphCamera).toHaveBeenCalledWith(
             expect.objectContaining({position: {x: 100, y: 200, z: 300}})
         );
@@ -197,10 +196,101 @@ describe('MovieAssetManager rendering performance', () => {
             y: 20,
             z: 30
         });
-        expect(manager.runtime.renderer.updateDrawablePosition).toHaveBeenLastCalledWith(
-            target.drawableID,
-            [0, 0]
-        );
+    });
+
+    test('batches costumes and procedural shapes only inside an explicit Three.js scene', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.camera = {
+            focalLength: 480,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        manager.cameraVersion = 0;
+        manager.renderObjectScene = jest.fn();
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const scene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+
+        expect(manager.drawObject(target, {
+            asset: 'logo',
+            position: {x: 0, y: 0, z: 600},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            source: 'costume'
+        }, scene)).toBeUndefined();
+        expect(manager.drawShape(target, {
+            height: 100,
+            position: {x: 0, y: 0, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            shape: 'polygon',
+            width: 100
+        }, scene)).toBeUndefined();
+
+        expect(manager.flushFrameGraph()).toBeUndefined();
+        expect(manager.renderObjectScene).toHaveBeenCalledTimes(1);
+        expect(manager.renderObjectScene.mock.calls[0][1].entries).toEqual([
+            expect.objectContaining({asset: 'logo', movieDrawKind: 'object'}),
+            expect.objectContaining({movieDrawKind: 'shape', shape: 'polygon'})
+        ]);
+    });
+
+    test('keeps structural groups and transforms inside the shared Three.js scene', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.camera = {
+            focalLength: 480,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        manager.cameraVersion = 0;
+        manager.renderObjectScene = jest.fn();
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const scene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+        const group = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {}, scene);
+        const transform = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {
+            transform: {
+                anchor: {x: 0, y: 0, z: 0},
+                position: {x: 25, y: -10, z: 30},
+                rotation: {x: 0, y: 0, z: 0},
+                scale: {x: 1, y: 1, z: 1}
+            }
+        }, group);
+        manager.drawObject(target, {
+            asset: 'inside-group',
+            position: {x: 5, y: 10, z: 500},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            source: 'costume'
+        }, transform);
+        manager.drawObject(target, {
+            asset: 'outside-group',
+            position: {x: 0, y: 0, z: 600},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            source: 'costume'
+        }, scene);
+
+        manager.flushFrameGraph();
+
+        expect(manager.renderObjectScene).toHaveBeenCalledTimes(1);
+        expect(manager.renderObjectScene.mock.calls[0][1].entries).toEqual([
+            expect.objectContaining({
+                asset: 'inside-group',
+                position: {x: 30, y: 0, z: 530}
+            }),
+            expect.objectContaining({asset: 'outside-group'})
+        ]);
     });
 
     test('batches consecutive 3D scene mutations into one model render', () => {
@@ -2066,6 +2156,102 @@ describe('MovieAssetManager rendering performance', () => {
             false,
             expect.objectContaining({name: 'camera'})
         );
+    });
+
+    test('converts procedural drawing into a depth-tested Three.js image plane', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        let prepared;
+
+        try {
+            prepared = manager.prepareShapeSceneItem(target, {
+                color: '#ff0000',
+                height: 80,
+                movieDrawKind: 'shape',
+                n: 5,
+                opacity: 100,
+                position: {x: 10, y: 20, z: 480},
+                radius: {inner: 25, outer: 50},
+                rotation: {x: 1, y: 2, z: 3},
+                scale: {x: 2, y: 3, z: 4},
+                shape: 'star',
+                width: 120
+            });
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(prepared.item.sourceObject).toMatchObject({
+            isMesh: true,
+            name: 'Movie image plane'
+        });
+        expect(prepared.item.sourceObject.material).toMatchObject({
+            depthTest: true,
+            depthWrite: true,
+            transparent: false
+        });
+        expect(prepared.item.transform).toMatchObject({
+            rotation: {x: 1, y: 2, z: 3},
+            scale: {x: 2, y: 3, z: 4},
+            worldX: 10,
+            worldY: 20,
+            worldZ: 480
+        });
+        prepared.resource.geometry.dispose();
+        prepared.resource.material.map.dispose();
+        prepared.resource.material.dispose();
+    });
+
+    test('converts an ordinary Scratch costume into a Three.js image plane', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const texture = new THREE.Texture({height: 100, width: 200});
+        manager.getCostumeForObjectDraw = jest.fn(() => ({
+            asset: {encodeDataURI: jest.fn()},
+            bitmapResolution: 2,
+            rotationCenterX: 80,
+            rotationCenterY: 40,
+            size: [200, 100]
+        }));
+        manager.getBuildingTexture = jest.fn(() => ({texture}));
+
+        const prepared = await manager.prepareObjectSceneItem(target, {
+            asset: 'logo',
+            height: 50,
+            position: {x: 10, y: 20, z: 480},
+            rotation: {x: 1, y: 2, z: 3},
+            scale: {x: 2, y: 3, z: 4},
+            size: 75,
+            source: 'costume',
+            width: 150
+        });
+
+        expect(prepared.item.sourceObject).toMatchObject({
+            isMesh: true,
+            name: 'Movie image plane'
+        });
+        expect(prepared.item.transform).toMatchObject({
+            scale: {x: 3, y: 1.5, z: 4},
+            size: 75,
+            worldX: 10,
+            worldY: 20,
+            worldZ: 480
+        });
+        prepared.resource.geometry.dispose();
+        prepared.resource.material.map.dispose();
+        prepared.resource.material.dispose();
+        texture.dispose();
     });
 
     test('keeps a following draw behind an asynchronous scene render', async () => {

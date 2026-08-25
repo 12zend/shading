@@ -868,6 +868,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
         }, util, this.runtime);
+        if (util && util.thread && util.thread.objectSceneCapture) {
+            context.sceneCapture = util.thread.objectSceneCapture;
+        }
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {
@@ -887,6 +890,9 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
         }, configuration), util, this.runtime);
+        if (util && util.thread && util.thread.objectSceneCapture) {
+            context.sceneCapture = util.thread.objectSceneCapture;
+        }
         if (!context.time) delete context.time;
         const manager = this.runtime.movieAssetManager;
         if (manager && typeof manager.drawShape === 'function') {

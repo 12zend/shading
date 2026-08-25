@@ -1131,6 +1131,24 @@ describe('Objects blocks', () => {
         }));
     });
 
+    test('passes the active scene capture to a shape without returning asynchronous work', () => {
+        const capture = {entries: [], targetId: 'sprite'};
+        const manager = {drawShape: jest.fn(), runWithoutWaiting: jest.fn()};
+        const ObjectBlocks = createObjectBlocksClass({runtime: {movieAssetManager: manager}});
+        const objectBlocks = new ObjectBlocks();
+        const util = makeUtil();
+        util.thread.objectSceneCapture = capture;
+
+        expect(objectBlocks.shape({
+            COLOR: '#ff0000', HEIGHT: 80, INNER: 25, N: 5, OPACITY: 100, OUTER: 50,
+            PX: 0, PY: 0, PZ: 480, RX: 0, RY: 0, RZ: 0, SHAPE: 'star',
+            SX: 1, SY: 1, SZ: 1, T1: 0, T2: Infinity, WIDTH: 120
+        }, util)).toBeUndefined();
+        expect(manager.drawShape).toHaveBeenCalledWith(util.target, expect.objectContaining({
+            sceneCapture: capture
+        }));
+    });
+
     test('stack-clicks an Objects reporter without compiling it as an invalid command block', () => {
         const vm = new VM();
         installObjectBlocks(vm);

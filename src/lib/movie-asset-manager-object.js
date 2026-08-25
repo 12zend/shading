@@ -44,12 +44,32 @@ const MovieAssetManagerObjectMethods = {
         };
     },
 
-    captureObjectSceneDraw (target, configuration) {
+    captureObjectSceneDraw (target, configuration, drawKind = 'object') {
         const capture = configuration && configuration.sceneCapture;
         if (!capture || capture.targetId !== target.id || !Array.isArray(capture.entries)) return;
         const entry = this.cloneObjectDrawConfiguration(configuration);
         delete entry.sceneCapture;
+        if (drawKind !== 'object') entry.movieDrawKind = drawKind;
         capture.entries.push(entry);
+    },
+
+    getShapeSceneConfiguration (configuration) {
+        const shape = normalizeShapeType(configuration.shape);
+        if (shape !== 'line') return {...configuration, shape};
+        const point1 = configuration.position1 || {};
+        const point2 = configuration.position2 || {};
+        return {
+            ...configuration,
+            position: {
+                x: (toNumber(point1.x) + toNumber(point2.x)) / 2,
+                y: (toNumber(point1.y) + toNumber(point2.y)) / 2,
+                z: (toNumber(point1.z) + toNumber(point2.z)) / 2
+            },
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            shape,
+            size: 100
+        };
     },
 
     getObjectSceneTransform (target, configuration, isPlane = false) {
@@ -121,7 +141,38 @@ const MovieAssetManagerObjectMethods = {
         return canvas;
     },
 
+    prepareShapeSceneItem (target, requestedConfiguration) {
+        const configuration = this.getShapeSceneConfiguration(requestedConfiguration);
+        if (configuration.time) {
+            const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
+            const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);
+            const currentTime = this.getObjectEvaluationTime(configuration);
+            if (currentTime < startTime || currentTime > endTime) return null;
+        }
+        const bitmap = configuration.shape === 'line' ?
+            createLineBitmap(configuration) : createShapeBitmap(configuration);
+        if (!bitmap) return null;
+        const bitmapResolution = Math.max(0.001, toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION));
+        const sourceObject = createImagePlane(
+            bitmap,
+            bitmap.width / bitmapResolution,
+            bitmap.height / bitmapResolution
+        );
+        return {
+            item: {
+                animationName: '',
+                frame: 1,
+                sourceObject,
+                transform: this.getObjectSceneTransform(target, configuration)
+            },
+            resource: sourceObject
+        };
+    },
+
     async prepareObjectSceneItem (target, requestedConfiguration) {
+        if (requestedConfiguration.movieDrawKind === 'shape') {
+            return this.prepareShapeSceneItem(target, requestedConfiguration);
+        }
         const configuration = this.getActiveObjectSceneConfiguration(target, requestedConfiguration);
         if (!configuration) return null;
         const source = String(configuration.source || 'costume').toLowerCase();
@@ -632,23 +683,7 @@ const MovieAssetManagerObjectMethods = {
     renderShape (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage || !this.runtime.renderer) return;
         const shape = normalizeShapeType(configuration.shape);
-        let drawConfiguration = configuration;
-        if (shape === 'line') {
-            const point1 = configuration.position1 || {};
-            const point2 = configuration.position2 || {};
-            drawConfiguration = {
-                ...configuration,
-                position: {
-                    x: (toNumber(point1.x) + toNumber(point2.x)) / 2,
-                    y: (toNumber(point1.y) + toNumber(point2.y)) / 2,
-                    z: (toNumber(point1.z) + toNumber(point2.z)) / 2
-                },
-                rotation: {x: 0, y: 0, z: 0},
-                scale: {x: 1, y: 1, z: 1},
-                size: 100
-            };
-        }
-
+        const drawConfiguration = this.getShapeSceneConfiguration(configuration);
         const shapeConfiguration = shape === 'line' ? drawConfiguration : {...configuration, shape};
         const skinId = this.getShapeSkin(shapeConfiguration);
         if (skinId === null) return;
@@ -734,6 +769,10 @@ const MovieAssetManagerObjectMethods = {
 
     drawShapeImmediately (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage) return;
+        if (configuration.sceneCapture) {
+            this.captureObjectSceneDraw(target, configuration, 'shape');
+            return;
+        }
         if (configuration.time) {
             const startTime = toNumber(configuration.time.start, Number.NEGATIVE_INFINITY);
             const endTime = toNumber(configuration.time.end, Number.POSITIVE_INFINITY);

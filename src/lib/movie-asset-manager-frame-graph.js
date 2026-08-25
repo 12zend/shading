@@ -8,6 +8,8 @@ import installMovieFrameGraphRenderer, {
 } from './movie-frame-graph';
 import {cloneCamera} from './movie-asset-manager-utils';
 
+const THREE_DRAW_KINDS = new Set(['object', 'shape']);
+
 const MovieAssetManagerFrameGraphMethods = {
     installTimelineHats () {
         this.runtime._hats.event_initialize = {
@@ -200,6 +202,48 @@ const MovieAssetManagerFrameGraphMethods = {
         ));
     },
 
+    collectFrameGraphThreeDraws (node, transforms = []) {
+        // An explicit Objects scene opts its children into one Three.js depth buffer. Ordinary Draw nodes stay on
+        // Scratch's existing 2D/Pen path so their color and screen-space text semantics do not change.
+        if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) {
+            if (!THREE_DRAW_KINDS.has(node.drawKind)) return null;
+            return [{
+                camera: node.camera,
+                cameraVersion: node.cameraVersion,
+                configuration: applyObjectTransforms(node.configuration, transforms),
+                drawKind: node.drawKind,
+                target: node.target
+            }];
+        }
+        let childTransforms = transforms;
+        if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
+            childTransforms = transforms.concat([node.transform]);
+        } else if (node.type !== FRAME_GRAPH_NODE_TYPES.GROUP && !(
+            node.type === FRAME_GRAPH_NODE_TYPES.SCENE && node.sceneKind === 'objects'
+        )) {
+            return null;
+        }
+        const draws = [];
+        for (const child of node.children) {
+            const childDraws = this.collectFrameGraphThreeDraws(child, childTransforms);
+            if (!childDraws) return null;
+            draws.push(...childDraws);
+        }
+        return draws;
+    },
+
+    executeFrameGraphDrawBatch (draws) {
+        const first = draws[0];
+        if (!first || !first.target) return;
+        const capture = this.createObjectSceneCapture(first.target, first.camera);
+        if (!capture) return;
+        capture.entries = draws.map(draw => ({
+            ...draw.configuration,
+            movieDrawKind: draw.drawKind
+        }));
+        return this.renderObjectScene(first.target, capture);
+    },
+
     executeFrameGraphSceneBatch (nodes) {
         const target = nodes[0] && nodes[0].target;
         if (!target) return;
@@ -278,22 +322,13 @@ const MovieAssetManagerFrameGraphMethods = {
         return this.finishFrameGraphScope(pending, finish, context.generation);
     },
 
-    collectObjectSceneEntries (node, transforms = [], entries = []) {
-        if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
-            const nextTransforms = transforms.concat([node.transform]);
-            node.children.forEach(child => this.collectObjectSceneEntries(child, nextTransforms, entries));
-            return entries;
-        }
-        if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW && node.drawKind === 'object') {
-            entries.push(applyObjectTransforms(node.configuration, transforms));
-            return entries;
-        }
-        node.children.forEach(child => this.collectObjectSceneEntries(child, transforms, entries));
-        return entries;
-    },
-
     executeFrameGraphScene (node, context) {
         if (node.sceneKind === 'frame') return this.executeFrameGraphChildren(node, context);
+        if (node.sceneKind === 'objects') {
+            const draws = this.collectFrameGraphThreeDraws(node, context.transforms);
+            return draws && draws.length ? this.executeFrameGraphDrawBatch(draws) :
+                this.executeFrameGraphChildren(node, context);
+        }
         return this.executeWithFrameGraphCamera(node.camera, () => {
             if (node.sceneKind === 'camera') {
                 return typeof node.rerenderModels === 'undefined' || node.rerenderModels ?
@@ -319,12 +354,7 @@ const MovieAssetManagerFrameGraphMethods = {
                 }
                 return;
             }
-            if (node.sceneKind !== 'objects' || !node.target) return this.executeFrameGraphChildren(node, context);
-            const capture = this.createObjectSceneCapture(node.target, node.camera);
-            if (!capture) return;
-            capture.entries = this.collectObjectSceneEntries(node, context.transforms);
-            if (!capture.entries.length) return;
-            return this.renderObjectScene(node.target, capture);
+            return this.executeFrameGraphChildren(node, context);
         });
     },
 
