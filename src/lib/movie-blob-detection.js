@@ -20,33 +20,75 @@ const luminance = (data, offset) => (
     (straightChannel(data, offset, 2) * 0.114)
 );
 
-const buildIntegral = (frame, sample) => {
-    const stride = frame.width + 1;
+// Specialized integral builders keep the hot per-pixel loops free of closure
+// dispatch while producing bit-identical sums to a generic sample() walk.
+const buildAlphaIntegral = frame => {
+    const data = frame.data;
+    const width = frame.width;
+    const stride = width + 1;
     const values = new Float64Array(stride * (frame.height + 1));
     for (let y = 0; y < frame.height; y++) {
         let row = 0;
-        for (let x = 0; x < frame.width; x++) {
-            row += sample(frame.data, ((y * frame.width) + x) * 4);
-            values[((y + 1) * stride) + x + 1] = values[(y * stride) + x + 1] + row;
+        let offset = y * width * 4;
+        const previousRow = y * stride;
+        const currentRow = previousRow + stride;
+        for (let x = 0; x < width; x++, offset += 4) {
+            row += data[offset + 3];
+            values[currentRow + x + 1] = values[previousRow + x + 1] + row;
         }
     }
     return values;
 };
 
-const integralSample = (integral, width, height, x, y, radius) => {
+const buildLumaIntegral = frame => {
+    const data = frame.data;
+    const width = frame.width;
     const stride = width + 1;
-    const x0 = Math.max(0, x - radius);
-    const y0 = Math.max(0, y - radius);
-    const x1 = Math.min(width, x + radius + 1);
-    const y1 = Math.min(height, y + radius + 1);
-    const sum = integral[(y1 * stride) + x1] - integral[(y0 * stride) + x1] -
-        integral[(y1 * stride) + x0] + integral[(y0 * stride) + x0];
-    return sum / ((x1 - x0) * (y1 - y0));
+    const values = new Float64Array(stride * (frame.height + 1));
+    for (let y = 0; y < frame.height; y++) {
+        let row = 0;
+        let offset = y * width * 4;
+        const previousRow = y * stride;
+        const currentRow = previousRow + stride;
+        for (let x = 0; x < width; x++, offset += 4) {
+            const alpha = data[offset + 3];
+            if (alpha > 0) {
+                const r = clamp((data[offset] * 255) / alpha, 0, 255);
+                const g = clamp((data[offset + 1] * 255) / alpha, 0, 255);
+                const b = clamp((data[offset + 2] * 255) / alpha, 0, 255);
+                row += (r * 0.299) + (g * 0.587) + (b * 0.114);
+            }
+            values[currentRow + x + 1] = values[previousRow + x + 1] + row;
+        }
+    }
+    return values;
+};
+
+const buildChannelIntegral = (frame, channel) => {
+    const data = frame.data;
+    const width = frame.width;
+    const stride = width + 1;
+    const values = new Float64Array(stride * (frame.height + 1));
+    for (let y = 0; y < frame.height; y++) {
+        let row = 0;
+        let offset = y * width * 4;
+        const previousRow = y * stride;
+        const currentRow = previousRow + stride;
+        for (let x = 0; x < width; x++, offset += 4) {
+            const alpha = data[offset + 3];
+            if (alpha > 0) {
+                row += clamp((data[offset + channel] * 255) / alpha, 0, 255);
+            }
+            values[currentRow + x + 1] = values[previousRow + x + 1] + row;
+        }
+    }
+    return values;
 };
 
 const makeMask = (frame, options, previousFrame) => {
-    const mode = ['alpha', 'bright', 'color', 'dark', 'motion'].includes(String(options.mode).toLowerCase()) ?
-        String(options.mode).toLowerCase() : 'dark';
+    const requestedMode = String(options.mode).toLowerCase();
+    const mode = ['alpha', 'bright', 'color', 'dark', 'motion'].includes(requestedMode) ?
+        requestedMode : 'dark';
     const threshold = clamp(Number(options.threshold) || 0, 0, 255);
     const blurRadius = clamp(Math.round(Number(options.blurRadius) || 0), 0, 100);
     const targetColor = Array.isArray(options.targetColor) || ArrayBuffer.isView(options.targetColor) ?
@@ -56,22 +98,45 @@ const makeMask = (frame, options, previousFrame) => {
         previousFrame.height === frame.height;
     if (mode === 'motion' && !previousMatches) return mask;
 
-    const alphaSample = (data, offset) => data[offset + 3];
-    const channelSamples = [0, 1, 2].map(channel => (
-        (data, offset) => straightChannel(data, offset, channel)
-    ));
-    const lumaIntegral = blurRadius > 0 && mode !== 'color' ? buildIntegral(frame, luminance) : null;
-    const alphaIntegral = blurRadius > 0 ? buildIntegral(frame, alphaSample) : null;
-    const colorIntegrals = blurRadius > 0 && mode === 'color' ?
-        channelSamples.map(sample => buildIntegral(frame, sample)) : null;
-    const previousLumaIntegral = blurRadius > 0 && mode === 'motion' ? buildIntegral(previousFrame, luminance) : null;
+    const data = frame.data;
+    const width = frame.width;
+    const height = frame.height;
+    const lumaIntegral = blurRadius > 0 && mode !== 'color' ? buildLumaIntegral(frame) : null;
+    const alphaIntegral = blurRadius > 0 ? buildAlphaIntegral(frame) : null;
+    const colorIntegrals = blurRadius > 0 && mode === 'color' ? [
+        buildChannelIntegral(frame, 0),
+        buildChannelIntegral(frame, 1),
+        buildChannelIntegral(frame, 2)
+    ] : null;
+    const previousLumaIntegral = blurRadius > 0 && mode === 'motion' ?
+        buildLumaIntegral(previousFrame) : null;
+    const targetChannels = mode === 'color' ? [
+        clamp(Number(targetColor[0]) || 0, 0, 1) * 255,
+        clamp(Number(targetColor[1]) || 0, 0, 1) * 255,
+        clamp(Number(targetColor[2]) || 0, 0, 1) * 255
+    ] : null;
+    const stride = width + 1;
 
-    for (let y = 0; y < frame.height; y++) {
-        for (let x = 0; x < frame.width; x++) {
-            const index = (y * frame.width) + x;
+    for (let y = 0; y < height; y++) {
+        // Row geometry is shared by every integral, so hoist it out of the pixel loop.
+        const y0 = y < blurRadius ? 0 : y - blurRadius;
+        const y1 = y + blurRadius + 1 > height ? height : y + blurRadius + 1;
+        const spanY = y1 - y0;
+        const rowA = y0 * stride;
+        const rowB = y1 * stride;
+        for (let x = 0; x < width; x++) {
+            const index = (y * width) + x;
             const offset = index * 4;
-            const averageAlpha = alphaIntegral ?
-                integralSample(alphaIntegral, frame.width, frame.height, x, y, blurRadius) : frame.data[offset + 3];
+            let averageAlpha = 0;
+            if (blurRadius > 0) {
+                const x0 = x < blurRadius ? 0 : x - blurRadius;
+                const x1 = x + blurRadius + 1 > width ? width : x + blurRadius + 1;
+                averageAlpha = (alphaIntegral[rowB + x1] - alphaIntegral[rowA + x1] -
+                    alphaIntegral[rowB + x0] + alphaIntegral[rowA + x0]) /
+                    ((x1 - x0) * spanY);
+            } else {
+                averageAlpha = data[offset + 3];
+            }
             let matches = false;
             if (mode === 'alpha') {
                 matches = averageAlpha >= threshold;
@@ -79,26 +144,50 @@ const makeMask = (frame, options, previousFrame) => {
                 if (averageAlpha > 0) {
                     let distance = 0;
                     for (let channel = 0; channel < 3; channel++) {
-                        const value = colorIntegrals ?
-                            integralSample(colorIntegrals[channel], frame.width, frame.height, x, y, blurRadius) :
-                            straightChannel(frame.data, offset, channel);
-                        distance += Math.abs(value - (clamp(Number(targetColor[channel]) || 0, 0, 1) * 255));
+                        let value;
+                        if (colorIntegrals) {
+                            const integral = colorIntegrals[channel];
+                            const x0 = x < blurRadius ? 0 : x - blurRadius;
+                            const x1 = x + blurRadius + 1 > width ? width : x + blurRadius + 1;
+                            value = (integral[rowB + x1] - integral[rowA + x1] -
+                                integral[rowB + x0] + integral[rowA + x0]) /
+                                ((x1 - x0) * spanY);
+                        } else {
+                            value = straightChannel(data, offset, channel);
+                        }
+                        distance += Math.abs(value - targetChannels[channel]);
                     }
                     matches = distance < threshold * 3;
                 }
             } else if (mode === 'motion') {
-                const current = lumaIntegral ?
-                    integralSample(lumaIntegral, frame.width, frame.height, x, y, blurRadius) :
-                    luminance(frame.data, offset);
-                const previous = previousLumaIntegral ?
-                    integralSample(previousLumaIntegral, frame.width, frame.height, x, y, blurRadius) :
-                    luminance(previousFrame.data, offset);
-                const alphaDelta = Math.abs(frame.data[offset + 3] - previousFrame.data[offset + 3]);
+                let current;
+                let previous;
+                if (lumaIntegral) {
+                    const x0 = x < blurRadius ? 0 : x - blurRadius;
+                    const x1 = x + blurRadius + 1 > width ? width : x + blurRadius + 1;
+                    current = (lumaIntegral[rowB + x1] - lumaIntegral[rowA + x1] -
+                        lumaIntegral[rowB + x0] + lumaIntegral[rowA + x0]) /
+                        ((x1 - x0) * spanY);
+                    previous = (previousLumaIntegral[rowB + x1] - previousLumaIntegral[rowA + x1] -
+                        previousLumaIntegral[rowB + x0] + previousLumaIntegral[rowA + x0]) /
+                        ((x1 - x0) * spanY);
+                } else {
+                    current = luminance(data, offset);
+                    previous = luminance(previousFrame.data, offset);
+                }
+                const alphaDelta = Math.abs(data[offset + 3] - previousFrame.data[offset + 3]);
                 matches = Math.max(Math.abs(current - previous), alphaDelta) >= threshold;
             } else if (averageAlpha > 0) {
-                const value = lumaIntegral ?
-                    integralSample(lumaIntegral, frame.width, frame.height, x, y, blurRadius) :
-                    luminance(frame.data, offset);
+                let value;
+                if (lumaIntegral) {
+                    const x0 = x < blurRadius ? 0 : x - blurRadius;
+                    const x1 = x + blurRadius + 1 > width ? width : x + blurRadius + 1;
+                    value = (lumaIntegral[rowB + x1] - lumaIntegral[rowA + x1] -
+                        lumaIntegral[rowB + x0] + lumaIntegral[rowA + x0]) /
+                        ((x1 - x0) * spanY);
+                } else {
+                    value = luminance(data, offset);
+                }
                 matches = mode === 'bright' ? value >= threshold : value <= threshold;
             }
             mask[index] = matches ? 1 : 0;
@@ -135,6 +224,8 @@ const dilateMask = (mask, width, height, radius) => {
 
 const findBoxes = (mask, frame) => {
     const boxes = [];
+    const width = frame.width;
+    const height = frame.height;
     const stack = new Int32Array(mask.length);
     for (let start = 0; start < mask.length; start++) {
         if (!mask[start]) continue;
@@ -142,35 +233,41 @@ const findBoxes = (mask, frame) => {
         let head = 0;
         let tail = 1;
         stack[0] = start;
-        let minimumX = start % frame.width;
+        let minimumX = start % width;
         let maximumX = minimumX;
-        let minimumY = Math.floor(start / frame.width);
+        let minimumY = Math.floor(start / width);
         let maximumY = minimumY;
         let pixelArea = 0;
         while (head < tail) {
             const index = stack[head++];
-            const x = index % frame.width;
-            const y = Math.floor(index / frame.width);
+            const x = index % width;
+            const y = (index - x) / width;
             pixelArea++;
-            minimumX = Math.min(minimumX, x);
-            maximumX = Math.max(maximumX, x);
-            minimumY = Math.min(minimumY, y);
-            maximumY = Math.max(maximumY, y);
-            const neighbours = [
-                x > 0 ? index - 1 : -1,
-                x + 1 < frame.width ? index + 1 : -1,
-                y > 0 ? index - frame.width : -1,
-                y + 1 < frame.height ? index + frame.width : -1
-            ];
-            for (const neighbour of neighbours) {
-                if (neighbour < 0 || !mask[neighbour]) continue;
-                mask[neighbour] = 0;
-                stack[tail++] = neighbour;
+            if (x < minimumX) minimumX = x;
+            else if (x > maximumX) maximumX = x;
+            if (y < minimumY) minimumY = y;
+            else if (y > maximumY) maximumY = y;
+            // Visit left, right, up, down without allocating a neighbour array per pixel.
+            if (x > 0 && mask[index - 1]) {
+                mask[index - 1] = 0;
+                stack[tail++] = index - 1;
+            }
+            if (x + 1 < width && mask[index + 1]) {
+                mask[index + 1] = 0;
+                stack[tail++] = index + 1;
+            }
+            if (y > 0 && mask[index - width]) {
+                mask[index - width] = 0;
+                stack[tail++] = index - width;
+            }
+            if (y + 1 < height && mask[index + width]) {
+                mask[index + width] = 0;
+                stack[tail++] = index + width;
             }
         }
         const centerX = Math.floor((minimumX + maximumX + 1) / 2);
         const centerY = Math.floor((minimumY + maximumY + 1) / 2);
-        const centerOffset = ((centerY * frame.width) + centerX) * 4;
+        const centerOffset = ((centerY * width) + centerX) * 4;
         boxes.push({
             centerX,
             centerY,
@@ -235,12 +332,15 @@ const paintPixel = (output, index, rgb, opacity) => {
  * @param {object} inputFrame source frame
  * @param {Array<object>} boxes detected boxes
  * @param {object} options overlay appearance
+ * @param {Uint8Array} [outputBuffer] reusable output buffer of the same length as the frame
  * @returns {Uint8Array} frame containing the overlay
  */
-const drawMovieBlobOverlay = (inputFrame, boxes, options = {}) => {
+const drawMovieBlobOverlay = (inputFrame, boxes, options = {}, outputBuffer = null) => {
     const frame = normalizeFrame(inputFrame);
     if (!frame) return new Uint8Array(0);
-    const output = new Uint8Array(frame.data);
+    const output = outputBuffer && outputBuffer.length === frame.data.length ?
+        outputBuffer : new Uint8Array(frame.data.length);
+    output.set(frame.data);
     if (!Array.isArray(boxes) || !boxes.length) return output;
     const overlay = new Uint8Array(frame.width * frame.height);
     const shape = String(options.shape).toLowerCase() === 'ellipse' ? 'ellipse' : 'rectangle';

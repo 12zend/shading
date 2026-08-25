@@ -17,17 +17,37 @@ const install = ({Engine, PenFX}) => {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
         gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, source);
         const frame = {data: source, height: this.height, width: this.width};
-        const boxes = detectMovieBlobs(frame, options, this.previousBlobFrame);
-        // Keep the unannotated frame as the motion baseline so the debugger overlay never detects itself.
-        this.previousBlobFrame = {data: new Uint8Array(source), height: this.height, width: this.width};
+        // detectMovieBlobs never mutates its inputs, so the baseline buffer can be
+        // refilled in place once detection finishes instead of copying every frame.
+        const staleBaseline = !this.previousBlobFrame || !this.previousBlobFrame.data ||
+            this.previousBlobFrame.data.length !== pixelLength;
+        const boxes = detectMovieBlobs(frame, options, staleBaseline ? null : this.previousBlobFrame);
+        this._storeBlobBaseline(source);
         if (!boxes.length) return;
-        const output = drawMovieBlobOverlay(frame, boxes, options);
+        if (!this.blobOutput || this.blobOutput.length !== pixelLength) {
+            this.blobOutput = new Uint8Array(pixelLength);
+        }
+        const output = drawMovieBlobOverlay(frame, boxes, options, this.blobOutput);
         const direct = this._canRenderDirectly(blendMode);
         if (!direct) this._ensureSecondaryBuffer();
         gl.bindTexture(gl.TEXTURE_2D, direct ? skin._texture : this.textures[1]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, output);
         if (direct) this._markSkinChanged(skin);
         else this._finish(skin, this.textures[1], blendMode);
+    };
+
+    Engine.prototype._storeBlobBaseline = function (source) {
+        if (!this.previousBlobFrame || this.previousBlobFrame.data.length !== source.length) {
+            this.previousBlobFrame = {
+                data: new Uint8Array(source),
+                height: this.height,
+                width: this.width
+            };
+            return;
+        }
+        this.previousBlobFrame.data.set(source);
+        this.previousBlobFrame.height = this.height;
+        this.previousBlobFrame.width = this.width;
     };
 
     PenFX.prototype.blob = function (args) {
