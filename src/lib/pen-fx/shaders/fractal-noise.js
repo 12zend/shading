@@ -58,14 +58,18 @@ export default `
     float total = 0.0;
     float maximum = 0.0;
     float amplitude = u_fractalType == 11 ? 0.62 : 0.5;
+    float ampDecay = u_fractalType == 11 ? 0.62 : 0.5;
+    float lacunarity = u_fractalType == 11 ? 1.78 : u_fractalType == 13 ? 2.65 : 2.03;
+    float depthClamped = clamp(u_depth, 1.0, 10.0);
     float previous = 0.0;
     for (int i = 0; i < 10; i++) {
-      float octaveMask = step(float(i) + 0.5, clamp(u_depth, 1.0, 10.0));
+      float fi = float(i);
+      float octaveMask = step(fi + 0.5, depthClamped);
       vec2 samplePoint = p;
       if (u_fractalType == 4) {
         samplePoint += vec2(previous, valueNoise(p + vec2(9.7, 3.1)) - 0.5) * 1.4;
       } else if (u_fractalType == 5) {
-        samplePoint = rotate2D(p, previous * 0.9 + float(i) * 0.13);
+        samplePoint = rotate2D(p, previous * 0.9 + fi * 0.13);
       } else if (u_fractalType == 6) {
         float twist = (length(p) + previous * 2.0) * 0.32;
         samplePoint = rotate2D(p, twist);
@@ -91,7 +95,7 @@ export default `
         contribution *= contribution;
         contribution = contribution * 2.0 - 1.0;
       } else if (u_fractalType == 12) {
-        contribution = floor((n * 0.5 + 0.5) * 7.0) / 6.0 * 2.0 - 1.0;
+        contribution = floor((n * 0.5 + 0.5) * 7.0) / 3.0 - 1.0;
       } else if (u_fractalType == 14) {
         contribution = 1.0 - abs(n);
         contribution = pow(contribution, 4.0) * 2.0 - 1.0;
@@ -104,9 +108,12 @@ export default `
       sum += contribution * amplitude * octaveMask;
       total += amplitude * octaveMask;
       previous = n;
-      float lacunarity = u_fractalType == 11 ? 1.78 : u_fractalType == 13 ? 2.65 : 2.03;
-      p = rotate2D(p * lacunarity + vec2(17.13, 9.27), 0.17);
-      amplitude *= u_fractalType == 11 ? 0.62 : 0.5;
+      vec2 warped = p * lacunarity + vec2(17.13, 9.27);
+      p = vec2(
+        warped.x * 0.9855847669 + warped.y * 0.1691823491,
+        warped.y * 0.9855847669 - warped.x * 0.1691823491
+      );
+      amplitude *= ampDecay;
     }
 
     if (u_fractalType == 7) return maximum;
@@ -128,8 +135,7 @@ export default `
     vec2 centered = v_uv * u_resolution - u_resolution * 0.5;
     if (u_perspective == 1) {
       float perspective = max(0.3, 1.0 + centered.y / max(u_resolution.y, 1.0) * 0.85);
-      centered.x /= perspective;
-      centered.y /= perspective;
+      centered *= 1.0 / perspective;
     }
     centered = rotate2D(centered, radians(u_rotation));
     centered += u_offset;

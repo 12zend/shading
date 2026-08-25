@@ -11,8 +11,7 @@ export default `
 
   void main() {
     vec4 original = texture2D(u_image, v_uv);
-    vec3 overlaid = u_color;
-    vec3 color = mix(straightColor(original), overlaid, clamp(u_mix, 0.0, 1.0));
+    vec3 color = mix(straightColor(original), u_color, clamp(u_mix, 0.0, 1.0));
     gl_FragColor = vec4(clamp(color, 0.0, 1.0) * original.a, original.a);
   }
 `;

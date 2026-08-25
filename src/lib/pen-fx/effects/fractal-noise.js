@@ -27,12 +27,15 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.fractalnoise = function (args) {
-        const fractalType = FRACTAL_TYPES.includes(String(args.FRACTALTYPE)) ?
-            String(args.FRACTALTYPE) : FRACTAL_TYPES[0];
-        const noiseType = FRACTAL_NOISE_TYPES.includes(String(args.NOISETYPE)) ?
-            String(args.NOISETYPE) : FRACTAL_NOISE_TYPES[0];
-        const overflow = FRACTAL_OVERFLOW_TYPES.includes(String(args.OVERFLOW)) ?
-            String(args.OVERFLOW) : FRACTAL_OVERFLOW_TYPES[0];
+        const rawFractalType = String(args.FRACTALTYPE);
+        const rawNoiseType = String(args.NOISETYPE);
+        const rawOverflow = String(args.OVERFLOW);
+        const fractalType = FRACTAL_TYPES.includes(rawFractalType) ?
+            rawFractalType : FRACTAL_TYPES[0];
+        const noiseType = FRACTAL_NOISE_TYPES.includes(rawNoiseType) ?
+            rawNoiseType : FRACTAL_NOISE_TYPES[0];
+        const overflow = FRACTAL_OVERFLOW_TYPES.includes(rawOverflow) ?
+            rawOverflow : FRACTAL_OVERFLOW_TYPES[0];
         this._safe(engine => engine.fractalNoise(fractalType, noiseType, boolean(args.INVERT),
             numberOr(args.CONTRAST, 100), number(args.BRIGHTNESS), overflow, number(args.ROTATE),
             numberOr(args.SCALE, 100), numberOr(args.WIDTH, 100), numberOr(args.HEIGHT, 100),

@@ -14,13 +14,12 @@ export default `
   void main() {
     vec4 base = texture2D(u_image, v_uv);
     float expandedAlpha = base.a;
-    vec2 sampleStep = vec2(u_width / 8.0) / u_resolution;
+    vec2 sampleStep = (u_width * 0.125) / u_resolution;
     for (int y = -8; y <= 8; y++) {
       for (int x = -8; x <= 8; x++) {
-        vec2 offset = vec2(float(x), float(y));
-        if (dot(offset, offset) <= 64.0) {
-          expandedAlpha = max(expandedAlpha, sampleAlpha(v_uv + offset * sampleStep));
-        }
+        int d2 = x * x + y * y;
+        if (d2 > 64 || d2 == 0) continue;
+        expandedAlpha = max(expandedAlpha, sampleAlpha(v_uv + vec2(float(x), float(y)) * sampleStep));
       }
     }
     float strokeAlpha = expandedAlpha * (1.0 - base.a);

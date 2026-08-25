@@ -2,6 +2,8 @@
 
 import {boolean, color, mixAmount, number} from '../helpers';
 
+const INTEGER_UNIFORMS = ['u_invert'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.bloom = function (threshold, radius, value, invert, glowColor, blendMode) {
         const skin = this._prepare();
@@ -15,7 +17,7 @@ const install = ({Engine, PenFX}) => {
             u_value: value,
             u_invert: invert ? 1 : 0,
             u_color: glowColor
-        }, ['u_invert'], blendMode);
+        }, INTEGER_UNIFORMS, blendMode);
     };
 
     PenFX.prototype.bloom = function (args) {

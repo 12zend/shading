@@ -2,13 +2,17 @@
 
 import {boolean, color, mixAmount, number, numberOr} from '../helpers';
 
+const CHROMA_KEY_BEHAVIORS = ['solid', 'gradient', 'transparent'];
+const COLOR_BLINDNESS_TYPES = ['deuteranopia', 'protanopia', 'tritanopia'];
+const TONE_MAP_TYPES = ['clamp', 'aces hill', 'aces', 'reinhard'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.alpha = function (value, mixValue, blendMode) {
         this._acerolaPass(this._program('acerolaColor'), 0, {u_value: value, u_mix: mixValue}, [], blendMode);
     };
 
     Engine.prototype.chromaKey = function (keyColor, tolerance, softness, behavior, replacement, gradientEnd, mixValue, blendMode) {
-        const behaviorIndex = ['solid', 'gradient', 'transparent'].indexOf(behavior);
+        const behaviorIndex = CHROMA_KEY_BEHAVIORS.indexOf(behavior);
         this._acerolaPass(this._program('acerolaColor'), 1, {
             u_type: Math.max(0, behaviorIndex),
             u_value: tolerance,
@@ -22,7 +26,7 @@ const install = ({Engine, PenFX}) => {
 
     Engine.prototype.colorBlindness = function (type, severity, mixValue, blendMode) {
         this._acerolaPass(this._program('acerolaColor'), 2, {
-            u_type: Math.max(0, ['deuteranopia', 'protanopia', 'tritanopia'].indexOf(type)),
+            u_type: Math.max(0, COLOR_BLINDNESS_TYPES.indexOf(type)),
             u_value: severity,
             u_mix: mixValue
         }, [], blendMode);
@@ -62,7 +66,7 @@ const install = ({Engine, PenFX}) => {
 
     Engine.prototype.toneMap = function (type, exposure, whitePoint, mixValue, blendMode) {
         this._acerolaPass(this._program('acerolaColor'), 6, {
-            u_type: Math.max(0, ['clamp', 'aces hill', 'aces', 'reinhard'].indexOf(type)),
+            u_type: Math.max(0, TONE_MAP_TYPES.indexOf(type)),
             u_value: exposure,
             u_value2: whitePoint,
             u_mix: mixValue
@@ -166,7 +170,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.colorBlindness = function (args) {
-        const type = ['deuteranopia', 'protanopia', 'tritanopia'].includes(String(args.TYPE)) ? String(args.TYPE) : 'deuteranopia';
+        const requested = String(args.TYPE);
+        const type = COLOR_BLINDNESS_TYPES.includes(requested) ? requested : 'deuteranopia';
         this._safe(engine => engine.colorBlindness(type, Math.min(1, Math.max(0, number(args.SEVERITY) / 100)), mixAmount(args.MIX), this.blendMode));
     };
 
@@ -177,7 +182,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.toneMap = function (args) {
-        const type = ['clamp', 'aces hill', 'aces', 'reinhard'].includes(String(args.TYPE)) ? String(args.TYPE) : 'aces';
+        const requested = String(args.TYPE);
+        const type = TONE_MAP_TYPES.includes(requested) ? requested : 'aces';
         this._safe(engine => engine.toneMap(type, number(args.EXPOSURE), numberOr(args.WHITE, 4), mixAmount(args.MIX), this.blendMode));
     };
 
@@ -192,7 +198,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.chromaKey = function (args) {
-        const behavior = ['solid', 'gradient', 'transparent'].includes(String(args.BEHAVIOR)) ? String(args.BEHAVIOR) : 'solid';
+        const requested = String(args.BEHAVIOR);
+        const behavior = CHROMA_KEY_BEHAVIORS.includes(requested) ? requested : 'solid';
         this._safe(engine => engine.chromaKey(color(args.KEY), Math.max(0, number(args.TOLERANCE)),
             Math.max(0.0001, numberOr(args.SOFTNESS, 0.05)), behavior, color(args.COLOR1), color(args.COLOR2),
             mixAmount(args.MIX), this.blendMode));

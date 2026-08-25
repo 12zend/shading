@@ -11,10 +11,11 @@ const composite = `
   }
 
   void main() {
+    float opacity = clamp(u_opacity, 0.0, 1.0);
     vec4 basePixel = texture2D(u_base, v_uv);
     vec4 effectPixel = texture2D(u_effect, v_uv);
     if (u_blend == 0) {
-      gl_FragColor = mix(basePixel, effectPixel, clamp(u_opacity, 0.0, 1.0));
+      gl_FragColor = mix(basePixel, effectPixel, opacity);
       return;
     }
     vec3 b = straightColor(basePixel);
@@ -35,8 +36,8 @@ const composite = `
     } else {
       c = min(vec3(1.0), b / max(vec3(1.0) - e, vec3(0.0039215686)));
     }
-    c = mix(b, c, clamp(u_opacity, 0.0, 1.0));
-    float alpha = mix(basePixel.a, max(basePixel.a, effectPixel.a), clamp(u_opacity, 0.0, 1.0));
+    c = mix(b, c, opacity);
+    float alpha = mix(basePixel.a, max(basePixel.a, effectPixel.a), opacity);
     gl_FragColor = vec4(clamp(c, 0.0, 1.0) * alpha, alpha);
   }
 `;
@@ -80,9 +81,10 @@ const groupOver = `
     }
 
     float effectAlpha = effectPixel.a * clamp(u_opacity, 0.0, 1.0);
-    float outputAlpha = effectAlpha + (basePixel.a * (1.0 - effectAlpha));
+    float invEffectAlpha = 1.0 - effectAlpha;
+    float outputAlpha = effectAlpha + (basePixel.a * invEffectAlpha);
     vec3 compositedColor = mix(effectColor, blended, basePixel.a);
-    vec3 outputColor = (basePixel.rgb * (1.0 - effectAlpha)) + (compositedColor * effectAlpha);
+    vec3 outputColor = (basePixel.rgb * invEffectAlpha) + (compositedColor * effectAlpha);
     gl_FragColor = vec4(clamp(outputColor, 0.0, 1.0), outputAlpha);
   }
 `;

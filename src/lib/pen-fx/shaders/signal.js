@@ -23,10 +23,6 @@ export default `
     return texture2D(u_image, uv);
   }
 
-  vec3 straightColor(vec4 pixel) {
-    return pixel.a > 0.00001 ? pixel.rgb / pixel.a : vec3(0.0);
-  }
-
   float hash(vec2 value) {
     value += vec2(u_seed * 0.127, u_seed * 0.311);
     return fract(sin(dot(value, vec2(127.1, 311.7))) * 43758.5453123);
@@ -37,6 +33,7 @@ export default `
     vec2 pixel = v_uv * u_resolution;
     vec2 uv = v_uv;
     float frame = mod(u_evolution, 100000.0);
+    float invSafeWidth = 1.0 / max(u_resolution.x, 1.0);
     float alpha;
     vec3 color;
 
@@ -45,18 +42,23 @@ export default `
       float lineNoise = hash(vec2(line, frame * 0.071)) * 2.0 - 1.0;
       float wobble = sin(pixel.y * 0.045 + frame * 0.83) * 0.45;
       float trackingCenter = mix(0.12, 0.88, hash(vec2(floor(frame * 0.19), 41.0)));
-      float trackingBand = exp(-pow((v_uv.y - trackingCenter) / 0.035, 2.0));
+      float bandT = (v_uv.y - trackingCenter) / 0.035;
+      float trackingBand = exp(-bandT * bandT);
       float trackingNoise = hash(vec2(floor(pixel.y), floor(frame * 2.0))) * 2.0 - 1.0;
       float horizontalShift = (lineNoise * 0.28 + wobble + trackingNoise * trackingBand * 1.8) * u_tracking;
-      uv.x += horizontalShift / max(u_resolution.x, 1.0);
+      uv.x += horizontalShift * invSafeWidth;
 
       float chromaWave = 0.65 + 0.35 * sin(pixel.y * 0.021 + frame * 0.37);
-      vec2 chromaOffset = vec2(u_chroma * chromaWave / max(u_resolution.x, 1.0), 0.0);
+      vec2 chromaOffset = vec2(u_chroma * chromaWave * invSafeWidth, 0.0);
       vec4 redPixel = sampleImage(uv + chromaOffset);
       vec4 greenPixel = sampleImage(uv);
       vec4 bluePixel = sampleImage(uv - chromaOffset);
       alpha = max(redPixel.a, max(greenPixel.a, bluePixel.a));
-      color = vec3(straightColor(redPixel).r, straightColor(greenPixel).g, straightColor(bluePixel).b);
+      color = vec3(
+        redPixel.a > 0.00001 ? redPixel.r / redPixel.a : 0.0,
+        greenPixel.a > 0.00001 ? greenPixel.g / greenPixel.a : 0.0,
+        bluePixel.a > 0.00001 ? bluePixel.b / bluePixel.a : 0.0
+      );
 
       float tapeNoise = hash(floor(pixel * vec2(0.5, 1.0)) + vec2(frame * 13.7, frame * 5.3)) * 2.0 - 1.0;
       float streakNoise = hash(vec2(floor(pixel.y * 0.5), floor(frame * 3.0))) * 2.0 - 1.0;
@@ -71,19 +73,23 @@ export default `
       float sliceRandom = hash(vec2(slice, floor(frame)));
       float activeMask = step(1.0 - u_density, sliceRandom);
       float blockWidth = max(8.0, u_resolution.x / 12.0);
-      float block = floor(pixel.x / blockWidth);
+      float block = floor(pixel.x * (1.0 / blockWidth));
       float blockRandom = hash(vec2(block + slice * 17.0, floor(frame * 1.7)));
       float blockGate = mix(0.45, 1.0, step(0.38, blockRandom));
       float sliceShift = (hash(vec2(slice * 3.1, frame * 0.53)) * 2.0 - 1.0) * u_shift * activeMask * blockGate;
-      uv.x += sliceShift / max(u_resolution.x, 1.0);
+      uv.x += sliceShift * invSafeWidth;
 
       float splitPulse = activeMask * (0.45 + 0.55 * blockRandom);
-      vec2 rgbOffset = vec2(u_rgb * splitPulse / max(u_resolution.x, 1.0), 0.0);
+      vec2 rgbOffset = vec2(u_rgb * splitPulse * invSafeWidth, 0.0);
       vec4 redPixel = sampleImage(uv + rgbOffset);
       vec4 greenPixel = sampleImage(uv);
       vec4 bluePixel = sampleImage(uv - rgbOffset);
       alpha = max(redPixel.a, max(greenPixel.a, bluePixel.a));
-      color = vec3(straightColor(redPixel).r, straightColor(greenPixel).g, straightColor(bluePixel).b);
+      color = vec3(
+        redPixel.a > 0.00001 ? redPixel.r / redPixel.a : 0.0,
+        greenPixel.a > 0.00001 ? greenPixel.g / greenPixel.a : 0.0,
+        bluePixel.a > 0.00001 ? bluePixel.b / bluePixel.a : 0.0
+      );
 
       float dropoutRandom = hash(vec2(block * 7.3 + slice, floor(frame * 2.3)));
       float dropout = activeMask * step(0.91, dropoutRandom);

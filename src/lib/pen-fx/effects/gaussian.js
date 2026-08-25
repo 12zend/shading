@@ -2,6 +2,8 @@
 
 import {mixAmount, number, numberOr} from '../helpers';
 
+const GAUSSIAN_TYPES = ['normal', 'horizontal', 'vertical'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype._gaussianPass = function (texture, framebuffer, direction, radius, radialType, twoDimensional, center, mixValue) {
         this._render(this._program('gaussian'), framebuffer, [{name: 'u_image', texture}], {
@@ -55,7 +57,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.gaussianBlur = function (args) {
-        const type = ['normal', 'horizontal', 'vertical'].includes(String(args.TYPE)) ? String(args.TYPE) : 'normal';
+        const rawType = String(args.TYPE);
+        const type = GAUSSIAN_TYPES.includes(rawType) ? rawType : 'normal';
         this._safe(engine => engine.gaussian(type, 0, number(args.VALUE), mixAmount(args.MIX), this.blendMode));
     };
 

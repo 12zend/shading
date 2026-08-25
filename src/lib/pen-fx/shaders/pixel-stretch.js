@@ -16,21 +16,22 @@ export default `
     return mod(angle + pi, pi * 2.0) - pi;
   }
 
-  vec4 samplePixel(vec2 pixel) {
+  vec4 samplePixel(vec2 pixel, vec2 invResolution) {
     if (any(lessThan(pixel, vec2(0.0))) || any(greaterThanEqual(pixel, u_resolution))) {
       return vec4(0.0);
     }
-    return texture2D(u_image, (floor(pixel) + vec2(0.5)) / u_resolution);
+    return texture2D(u_image, (floor(pixel) + vec2(0.5)) * invResolution);
   }
 
-  vec4 samplePosition(vec2 pixel) {
+  vec4 samplePosition(vec2 pixel, vec2 invResolution) {
     if (any(lessThan(pixel, vec2(0.0))) || any(greaterThanEqual(pixel, u_resolution))) {
       return vec4(0.0);
     }
-    return texture2D(u_image, pixel / u_resolution);
+    return texture2D(u_image, pixel * invResolution);
   }
 
   void main() {
+    vec2 invResolution = 1.0 / u_resolution;
     vec2 pixel = v_uv * u_resolution;
     vec2 center = u_resolution * 0.5 + u_center;
     vec2 fromCenter = pixel - center;
@@ -47,11 +48,12 @@ export default `
       float sourcePosition = clamp(axisCenter + u_position, 0.5, axisLimit - 0.5);
       float distanceFromSource = axisPosition - sourcePosition;
       active = abs(distanceFromSource) <= halfSize;
+      float edgePosition = axisPosition - sign(distanceFromSource) * halfSize;
       if (u_type == 0) {
-        sampleBase.x = active ? sourcePosition : axisPosition - sign(distanceFromSource) * halfSize;
+        sampleBase.x = active ? sourcePosition : edgePosition;
         sampleDirection = vec2(1.0, 0.0);
       } else {
-        sampleBase.y = active ? sourcePosition : axisPosition - sign(distanceFromSource) * halfSize;
+        sampleBase.y = active ? sourcePosition : edgePosition;
         sampleDirection = vec2(0.0, 1.0);
       }
     } else if (u_type == 2) {
@@ -72,7 +74,7 @@ export default `
       float radius = length(fromCenter);
       float sampleAngle = active ? sourceAngle : angle - sign(angularDistance) * halfAngle;
       sampleBase = center + vec2(cos(sampleAngle), sin(sampleAngle)) * radius;
-      sampleStep = max(radius * pi / 180.0, 0.25);
+      sampleStep = max(radius * (pi / 180.0), 0.25);
       sampleDirection = vec2(-sin(sourceAngle), cos(sourceAngle));
     }
 
@@ -80,14 +82,17 @@ export default `
     if (active) {
       transformed = vec4(0.0);
       float samples = 0.0;
+      float sampleLimit = min(abs(u_sampleSize) * 0.5, 4.0);
+      vec2 sampleOffset = sampleDirection * sampleStep;
       for (int i = -4; i <= 4; i++) {
-        float sampleActive = step(abs(float(i)), min(abs(u_sampleSize) * 0.5, 4.0));
-        transformed += samplePixel(sampleBase + sampleDirection * float(i) * sampleStep) * sampleActive;
+        float fi = float(i);
+        float sampleActive = step(abs(fi), sampleLimit);
+        transformed += samplePixel(sampleBase + sampleOffset * fi, invResolution) * sampleActive;
         samples += sampleActive;
       }
       transformed /= max(samples, 1.0);
     } else {
-      transformed = samplePosition(sampleBase);
+      transformed = samplePosition(sampleBase, invResolution);
     }
     float mixValue = clamp(u_mix, 0.0, 1.0);
     gl_FragColor = mixValue == 1.0 ? transformed : mix(texture2D(u_image, v_uv), transformed, mixValue);

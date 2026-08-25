@@ -2,6 +2,9 @@
 
 import {evolutionAmount, mixAmount, numberOr, seedAmount} from '../helpers';
 
+// Read-only downstream (_render only calls indexOf), safe to share across calls.
+const MODE_INTEGER_UNIFORMS = ['u_mode'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.vhs = function (tracking, chroma, noise, scanlines, seed, evolution, mixValue, blendMode) {
         this._singlePass(this._program('signal'), {
@@ -18,7 +21,7 @@ const install = ({Engine, PenFX}) => {
             u_rgb: 0,
             u_density: 0,
             u_mix: mixValue
-        }, ['u_mode'], blendMode);
+        }, MODE_INTEGER_UNIFORMS, blendMode);
     };
 
     Engine.prototype.digitalGlitch = function (slices, shift, rgb, density, seed, evolution, mixValue, blendMode) {
@@ -36,7 +39,7 @@ const install = ({Engine, PenFX}) => {
             u_rgb: Math.min(128, Math.max(0, Math.abs(rgb))),
             u_density: Math.min(1, Math.max(0, density)),
             u_mix: mixValue
-        }, ['u_mode'], blendMode);
+        }, MODE_INTEGER_UNIFORMS, blendMode);
     };
 
     PenFX.prototype.vhs = function (args) {

@@ -2,21 +2,30 @@
 
 import {color, mixAmount, number, numberOr} from '../helpers';
 
+// Shared default vec3 uniforms and the integer-uniform list are read-only as
+// far as Engine._render is concerned (values are copied via gl.uniform*fv /
+// matched via indexOf), so every call can reference the same instances
+// instead of allocating fresh ones per rendered frame.
+const VEC3_ZERO = [0, 0, 0];
+const VEC3_ONE = [1, 1, 1];
+const COLOR_INTEGER_UNIFORMS = ['u_mode'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.color = function (mode, uniforms, blendMode) {
-        if (this._isNoOp(uniforms.mix === undefined ? 1 : uniforms.mix, blendMode)) return;
+        const mix = uniforms.mix === undefined ? 1 : uniforms.mix;
+        if (this._isNoOp(mix, blendMode)) return;
         const skin = this._prepare();
         if (!skin) return;
         this._renderEffect(skin, this._program('color'), [{name: 'u_image', texture: this.textures[0]}], {
             u_mode: mode,
             u_value: uniforms.value === undefined ? 1 : uniforms.value,
-            u_mix: uniforms.mix === undefined ? 1 : uniforms.mix,
+            u_mix: mix,
             u_pivot: uniforms.pivot === undefined ? 0.5 : uniforms.pivot,
-            u_color: uniforms.color || [0, 0, 0],
-            u_add: uniforms.add || [0, 0, 0],
-            u_mul: uniforms.mul || [1, 1, 1],
-            u_div: uniforms.div || [1, 1, 1]
-        }, ['u_mode'], blendMode);
+            u_color: uniforms.color || VEC3_ZERO,
+            u_add: uniforms.add || VEC3_ZERO,
+            u_mul: uniforms.mul || VEC3_ONE,
+            u_div: uniforms.div || VEC3_ONE
+        }, COLOR_INTEGER_UNIFORMS, blendMode);
     };
 
     const invokeColor = (mode, values) => function (args) {

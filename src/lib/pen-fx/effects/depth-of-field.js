@@ -2,6 +2,8 @@
 
 import {mixAmount, numberOr} from '../helpers';
 
+const SHAPES = ['circle', 'hexagon', 'octagon'];
+
 const install = ({Engine, PenFX, vm}) => {
     Engine.prototype.depthOfField = function (depthBuffer, focusDistance, focusRange, aperture, maxBlur, nearStrength,
         farStrength, edgeSoftness, shape, rotation, mixValue, blendMode) {
@@ -37,7 +39,8 @@ const install = ({Engine, PenFX, vm}) => {
     };
 
     PenFX.prototype.depthOfField = function (args) {
-        const shape = ['circle', 'hexagon', 'octagon'].includes(String(args.SHAPE)) ? String(args.SHAPE) : 'circle';
+        const shapeName = String(args.SHAPE);
+        const shape = SHAPES.includes(shapeName) ? shapeName : 'circle';
         this._safe(engine => engine.depthOfField(vm.runtime.movieZBuffer,
             numberOr(args.FOCUS, 480), numberOr(args.RANGE, 24), numberOr(args.APERTURE, 48),
             numberOr(args.MAXBLUR, 24), numberOr(args.NEAR, 100) / 100, numberOr(args.FAR, 100) / 100,

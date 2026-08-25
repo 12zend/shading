@@ -15,7 +15,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.lensBlur = function (args) {
-        const shape = ['circle', 'hexagon', 'octagon'].includes(String(args.SHAPE)) ? String(args.SHAPE) : 'circle';
+        const shapeName = String(args.SHAPE);
+        const shape = shapeName === 'hexagon' || shapeName === 'octagon' ? shapeName : 'circle';
         this._safe(engine => engine.lensBlur(number(args.RADIUS), shape, numberOr(args.ROTATION, 0), mixAmount(args.MIX), this.blendMode));
     };
 };

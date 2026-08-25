@@ -15,6 +15,8 @@ export default `
   uniform vec3 u_farColor;
   uniform float u_mix;
 
+  const float rcpOneMinusExpNeg4 = 1.0186573604;
+
   float unpackDepth(vec3 encodedDepth) {
     if (all(greaterThan(encodedDepth, vec3(0.999)))) return 1.0;
     return dot(encodedDepth, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
@@ -22,10 +24,10 @@ export default `
 
   float viewDepth(vec2 uv) {
     if (u_flatDepth > 0.0) return u_flatDepth;
-    float depth = unpackDepth(texture2D(u_depth, clamp(uv, vec2(0.0), vec2(1.0))).rgb);
+    float depth = unpackDepth(texture2D(u_depth, clamp(uv, 0.0, 1.0)).rgb);
     float z = depth * 2.0 - 1.0;
     return (2.0 * u_cameraNear * u_cameraFar) /
-      max(u_cameraFar + u_cameraNear - z * (u_cameraFar - u_cameraNear), 0.00001);
+      max(z * (u_cameraNear - u_cameraFar) + (u_cameraFar + u_cameraNear), 0.00001);
   }
 
   void main() {
@@ -43,16 +45,16 @@ export default `
     if (u_mode == 1) {
       fogFactor = distanceFactor * distanceFactor * (3.0 - 2.0 * distanceFactor);
     } else if (u_mode == 2) {
-      fogFactor = (1.0 - exp(-4.0 * distanceFactor)) / (1.0 - exp(-4.0));
+      fogFactor = (1.0 - exp(-4.0 * distanceFactor)) * rcpOneMinusExpNeg4;
     } else if (u_mode == 3) {
-      fogFactor = (1.0 - exp(-4.0 * distanceFactor * distanceFactor)) / (1.0 - exp(-4.0));
+      fogFactor = (1.0 - exp(-4.0 * distanceFactor * distanceFactor)) * rcpOneMinusExpNeg4;
     }
     fogFactor = pow(clamp(fogFactor, 0.0, 1.0), max(u_curve, 0.01));
     fogFactor *= clamp(u_density, 0.0, 1.0) * clamp(u_mix, 0.0, 1.0);
 
-    vec3 originalColor = original.rgb / original.a;
+    vec3 originalColor = original.rgb * (1.0 / original.a);
     vec3 fogColor = mix(u_nearColor, u_farColor, distanceFactor);
-    vec3 color = mix(originalColor, fogColor, clamp(fogFactor, 0.0, 1.0));
+    vec3 color = mix(originalColor, fogColor, fogFactor);
     gl_FragColor = vec4(clamp(color, 0.0, 1.0) * original.a, original.a);
   }
 `;

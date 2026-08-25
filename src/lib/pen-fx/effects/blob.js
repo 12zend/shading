@@ -3,25 +3,30 @@
 import detectMovieBlobs, {drawMovieBlobOverlay} from '../../movie-blob-detection';
 import {boolean, color, number, numberOr} from '../helpers';
 
+const BLOB_MODES = ['alpha', 'bright', 'color', 'dark', 'motion'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.blob = function (options, blendMode) {
         const gl = this.gl;
         if (this.blendOpacity <= 0) return;
         const skin = this._prepare();
         if (!skin) return;
-        const pixelLength = this.width * this.height * 4;
+        const width = this.width;
+        const height = this.height;
+        const pixelLength = width * height * 4;
         if (!this.blobSource || this.blobSource.length !== pixelLength) {
             this.blobSource = new Uint8Array(pixelLength);
         }
         const source = this.blobSource;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
-        gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, source);
-        const frame = {data: source, height: this.height, width: this.width};
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        const frame = {data: source, height, width};
         // detectMovieBlobs never mutates its inputs, so the baseline buffer can be
         // refilled in place once detection finishes instead of copying every frame.
-        const staleBaseline = !this.previousBlobFrame || !this.previousBlobFrame.data ||
-            this.previousBlobFrame.data.length !== pixelLength;
-        const boxes = detectMovieBlobs(frame, options, staleBaseline ? null : this.previousBlobFrame);
+        const previousBlobFrame = this.previousBlobFrame;
+        const staleBaseline = !previousBlobFrame || !previousBlobFrame.data ||
+            previousBlobFrame.data.length !== pixelLength;
+        const boxes = detectMovieBlobs(frame, options, staleBaseline ? null : previousBlobFrame);
         this._storeBlobBaseline(source);
         if (!boxes.length) return;
         if (!this.blobOutput || this.blobOutput.length !== pixelLength) {
@@ -37,7 +42,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     Engine.prototype._storeBlobBaseline = function (source) {
-        if (!this.previousBlobFrame || this.previousBlobFrame.data.length !== source.length) {
+        const previousBlobFrame = this.previousBlobFrame;
+        if (!previousBlobFrame || previousBlobFrame.data.length !== source.length) {
             this.previousBlobFrame = {
                 data: new Uint8Array(source),
                 height: this.height,
@@ -45,14 +51,14 @@ const install = ({Engine, PenFX}) => {
             };
             return;
         }
-        this.previousBlobFrame.data.set(source);
-        this.previousBlobFrame.height = this.height;
-        this.previousBlobFrame.width = this.width;
+        previousBlobFrame.data.set(source);
+        previousBlobFrame.height = this.height;
+        previousBlobFrame.width = this.width;
     };
 
     PenFX.prototype.blob = function (args) {
-        const mode = ['alpha', 'bright', 'color', 'dark', 'motion'].includes(String(args.MODE)) ?
-            String(args.MODE) : 'dark';
+        const modeArg = String(args.MODE);
+        const mode = BLOB_MODES.includes(modeArg) ? modeArg : 'dark';
         const shape = String(args.SHAPE) === 'ellipse' ? 'ellipse' : 'rectangle';
         this._safe(engine => engine.blob({
             blurRadius: Math.max(0, number(args.BLUR)),

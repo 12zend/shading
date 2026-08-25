@@ -2,6 +2,8 @@
 
 import {evolutionAmount, mixAmount, number, numberOr, seedAmount} from '../helpers';
 
+const WAVY_TYPES = ['both', 'x', 'y', 'size', 'dir'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.wavy = function (value, seed, offsetX, offsetY, size, complexity, evolution, type, centerX, centerY,
         mixValue, blendMode) {
@@ -17,13 +19,14 @@ const install = ({Engine, PenFX}) => {
             u_size: size,
             u_complexity: Math.min(8, Math.max(1, complexity)),
             u_evolution: evolution,
-            u_type: Math.max(0, ['both', 'x', 'y', 'size', 'dir'].indexOf(type)),
+            u_type: Math.max(0, WAVY_TYPES.indexOf(type)),
             u_mix: mixValue
         }, ['u_type'], blendMode);
     };
 
     PenFX.prototype.wavy = function (args) {
-        const type = ['both', 'x', 'y', 'size', 'dir'].includes(String(args.TYPE)) ? String(args.TYPE) : 'both';
+        const rawType = String(args.TYPE);
+        const type = WAVY_TYPES.includes(rawType) ? rawType : 'both';
         this._safe(engine => engine.wavy(number(args.VALUE), seedAmount(args.SEED), number(args.X), number(args.Y),
             number(args.SIZE), numberOr(args.COMPLEXITY, 3), evolutionAmount(args.EVOLUTION), type,
             number(args.CENTERX), number(args.CENTERY), mixAmount(args.MIX), this.blendMode));

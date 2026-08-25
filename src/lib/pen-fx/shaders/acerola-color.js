@@ -47,7 +47,6 @@ export default `
       else if (mx == c.g) h = (c.b - c.r) / d + 2.0;
       else h = (c.r - c.g) / d + 4.0;
       h /= 6.0;
-      if (h < 0.0) h += 1.0;
     }
     float l = (mx + mn) * 0.5;
     float s = d / max(1.0 - abs(2.0 * l - 1.0), 0.00001);
@@ -61,13 +60,11 @@ export default `
 
   float bayer4(vec2 pixel) {
     vec2 p = mod(floor(pixel), 4.0);
-    float x = p.x;
-    float y = p.y;
-    float row0 = x < 1.0 ? 0.0 : x < 2.0 ? 8.0 : x < 3.0 ? 2.0 : 10.0;
-    float row1 = x < 1.0 ? 12.0 : x < 2.0 ? 4.0 : x < 3.0 ? 14.0 : 6.0;
-    float row2 = x < 1.0 ? 3.0 : x < 2.0 ? 11.0 : x < 3.0 ? 1.0 : 9.0;
-    float row3 = x < 1.0 ? 15.0 : x < 2.0 ? 7.0 : x < 3.0 ? 13.0 : 5.0;
-    return ((y < 1.0 ? row0 : y < 2.0 ? row1 : y < 3.0 ? row2 : row3) / 16.0) - 0.5;
+    vec2 r = mod(p, 2.0);
+    vec2 q = (p - r) * 0.5;
+    float hi = q.x * 2.0 + q.y * 3.0 - q.x * q.y * 4.0;
+    float lo = r.x * 2.0 + r.y * 3.0 - r.x * r.y * 4.0;
+    return (lo * 4.0 + hi) / 16.0 - 0.5;
   }
 
   vec3 toneMap(vec3 c, int kind, float whitePoint) {
@@ -79,17 +76,17 @@ export default `
     }
     if (kind == 2) return clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);
     float l = max(luminance(c), 0.00001);
-    float mapped = (l * (1.0 + l / max(whitePoint * whitePoint, 0.00001))) / (1.0 + l);
-    return clamp(c * mapped / l, 0.0, 1.0);
+    return clamp(c * ((1.0 + l / max(whitePoint * whitePoint, 0.00001)) / (1.0 + l)), 0.0, 1.0);
   }
 
   float asciiGlyph(vec2 cell, float level) {
     vec2 p = abs(cell - 0.5);
-    float dotShape = 1.0 - step(0.16, length(p));
+    float dist = length(p);
+    float dotShape = 1.0 - step(0.16, dist);
     float dashShape = (1.0 - step(0.38, p.x)) * (1.0 - step(0.09, p.y));
     float crossShape = max((1.0 - step(0.08, p.x)) * (1.0 - step(0.4, p.y)),
                            (1.0 - step(0.4, p.x)) * (1.0 - step(0.08, p.y)));
-    float ringShape = (1.0 - step(0.42, length(p))) * step(0.25, length(p));
+    float ringShape = (1.0 - step(0.42, dist)) * step(0.25, dist);
     if (level < 0.2) return 0.0;
     if (level < 0.4) return dotShape;
     if (level < 0.6) return dashShape;
@@ -117,16 +114,18 @@ export default `
       else m = mat3(0.950, 0.000, 0.000, 0.050, 0.433, 0.475, 0.000, 0.567, 0.525);
       c = mix(original, clamp(m * original, 0.0, 1.0), clamp(u_value, 0.0, 1.0));
     } else if (u_mode == 3) {
-      c *= exp2(u_value);
-      c *= vec3(1.0 + u_value2 * 0.1, 1.0 - abs(u_value2) * 0.025 + u_value3 * 0.05, 1.0 - u_value2 * 0.1);
+      c *= exp2(u_value) * vec3(1.0 + u_value2 * 0.1,
+                                1.0 - abs(u_value2) * 0.025 + u_value3 * 0.05,
+                                1.0 - u_value2 * 0.1);
       c = (c - vec3(u_vec.x)) * u_vec.y + vec3(u_vec.x);
       c *= u_color;
       c = mix(vec3(luminance(c)), c, u_color2.x + 1.0);
     } else if (u_mode == 4) {
       float noise = bayer4((v_uv * u_resolution) / max(u_value3, 1.0));
       vec3 counts = max(vec3(u_vec, u_value), vec3(2.0));
+      vec3 levels = counts - 1.0;
       c = clamp(original + noise * u_value2, 0.0, 1.0);
-      c = floor((counts - 1.0) * c + 0.5) / (counts - 1.0);
+      c = floor(levels * c + 0.5) / levels;
     } else if (u_mode == 5) {
       float noise = hash(floor(v_uv * u_resolution / max(u_value3, 1.0))) * 2.0 - 1.0;
       float weight = mix(1.0, 1.0 - sqrt(clamp(luminance(original), 0.0, 1.0)), clamp(u_value2, 0.0, 1.0));
@@ -155,7 +154,8 @@ export default `
       c = clamp(vec3(1.0 - cyan, 1.0 - magenta, 1.0 - yellow) - blackInk, 0.0, 1.0);
     } else if (u_mode == 10) {
       vec2 q = v_uv * 2.0 - 1.0;
-      vec2 warp = q + q * (q.yx / max(u_value, 1.0)) * (q.yx / max(u_value, 1.0));
+      vec2 t = q.yx / max(u_value, 1.0);
+      vec2 warp = q + q * t * t;
       vec2 uv = warp * 0.5 + 0.5;
       vec4 warped = texture2D(u_image, uv);
       c = straightColor(warped);
@@ -177,8 +177,9 @@ export default `
       c = hslToRgb(hsl);
     } else if (u_mode == 13) {
       vec2 cellSize = max(u_vec, vec2(2.0));
-      vec2 cell = fract(v_uv * u_resolution / cellSize);
-      vec2 centerUv = (floor(v_uv * u_resolution / cellSize) + 0.5) * cellSize / u_resolution;
+      vec2 gridPos = v_uv * u_resolution / cellSize;
+      vec2 cell = fract(gridPos);
+      vec2 centerUv = (floor(gridPos) + 0.5) * cellSize / u_resolution;
       vec3 sampleColor = straightColor(texture2D(u_image, centerUv));
       float level = luminance(sampleColor);
       if (u_type == 1) level = 1.0 - level;
@@ -205,8 +206,9 @@ export default `
       c = original * exposure;
     }
 
-    c = mix(original, clamp(c, 0.0, 1.0), clamp(u_mix, 0.0, 1.0));
-    alpha = mix(p.a, alpha, clamp(u_mix, 0.0, 1.0));
+    float mixAmount = clamp(u_mix, 0.0, 1.0);
+    c = mix(original, clamp(c, 0.0, 1.0), mixAmount);
+    alpha = mix(p.a, alpha, mixAmount);
     gl_FragColor = vec4(c * alpha, alpha);
   }
 `;

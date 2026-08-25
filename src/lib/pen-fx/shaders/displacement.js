@@ -24,11 +24,12 @@ export default `
     vec4 mapPixel = texture2D(u_map, vec2(1.0 - v_uv.x, v_uv.y));
     vec3 straightMap = mapPixel.a > 0.00001 ? mapPixel.rgb / mapPixel.a : vec3(0.5);
     vec3 mapColor = mix(vec3(0.5), straightMap, mapPixel.a);
-    float mapValue = dot(mapColor, vec3(0.2126, 0.7152, 0.0722));
+    float mapValue;
     if (u_channel == 1) mapValue = mapColor.r;
     else if (u_channel == 2) mapValue = mapColor.g;
     else if (u_channel == 3) mapValue = mapColor.b;
     else if (u_channel == 4) mapValue = mapPixel.a;
+    else mapValue = dot(mapColor, vec3(0.2126, 0.7152, 0.0722));
     if (u_invert == 1) mapValue = 1.0 - mapValue;
     float amount = (mapValue - u_center) * 2.0 * u_value;
     vec2 displacedUv = v_uv;
@@ -37,13 +38,13 @@ export default `
     } else if (u_type == 1) {
       displacedUv.y -= amount / max(u_resolution.y, 1.0);
     } else if (u_type == 2) {
-      float scale = max(0.01, 1.0 + amount / 100.0);
-      displacedUv = vec2(0.5) + (v_uv - vec2(0.5)) / scale;
+      float invScale = 1.0 / max(0.01, 1.0 + amount / 100.0);
+      displacedUv = vec2(0.5) + (v_uv - vec2(0.5)) * invScale;
     } else {
       float angle = radians(amount);
-      vec2 offset = v_uv - vec2(0.5);
-      mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
-      displacedUv = vec2(0.5) + rotation * offset;
+      float s = sin(angle);
+      float c = cos(angle);
+      displacedUv = vec2(0.5) + mat2(c, -s, s, c) * (v_uv - vec2(0.5));
     }
     vec4 displaced = sampleImage(displacedUv);
     float mixValue = clamp(u_mix, 0.0, 1.0);

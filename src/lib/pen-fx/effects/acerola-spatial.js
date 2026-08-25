@@ -2,6 +2,8 @@
 
 import {boolean, color, mixAmount, number, numberOr} from '../helpers';
 
+const SAMPLE_MODES = ['clamp', 'mirror', 'wrap', 'border'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.edgeDetection = function (threshold, value, radius, softness, edgeColor, backgroundColor, hasBackground,
         alpha, mixValue, blendMode) {
@@ -57,7 +59,7 @@ const install = ({Engine, PenFX}) => {
 
     Engine.prototype.zoom = function (value, offsetX, offsetY, sampleMode, mixValue, blendMode) {
         this._acerolaPass(this._program('acerolaSpatial'), 5, {
-            u_type: Math.max(0, ['clamp', 'mirror', 'wrap', 'border'].indexOf(sampleMode)),
+            u_type: Math.max(0, SAMPLE_MODES.indexOf(sampleMode)),
             u_value: Math.max(0.001, value),
             u_vec: [offsetX, offsetY],
             u_mix: mixValue
@@ -93,7 +95,8 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.zoom = function (args) {
-        const mode = ['clamp', 'mirror', 'wrap', 'border'].includes(String(args.SAMPLE)) ? String(args.SAMPLE) : 'clamp';
+        const sample = String(args.SAMPLE);
+        const mode = SAMPLE_MODES.includes(sample) ? sample : 'clamp';
         this._safe(engine => engine.zoom(numberOr(args.VALUE, 1), number(args.X), number(args.Y), mode, mixAmount(args.MIX), this.blendMode));
     };
 };

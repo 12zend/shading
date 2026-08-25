@@ -9,7 +9,9 @@ const install = ({Engine, PenFX}) => {
         if (this._isNoOp(mixValue, blendMode)) return;
         const skin = this._prepare();
         if (!skin) return;
-        const pixelCount = this.width * this.height;
+        const width = this.width;
+        const height = this.height;
+        const pixelCount = width * height;
         if (!this.pixelSortSource || this.pixelSortSource.length !== pixelCount * 4) {
             this.pixelSortSource = new Uint8Array(pixelCount * 4);
             this.pixelSortOutput = new Uint8Array(pixelCount * 4);
@@ -21,10 +23,12 @@ const install = ({Engine, PenFX}) => {
         const keys = this.pixelSortKeys;
         const selected = this.pixelSortSelected;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
-        gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, source);
         output.set(source);
         const low = Math.min(minimum, maximum);
         const high = Math.max(minimum, maximum);
+        const saturationSort = sortBy === 'saturation';
+        const hueSort = sortBy === 'hue';
         for (let index = 0, offset = 0; index < pixelCount; index++, offset += 4) {
             const alphaByte = source[offset + 3];
             let value = -1;
@@ -32,9 +36,9 @@ const install = ({Engine, PenFX}) => {
                 const r = source[offset] / alphaByte;
                 const g = source[offset + 1] / alphaByte;
                 const b = source[offset + 2] / alphaByte;
-                if (sortBy === 'saturation') {
+                if (saturationSort) {
                     value = Math.max(r, g, b) - Math.min(r, g, b);
-                } else if (sortBy === 'hue') {
+                } else if (hueSort) {
                     const max = Math.max(r, g, b);
                     const delta = max - Math.min(r, g, b);
                     if (delta <= 0.00001) {
@@ -99,58 +103,60 @@ const install = ({Engine, PenFX}) => {
             }
         };
         if (type === 'x' || type === 'y') {
-            const lineCount = type === 'y' ? this.width : this.height;
-            const lineLength = type === 'y' ? this.height : this.width;
-            const stride = type === 'y' ? this.width : 1;
+            const vertical = type === 'y';
+            const lineCount = vertical ? width : height;
+            const lineLength = vertical ? height : width;
+            const stride = vertical ? width : 1;
             for (let lineNumber = 0; lineNumber < lineCount; lineNumber++) {
-                const lineStart = type === 'y' ? lineNumber : lineNumber * this.width;
+                const lineStart = vertical ? lineNumber : lineNumber * width;
                 lineIndices.length = lineLength;
+                let pixelIndex = lineStart;
                 for (let position = 0; position < lineLength; position++) {
-                    lineIndices[position] = lineStart + position * stride;
+                    lineIndices[position] = pixelIndex;
+                    pixelIndex += stride;
                 }
                 sortLine(lineIndices);
             }
         } else {
-            const center = [
-                Math.min(this.width - 0.5, Math.max(0.5, this.width * 0.5 + centerX)),
-                Math.min(this.height - 0.5, Math.max(0.5, this.height * 0.5 + centerY))
-            ];
+            const tau = Math.PI * 2;
+            const cx = Math.min(width - 0.5, Math.max(0.5, width * 0.5 + centerX));
+            const cy = Math.min(height - 0.5, Math.max(0.5, height * 0.5 + centerY));
             const maxRadius = Math.ceil(Math.max(
-                Math.hypot(center[0], center[1]),
-                Math.hypot(this.width - center[0], center[1]),
-                Math.hypot(center[0], this.height - center[1]),
-                Math.hypot(this.width - center[0], this.height - center[1])
+                Math.hypot(cx, cy),
+                Math.hypot(width - cx, cy),
+                Math.hypot(cx, height - cy),
+                Math.hypot(width - cx, height - cy)
             ));
             const addPolarPixel = (x, y, previous) => {
                 const px = Math.floor(x);
                 const py = Math.floor(y);
-                if (px < 0 || px >= this.width || py < 0 || py >= this.height) return previous;
-                const index = py * this.width + px;
+                if (px < 0 || px >= width || py < 0 || py >= height) return previous;
+                const index = py * width + px;
                 if (index !== previous) lineIndices.push(index);
                 return index;
             };
             if (type === 'size') {
-                const rayCount = Math.min(1440, Math.max(360, Math.ceil(Math.PI * 2 * maxRadius)));
+                const rayCount = Math.min(1440, Math.max(360, Math.ceil(tau * maxRadius)));
                 for (let ray = 0; ray < rayCount; ray++) {
-                    const angle = ray / rayCount * Math.PI * 2;
+                    const angle = ray / rayCount * tau;
                     const cosine = Math.cos(angle);
                     const sine = Math.sin(angle);
                     let previous = -1;
                     lineIndices.length = 0;
                     for (let radius = 0; radius <= maxRadius; radius++) {
-                        previous = addPolarPixel(center[0] + cosine * radius, center[1] + sine * radius, previous);
+                        previous = addPolarPixel(cx + cosine * radius, cy + sine * radius, previous);
                     }
                     sortLine(lineIndices);
                 }
             } else {
                 for (let radius = 0; radius <= maxRadius; radius++) {
-                    const sampleCount = Math.max(1, Math.ceil(Math.PI * 2 * Math.max(radius, 1)));
+                    const sampleCount = Math.max(1, Math.ceil(tau * Math.max(radius, 1)));
                     let previous = -1;
                     lineIndices.length = 0;
                     for (let sample = 0; sample < sampleCount; sample++) {
-                        const angle = sample / sampleCount * Math.PI * 2;
-                        previous = addPolarPixel(center[0] + Math.cos(angle) * radius,
-                            center[1] + Math.sin(angle) * radius, previous);
+                        const angle = sample / sampleCount * tau;
+                        previous = addPolarPixel(cx + Math.cos(angle) * radius,
+                            cy + Math.sin(angle) * radius, previous);
                     }
                     sortLine(lineIndices);
                 }
@@ -159,7 +165,7 @@ const install = ({Engine, PenFX}) => {
         const direct = this._canRenderDirectly(blendMode);
         if (!direct) this._ensureSecondaryBuffer();
         gl.bindTexture(gl.TEXTURE_2D, direct ? skin._texture : this.textures[1]);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, output);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, output);
         if (direct) this._markSkinChanged(skin);
         else this._finish(skin, this.textures[1], blendMode);
     };

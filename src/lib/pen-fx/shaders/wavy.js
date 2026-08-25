@@ -34,10 +34,13 @@ export default `
     float value = 0.0;
     float amplitude = 0.5;
     float total = 0.0;
+    float limit = clamp(u_complexity, 1.0, 8.0);
     for (int i = 0; i < 8; i++) {
-      float active = step(float(i) + 0.5, clamp(u_complexity, 1.0, 8.0));
-      value += amplitude * (noise(p) * 2.0 - 1.0) * active;
-      total += amplitude * active;
+      if (float(i) + 0.5 > limit) {
+        break;
+      }
+      value += amplitude * (noise(p) * 2.0 - 1.0);
+      total += amplitude;
       p = p * 2.03 + vec2(17.1, 9.2);
       amplitude *= 0.5;
     }
@@ -46,10 +49,11 @@ export default `
 
   void main() {
     float scale = max(abs(u_size), 0.0001);
-    vec2 evolution = vec2(cos(radians(u_evolution)), sin(radians(u_evolution))) * 4.0;
+    float evolutionAngle = radians(u_evolution);
+    vec2 evolution = vec2(cos(evolutionAngle), sin(evolutionAngle)) * 4.0;
     vec2 p = ((v_uv * u_resolution) + u_offset) / scale + evolution;
-    float nx = fbm(p);
-    float ny = fbm(p + vec2(31.7, 47.2));
+    float nx = u_type != 2 ? fbm(p) : 0.0;
+    float ny = (u_type == 0 || u_type == 2) ? fbm(p + vec2(31.7, 47.2)) : 0.0;
     vec2 center = u_resolution * 0.5 + u_center;
     vec2 displaced = v_uv;
     if (u_type == 0) {
@@ -64,7 +68,9 @@ export default `
     } else {
       float angle = radians(nx * u_value);
       vec2 offset = v_uv * u_resolution - center;
-      mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+      float ca = cos(angle);
+      float sa = sin(angle);
+      mat2 rotation = mat2(ca, -sa, sa, ca);
       displaced = (center + rotation * offset) / u_resolution;
     }
     vec4 displacedPixel = sampleImage(displaced);

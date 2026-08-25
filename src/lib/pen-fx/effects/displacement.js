@@ -2,6 +2,9 @@
 
 import {boolean, mixAmount, number, numberOr} from '../helpers';
 
+const TYPE_NAMES = ['x', 'y', 'size', 'dir'];
+const CHANNEL_NAMES = ['luminance', 'r', 'g', 'b', 'a'];
+
 const install = ({Engine, PenFX}) => {
     Engine.prototype.displacement = function (costume, value, type, channel, invert, center, mixValue, target, blendMode) {
         if (this.blendOpacity <= 0 || this._isNoOp(mixValue, blendMode)) return;
@@ -9,8 +12,8 @@ const install = ({Engine, PenFX}) => {
         if (!mapTexture) return;
         const skin = this._prepare();
         if (!skin) return;
-        const typeIndex = ['x', 'y', 'size', 'dir'].indexOf(type);
-        const channelIndex = ['luminance', 'r', 'g', 'b', 'a'].indexOf(channel);
+        const typeIndex = TYPE_NAMES.indexOf(type);
+        const channelIndex = CHANNEL_NAMES.indexOf(channel);
         this._renderEffect(skin, this._program('displacement'), [
             {name: 'u_image', texture: this.textures[0]},
             {name: 'u_map', texture: mapTexture}
@@ -41,8 +44,10 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.displacementMap = function (args, util) {
-        const type = ['x', 'y', 'size', 'dir'].includes(String(args.TYPE)) ? String(args.TYPE) : 'x';
-        const channel = ['luminance', 'r', 'g', 'b', 'a'].includes(String(args.CHANNEL)) ? String(args.CHANNEL) : 'luminance';
+        const typeKey = String(args.TYPE);
+        const channelKey = String(args.CHANNEL);
+        const type = TYPE_NAMES.includes(typeKey) ? typeKey : 'x';
+        const channel = CHANNEL_NAMES.includes(channelKey) ? channelKey : 'luminance';
         this._safe(engine => engine.displacement(args.COSTUME, number(args.VALUE), type, channel,
             boolean(args.INVERT), numberOr(args.CENTER, 0.5), mixAmount(args.MIX), util.target, this.blendMode));
     };
