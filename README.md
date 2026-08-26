@@ -22,6 +22,8 @@ Create a platform package with `npm run package:desktop`. The result is written 
 
 Project files can be opened by selecting them in the app, passing them as command-line arguments, or opening them through the operating system's file association. Saves use a temporary file followed by an atomic replacement, and the app asks before closing a dirty project.
 
+On macOS, the desktop app selects Chromium's ANGLE Metal backend before startup. This covers the existing WebGL GPU paths used by the Scratch renderer, PenFX, and Three.js model rendering without duplicating those implementations. An explicit `--use-gl`, `--use-angle`, or `--disable-gpu` launch option is respected.
+
 ## License
 
 TurboWarp's modifications to Scratch are licensed under the GNU General Public License v3.0. See LICENSE or https://www.gnu.org/licenses/ for details.

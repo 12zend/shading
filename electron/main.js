@@ -12,6 +12,7 @@ const {fileURLToPath} = require('url');
 const {spawn} = require('child_process');
 
 const {FileStore, isProjectFile} = require('./file-store');
+const {configureGraphicsBackend} = require('./graphics');
 
 const ROOT_DIRECTORY = path.resolve(__dirname, '..');
 const BUILD_DIRECTORY = path.join(ROOT_DIRECTORY, 'build');
@@ -590,6 +591,9 @@ const start = async () => {
 };
 
 const startApplication = () => {
+    // This must run before app.ready so Chromium can select ANGLE's Metal
+    // backend for every WebGL consumer in the renderer process.
+    configureGraphicsBackend(app.commandLine);
     const hasSingleInstance = app.requestSingleInstanceLock();
     if (hasSingleInstance) {
         registerIpcHandlers();
