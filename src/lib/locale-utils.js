@@ -17,6 +17,9 @@ const wideLocales = [
     'vi'
 ];
 
+// Shading currently exposes only English and Japanese as interface languages.
+const supportedLocales = ['en', 'ja'];
+
 /**
  * Identify the languages where translations are too long to fit in fixed width parts of the gui.
  * @param {string} locale The current locale.
@@ -28,6 +31,7 @@ const isWideLocale = locale => (
 );
 
 export {
+    supportedLocales,
     wideLocales,
     isWideLocale
 };

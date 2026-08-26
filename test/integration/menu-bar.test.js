@@ -9,7 +9,8 @@ const {
     getDriver,
     loadUri,
     rightClickText,
-    scope
+    scope,
+    textExists
 } = new SeleniumHelper();
 
 const uri = path.resolve(__dirname, '../../build/index.html');
@@ -129,19 +130,21 @@ describe('Menu bar settings', () => {
 
         // Language and theme options not visible yet
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(false);
-        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(false);
+        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
 
         await clickText('Color Mode', scope.menuBar);
 
         // Only theme options visible
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(true);
-        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(false);
+        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
 
         await clickText('Language', scope.menuBar);
 
         // Only language options visible
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(false);
-        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(true);
+        expect(await (await findByText('English', scope.menuBar)).isDisplayed()).toBe(true);
+        expect(await (await findByText('日本語', scope.menuBar)).isDisplayed()).toBe(true);
+        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
     });
 
     test('Menu labels hidden when width is equal to 1024', async () => {

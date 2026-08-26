@@ -25,6 +25,7 @@ import settingsTranslationsEnglish from './en.json';
 import settingsTranslationsOther from './translations.json';
 import upstreamMeta from '../generated/upstream-meta.json';
 import {detectLocale} from '../../lib/detect-locale';
+import {supportedLocales} from '../../lib/locale-utils.js';
 import SettingsStore from '../settings-store-singleton';
 import Channels from '../channels';
 import extensionImage from './icons/extension.svg';
@@ -44,9 +45,8 @@ import '../../lib/normalize.css';
 /* eslint-disable react/no-multi-comp */
 /* eslint-disable react/jsx-no-bind */
 
-// messagesByLocale only has the non-English strings, so we have to add English as a supported
-// locale so that a non-English device with their editor language set to English gets English.
-const locale = detectLocale(['en', ...Object.keys(messagesByLocale)]);
+// Keep the addon settings language aligned with the languages available in the editor.
+const locale = detectLocale(supportedLocales);
 document.documentElement.lang = locale;
 
 const addonTranslations = messagesByLocale[locale] ? messagesByLocale[locale]() : {};

@@ -308,10 +308,10 @@ describe('Working with the blocks', () => {
         // change language
         await clickXpath(SETTINGS_MENU_XPATH);
         await clickText('Language', scope.menuBar);
-        await clickText('Deutsch');
+        await clickText('日本語');
 
-        await clickText('Skripte');
-        await clickBlocksCategory('Variablen');
+        await clickText('スクリプト');
+        await clickBlocksCategory('変数');
 
         // make sure "my variable" is still 1
         await clickText(myVariable);
@@ -324,7 +324,7 @@ describe('Working with the blocks', () => {
             .perform();
 
         // change "my variable" by 10
-        await clickText('ändere', changeVariableByScope);
+        await clickText('変える', changeVariableByScope);
 
         // check it is turned up to 11
         await clickText(myVariable);

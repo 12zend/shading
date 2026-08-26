@@ -2,10 +2,8 @@ import PropTypes from 'prop-types';
 import React from 'react';
 
 import locales from '@turbowarp/scratch-l10n';
+import {supportedLocales} from '../../lib/locale-utils.js';
 import styles from './language-selector.css';
-
-// supported languages to exclude from the menu, but allow as a URL option
-const ignore = [];
 
 const LanguageSelector = ({currentLocale, label, onChange}) => (
     <select
@@ -15,16 +13,14 @@ const LanguageSelector = ({currentLocale, label, onChange}) => (
         onChange={onChange}
     >
         {
-            Object.keys(locales)
-                .filter(l => !ignore.includes(l))
-                .map(locale => (
-                    <option
-                        key={locale}
-                        value={locale}
-                    >
-                        {locales[locale].name}
-                    </option>
-                ))
+            supportedLocales.map(locale => (
+                <option
+                    key={locale}
+                    value={locale}
+                >
+                    {locales[locale].name}
+                </option>
+            ))
         }
     </select>
 );

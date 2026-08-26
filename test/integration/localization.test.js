@@ -40,16 +40,16 @@ describe('Localization', () => {
 
         await clickXpath(SETTINGS_MENU_XPATH);
         await clickText('Language', scope.menuBar);
-        await clickText('Deutsch');
+        await clickText('日本語');
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks refresh
 
         // Make sure the blocks are translating
-        await clickText('Fühlen'); // Sensing category in German
+        await clickText('調べる'); // Sensing category in Japanese
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks to scroll
-        await clickText('Antwort'); // Find the "answer" block in German
+        await clickText('答え'); // Find the "answer" block in Japanese
 
         // Change to the costumes tab to confirm other parts of the GUI are translating
-        await clickText('Kostüme');
+        await clickText('コスチューム');
 
         // After switching languages, make sure Apple sprite still exists
         await rightClickText('Apple', scope.spriteTile); // Make sure it is there
@@ -63,10 +63,10 @@ describe('Localization', () => {
 
     // Regression test for #4476, blocks in wrong language when loaded with locale
     test('Loading with locale shows correct blocks', async () => {
-        await loadUri(`${uri}?locale=de`);
-        await clickText('Fühlen'); // Sensing category in German
+        await loadUri(`${uri}?locale=ja`);
+        await clickText('調べる'); // Sensing category in Japanese
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks to scroll
-        await clickText('Antwort'); // Find the "answer" block in German
+        await clickText('答え'); // Find the "answer" block in Japanese
         const logs = await getLogs();
         await expect(logs).toEqual([]);
     });
