@@ -22,7 +22,6 @@ class UsernameModal extends React.Component {
         bindAll(this, [
             'handleFramerateChange',
             'handleCustomizeFramerate',
-            'handleHighQualityPenChange',
             'handleInterpolationChange',
             'handleInfiniteClonesChange',
             'handleRemoveFencingChange',
@@ -45,9 +44,6 @@ class UsernameModal extends React.Component {
         if (isFinite(parsed)) {
             this.props.vm.setFramerate(parsed);
         }
-    }
-    handleHighQualityPenChange (e) {
-        this.props.vm.renderer.setUseHighQualityRender(e.target.checked);
     }
     handleInterpolationChange (e) {
         this.props.vm.setInterpolation(e.target.checked);
@@ -99,7 +95,6 @@ class UsernameModal extends React.Component {
                 onClose={this.props.onClose}
                 onFramerateChange={this.handleFramerateChange}
                 onCustomizeFramerate={this.handleCustomizeFramerate}
-                onHighQualityPenChange={this.handleHighQualityPenChange}
                 onInterpolationChange={this.handleInterpolationChange}
                 onInfiniteClonesChange={this.handleInfiniteClonesChange}
                 onRemoveFencingChange={this.handleRemoveFencingChange}
@@ -125,9 +120,6 @@ UsernameModal.propTypes = {
     intl: intlShape,
     onClose: PropTypes.func,
     vm: PropTypes.shape({
-        renderer: PropTypes.shape({
-            setUseHighQualityRender: PropTypes.func
-        }),
         setFramerate: PropTypes.func,
         setCompilerOptions: PropTypes.func,
         setInterpolation: PropTypes.func,
@@ -137,7 +129,6 @@ UsernameModal.propTypes = {
     }),
     isEmbedded: PropTypes.bool,
     framerate: PropTypes.number,
-    highQualityPen: PropTypes.bool,
     interpolation: PropTypes.bool,
     infiniteClones: PropTypes.bool,
     removeFencing: PropTypes.bool,
@@ -154,7 +145,6 @@ const mapStateToProps = state => ({
     vm: state.scratchGui.vm,
     isEmbedded: state.scratchGui.mode.isEmbedded,
     framerate: state.scratchGui.tw.framerate,
-    highQualityPen: state.scratchGui.tw.highQualityPen,
     interpolation: state.scratchGui.tw.interpolation,
     infiniteClones: state.scratchGui.tw.runtimeOptions.maxClones === Infinity,
     removeFencing: !state.scratchGui.tw.runtimeOptions.fencing,

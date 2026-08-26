@@ -379,8 +379,13 @@ const TWStateManager = function (WrappedComponent) {
                 }
             }
 
-            if (this.props.highQualityPen || urlParams.has('hqpen')) {
-                this.props.vm.renderer.setUseHighQualityRender(true);
+            // High quality pen rendering is always enabled in Shading.
+            this.props.vm.renderer.setUseHighQualityRender(true);
+
+            // Remove the old opt-in parameter from links while retaining all other URL options.
+            if (urlParams.has('hqpen')) {
+                urlParams.delete('hqpen');
+                setSearchParams(urlParams);
             }
 
             if (urlParams.has('turbo')) {
@@ -463,7 +468,6 @@ const TWStateManager = function (WrappedComponent) {
                 this.props.customStageSize !== prevProps.customStageSize ||
                 this.props.runtimeOptions !== prevProps.runtimeOptions ||
                 this.props.compilerOptions !== prevProps.compilerOptions ||
-                this.props.highQualityPen !== prevProps.highQualityPen ||
                 this.props.framerate !== prevProps.framerate ||
                 this.props.interpolation !== prevProps.interpolation ||
                 this.props.turbo !== prevProps.turbo
@@ -498,12 +502,6 @@ const TWStateManager = function (WrappedComponent) {
                     searchParams.set('turbo', '');
                 } else {
                     searchParams.delete('turbo');
-                }
-
-                if (this.props.highQualityPen) {
-                    searchParams.set('hqpen', '');
-                } else {
-                    searchParams.delete('hqpen');
                 }
 
                 if (compilerOptions.enabled) {
