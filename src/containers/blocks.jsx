@@ -52,7 +52,6 @@ import {
 import installObjectBlockDefinitions from '../lib/object-blocks-ui';
 import installPenFXBlockDefinitions from '../lib/pen-fx-ui';
 import {SHADER_MARKER} from '../lib/my-blocks-shader';
-import installCollaborationManager from '../lib/collaboration-manager';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 
 // TW: Strings we add to scratch-blocks are localized here
@@ -183,8 +182,6 @@ class Blocks extends React.Component {
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
         registerMyBlocksShaderCategory(this.ScratchBlocks, this.workspace);
         AddonHooks.blocklyWorkspace = this.workspace;
-        this.collaborationManager = installCollaborationManager(this.props.vm);
-        this.collaborationManager.attachWorkspace(this.workspace, this.ScratchBlocks);
         this.movieAssetManager = installMovieAssetManager(this.props.vm);
         this.movieAssetManager.on('timelineDiagnosticsChanged', this.handleMovieDiagnosticsChanged);
         this.movieAssetManager.on('focusMovieBlock', this.handleMovieBlockFocus);
@@ -310,9 +307,6 @@ class Blocks extends React.Component {
     componentWillUnmount () {
         this.detachVM();
         this.unmounted = true;
-        if (this.collaborationManager && this.collaborationManager.workspace === this.workspace) {
-            this.collaborationManager.detachWorkspace();
-        }
         if (this.movieAssetManager) {
             this.movieAssetManager.removeListener('timelineDiagnosticsChanged', this.handleMovieDiagnosticsChanged);
             this.movieAssetManager.removeListener('focusMovieBlock', this.handleMovieBlockFocus);

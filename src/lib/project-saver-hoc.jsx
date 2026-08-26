@@ -66,7 +66,13 @@ const ProjectSaverHOC = function (WrappedComponent) {
             this.props.onSetProjectThumbnailer(this.getProjectThumbnail);
             this.props.onSetProjectSaver(this.tryToAutoSave);
         }
+        componentDidMount () {
+            this.setDesktopDirty(this.props.projectChanged);
+        }
         componentDidUpdate (prevProps) {
+            if (this.props.projectChanged !== prevProps.projectChanged) {
+                this.setDesktopDirty(this.props.projectChanged);
+            }
             if (!this.props.isAnyCreatingNewState && prevProps.isAnyCreatingNewState) {
                 this.reportTelemetryEvent('projectWasCreated');
             }
@@ -122,6 +128,12 @@ const ProjectSaverHOC = function (WrappedComponent) {
             // Remove project thumbnailer function since the components are unmounting
             this.props.onSetProjectThumbnailer(null);
             this.props.onSetProjectSaver(null);
+        }
+        setDesktopDirty (dirty) {
+            if (typeof window !== 'undefined' && window.shadingDesktop &&
+                typeof window.shadingDesktop.setDirty === 'function') {
+                window.shadingDesktop.setDirty(Boolean(dirty));
+            }
         }
         leavePageConfirm (e) {
             if (this.props.projectChanged) {

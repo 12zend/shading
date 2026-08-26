@@ -6,6 +6,22 @@ See https://docs.turbowarp.org/development/getting-started to setup the complete
 
 If you just want to play with the GUI then it's the same process as upstream scratch-gui.
 
+## Shading Desktop
+
+The desktop app lives in this repository and uses the same `build` output as the web app. Electron serves that output from a stable localhost origin, so browser project files, IndexedDB data, and project formats remain compatible. Collaborative editing is not enabled in either app.
+
+```bash
+npm ci
+npm run build:desktop
+npm run electron:start
+```
+
+For development, `npm run electron:dev` starts webpack-dev-server and Electron together.
+
+Create a platform package with `npm run package:desktop`. The result is written to `release/` (`.dmg` and `.zip` on macOS, with the platform's native targets on Windows or Linux). Use `npm run package:desktop:dir` when an unpacked app directory is preferred.
+
+Project files can be opened by selecting them in the app, passing them as command-line arguments, or opening them through the operating system's file association. Saves use a temporary file followed by an atomic replacement, and the app asks before closing a dirty project.
+
 ## License
 
 TurboWarp's modifications to Scratch are licensed under the GNU General Public License v3.0. See LICENSE or https://www.gnu.org/licenses/ for details.

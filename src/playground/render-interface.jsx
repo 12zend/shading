@@ -23,6 +23,7 @@ import '../lib/tw-fix-history-api';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
 import {getIsLoading} from '../reducers/project-state.js';
+import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
 import GUI from './render-gui.jsx';
 import {loadServiceWorker} from './load-service-worker';
 import runAddons from '../addons/entry';
@@ -30,6 +31,25 @@ import runAddons from '../addons/entry';
 import styles from './interface.css';
 
 const isInvalidEmbed = window.parent !== window;
+const desktopBridge = window.shadingDesktop || null;
+
+// Set this before the first render. Menu items use this value while the GUI's
+// component tree is mounting, so waiting for componentDidMount briefly exposes
+// the browser-only download action in a desktop window.
+setIsScratchDesktop(Boolean(desktopBridge));
+
+const desktopProps = desktopBridge ? {
+    // Desktop projects are saved locally. Keeping these server permissions off
+    // prevents the web auto-save HOC from trying to create a remote project.
+    canCreateNew: false,
+    canEditTitle: true,
+    canSave: false,
+    isScratchDesktop: true,
+    onClickAbout: desktopBridge.showAbout,
+    onClickNewWindow: desktopBridge.newWindow,
+    showOpenFilePicker: desktopBridge.showOpenFilePicker,
+    showSaveFilePicker: desktopBridge.showSaveFilePicker
+} : {};
 
 const handleClickAddonSettings = addonId => {
     const path = process.env.ROUTING_STYLE === 'wildcard' ? 'addons' : 'addons.html';
@@ -98,6 +118,7 @@ class Interface extends React.Component {
                         onClickAddonSettings={handleClickAddonSettings}
                         onUpdateProjectTitle={this.handleUpdateProjectTitle}
                         {...props}
+                        {...desktopProps}
                     />
                 </div>
             </div>

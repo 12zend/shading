@@ -1,4 +1,14 @@
 export default (filename, blob) => {
+    if (typeof window !== 'undefined' && window.shadingDesktop &&
+        typeof window.shadingDesktop.saveBlob === 'function') {
+        return Promise.resolve(window.shadingDesktop.saveBlob(filename, blob))
+            .catch(error => {
+                if (!error || error.name !== 'AbortError') {
+                    // eslint-disable-next-line no-console
+                    console.error('Could not save file:', error);
+                }
+            });
+    }
     const downloadLink = document.createElement('a');
     document.body.appendChild(downloadLink);
 

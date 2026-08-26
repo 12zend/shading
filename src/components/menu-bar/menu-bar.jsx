@@ -229,9 +229,17 @@ class MenuBar extends React.Component {
     }
     componentDidMount () {
         document.addEventListener('keydown', this.handleKeyPress);
+        if (typeof window !== 'undefined' && window.shadingDesktop &&
+            typeof window.shadingDesktop.onSaveRequest === 'function') {
+            this.removeDesktopSaveListener = window.shadingDesktop.onSaveRequest(() => {
+                if (this.props.handleSaveProject) return this.props.handleSaveProject();
+                return;
+            });
+        }
     }
     componentWillUnmount () {
         document.removeEventListener('keydown', this.handleKeyPress);
+        if (this.removeDesktopSaveListener) this.removeDesktopSaveListener();
     }
     handleClickNew () {
         // if the project is dirty, and user owns the project, we will autosave.

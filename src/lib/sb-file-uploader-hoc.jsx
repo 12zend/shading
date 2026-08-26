@@ -43,6 +43,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             bindAll(this, [
                 'createFileObjects',
                 'getProjectTitleFromFilename',
+                'handleDesktopFileOpen',
                 'handleFinishedLoadingUpload',
                 'handleStartSelectingFileUpload',
                 'handleChange',
@@ -52,13 +53,33 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             // tw: We have multiple instances of this HOC alive at a time. This flag fixes issues that arise from that.
             this.expectingFileUploadFinish = false;
         }
+        componentDidMount () {
+            if (typeof window !== 'undefined' && window.shadingDesktop &&
+                typeof window.shadingDesktop.onOpenFile === 'function') {
+                this.removeDesktopOpenListener = window.shadingDesktop.onOpenFile(this.handleDesktopFileOpen);
+            }
+        }
         componentDidUpdate (prevProps) {
             if (this.props.isLoadingUpload && !prevProps.isLoadingUpload && this.expectingFileUploadFinish) {
                 this.handleFinishedLoadingUpload(); // cue step 5 below
             }
         }
         componentWillUnmount () {
+            if (this.removeDesktopOpenListener) this.removeDesktopOpenListener();
             this.removeFileObjects();
+        }
+        handleDesktopFileOpen (record) {
+            if (!record || !record.file) return;
+            this.removeFileObjects();
+            this.expectingFileUploadFinish = true;
+            this.fileReader = new FileReader();
+            this.fileReader.onload = this.onload;
+            this.handleChange({
+                target: {
+                    files: [record.file],
+                    handle: record.handle
+                }
+            });
         }
         // step 1: this is where the upload process begins
         handleStartSelectingFileUpload () {

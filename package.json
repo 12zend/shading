@@ -16,6 +16,11 @@
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
     "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc",
+    "build:desktop": "node scripts/build-desktop.js",
+    "electron:start": "electron electron/main.js",
+    "electron:dev": "electron electron/main.js --dev",
+    "package:desktop": "npm run build:desktop && electron-builder --publish never",
+    "package:desktop:dir": "npm run build:desktop && electron-builder --dir --publish never",
     "prepublish": "node scripts/prepublish.mjs",
     "prune": "./prune-gh-pages.sh",
     "i18n:push": "tx-push-src scratch-editor interface translations/en.json",
@@ -111,6 +116,7 @@
   "devDependencies": {
     "@babel/cli": "^7.26.4",
     "@babel/core": "^7.26.9",
+    "@babel/eslint-parser": "^7.27.5",
     "@babel/plugin-proposal-object-rest-spread": "7.14.7",
     "@babel/plugin-syntax-dynamic-import": "7.2.0",
     "@babel/plugin-transform-async-to-generator": "7.14.5",
@@ -122,6 +128,8 @@
     "chromedriver": "117.0.3",
     "enzyme": "3.10.0",
     "enzyme-adapter-react-16": "1.15.7",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
     "eslint": "8.55.0",
     "eslint-config-scratch": "9.0.3",
     "eslint-import-resolver-webpack": "0.11.1",
@@ -147,6 +155,42 @@
     "webpack-dev-server": "3.11.2",
     "wrangler": "4.121.0",
     "yauzl": "2.10.0"
+  },
+  "build": {
+    "appId": "app.shading.desktop",
+    "productName": "Shading",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "fileAssociations": [
+      {"ext": "shade", "name": "Shading Project", "role": "Editor"},
+      {"ext": "mb3", "name": "Movie Project", "role": "Editor"},
+      {"ext": "sb3", "name": "Scratch Project", "role": "Editor"},
+      {"ext": "sb2", "name": "Scratch 2 Project", "role": "Editor"},
+      {"ext": "sb", "name": "Scratch Project", "role": "Editor"}
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "linux": {
+      "category": "Education",
+      "target": ["AppImage", "deb"]
+    }
   },
   "jest": {
     "setupFiles": [

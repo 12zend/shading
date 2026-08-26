@@ -4,7 +4,6 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
-import installCollaborationManager from '../../lib/collaboration-manager';
 import {evaluateTimeScopes} from '../../lib/object-animation';
 
 import {GearIcon, PauseIcon, PlayIcon, ZoomInIcon, ZoomOutIcon} from './icons.jsx';
@@ -51,7 +50,6 @@ class Timeline extends React.Component {
             diagnostics: {ranges: [], warnings: []},
             exporting: false,
             exportError: '',
-            markers: [],
             pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
             scrollLeft: 0,
             selectedKeyframeTime: null,
@@ -72,7 +70,6 @@ class Timeline extends React.Component {
         this.handleTimelineChanged = this.handleTimelineChanged.bind(this);
         this.handleRenderingFramesChanged = this.handleRenderingFramesChanged.bind(this);
         this.handleTimelineDiagnosticsChanged = this.handleTimelineDiagnosticsChanged.bind(this);
-        this.handleCollaborationChanged = this.handleCollaborationChanged.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handlePlayPause = this.handlePlayPause.bind(this);
         this.handleStepFrame = this.handleStepFrame.bind(this);
@@ -81,7 +78,6 @@ class Timeline extends React.Component {
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
         this.handleExport = this.handleExport.bind(this);
-        this.handleMarkerClick = this.handleMarkerClick.bind(this);
         this.handleMarkerMouseDown = this.handleMarkerMouseDown.bind(this);
         this.handleAddKeyframe = this.handleAddKeyframe.bind(this);
         this.handleDeleteKeyframe = this.handleDeleteKeyframe.bind(this);
@@ -104,8 +100,6 @@ class Timeline extends React.Component {
         this.manager.on('timelineChanged', this.handleTimelineChanged);
         this.manager.on('renderingFramesChanged', this.handleRenderingFramesChanged);
         this.manager.on('timelineDiagnosticsChanged', this.handleTimelineDiagnosticsChanged);
-        this.collaborationManager = installCollaborationManager(this.props.vm);
-        this.collaborationManager.on('stateChanged', this.handleCollaborationChanged);
         document.addEventListener('keydown', this.handleKeyDown);
         if (typeof ResizeObserver === 'function') {
             this.resizeObserver = new ResizeObserver(this.measureTimelineViewport);
@@ -116,7 +110,6 @@ class Timeline extends React.Component {
         this.measureTimelineViewport();
         this.handleTimelineChanged(this.manager.getTimelineState());
         this.handleTimelineDiagnosticsChanged(this.manager.getTimelineDiagnostics(true));
-        this.handleCollaborationChanged(this.collaborationManager.getState());
     }
 
     componentDidUpdate (prevProps, prevState) {
@@ -132,9 +125,6 @@ class Timeline extends React.Component {
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
         this.manager.removeListener('timelineDiagnosticsChanged', this.handleTimelineDiagnosticsChanged);
-        if (this.collaborationManager) {
-            this.collaborationManager.removeListener('stateChanged', this.handleCollaborationChanged);
-        }
         document.removeEventListener('keydown', this.handleKeyDown);
         document.removeEventListener('mousemove', this.handleScrubMove);
         document.removeEventListener('mouseup', this.handleScrubEnd);
@@ -173,13 +163,6 @@ class Timeline extends React.Component {
         this.setState({
             diagnostics: diagnostics || {ranges: [], warnings: []}
         });
-    }
-
-    handleCollaborationChanged (collaborationState) {
-        const markers = (collaborationState.entries || []).filter(entry => (
-            !entry.deleted && entry.seconds !== null && Number.isFinite(Number(entry.seconds))
-        ));
-        this.setState({markers});
     }
 
     handleKeyDown (event) {
@@ -276,14 +259,6 @@ class Timeline extends React.Component {
         document.removeEventListener('mouseup', this.handleScrubEnd);
     }
 
-    handleMarkerClick (event) {
-        this.manager.seekTimeline(Number(event.currentTarget.value));
-    }
-
-    handleMarkerMouseDown (event) {
-        event.stopPropagation();
-    }
-
     handleAddKeyframe () {
         const time = this.state.timeline.currentTime;
         this.manager.addTimelineKeyframe(time);
@@ -318,6 +293,10 @@ class Timeline extends React.Component {
     handleWarningClick (event) {
         const warning = this.state.diagnostics.warnings[Number(event.currentTarget.value)];
         if (warning) this.manager.emit('focusMovieBlock', warning);
+    }
+
+    handleMarkerMouseDown (event) {
+        event.stopPropagation();
     }
 
     handleScroll (event) {
@@ -637,7 +616,6 @@ class Timeline extends React.Component {
 
     render () {
         const timeline = this.state.timeline;
-        const frame = Math.round(timeline.currentTime * timeline.framerate);
         const timelineWidth = Math.max(
             timeline.duration * this.state.pixelsPerSecond,
             Math.max(1, this.state.viewportWidth - 2)
@@ -838,27 +816,6 @@ class Timeline extends React.Component {
                                     className={styles.elapsedRange}
                                     style={{width: `${timeline.currentTime * this.state.pixelsPerSecond}px`}}
                                 />
-                            </div>
-                            <div className={styles.markers}>
-                                {this.state.markers.map(marker => {
-                                    const markerKind = marker.kind === 'note' ? 'メモ' : 'チャット';
-                                    const markerLabel =
-                                        `${marker.authorName}の${markerKind}、${formatTime(marker.seconds)}`;
-                                    const markerTitle = `${marker.authorName}: ${marker.text}`;
-                                    return (
-                                        <button
-                                            aria-label={markerLabel}
-                                            className={classNames(styles.marker, styles[marker.kind])}
-                                            key={marker.id}
-                                            style={{left: `${marker.seconds * this.state.pixelsPerSecond}px`}}
-                                            title={markerTitle}
-                                            type="button"
-                                            value={marker.seconds}
-                                            onClick={this.handleMarkerClick}
-                                            onMouseDown={this.handleMarkerMouseDown}
-                                        ><span /></button>
-                                    );
-                                })}
                             </div>
                             <div
                                 aria-hidden="true"
