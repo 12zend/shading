@@ -29,7 +29,8 @@ const createPenFXEngine = (gl, renderer) => {
             this.renderer = renderer;
             // Keep imported program sources scoped to this VM/renderer. The built-in
             // source table is shared by the module and must remain immutable.
-            this.programSources = Object.assign({}, programSources);
+            this.baseProgramSources = Object.assign({}, programSources);
+            this.programSources = Object.assign({}, this.baseProgramSources);
             this.programs = Object.create(null);
             this.vertexShader = this._compileShader(gl.VERTEX_SHADER, vertex);
             this.quad = gl.createBuffer();
@@ -50,6 +51,7 @@ const createPenFXEngine = (gl, renderer) => {
             this.blendOpacity = 1;
             this.uniformCache = new WeakMap();
             this.positionCache = new WeakMap();
+            this.programOverrides = null;
             this.pixelSortSource = null;
             this.pixelSortOutput = null;
             this.pixelSortKeys = null;
@@ -114,16 +116,31 @@ const createPenFXEngine = (gl, renderer) => {
             const existingProgram = this.programs[key];
             if (existingProgram) gl.deleteProgram(existingProgram);
             delete this.programs[key];
-            delete this.programSources[key];
+            if (Object.prototype.hasOwnProperty.call(this.baseProgramSources, key)) {
+                this.programSources[key] = this.baseProgramSources[key];
+            } else {
+                delete this.programSources[key];
+            }
         }
 
         _program (name) {
+            if (this.programOverrides && this.programOverrides[name]) name = this.programOverrides[name];
             let program = this.programs[name];
             if (!program) {
                 program = this._createProgram(this.programSources[name]);
                 this.programs[name] = program;
             }
             return program;
+        }
+
+        withProgramOverrides (overrides, callback) {
+            const previous = this.programOverrides;
+            this.programOverrides = overrides;
+            try {
+                return callback();
+            } finally {
+                this.programOverrides = previous;
+            }
         }
 
         _penSkin () {

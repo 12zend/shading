@@ -1,4 +1,6 @@
 import JSZip from '@turbowarp/jszip';
+import fs from 'fs';
+import path from 'path';
 import VM from 'scratch-vm';
 
 import installPenFX from '../../../src/lib/pen-fx';
@@ -6,11 +8,14 @@ import {
     CUSTOM_SHADER_FORMAT,
     CUSTOM_SHADER_PROJECT_KEY,
     CUSTOM_SHADER_VERSION,
+    DEFAULT_SHADER_PACKAGE_ID,
     PenFXCustomShaderManager,
+    createDefaultPackageShell,
     normalizePackage,
     opcodeFor,
     parseShaderZip
 } from '../../../src/lib/pen-fx/custom-shaders';
+import {programSources} from '../../../src/lib/pen-fx/shaders';
 
 const fragmentSource = `
 precision highp float;
@@ -55,6 +60,11 @@ const makeManifestZip = async () => {
 };
 
 describe('Pen FX custom shader packages', () => {
+    const defaultPackagePath = path.resolve(
+        __dirname,
+        '../../../src/lib/pen-fx/default-shader-package/penfx-builtins.zip'
+    );
+
     test('loads a manifest and its GLSL from a zip', async () => {
         const descriptor = await parseShaderZip(await makeManifestZip(), 'test-pack.zip');
 
@@ -81,6 +91,101 @@ describe('Pen FX custom shader packages', () => {
         expect(descriptor.name).toBe('quick effects');
         expect(descriptor.blocks.map(block => block.name)).toEqual(['soft glow', 'color shift']);
         expect(descriptor.blocks.every(block => block.inputs.length === 0)).toBe(true);
+    });
+
+    test('ships every built-in PenFX block and fragment program in the default zip', async () => {
+        const descriptor = await parseShaderZip(fs.readFileSync(defaultPackagePath), 'penfx-builtins.zip');
+
+        expect(descriptor.id).toBe(DEFAULT_SHADER_PACKAGE_ID);
+        expect(descriptor.blocks).toHaveLength(59);
+        expect(descriptor.programs).toHaveLength(Object.keys(programSources).length);
+        expect(descriptor.blocks.map(block => block.opcode)).toEqual(expect.arrayContaining([
+            'contrast',
+            'depthOfField',
+            'pixelSort',
+            'displacementMap',
+            'bufferStackSize'
+        ]));
+        for (const program of descriptor.programs) {
+            expect(program.source).toBe(programSources[program.bind].trim());
+        }
+    });
+
+    test('loads the default zip without making extension installation wait', async () => {
+        const shell = createDefaultPackageShell();
+        const runWithoutWaiting = jest.fn();
+        const engine = {
+            registerCustomShader: jest.fn(),
+            unregisterCustomShader: jest.fn(),
+            validateCustomShader: jest.fn()
+        };
+        const penFX = {_getEngine: () => engine};
+        for (const block of shell.blocks) penFX[block.implementation.opcode] = jest.fn();
+        const vm = {runtime: {movieAssetManager: {runWithoutWaiting}}};
+
+        const manager = new PenFXCustomShaderManager(vm, penFX, {
+            loadDefaultPackage: true,
+            defaultPackageData: fs.readFileSync(defaultPackagePath)
+        });
+
+        expect(runWithoutWaiting).toHaveBeenCalledWith(manager.defaultPackagePromise);
+        await manager.defaultPackagePromise;
+        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(26);
+        expect(engine.validateCustomShader).toHaveBeenCalledTimes(26);
+    });
+
+    test('all default command delegates return undefined in the current VM tick', () => {
+        const vm = new VM();
+        vm.runtime.renderer = {};
+        installPenFX(vm);
+        const penFX = vm.runtime.penFX;
+        const engineMethod = jest.fn();
+        penFX.engine = new Proxy({blendOpacity: 1, _restoreGLState: jest.fn()}, {
+            get: (target, property) => property in target ? target[property] : engineMethod
+        });
+        const commandBlocks = penFX.getInfo().blocks.filter(block => block && block.blockType === 'command');
+
+        for (const block of commandBlocks) {
+            const args = {};
+            for (const id of Object.keys(block.arguments || {})) args[id] = block.arguments[id].defaultValue;
+            const result = vm.runtime._primitives[`penfx_${block.opcode}`](args, {target: {}});
+            expect(result).toBeUndefined();
+            expect(result).not.toBeInstanceOf(Promise);
+        }
+        expect(commandBlocks).toHaveLength(58);
+    });
+
+    test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {
+        const withShaderProgramOverrides = jest.fn((overrides, callback) => callback());
+        const contrast = jest.fn();
+        const penFX = {contrast, withShaderProgramOverrides, engine: null};
+        const manager = new PenFXCustomShaderManager({runtime: {}}, penFX);
+        const descriptor = normalizePackage({
+            format: CUSTOM_SHADER_FORMAT,
+            version: 2,
+            id: 'contrast-variant',
+            name: 'Contrast Variant',
+            programs: [{
+                id: 'color',
+                file: 'color.glsl',
+                source: fragmentSource,
+                bind: 'color'
+            }],
+            blocks: [{
+                id: 'contrast',
+                name: 'contrast',
+                text: 'contrast',
+                implementation: {type: 'penfx', opcode: 'contrast'}
+            }]
+        });
+
+        await manager.restorePackages([JSON.parse(JSON.stringify(descriptor))]);
+        penFX[opcodeFor('contrast-variant', 'contrast')]({}, {});
+
+        expect(contrast).toHaveBeenCalledTimes(1);
+        expect(withShaderProgramOverrides).toHaveBeenCalledWith({
+            color: 'custom:contrast-variant:program:color'
+        }, expect.any(Function));
     });
 
     test('rejects manifest inputs which target standard uniforms', () => {
