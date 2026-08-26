@@ -4,6 +4,7 @@ import ArgumentType from 'scratch-vm/src/extension-support/argument-type';
 import BlockType from 'scratch-vm/src/extension-support/block-type';
 import createPenFXEngine from './engine';
 import installEffects from './effects';
+import PenFXCustomShaderManager from './custom-shaders';
 import {BLEND_MODES, FRACTAL_NOISE_TYPES, FRACTAL_OVERFLOW_TYPES, FRACTAL_TYPES} from './constants';
 import {mixAmount} from './helpers';
 
@@ -20,6 +21,7 @@ const createPenFXClass = vm => {
             this.warned = false;
             this.effectCaptureStack = [];
             vm.runtime.penFX = this;
+            this.customShaders = new PenFXCustomShaderManager(vm, this);
             const movieAssetManager = vm.runtime.movieAssetManager;
             if (movieAssetManager && typeof movieAssetManager.attachPenFrameTransactions === 'function') {
                 movieAssetManager.attachPenFrameTransactions(this);
@@ -33,7 +35,7 @@ const createPenFXClass = vm => {
                 color1: '#6b56d9',
                 color2: '#5945c2',
                 color3: '#46359f',
-                blocks: [
+                blocks: this.customShaders.getToolboxBlocks().concat([
                     {opcode: 'contrast', blockType: BlockType.COMMAND, text: 'contrast value: [VALUE] pivot: [PIVOT] mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, PIVOT: {type: ArgumentType.NUMBER, defaultValue: 0.5}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
                     {opcode: 'brightness', blockType: BlockType.COMMAND, text: 'brightness color: [COLOR] value: [VALUE] mix: [MIX] %', arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#101010'}, VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
                     {opcode: 'gamma', blockType: BlockType.COMMAND, text: 'gamma value: [VALUE] mix: [MIX] %', arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 1}, MIX: {type: ArgumentType.NUMBER, defaultValue: 100}}},
@@ -98,8 +100,8 @@ const createPenFXClass = vm => {
                     {opcode: 'bufferStackSize', blockType: BlockType.REPORTER, text: 'drawing stack samples'},
                     '---',
                     {opcode: 'setBlendMode', blockType: BlockType.COMMAND, text: 'use [TYPE] blending mode opacity: [OPACITY] %', arguments: {TYPE: {type: ArgumentType.STRING, menu: 'blendMode'}, OPACITY: {type: ArgumentType.NUMBER, defaultValue: 100}}}
-                ],
-                menus: {
+                ]),
+                menus: Object.assign({
                     rgbPair: {acceptReporters: true, items: ['RG', 'GB', 'BR']},
                     colorBlindType: {acceptReporters: true, items: ['deuteranopia', 'protanopia', 'tritanopia']},
                     toneMapType: {acceptReporters: true, items: ['clamp', 'aces hill', 'aces', 'reinhard']},
@@ -125,13 +127,20 @@ const createPenFXClass = vm => {
                     mirrorType: {acceptReporters: true, items: ['x', 'y', 'xy']},
                     boolean: {acceptReporters: true, items: ['false', 'true']},
                     blendMode: {acceptReporters: true, items: BLEND_MODES}
-                }
+                }, this.customShaders.getMenus())
             };
         }
 
         _getEngine() {
-            if (!this.engine) this.engine = new PenFXEngine();
+            if (!this.engine) {
+                this.engine = new PenFXEngine();
+                this.customShaders.installIntoEngine(this.engine);
+            }
             return this.engine;
+        }
+
+        importShaderPackage() {
+            this.customShaders.openImportPicker();
         }
 
         _executeSafe(callback, blendMode, blendOpacity) {

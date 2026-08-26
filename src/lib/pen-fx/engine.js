@@ -27,7 +27,9 @@ const createPenFXEngine = (gl, renderer) => {
         constructor () {
             this.gl = gl;
             this.renderer = renderer;
-            this.programSources = programSources;
+            // Keep imported program sources scoped to this VM/renderer. The built-in
+            // source table is shared by the module and must remain immutable.
+            this.programSources = Object.assign({}, programSources);
             this.programs = Object.create(null);
             this.vertexShader = this._compileShader(gl.VERTEX_SHADER, vertex);
             this.quad = gl.createBuffer();
@@ -90,6 +92,29 @@ const createPenFXEngine = (gl, renderer) => {
                 throw new Error(message);
             }
             return program;
+        }
+
+        validateCustomShader (fragmentSource) {
+            const program = this._createProgram(fragmentSource);
+            gl.deleteProgram(program);
+        }
+
+        registerCustomShader (name, fragmentSource) {
+            const key = String(name);
+            const existingProgram = this.programs[key];
+            if (existingProgram) {
+                gl.deleteProgram(existingProgram);
+                delete this.programs[key];
+            }
+            this.programSources[key] = String(fragmentSource);
+        }
+
+        unregisterCustomShader (name) {
+            const key = String(name);
+            const existingProgram = this.programs[key];
+            if (existingProgram) gl.deleteProgram(existingProgram);
+            delete this.programs[key];
+            delete this.programSources[key];
         }
 
         _program (name) {
@@ -667,6 +692,10 @@ const createPenFXEngine = (gl, renderer) => {
                 u_mode: mode,
                 u_resolution: this.resolution
             }, ACEROLA_DEFAULT_UNIFORMS, uniforms), ['u_mode', 'u_type', 'u_type2'].concat(integerUniforms || []), blendMode);
+        }
+
+        customShader (name, uniforms, integerUniforms, blendMode) {
+            this._singlePass(this._program(name), uniforms, integerUniforms || [], blendMode);
         }
     }
 

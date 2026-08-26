@@ -1,0 +1,46 @@
+{
+  "format": "shading.app/penfx-shader",
+  "version": 1,
+  "id": "tint-wave",
+  "name": "Tint Wave",
+  "blocks": [
+    {
+      "id": "tint-wave",
+      "name": "tint wave",
+      "text": "tint wave amount: [AMOUNT] tint: [TINT] mode: [MODE] mix: [MIX] %",
+      "file": "tint-wave.glsl",
+      "inputs": [
+        {
+          "id": "AMOUNT",
+          "label": "amount",
+          "type": "number",
+          "defaultValue": 8,
+          "uniform": "u_amount"
+        },
+        {
+          "id": "TINT",
+          "label": "tint",
+          "type": "color",
+          "defaultValue": "#6b56d9",
+          "uniform": "u_tint"
+        },
+        {
+          "id": "MODE",
+          "label": "mode",
+          "type": "menu",
+          "items": ["soft", "hard"],
+          "defaultValue": "soft",
+          "uniform": "u_mode"
+        },
+        {
+          "id": "MIX",
+          "label": "mix",
+          "type": "number",
+          "defaultValue": 100,
+          "scale": 0.01,
+          "uniform": "u_mix"
+        }
+      ]
+    }
+  ]
+}

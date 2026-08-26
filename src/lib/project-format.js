@@ -216,6 +216,9 @@ const getMovieProjectFeatures = projectJSON => {
     }
     if (projectJSON.movieCamera && typeof projectJSON.movieCamera === 'object') features.add('3d-engine');
     if (projectJSON.movieTimeline && typeof projectJSON.movieTimeline === 'object') features.add('timeline');
+    if (Array.isArray(projectJSON.penFXShaders) && projectJSON.penFXShaders.length > 0) {
+        features.add('pen-fx-shaders');
+    }
 
     const targets = Array.isArray(projectJSON.targets) ? projectJSON.targets : [projectJSON];
     for (const target of targets) {
@@ -271,6 +274,11 @@ const getRuntimeMovieProjectFeatures = runtime => {
                 break;
             }
         }
+    }
+    const penFX = runtime.penFX;
+    if (penFX && penFX.customShaders && penFX.customShaders.packages instanceof Map &&
+        penFX.customShaders.packages.size > 0) {
+        features.add('pen-fx-shaders');
     }
 
     for (const target of runtime.targets || []) {
