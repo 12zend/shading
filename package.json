@@ -182,6 +182,7 @@
     ],
     "mac": {
       "category": "public.app-category.education",
+      "icon": "static/images/512.png",
       "target": ["dmg", "zip"]
     },
     "win": {
