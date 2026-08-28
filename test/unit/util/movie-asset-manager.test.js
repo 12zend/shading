@@ -2538,6 +2538,8 @@ describe('MovieAssetManager rendering performance', () => {
 
         expect(canvas.width).toBe(106);
         expect(canvas.height).toBe(66);
+        expect(context.moveTo).toHaveBeenCalledWith(3, 63);
+        expect(context.lineTo).toHaveBeenCalledWith(103, 3);
         expect(context.stroke).toHaveBeenCalledTimes(1);
         expect(context.lineWidth).toBe(6);
         expect(manager.runtime.graphicEffectsManager.setScale).not.toHaveBeenCalled();

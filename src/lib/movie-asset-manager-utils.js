@@ -261,11 +261,13 @@ const createLineBitmap = configuration => {
     canvas.width = width;
     canvas.height = height;
     const minX = Math.min(toNumber(point1.x), toNumber(point2.x));
-    const minY = Math.min(toNumber(point1.y), toNumber(point2.y));
+    const maxY = Math.max(toNumber(point1.y), toNumber(point2.y));
     context.clearRect(0, 0, width, height);
     context.beginPath();
-    context.moveTo(toNumber(point1.x) - minX + padding, toNumber(point1.y) - minY + padding);
-    context.lineTo(toNumber(point2.x) - minX + padding, toNumber(point2.y) - minY + padding);
+    // Scratch's world coordinates grow upward while a canvas bitmap's pixel coordinates grow downward.
+    // Flip only the local bitmap Y coordinate so the scene transform can keep using Scratch coordinates.
+    context.moveTo(toNumber(point1.x) - minX + padding, maxY - toNumber(point1.y) + padding);
+    context.lineTo(toNumber(point2.x) - minX + padding, maxY - toNumber(point2.y) + padding);
     context.lineWidth = thickness;
     context.strokeStyle = typeof configuration.color === 'string' && configuration.color ?
         configuration.color : '#ffffff';
