@@ -1297,6 +1297,79 @@ describe('Objects blocks', () => {
         expect(runtime.penFX.endGroup).toHaveBeenCalledTimes(1);
     });
 
+    test('preserves custom procedure arguments for draws inside a grouping', () => {
+        const vm = new VM();
+        installObjectBlocks(vm);
+        const runtime = vm.runtime;
+        const stageSprite = new Sprite(null, runtime);
+        stageSprite.name = 'Stage';
+        const stage = new RenderedTarget(stageSprite, runtime);
+        stage.isStage = true;
+        const sprite = new Sprite(null, runtime);
+        sprite.name = 'Sprite';
+        const target = new RenderedTarget(sprite, runtime);
+        runtime.targets = [stage, target];
+        const drawObject = jest.fn();
+        runtime.movieAssetManager = {drawObject, runWithoutWaiting: jest.fn()};
+
+        const createBlock = (id, opcode, properties = {}) => target.blocks.createBlock({
+            fields: {},
+            id,
+            inputs: {},
+            next: null,
+            parent: null,
+            shadow: false,
+            topLevel: false,
+            opcode,
+            ...properties
+        });
+        createBlock('definition', 'procedures_definition', {
+            inputs: {custom_block: {block: 'prototype'}},
+            next: 'grouping',
+            topLevel: true
+        });
+        createBlock('prototype', 'procedures_prototype', {
+            mutation: {
+                argumentdefaults: '[0]',
+                argumentids: '["x"]',
+                argumentnames: '["x"]',
+                proccode: 'paint %s'
+            },
+            parent: 'definition'
+        });
+        createBlock('grouping', 'objects_grouping', {
+            inputs: {
+                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null},
+                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+            },
+            parent: 'definition'
+        });
+        createBlock('draw', 'objects_draw', {
+            inputs: {PX: {name: 'PX', block: 'argument', shadow: null}},
+            parent: 'grouping'
+        });
+        createBlock('argument', 'argument_reporter_string_number', {
+            fields: {VALUE: {name: 'VALUE', value: 'x'}},
+            parent: 'draw'
+        });
+        createBlock('call', 'procedures_call', {
+            inputs: {x: {name: 'x', block: 'value', shadow: null}},
+            mutation: {argumentids: '["x"]', proccode: 'paint %s'},
+            topLevel: true
+        });
+        createBlock('value', 'text', {
+            fields: {TEXT: {name: 'TEXT', value: '10'}},
+            parent: 'call'
+        });
+
+        const thread = runtime._pushThread('call', target);
+        runtime.sequencer.stepThread(thread);
+
+        expect(drawObject).toHaveBeenCalledWith(target, expect.objectContaining({
+            position: expect.objectContaining({x: 10})
+        }));
+    });
+
     test('finishes an asynchronous grouped draw before applying captured effects', async () => {
         let resolveDraw;
         const pendingDraw = new Promise(resolve => {

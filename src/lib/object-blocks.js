@@ -60,6 +60,9 @@ const OBJECT_REPORTER_OPCODES = new Set([
     'objects_instanceSeed'
 ]);
 const REPORTER_STACK_CLICK_GUARD = '__movieObjectReporterStackClickGuard';
+const PROCEDURE_PARAMETER_CONTEXT = '__movieObjectProcedureParameterContext';
+const PROCEDURE_PARAMETER_CONTEXT_WRAPPED = '__movieObjectProcedureParameterContextWrapped';
+const PROCEDURE_PARAMETER_CONTEXT_PATCH = '__movieObjectProcedureParameterContextPatch';
 
 const encodeDrawAsset = (source, asset) => `${source}:${asset}`;
 
@@ -149,6 +152,90 @@ const getObjectInstanceId = util => {
     return [targetId, path || blockId || 'instance'].filter(Boolean).join(':');
 };
 
+const removeProcedureParameterContext = (thread, context) => {
+    const contexts = thread && thread[PROCEDURE_PARAMETER_CONTEXT];
+    if (!Array.isArray(contexts)) return;
+    const index = contexts.lastIndexOf(context);
+    if (index >= 0) contexts.splice(index, 1);
+};
+
+const wrapCompiledProcedure = (thread, procedure, parameterNames) => function (...values) {
+    const context = {names: parameterNames, values};
+    if (!Array.isArray(thread[PROCEDURE_PARAMETER_CONTEXT])) {
+        thread[PROCEDURE_PARAMETER_CONTEXT] = [];
+    }
+    thread[PROCEDURE_PARAMETER_CONTEXT].push(context);
+
+    let result;
+    try {
+        result = procedure(...values);
+    } catch (error) {
+        removeProcedureParameterContext(thread, context);
+        throw error;
+    }
+
+    if (result && typeof result.next === 'function') {
+        return (function* () {
+            try {
+                return yield* result;
+            } finally {
+                removeProcedureParameterContext(thread, context);
+            }
+        }());
+    }
+
+    removeProcedureParameterContext(thread, context);
+    return result;
+};
+
+const getProcedureParameterContext = parentThread => {
+    const compiledContexts = parentThread && parentThread[PROCEDURE_PARAMETER_CONTEXT];
+    if (Array.isArray(compiledContexts) && compiledContexts.length) {
+        const current = compiledContexts[compiledContexts.length - 1];
+        const params = {};
+        current.names.forEach((name, index) => {
+            params[name] = current.values[index];
+        });
+        return params;
+    }
+
+    const stackFrames = parentThread && parentThread.stackFrames;
+    if (!Array.isArray(stackFrames)) return null;
+    for (let index = stackFrames.length - 1; index >= 0; index--) {
+        const frame = stackFrames[index];
+        if (frame && frame.params !== null && typeof frame.params === 'object') {
+            return {...frame.params};
+        }
+    }
+    return null;
+};
+
+const installProcedureParameterContext = () => {
+    if (Thread.prototype[PROCEDURE_PARAMETER_CONTEXT_PATCH] ||
+        typeof Thread.prototype.tryCompile !== 'function') return;
+
+    const originalTryCompile = Thread.prototype.tryCompile;
+    Thread.prototype.tryCompile = function (...args) {
+        const result = originalTryCompile.apply(this, args);
+        if (!this.isCompiled || this[PROCEDURE_PARAMETER_CONTEXT_WRAPPED]) return result;
+
+        this[PROCEDURE_PARAMETER_CONTEXT] = [];
+        const blocks = this.target && this.target.blocks;
+        Object.keys(this.procedures || {}).forEach(procedureVariant => {
+            const procedure = this.procedures[procedureVariant];
+            if (typeof procedure !== 'function') return;
+            const procedureCode = procedureVariant.substring(1);
+            const metadata = blocks && typeof blocks.getProcedureParamNamesIdsAndDefaults === 'function' ?
+                blocks.getProcedureParamNamesIdsAndDefaults(procedureCode) : null;
+            const parameterNames = metadata && Array.isArray(metadata[0]) ? metadata[0].slice() : [];
+            this.procedures[procedureVariant] = wrapCompiledProcedure(this, procedure, parameterNames);
+        });
+        this[PROCEDURE_PARAMETER_CONTEXT_WRAPPED] = true;
+        return result;
+    };
+    Thread.prototype[PROCEDURE_PARAMETER_CONTEXT_PATCH] = true;
+};
+
 const trackPendingDraw = (pendingDraw, util, manager) => {
     if (!pendingDraw || typeof pendingDraw.then !== 'function') return;
     if (!util || !util.thread) {
@@ -181,6 +268,7 @@ const getGroupingContext = util => {
         objectTimeScopes: parentThread && parentThread.objectTimeScopes,
         objectTransformStack: parentThread && parentThread.objectTransformStack,
         parentBlockId,
+        procedureParams: getProcedureParameterContext(parentThread),
         target
     };
 };
@@ -200,6 +288,7 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     branchThread.blockContainer = blocks;
     branchThread.pushStack(branchId);
     branchThread.peekStackFrame().warpMode = true;
+    if (context.procedureParams) branchThread.peekStackFrame().params = {...context.procedureParams};
     if (context.objectInstancePath) branchThread.objectInstancePath = context.objectInstancePath;
     if (context.objectFrameGraphParent) branchThread.objectFrameGraphParent = context.objectFrameGraphParent;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
@@ -1394,6 +1483,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
 const installObjectBlocks = vm => {
     const extensionManager = vm.extensionManager;
+    installProcedureParameterContext();
     installReporterStackClickGuard(vm.runtime);
     if (extensionManager.isExtensionLoaded(EXTENSION_ID)) return vm;
 
