@@ -46,6 +46,7 @@ import installTimerOffset from '../lib/timer-offset';
 import installObjectBlocks from '../lib/object-blocks';
 import installPenFX from '../lib/pen-fx';
 import installMyBlocksShader from '../lib/my-blocks-shader';
+import installListBlocks from '../lib/list-blocks';
 
 import GUIComponent from '../components/gui/gui.jsx';
 import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
@@ -71,6 +72,7 @@ class GUI extends React.Component {
         installGraphicEffectsManager(this.props.vm);
         installMovieEasing(this.props.vm);
         installTimerOffset(this.props.vm);
+        installListBlocks(this.props.vm);
         installMovieAssetManager(this.props.vm);
         installDefaultExtensions(this.props.vm);
         installPenFX(this.props.vm);

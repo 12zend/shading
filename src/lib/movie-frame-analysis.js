@@ -2,6 +2,7 @@ const STATEFUL_RENDER_BLOCKS = {
     control_wait: 'waits for an earlier VM tick',
     control_wait_until: 'waits for state that may have been produced earlier',
     data_addtolist: 'changes a list from its previous value',
+    data_changeitemoflistby: 'changes a list from its previous value',
     data_changevariableby: 'changes a variable from its previous value',
     data_deletealloflist: 'changes a list from its previous value',
     data_deleteoflist: 'changes a list from its previous value',

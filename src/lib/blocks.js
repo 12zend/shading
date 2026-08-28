@@ -2,6 +2,7 @@ import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import installBlockNumberScrubbing from './block-number-scrubbing';
 import installObjectBlockDefinitions from './object-blocks-ui';
 import installPenFXBlockDefinitions from './pen-fx-ui';
+import installListBlocks from './list-blocks';
 
 /**
  * Connect scratch blocks with the vm
@@ -10,6 +11,7 @@ import installPenFXBlockDefinitions from './pen-fx-ui';
  */
 export default function (vm) {
     const ScratchBlocks = LazyScratchBlocks.get();
+    installListBlocks(vm, ScratchBlocks);
     installObjectBlockDefinitions(ScratchBlocks, vm);
     installPenFXBlockDefinitions(ScratchBlocks);
     installBlockNumberScrubbing(ScratchBlocks, () => {
