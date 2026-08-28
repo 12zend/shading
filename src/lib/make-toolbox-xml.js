@@ -745,6 +745,7 @@ const proceduralShapeBlocks = function () {
         <block type="objects_shape">
             <field name="SHAPE">polygon</field>
             ${number('N', 6)}
+            ${number('RATIO', 0.5)}
             ${transform()}
             ${number('INNER', 50)}${number('OUTER', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}

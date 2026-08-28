@@ -13,6 +13,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<block type="objects_draw">');
         expect(toolbox).toContain('<block type="objects_shape">');
         expect(toolbox).toContain('<field name="SHAPE">polygon</field>');
+        expect(toolbox).toContain('<value name="RATIO"><shadow type="math_number"><field name="NUM">0.5</field>');
         expect(toolbox).toContain('<value name="INNER"><shadow type="math_number"><field name="NUM">50</field>');
         expect(toolbox).toContain('<value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field>');
         expect(toolbox).toContain('<value name="OPACITY"><shadow type="math_number"><field name="NUM">100</field>');

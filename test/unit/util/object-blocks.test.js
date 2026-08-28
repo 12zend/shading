@@ -88,6 +88,69 @@ describe('Objects blocks', () => {
         });
     });
 
+    test('shows the shape ratio input only for star and flower', () => {
+        const ScratchBlocks = {
+            Blocks: {},
+            FieldDropdown: class {}
+        };
+        installObjectBlockDefinitions(ScratchBlocks, {runtime: {}});
+        const definition = ScratchBlocks.Blocks.objects_shape;
+        const makeBlock = initialShape => {
+            let shape = initialShape;
+            const inputs = {};
+            const field = {setValue: jest.fn(value => {
+                shape = value;
+            })};
+            const makeInput = () => {
+                const input = {
+                    connection: null,
+                    setVisible: jest.fn(() => []),
+                    appendField: jest.fn(() => input)
+                };
+                return input;
+            };
+            const block = {
+                appendDummyInput: jest.fn(name => {
+                    const input = makeInput();
+                    inputs[name] = input;
+                    return input;
+                }),
+                appendValueInput: jest.fn(name => {
+                    const input = makeInput();
+                    inputs[name] = input;
+                    return input;
+                }),
+                getField: jest.fn(name => name === 'SHAPE' ? field : null),
+                getFieldValue: jest.fn(name => name === 'SHAPE' ? shape : ''),
+                getInput: name => inputs[name],
+                rendered: false,
+                setColour: jest.fn(),
+                setInputsInline: jest.fn(),
+                setNextStatement: jest.fn(),
+                setOnChange: jest.fn(handler => {
+                    block.onChange = handler;
+                }),
+                setOutputShape: jest.fn(),
+                setPreviousStatement: jest.fn()
+            };
+            definition.init.call(block);
+            return {block, ratioInput: inputs.RATIO};
+        };
+
+        const polygon = makeBlock('polygon');
+        expect(polygon.ratioInput.setVisible).toHaveBeenLastCalledWith(false);
+
+        const star = makeBlock('star');
+        expect(star.ratioInput.setVisible).toHaveBeenLastCalledWith(true);
+
+        const changing = makeBlock('polygon');
+        changing.block.onChange();
+        expect(changing.ratioInput.setVisible).toHaveBeenLastCalledWith(false);
+        changing.block.getFieldValue.mockImplementation(name => name === 'SHAPE' ? 'flower' : '');
+        changing.block.onChange();
+        expect(changing.ratioInput.setVisible).toHaveBeenLastCalledWith(true);
+    });
+
     test('persists and restores the dynamic text input for duplicated and shared font draw blocks', () => {
         const originalDocument = global.document;
         global.document = {
@@ -438,6 +501,7 @@ describe('Objects blocks', () => {
         ]);
         expect(Object.keys(info.blocks[1].arguments)).toEqual([
             'SHAPE', 'N',
+            'RATIO',
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
@@ -446,6 +510,8 @@ describe('Objects blocks', () => {
             'T1', 'T2'
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
+        expect(info.blocks[1].arguments.RATIO.defaultValue).toBe(0.5);
+        expect(info.blocks[1].text).toContain('ratio: [RATIO]');
         expect(info.menus.blendMode.items).toEqual(BLEND_MODES);
         expect(info.menus.easing.items).toEqual(ANIMATION_EASING_TYPES);
         expect(info.menus.matteMode.items).toEqual(MATTE_MODES);
@@ -921,6 +987,7 @@ describe('Objects blocks', () => {
             RY: 2,
             RZ: 3,
             SHAPE: 'star',
+            RATIO: 0.35,
             SX: 2,
             SY: 3,
             SZ: 4,
@@ -934,6 +1001,7 @@ describe('Objects blocks', () => {
         expect(manager.drawShape).toHaveBeenCalledWith(util.target, {
             height: 80,
             n: 5,
+            ratio: 0.35,
             playbackId: 'draw-block',
             position: {x: 10, y: 20, z: 30},
             radius: {inner: 25, outer: 50},

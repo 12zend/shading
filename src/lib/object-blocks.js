@@ -417,13 +417,14 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'shape',
                     blockType: BlockType.COMMAND,
-                    text: 'shape [SHAPE] n: [N] position x: [PX] y: [PY] z: [PZ] ' +
+                    text: 'shape [SHAPE] n: [N] ratio: [RATIO] position x: [PX] y: [PY] z: [PZ] ' +
                         'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
                         'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2]\n' +
                         'color: [COLOR] opacity: [OPACITY] %',
                     arguments: {
                         SHAPE: {type: ArgumentType.STRING, menu: 'shapeType', defaultValue: 'polygon'},
                         N: numberArgument(6),
+                        RATIO: numberArgument(0.5),
                         PX: numberArgument(0),
                         PY: numberArgument(0),
                         PZ: numberArgument(480),
@@ -942,6 +943,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const context = applyThreadComposition({
             height: args.HEIGHT,
             n: args.N,
+            ratio: args.RATIO,
             playbackId: getObjectPlaybackId(util),
             position: {x: args.PX, y: args.PY, z: args.PZ},
             radius: {inner: args.INNER, outer: args.OUTER},

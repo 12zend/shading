@@ -1287,6 +1287,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                     'SHAPE'
                 );
             this.appendValueInput('N').appendField('n:');
+            this.appendValueInput('RATIO').appendField('ratio:');
             const position = this.appendValueInput('PX').appendField('position x:');
             position.objectStartRow_ = true;
             this.appendValueInput('PY').appendField('y:');
@@ -1329,7 +1330,26 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
                     const value = normalizeShapeType(block.getFieldValue('SHAPE'));
                     if (value !== block.getFieldValue('SHAPE')) field.setValue(value);
                 }
+                block.syncShapeOptionalInputs_();
             });
+            this.syncShapeOptionalInputs_();
+        },
+        syncShapeOptionalInputs_: function () {
+            const input = this.getInput('RATIO');
+            if (!input) return;
+            const shape = normalizeShapeType(this.getFieldValue('SHAPE'));
+            const visible = shape === 'star' || shape === 'flower';
+            const renderList = input.setVisible(visible);
+            if (!visible && input.connection) {
+                input.connection.hideAll();
+                const childBlock = input.connection.targetBlock();
+                if (childBlock && childBlock.getSvgRoot()) {
+                    childBlock.getSvgRoot().style.display = 'none';
+                    childBlock.rendered = false;
+                }
+            } else if (visible && this.rendered && renderList) {
+                for (const block of renderList) block.render();
+            }
         }
     };
 

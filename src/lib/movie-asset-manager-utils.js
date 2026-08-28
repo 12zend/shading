@@ -188,6 +188,7 @@ const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'l
 const MAX_SHAPE_SIZE = 4096;
 const MAX_SHAPE_BITMAP_PIXELS = 1024 * 1024;
 const SHAPE_RADIUS_SCALE = 0.5;
+const DEFAULT_SHAPE_RATIO = 0.5;
 const MAX_CACHED_SHAPE_SKINS = 256;
 const MAX_CACHED_SHAPE_SKIN_PIXELS = 4096 * 4096;
 
@@ -195,6 +196,8 @@ const normalizeShapeType = value => {
     const shape = String(value || '').toLowerCase();
     return PROCEDURAL_SHAPE_TYPES.includes(shape) ? shape : SHAPE_TYPES[0];
 };
+
+const normalizeShapeRatio = value => clamp(toNumber(value, DEFAULT_SHAPE_RATIO), 0, 1);
 
 const getShapeBitmapCacheKey = configuration => {
     const shape = normalizeShapeType(configuration.shape);
@@ -228,6 +231,7 @@ const getShapeBitmapCacheKey = configuration => {
             shape === 'circular segment' ? 0 : outerRadius * 0.5
         )))
     );
+    const ratio = shape === 'star' || shape === 'flower' ? normalizeShapeRatio(configuration.ratio) : null;
     const angle = configuration.angle || {};
     return JSON.stringify([
         shape,
@@ -236,6 +240,7 @@ const getShapeBitmapCacheKey = configuration => {
         Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6))))),
         outerRadius,
         innerRadius,
+        ratio,
         shape === 'arc' || shape === 'circular segment' ? toNumber(angle.start, 0) : 0,
         shape === 'arc' || shape === 'circular segment' ? toNumber(angle.end, 360) : 360,
         color,
@@ -305,6 +310,7 @@ const createShapeBitmap = configuration => {
             shape === 'circular segment' ? 0 : outerRadius * 0.5
         )))
     );
+    const ratio = shape === 'star' || shape === 'flower' ? normalizeShapeRatio(configuration.ratio) : null;
     // Keep radius in the same coordinate system as the block's default 100px outer radius. The bitmap grows
     // when a larger radius is requested instead of normalizing every shape back to the requested dimensions.
     const scale = SHAPE_RADIUS_SCALE;
@@ -317,30 +323,33 @@ const createShapeBitmap = configuration => {
     // of each axis also keeps thin shapes sharp without allocating unnecessary pixels.
     const bitmapScale = Math.min(
         1,
-        Math.sqrt(MAX_SHAPE_BITMAP_PIXELS / (logicalBitmapWidth * logicalBitmapHeight))
+        Math.sqrt(MAX_SHAPE_BITMAP_PIXELS / (
+            logicalBitmapWidth * logicalBitmapHeight * BITMAP_RESOLUTION * BITMAP_RESOLUTION
+        ))
     );
-    const width = Math.max(2, Math.round(logicalBitmapWidth * bitmapScale));
-    const height = Math.max(2, Math.round(logicalBitmapHeight * bitmapScale));
+    const bitmapResolution = BITMAP_RESOLUTION * bitmapScale;
+    const width = Math.max(2, Math.round(logicalBitmapWidth * bitmapResolution));
+    const height = Math.max(2, Math.round(logicalBitmapHeight * bitmapResolution));
     canvas.width = width;
     canvas.height = height;
-    canvas.movieBitmapResolution = BITMAP_RESOLUTION * bitmapScale;
+    canvas.movieBitmapResolution = bitmapResolution;
     const centerX = width / 2;
     const centerY = height / 2;
     const sides = Math.min(128, Math.max(2, Math.round(Math.abs(toNumber(configuration.n, 6)))));
     const pointCount = shape === 'polygon' ? sides : shape === 'flower' ? Math.max(24, sides * 12) : sides * 2;
 
-    const radiusAt = angle => {
-        if (shape === 'polygon') return outerRadius;
-        if (shape === 'star') return angle % 2 === 0 ? outerRadius : innerRadius;
+    const radiusAt = (radiusValue, angle) => {
+        if (shape === 'polygon') return radiusValue;
+        if (shape === 'star') return angle % 2 === 0 ? radiusValue : radiusValue * ratio;
         const petal = (Math.cos((angle / pointCount) * sides * Math.PI * 2) + 1) / 2;
-        return innerRadius + ((outerRadius - innerRadius) * Math.pow(petal, 0.45));
+        return radiusValue * (ratio + ((1 - ratio) * Math.pow(petal, 0.45)));
     };
 
     const drawPath = (count, distanceAt, reverse = false) => {
         for (let index = 0; index < count; index++) {
             const pathIndex = reverse ? count - index - 1 : index;
             const angle = (-Math.PI / 2) + ((pathIndex / count) * Math.PI * 2);
-            const distance = distanceAt(pathIndex) * scale * bitmapScale;
+            const distance = distanceAt(pathIndex) * scale * bitmapResolution;
             const x = centerX + (Math.cos(angle) * distance);
             const y = centerY + (Math.sin(angle) * distance);
             if (index === 0) context.moveTo(x, y);
@@ -357,18 +366,18 @@ const createShapeBitmap = configuration => {
         const end = (toNumber(angle.end, 360) - 90) * Math.PI / 180;
         // Keep the endpoints unwrapped so their order describes the sweep direction.
         const anticlockwise = end < start;
-        const outerStartX = centerX + (Math.cos(start) * outerRadius * scale * bitmapScale);
-        const outerStartY = centerY + (Math.sin(start) * outerRadius * scale * bitmapScale);
+        const outerStartX = centerX + (Math.cos(start) * outerRadius * scale * bitmapResolution);
+        const outerStartY = centerY + (Math.sin(start) * outerRadius * scale * bitmapResolution);
         context.moveTo(outerStartX, outerStartY);
-        context.arc(centerX, centerY, outerRadius * scale * bitmapScale, start, end, anticlockwise);
+        context.arc(centerX, centerY, outerRadius * scale * bitmapResolution, start, end, anticlockwise);
         if (shape === 'arc' && innerRadius > 0) {
-            context.arc(centerX, centerY, innerRadius * scale * bitmapScale, end, start, !anticlockwise);
+            context.arc(centerX, centerY, innerRadius * scale * bitmapResolution, end, start, !anticlockwise);
         } else {
             context.lineTo(outerStartX, outerStartY);
         }
     } else {
-        drawPath(pointCount, radiusAt);
-        if (innerRadius > 0) drawPath(sides, () => innerRadius, true);
+        drawPath(pointCount, angle => radiusAt(outerRadius, angle));
+        if (innerRadius > 0) drawPath(pointCount, angle => radiusAt(innerRadius, angle), true);
     }
     context.fillStyle = typeof configuration.color === 'string' && configuration.color ?
         configuration.color : '#ffffff';
@@ -420,6 +429,7 @@ export {
     normalizeImportError,
     normalizeRotationOrder,
     normalizeScale,
+    normalizeShapeRatio,
     normalizeShapeType,
     normalizeTimelineKeyframes,
     now,

@@ -2365,9 +2365,13 @@ describe('MovieAssetManager rendering performance', () => {
             global.document = originalDocument;
         }
 
-        expect(canvas.width).toBe(120);
-        expect(canvas.height).toBe(80);
+        expect(canvas.width).toBe(240);
+        expect(canvas.height).toBe(160);
+        expect(canvas.movieBitmapResolution).toBe(2);
         expect(context.beginPath).toHaveBeenCalledTimes(1);
+        const pointCount = shape === 'flower' ? 60 : shape === 'star' ? 10 : 5;
+        expect(context.moveTo).toHaveBeenCalledTimes(2);
+        expect(context.lineTo).toHaveBeenCalledTimes((pointCount - 1) * 2);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
         expect(context.globalAlpha).toBe(0.65);
         expect(context.fillStyle).toBe('#ff0000');
@@ -2408,8 +2412,8 @@ describe('MovieAssetManager rendering performance', () => {
             global.document = originalDocument;
         }
 
-        expect(canvas.width).toBe(150);
-        expect(canvas.height).toBe(150);
+        expect(canvas.width).toBe(300);
+        expect(canvas.height).toBe(300);
         expect(context.moveTo).toHaveBeenCalledTimes(2);
         expect(context.closePath).toHaveBeenCalledTimes(2);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
@@ -2499,7 +2503,7 @@ describe('MovieAssetManager rendering performance', () => {
 
             expect(canvas.width).toBe(1024);
             expect(canvas.height).toBe(1024);
-            expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(canvas, 0.5);
+            expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(canvas, 0.25);
             expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(1);
         }
     );
