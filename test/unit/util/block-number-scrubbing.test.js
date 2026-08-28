@@ -4,8 +4,9 @@ const makeScratchBlocks = () => {
     const FieldNumber = function () {};
     const FieldAngle = function () {};
     const FieldNumberDropdown = function () {};
+    const FieldTextInput = function () {};
 
-    [FieldNumber, FieldAngle, FieldNumberDropdown].forEach(FieldClass => {
+    [FieldNumber, FieldAngle, FieldNumberDropdown, FieldTextInput].forEach(FieldClass => {
         FieldClass.prototype.widgetDispose_ = function () {
             return () => {
                 if (typeof this.editedValue_ !== 'undefined') this.setValue(this.editedValue_);
@@ -45,12 +46,28 @@ const makeScratchBlocks = () => {
         })
     };
 
-    return {Events, FieldAngle, FieldNumber, FieldNumberDropdown, Gesture};
+    return {Events, FieldAngle, FieldNumber, FieldNumberDropdown, FieldTextInput, Gesture};
 };
 
 const makeField = (ScratchBlocks, value = '10') => {
     const field = new ScratchBlocks.FieldNumber();
     field.sourceBlock_ = {isInFlyout: false};
+    field.isCurrentlyEditable = () => true;
+    field.getValue = () => value;
+    field.setValue = jest.fn(newValue => {
+        value = newValue;
+    });
+    return field;
+};
+
+const makeProcedureArgumentField = (ScratchBlocks, value = '10') => {
+    const field = new ScratchBlocks.FieldTextInput();
+    const procedureCall = {type: 'procedures_call'};
+    field.sourceBlock_ = {
+        type: 'text',
+        isInFlyout: false,
+        getParent: () => procedureCall
+    };
     field.isCurrentlyEditable = () => true;
     field.getValue = () => value;
     field.setValue = jest.fn(newValue => {
@@ -117,6 +134,34 @@ describe('block number scrubbing', () => {
         gesture.handleMove({clientX: 9, clientY: 0, shiftKey: true});
 
         expect(field.setValue).toHaveBeenLastCalledWith('4');
+    });
+
+    test('scrubs numeric values in custom procedure arguments', () => {
+        const ScratchBlocks = makeScratchBlocks();
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
+        const field = makeProcedureArgumentField(ScratchBlocks);
+        const gesture = makeGesture(ScratchBlocks, field);
+
+        gesture.handleMove({clientX: 5, clientY: 0, shiftKey: true});
+        gesture.handleMove({clientX: 15, clientY: 0, shiftKey: true});
+
+        expect(field.setValue.mock.calls).toEqual([['10.5'], ['11.5']]);
+        expect(onChange).toHaveBeenCalledTimes(2);
+    });
+
+    test('refreshes after directly editing a custom procedure argument', () => {
+        const ScratchBlocks = makeScratchBlocks();
+        const onChange = jest.fn();
+        installBlockNumberScrubbing(ScratchBlocks, onChange);
+        const field = makeProcedureArgumentField(ScratchBlocks);
+        const disposeEditor = field.widgetDispose_();
+
+        field.editedValue_ = '25';
+        disposeEditor();
+
+        expect(field.getValue()).toBe('25');
+        expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     test('keeps positive-only fields at zero or above', () => {

@@ -3,10 +3,29 @@ const ROUNDING_FACTOR = 1e10;
 
 const isFiniteNumber = value => Number.isFinite(Number(value));
 
+const getParentBlock = block => {
+    if (!block) return null;
+    return typeof block.getParent === 'function' ? block.getParent() : block.parentBlock_;
+};
+
+const isProcedureArgumentField = (ScratchBlocks, field) => {
+    if (!ScratchBlocks.FieldTextInput || !(field instanceof ScratchBlocks.FieldTextInput)) {
+        return false;
+    }
+
+    const sourceBlock = field.sourceBlock_;
+    const parentBlock = getParentBlock(sourceBlock);
+    return sourceBlock &&
+        sourceBlock.type === 'text' &&
+        parentBlock &&
+        parentBlock.type === 'procedures_call';
+};
+
 const isNumericField = (ScratchBlocks, field) => (
     field instanceof ScratchBlocks.FieldNumber ||
     field instanceof ScratchBlocks.FieldAngle ||
-    field instanceof ScratchBlocks.FieldNumberDropdown
+    field instanceof ScratchBlocks.FieldNumberDropdown ||
+    isProcedureArgumentField(ScratchBlocks, field)
 );
 
 const canStartScrubbing = (ScratchBlocks, gesture) => {
@@ -84,7 +103,7 @@ const stopScrubbing = (ScratchBlocks, gesture) => {
     gesture.movieNumberScrub_ = null;
 };
 
-const installDirectInputChangeCallback = (ScratchBlocks, FieldClass) => {
+const installDirectInputChangeCallback = (ScratchBlocks, FieldClass, isSupportedField = () => true) => {
     const fieldPrototype = FieldClass.prototype;
     const originalWidgetDispose = fieldPrototype.widgetDispose_;
 
@@ -96,6 +115,7 @@ const installDirectInputChangeCallback = (ScratchBlocks, FieldClass) => {
         return function () {
             dispose();
             if (
+                isSupportedField(field) &&
                 field.sourceBlock_ &&
                 !field.sourceBlock_.isInFlyout &&
                 field.getValue() !== originalValue &&
@@ -122,6 +142,13 @@ const installBlockNumberScrubbing = (ScratchBlocks, onChange) => {
     installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldNumber);
     installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldAngle);
     installDirectInputChangeCallback(ScratchBlocks, ScratchBlocks.FieldNumberDropdown);
+    if (ScratchBlocks.FieldTextInput) {
+        installDirectInputChangeCallback(
+            ScratchBlocks,
+            ScratchBlocks.FieldTextInput,
+            field => isProcedureArgumentField(ScratchBlocks, field)
+        );
+    }
 
     const gesturePrototype = ScratchBlocks.Gesture.prototype;
     const originalUpdateIsDragging = gesturePrototype.updateIsDragging_;
