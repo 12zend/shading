@@ -344,8 +344,15 @@ const MovieAssetManagerObjectMethods = {
 
             const graphicEffects = this.runtime.graphicEffectsManager;
             if (graphicEffects && typeof graphicEffects.setScale === 'function') {
-                graphicEffects.setScale(target, 'width', configuration.width);
-                graphicEffects.setScale(target, 'height', configuration.height);
+                // Line shapes derive their dimensions from their endpoints and do not provide width/height.
+                // Do not turn an omitted dimension into zero in the graphic-effects state, or the line's
+                // drawable scale becomes [0, 0] before it is stamped.
+                if (typeof configuration.width !== 'undefined') {
+                    graphicEffects.setScale(target, 'width', configuration.width);
+                }
+                if (typeof configuration.height !== 'undefined') {
+                    graphicEffects.setScale(target, 'height', configuration.height);
+                }
             }
         } finally {
             this.projectionBatchDepth--;

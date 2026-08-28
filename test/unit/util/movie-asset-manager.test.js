@@ -2506,6 +2506,7 @@ describe('MovieAssetManager rendering performance', () => {
 
     test('renders a line between its two positions with the requested thickness', () => {
         const manager = makeManager();
+        manager.runtime.graphicEffectsManager = {setScale: jest.fn()};
         manager.runtime._primitives.pen_stamp = jest.fn();
         const context = {
             beginPath: jest.fn(),
@@ -2539,6 +2540,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(canvas.height).toBe(66);
         expect(context.stroke).toHaveBeenCalledTimes(1);
         expect(context.lineWidth).toBe(6);
+        expect(manager.runtime.graphicEffectsManager.setScale).not.toHaveBeenCalled();
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });
 
