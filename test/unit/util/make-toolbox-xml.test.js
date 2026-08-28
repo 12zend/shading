@@ -1,11 +1,15 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
-    test('offers complete object and procedural shape blocks in a dedicated category', () => {
+    test('offers procedural shape blocks directly below Draw in Objects', () => {
         const categories = [{id: 'objects', xml: '<category id="objects" />'}];
         const toolbox = makeToolboxXML(false, false, 'target', categories, 'costume1');
 
         expect(toolbox).toContain('<category name="Objects" id="objects"');
+        expect(toolbox).not.toContain('<category name="Shape"');
+        expect(toolbox).not.toContain('<category name="Arc"');
+        expect(toolbox).not.toContain('<category name="Circular Segment"');
+        expect(toolbox).not.toContain('<category name="Line"');
         expect(toolbox).toContain('<block type="objects_draw">');
         expect(toolbox).toContain('<block type="objects_shape">');
         expect(toolbox).toContain('<field name="SHAPE">polygon</field>');
@@ -33,7 +37,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<block type="objects_line">');
         expect(toolbox).toContain('<block type="objects_pass">');
         expect(toolbox).toContain('<value name="POINTS"><shadow type="text">');
-        expect(toolbox).toContain('<value name="START"><shadow type="math_number"><field name="NUM">0</field>');
+        expect(toolbox).toContain('<value name="START"><shadow type="math_angle"><field name="NUM">0</field>');
         expect(toolbox).toContain('<field name="ASSET">costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox).toContain('<block type="objects_scene"/>');
@@ -46,6 +50,16 @@ describe('Movie toolbox categories', () => {
             .toBeLessThan(toolbox.indexOf('<block type="objects_scene"/>'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="motion"'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+        expect(toolbox.indexOf('<block type="objects_draw">'))
+            .toBeLessThan(toolbox.indexOf('<block type="objects_shape">'));
+        expect(toolbox.indexOf('<block type="objects_shape">'))
+            .toBeLessThan(toolbox.indexOf('<block type="objects_arc">'));
+        expect(toolbox.indexOf('<block type="objects_arc">'))
+            .toBeLessThan(toolbox.indexOf('<block type="objects_circularSegment">'));
+        expect(toolbox.indexOf('<block type="objects_circularSegment">'))
+            .toBeLessThan(toolbox.indexOf('<block type="objects_line">'));
+        expect(toolbox.indexOf('<block type="objects_line">'))
+            .toBeLessThan(toolbox.indexOf('<block type="objects_grouping"/>'));
     });
 
     test('places My Blocks Shader next to My Blocks as a native category', () => {
@@ -62,7 +76,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="myBlocksShader"'));
     });
 
-    test('hides the default Pen category and keeps Looks (Pen FX) in the compositor palette', () => {
+    test('shows the default Pen category below My Blocks Shader', () => {
         const categories = [
             {id: 'custom', xml: '<category id="custom" />'},
             {id: 'penfx', xml: '<category id="penfx" />'},
@@ -70,9 +84,8 @@ describe('Movie toolbox categories', () => {
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox).not.toContain('id="pen"');
-        expect(toolbox.indexOf('id="motion"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
-        expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+        expect(toolbox).toContain('id="pen"');
+        expect(toolbox.indexOf('id="myBlocksShader"')).toBeLessThan(toolbox.indexOf('id="pen"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 
@@ -83,8 +96,8 @@ describe('Movie toolbox categories', () => {
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox.indexOf('id="motion"')).toBeLessThan(toolbox.indexOf('id="penfx"'));
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+        expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="motion"'));
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 

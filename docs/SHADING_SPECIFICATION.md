@@ -85,8 +85,10 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Operators | `operators` | Scratch の演算子と `easing` |
 | Variables | `data` | Scratch の変数・リスト |
 | My Blocks | `procedures` | Scratch の通常のカスタムブロック |
+| My Blocks Shader | `myBlocksShader` | シェーダー用の動的カスタムブロック |
+| Pen | `pen` | ペン描画ブロック |
 
-標準の `looks` カテゴリと `pen` カテゴリは、現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。
+標準の `looks` カテゴリは現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。`Pen` と `My Blocks Shader` は表示する。
 
 ### 3.2 Objects
 
@@ -95,6 +97,10 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Opcode | 表示内容・役割 |
 | --- | --- |
 | `objects_draw` | コスチューム、コスチュームグループ、ビデオ、テキスト、モデルを描画 |
+| `objects_shape` | 多角形・星・花形などの手続き型シェイプを描画。`objects_draw` の直下に表示 |
+| `objects_arc` | 円弧を描画。`objects_draw` の直下に表示 |
+| `objects_circularSegment` | 円弧セグメントを描画。`objects_draw` の直下に表示 |
+| `objects_line` | 3D 座標間の線分を描画。`objects_draw` の直下に表示 |
 | `objects_grouping` | サブスタックを 1 つの grouping/effects 単位として評価 |
 | `objects_transform` | 位置、アンカー、回転、XYZ スケールをサブスタックへ適用 |
 | `objects_composite` | 不透明度とブレンドモードをサブスタックへ適用 |
@@ -506,10 +512,6 @@ npm run package:desktop:dir
 
 特に `objects_animate` は実装上の評価関数を残しているが、現行パレットには表示しない互換性専用ブロックである。
 
-#### 旧手続き型描画
-
-`objects_shape`、`objects_arc`、`objects_circularSegment`、`objects_line`
-
 #### 旧合成・時間制御
 
 `objects_group`、`objects_simulation`、`objects_matte`、`objects_renderPass`、
@@ -538,7 +540,7 @@ npm run package:desktop:dir
 
 ### 12.3 My Blocks Shader
 
-My Blocks Shader の compiler、procedure mutation、`myblocksshader_*` の読み込み互換処理は残っている。一方、現行の static toolbox XML は `myBlocksShader` カテゴリを `everything` に追加していないため、通常の現行パレット機能としては扱わない。
+My Blocks Shader は `myBlocksShader` カテゴリとして My Blocks の直下に表示する。compiler、procedure mutation、`myblocksshader_*` の読み込み互換処理も引き続き利用する。
 
 ## 13. 実装上のエラーと状態管理
 

@@ -716,6 +716,63 @@ const myBlocksShader = function () {
     `;
 };
 
+const proceduralShapeBlocks = function () {
+    const number = (name, value) => (
+        `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
+    );
+    const angle = (name, value) => (
+        `<value name="${name}"><shadow type="math_angle"><field name="NUM">${value}</field></shadow></value>`
+    );
+    const appearance = (timeStart = 0, timeEnd = 'Infinity') => (`
+        ${number('T1', timeStart)}${number('T2', timeEnd)}
+        <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
+        ${number('OPACITY', 100)}
+    `);
+    const transform = () => (`
+        ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}
+        ${number('RX', 0)}${number('RY', 0)}${number('RZ', 0)}
+        ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
+    `);
+    return [
+        `
+        <block type="objects_shape">
+            <field name="SHAPE">polygon</field>
+            ${number('N', 6)}
+            ${transform()}
+            ${number('INNER', 50)}${number('OUTER', 100)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${appearance()}
+        </block>
+        `,
+        `
+        <block type="objects_arc">
+            ${transform()}
+            ${number('INNER', 50)}${number('OUTER', 100)}
+            ${angle('START', 0)}${angle('END', 360)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${appearance()}
+        </block>
+        `,
+        `
+        <block type="objects_circularSegment">
+            ${transform()}
+            ${number('OUTER', 100)}
+            ${angle('START', 0)}${angle('END', 360)}
+            ${number('WIDTH', 100)}${number('HEIGHT', 100)}
+            ${appearance()}
+        </block>
+        `,
+        `
+        <block type="objects_line">
+            ${number('P1X', 0)}${number('P1Y', 0)}${number('P1Z', 480)}
+            ${number('P2X', 100)}${number('P2Y', 100)}${number('P2Z', 480)}
+            ${number('THICKNESS', 5)}
+            ${appearance()}
+        </block>
+        `
+    ];
+};
+
 const objects = function (costumeName) {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
@@ -738,6 +795,7 @@ const objects = function (costumeName) {
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${number('T1', 0)}${number('T2', 'Infinity')}
         </block>
+        ${proceduralShapeBlocks().join('\n')}
         <block type="objects_grouping"/>
         <block type="objects_transform">
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
@@ -828,12 +886,11 @@ const xmlClose = '</xml>';
  * @returns {string} - a ScratchBlocks-style XML document for the contents of the toolbox.
  */
 const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categoriesXML = [],
-    costumeName = '', backdropName = '', soundName = '', colors = defaultBlockColors) {
+    costumeName = '', _backdropName = '', soundName = '', colors = defaultBlockColors) {
     isStage = isInitialSetup || isStage;
     const gap = [categorySeparator];
 
     costumeName = xmlEscape(costumeName);
-    backdropName = xmlEscape(backdropName);
     soundName = xmlEscape(soundName);
 
     categoriesXML = categoriesXML.slice();
@@ -850,7 +907,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     // Looks blocks remain registered so existing projects can load, but the
     // category is intentionally hidden from the Movie toolbox.
     moveCategory('looks');
-    const objectsXML = moveCategory('objects') ? objects(costumeName) : null;
+    const objectsCategory = moveCategory('objects');
+    const objectsXML = objectsCategory ? objects(costumeName) : null;
     const penFXXML = withPenFXGradientField(moveCategory('penfx'));
     const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
@@ -859,8 +917,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
-    // Pen remains loadable for project compatibility, but compositing is presented through Looks (Pen FX).
-    moveCategory('pen');
+    const penXML = moveCategory('pen');
     // The VM registration allows myblocksshader_* opcodes to deserialize. Its
     // empty extension category is replaced by the native dynamic category.
     moveCategory('myblocksshader');
@@ -885,6 +942,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         operatorsXML, gap,
         variablesXML, gap,
         myBlocksXML, gap,
+        myBlocksShaderXML, gap,
+        ...(penXML ? [penXML, gap] : [])
     ];
 
     if (turbowarpXML) {
