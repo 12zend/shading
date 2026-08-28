@@ -44,6 +44,11 @@ describe('Movie project format', () => {
         })).toBe('shade');
     });
 
+    test('marks the timer offset command as a Movie block', () => {
+        expect(getMovieProjectFeatures(project({timerOffset: block('sensing_settimeroffsetto')})))
+            .toEqual(['movie-blocks']);
+    });
+
     test('marks object drawing, grouping, and z-buffer scenes as Movie blocks', () => {
         const json = project({
             draw: block('objects_draw'),

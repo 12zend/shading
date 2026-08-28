@@ -472,6 +472,13 @@ const sensing = function (isInitialSetup, isStage, targetId, colors) {
         colour="${colors.primary}"
         secondaryColour="${colors.tertiary}">
         <block id="timer" type="sensing_timer"/>
+        <block type="sensing_settimeroffsetto">
+            <value name="OFFSET">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+        </block>
         ${categorySeparator}
     </category>
     `;

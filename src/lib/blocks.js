@@ -217,6 +217,17 @@ export default function (vm) {
         }
     };
 
+    ScratchBlocks.Blocks.sensing_settimeroffsetto = {
+        init: function () {
+            this.jsonInit({
+                message0: 'set timer offset to %1',
+                args0: [{type: 'input_value', name: 'OFFSET'}],
+                category: ScratchBlocks.Categories.sensing,
+                extensions: ['colours_sensing', 'shape_statement']
+            });
+        }
+    };
+
     ScratchBlocks.Blocks.sound_playatframe = {
         init: function () {
             this.jsonInit({

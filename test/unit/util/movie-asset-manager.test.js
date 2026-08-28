@@ -100,7 +100,8 @@ const makeTimelineManager = () => {
             _paused: true,
             _pausedTime: 0,
             _projectTimer: {startTime: 10000},
-            projectTimer: jest.fn(() => 2.5)
+            projectTimer: jest.fn(() => 2.5),
+            projectTimerWithoutOffset: jest.fn(() => 2.5)
         }
     };
     manager.timeline = {
@@ -1122,6 +1123,20 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.timeline.playing).toBe(false);
         expect(manager.runtime.ioDevices.clock._paused).toBe(true);
         expect(manager.runtime.stopAll).toHaveBeenCalled();
+    });
+
+    test('keeps timer offsets out of timeline clock advancement', () => {
+        const manager = makeTimelineManager();
+        const clock = manager.runtime.ioDevices.clock;
+        clock.projectTimer.mockReturnValue(-0.5);
+        clock.projectTimerWithoutOffset.mockReturnValue(0.25);
+        manager.timeline.playing = true;
+
+        manager.pauseTimeline();
+
+        expect(manager.timeline.currentTime).toBe(0.25);
+        expect(clock.projectTimer).not.toHaveBeenCalled();
+        expect(clock.projectTimerWithoutOffset).toHaveBeenCalled();
     });
 
     test('captures rendering frames at deterministic frame times', () => {

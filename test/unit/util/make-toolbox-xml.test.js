@@ -201,8 +201,9 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="control_start_as_clone"');
         expect(toolbox).not.toContain('type="control_create_clone_of"');
         expect(toolbox).not.toContain('type="control_delete_this_clone"');
-        // Sensing exposes only timer.
+        // Sensing exposes the timer and its offset control.
         expect(toolbox).toContain('type="sensing_timer"');
+        expect(toolbox).toContain('type="sensing_settimeroffsetto"');
         expect(toolbox).not.toContain('type="sensing_resettimer"');
         expect(toolbox).not.toContain('type="sensing_touchingobject"');
         expect(toolbox).not.toContain('type="sensing_answer"');

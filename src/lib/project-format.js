@@ -80,6 +80,10 @@ const MOVIE_OPERATOR_BLOCKS = [
     'operator_easing'
 ];
 
+const MOVIE_TIMER_BLOCKS = [
+    'sensing_settimeroffsetto'
+];
+
 const MOVIE_3D_BLOCKS = [
     'looks_addlight',
     'looks_addpointlight',
@@ -161,7 +165,8 @@ const MOVIE_BLOCK_SET = new Set(MOVIE_ASSET_BLOCKS.concat(
     MOVIE_3D_BLOCKS,
     MOVIE_3D_REPORTER_BLOCKS,
     MOVIE_MENU_BLOCKS,
-    MOVIE_OPERATOR_BLOCKS
+    MOVIE_OPERATOR_BLOCKS,
+    MOVIE_TIMER_BLOCKS
 ));
 const ADVANCED_GRAPHIC_BLOCK_SET = new Set(ADVANCED_GRAPHIC_BLOCKS);
 const ADVANCED_GRAPHIC_EFFECT_SET = new Set(ADVANCED_GRAPHIC_EFFECTS);

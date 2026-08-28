@@ -42,6 +42,7 @@ import installDefaultExtensions from '../lib/default-extensions';
 import installGraphicEffectsManager from '../lib/graphic-effects-manager';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 import installMovieEasing from '../lib/movie-easing';
+import installTimerOffset from '../lib/timer-offset';
 import installObjectBlocks from '../lib/object-blocks';
 import installPenFX from '../lib/pen-fx';
 import installMyBlocksShader from '../lib/my-blocks-shader';
@@ -69,6 +70,7 @@ class GUI extends React.Component {
         this.props.onStorageInit(storage);
         installGraphicEffectsManager(this.props.vm);
         installMovieEasing(this.props.vm);
+        installTimerOffset(this.props.vm);
         installMovieAssetManager(this.props.vm);
         installDefaultExtensions(this.props.vm);
         installPenFX(this.props.vm);

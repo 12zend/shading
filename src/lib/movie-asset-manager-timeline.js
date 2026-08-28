@@ -9,6 +9,14 @@ import {
     toNumber
 } from './movie-asset-manager-utils';
 
+// The timeline playhead is driven by the underlying clock. Project scripts read the offset clock instead.
+const getTimelineClockTime = clock => {
+    if (clock && typeof clock.projectTimerWithoutOffset === 'function') {
+        return clock.projectTimerWithoutOffset();
+    }
+    return clock && typeof clock.projectTimer === 'function' ? clock.projectTimer() : 0;
+};
+
 const MovieAssetManagerTimelineMethods = {
     serializeTimeline () {
         return {
@@ -213,7 +221,7 @@ const MovieAssetManagerTimelineMethods = {
         this.cancelPendingObjectDraws();
         const clock = this.runtime.ioDevices.clock;
         if (this.timeline.playing) {
-            this.timeline.currentTime = clamp(clock.projectTimer(), 0, this.timeline.duration);
+            this.timeline.currentTime = clamp(getTimelineClockTime(clock), 0, this.timeline.duration);
         }
         this.timeline.playing = false;
         this.timeline.initializePromises = new Set();
@@ -452,7 +460,7 @@ const MovieAssetManagerTimelineMethods = {
                 false
             );
         } else if (this.timeline.playing) {
-            const time = this.runtime.ioDevices.clock.projectTimer();
+            const time = getTimelineClockTime(this.runtime.ioDevices.clock);
             this.timeline.currentTime = clamp(time, 0, this.timeline.duration);
             if (time >= this.timeline.duration) this.setTimelineClock(this.timeline.duration, false);
         }
@@ -532,7 +540,7 @@ const MovieAssetManagerTimelineMethods = {
             }
         } else if (this.timeline.playing) {
             this.timeline.currentTime = clamp(
-                this.runtime.ioDevices.clock.projectTimer(),
+                getTimelineClockTime(this.runtime.ioDevices.clock),
                 0,
                 this.timeline.duration
             );
