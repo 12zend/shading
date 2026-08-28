@@ -1,10 +1,4 @@
 import {createMediaField} from '../../../src/lib/object-blocks-ui';
-import {mountInlinePaintEditor, unmountInlinePaintEditor} from '../../../src/lib/inline-paint-editor';
-
-jest.mock('../../../src/lib/inline-paint-editor', () => ({
-    mountInlinePaintEditor: jest.fn(() => true),
-    unmountInlinePaintEditor: jest.fn()
-}));
 
 const createFakeDocument = () => {
     const fakeDocument = {activeElement: null};
@@ -173,9 +167,10 @@ describe('Objects draw media picker', () => {
             getVideos: jest.fn(() => []),
             importFiles: jest.fn(() => Promise.resolve([{name: 'Dropped', source: 'costume'}]))
         };
+        const costumes = [{name: 'One'}, {name: 'Two'}];
         const vm = {
             editingTarget: {
-                getCostumes: () => [{name: 'One'}, {name: 'Two'}],
+                getCostumes: () => costumes,
                 id: 'sprite'
             },
             runtime: {movieAssetManager: manager}
@@ -196,11 +191,6 @@ describe('Objects draw media picker', () => {
             const firstItem = findByLabel(content, 'Costume: One');
             const secondItem = findByLabel(content, 'Costume: Two');
             const closeButton = findByLabel(content, 'Close media picker');
-            const editButton = findByLabel(content, 'Edit selected costume');
-            const mediaButton = findByLabel(content, 'Show media');
-            const chooseCostumeButton = findByLabel(content, 'Choose a Costume');
-            const uploadCostumeButton = findByLabel(content, 'Upload Costume');
-            const editor = findByLabel(content, 'Costume editor');
             const picker = findByLabel(content, 'Choose media for draw');
             const dropOverlay = findByLabel(content, 'Drop files to import');
 
@@ -209,8 +199,8 @@ describe('Objects draw media picker', () => {
                 field.sourceBlock_,
                 expect.any(Function)
             );
-            expect(chooseCostumeButton).not.toBeNull();
-            expect(uploadCostumeButton).not.toBeNull();
+            expect(findByLabel(content, 'Media picker view')).toBeNull();
+            expect(findByLabel(content, 'Edit selected costume')).toBeNull();
             secondItem.click();
 
             expect(field.getValue()).toBe('costume:Two');
@@ -218,20 +208,6 @@ describe('Objects draw media picker', () => {
             expect(secondItem.getAttribute('aria-selected')).toBe('true');
             expect(ScratchBlocks.DropDownDiv.hide).not.toHaveBeenCalled();
             expect(fakeDocument.activeElement).toBe(secondItem);
-
-            editButton.click();
-            expect(editor.hidden).toBe(false);
-            expect(editButton.getAttribute('aria-pressed')).toBe('true');
-            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(true);
-            expect(mountInlinePaintEditor).toHaveBeenCalledWith(
-                expect.any(Object),
-                1,
-                expect.any(Function)
-            );
-            mediaButton.click();
-            expect(editor.hidden).toBe(true);
-            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(false);
-            expect(unmountInlinePaintEditor).toHaveBeenCalledTimes(1);
 
             const dataTransfer = {
                 dropEffect: 'none',
@@ -266,10 +242,12 @@ describe('Objects draw media picker', () => {
             closeButton.click();
             expect(ScratchBlocks.DropDownDiv.hide).toHaveBeenCalledTimes(2);
 
-            editButton.click();
-            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(true);
+            costumes[1].name = 'Renamed';
+            field.showEditor_();
+            expect(findByLabel(content, 'Costume: Renamed')).not.toBeNull();
+            expect(findByLabel(content, 'Costume: Two')).toBeNull();
+
             field.onHide();
-            expect(fakeDocument.body.classList.contains('object-blocks-inline-paint-editor-open')).toBe(false);
         } finally {
             global.document = originalDocument;
         }

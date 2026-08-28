@@ -12,6 +12,18 @@ import {
     getIsShowingProject
 } from '../reducers/project-state';
 import {
+    activateTab,
+    BLOCKS_TAB_INDEX,
+    COSTUMES_TAB_INDEX,
+    SOUNDS_TAB_INDEX,
+    VIDEOS_TAB_INDEX,
+    FONTS_TAB_INDEX,
+    MODELS_TAB_INDEX
+} from '../reducers/editor-tab';
+
+import {
+    closeCostumeLibrary,
+    closeBackdropLibrary,
     closeTelemetryModal,
     openExtensionLibrary
 } from '../reducers/modals';
@@ -152,9 +164,14 @@ GUI.defaultProps = {
 const mapStateToProps = state => {
     const loadingState = state.scratchGui.projectState.loadingState;
     return {
+        activeTabIndex: state.scratchGui.editorTab.activeTabIndex,
         alertsVisible: state.scratchGui.alerts.visible,
+        backdropLibraryVisible: state.scratchGui.modals.backdropLibrary,
+        blocksTabVisible: state.scratchGui.editorTab.activeTabIndex === BLOCKS_TAB_INDEX,
         cardsVisible: state.scratchGui.cards.visible,
         connectionModalVisible: state.scratchGui.modals.connectionModal,
+        costumeLibraryVisible: state.scratchGui.modals.costumeLibrary,
+        costumesTabVisible: state.scratchGui.editorTab.activeTabIndex === COSTUMES_TAB_INDEX,
         error: state.scratchGui.projectState.error,
         isError: getIsError(loadingState),
         isEmbedded: state.scratchGui.mode.isEmbedded,
@@ -164,6 +181,14 @@ const mapStateToProps = state => {
         isShowingProject: getIsShowingProject(loadingState),
         loadingStateVisible: state.scratchGui.modals.loadingProject,
         projectId: state.scratchGui.projectState.projectId,
+        soundsTabVisible: state.scratchGui.editorTab.activeTabIndex === SOUNDS_TAB_INDEX,
+        videosTabVisible: state.scratchGui.editorTab.activeTabIndex === VIDEOS_TAB_INDEX,
+        fontsTabVisible: state.scratchGui.editorTab.activeTabIndex === FONTS_TAB_INDEX,
+        modelsTabVisible: state.scratchGui.editorTab.activeTabIndex === MODELS_TAB_INDEX,
+        targetIsStage: (
+            state.scratchGui.targets.stage &&
+            state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget
+        ),
         telemetryModalVisible: state.scratchGui.modals.telemetryModal,
         tipsLibraryVisible: state.scratchGui.modals.tipsLibrary,
         usernameModalVisible: state.scratchGui.modals.usernameModal,
@@ -178,6 +203,14 @@ const mapStateToProps = state => {
 
 const mapDispatchToProps = dispatch => ({
     onExtensionButtonClick: () => dispatch(openExtensionLibrary()),
+    onActivateTab: tab => dispatch(activateTab(tab)),
+    onActivateCostumesTab: () => dispatch(activateTab(COSTUMES_TAB_INDEX)),
+    onActivateSoundsTab: () => dispatch(activateTab(SOUNDS_TAB_INDEX)),
+    onActivateVideosTab: () => dispatch(activateTab(VIDEOS_TAB_INDEX)),
+    onActivateFontsTab: () => dispatch(activateTab(FONTS_TAB_INDEX)),
+    onActivateModelsTab: () => dispatch(activateTab(MODELS_TAB_INDEX)),
+    onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
+    onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())
 });
 
