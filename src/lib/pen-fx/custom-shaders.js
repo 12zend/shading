@@ -465,6 +465,7 @@ const argumentTypeForInput = input => {
 const programNameFor = (packageId, blockId) => `custom:${packageId}:${blockId}`;
 const opcodeFor = (packageId, blockId, compatibilityOpcode) => compatibilityOpcode ||
     `shader_${packageId.replace(/-/g, '_')}_${blockId.replace(/-/g, '_')}`;
+const deleteFunctionFor = packageId => `deleteShaderPackage_${packageId.replace(/-/g, '_')}`;
 const programNameForDescriptor = (packageDescriptor, program) =>
     `custom:${packageDescriptor.id}:program:${program.id}`;
 const menuNameFor = (packageId, blockId, inputId) => (
@@ -495,6 +496,7 @@ class PenFXCustomShaderManager {
         this.penFX = penFX;
         this.packages = new Map();
         this.knownOpcodes = new Set();
+        this.deleteFunctionNames = new Set();
         this.implementationMethods = new Map();
         this.programOverrideStates = new Map();
         this.serializationInstalled = false;
@@ -571,6 +573,13 @@ class PenFXCustomShaderManager {
         for (const packageDescriptor of this.packages.values()) {
             blocks.push('---');
             blocks.push({blockType: BlockType.LABEL, text: packageDescriptor.name});
+            if (!packageDescriptor.isDefault) {
+                blocks.push({
+                    blockType: BlockType.BUTTON,
+                    text: 'Delete shader package',
+                    func: deleteFunctionFor(packageDescriptor.id)
+                });
+            }
             for (const shaderBlock of packageDescriptor.blocks) {
                 if (shaderBlock.separatorBefore) blocks.push('---');
                 const argumentsInfo = {};
@@ -638,6 +647,15 @@ class PenFXCustomShaderManager {
     }
 
     _bindPackage (packageDescriptor) {
+        if (!packageDescriptor.isDefault) {
+            const deleteFunction = deleteFunctionFor(packageDescriptor.id);
+            this.deleteFunctionNames.add(deleteFunction);
+            // Extension buttons do not receive arguments, so expose a package-specific
+            // callback while keeping the actual deletion logic on the manager.
+            this.penFX[deleteFunction] = () => {
+                this.deleteShaderPackage(packageDescriptor.id);
+            };
+        }
         const programOverrides = {};
         for (const program of packageDescriptor.programs) {
             if (program.bind) {
@@ -732,7 +750,13 @@ class PenFXCustomShaderManager {
             }
         }
         for (const opcode of this.knownOpcodes) this.penFX[opcode] = () => undefined;
+        for (const deleteFunction of this.deleteFunctionNames) this.penFX[deleteFunction] = () => undefined;
+        this.deleteFunctionNames.clear();
         this.packages.clear();
+        const packageIds = new Set(packages.map(packageDescriptor => packageDescriptor.id));
+        for (const packageId of this.programOverrideStates.keys()) {
+            if (!packageIds.has(packageId)) this.programOverrideStates.delete(packageId);
+        }
         packages.forEach(packageDescriptor => {
             this.packages.set(packageDescriptor.id, packageDescriptor);
             this._bindPackage(packageDescriptor);
@@ -815,6 +839,35 @@ class PenFXCustomShaderManager {
             this.vm.runtime.emitProjectChanged();
         }
         return packageDescriptor;
+    }
+
+    deleteShaderPackage (packageId) {
+        const packageDescriptor = this.packages.get(packageId);
+        if (!packageDescriptor || packageDescriptor.isDefault) return Promise.resolve(false);
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function' &&
+            !window.confirm(`Delete custom shader package "${packageDescriptor.name}"?`)) {
+            return Promise.resolve(false);
+        }
+
+        this._replacePackages(Array.from(this.packages.values()).filter(existing =>
+            existing.id !== packageDescriptor.id
+        ));
+        const pendingRefresh = this._refreshBlocks()
+            .then(() => {
+                if (this.vm && this.vm.runtime && typeof this.vm.runtime.emitProjectChanged === 'function') {
+                    this.vm.runtime.emitProjectChanged();
+                }
+                return true;
+            })
+            .catch(error => {
+                console.error('[Pen FX] Could not delete custom shader package:', error);
+                return false;
+            });
+        const movieAssetManager = this.vm && this.vm.runtime && this.vm.runtime.movieAssetManager;
+        if (movieAssetManager && typeof movieAssetManager.runWithoutWaiting === 'function') {
+            movieAssetManager.runWithoutWaiting(pendingRefresh);
+        }
+        return pendingRefresh;
     }
 
     openImportPicker () {
