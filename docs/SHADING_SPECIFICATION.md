@@ -97,7 +97,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Opcode | 表示内容・役割 |
 | --- | --- |
 | `objects_draw` | コスチューム、コスチュームグループ、ビデオ、テキスト、モデルを描画 |
-| `objects_shape` | 多角形・星・花形などの手続き型シェイプを描画。`objects_draw` の直下に表示 |
+| `objects_shape` | 多角形・星・曲線星・花形などの手続き型シェイプを描画。`objects_draw` の直下に表示 |
 | `objects_arc` | 円弧を描画。`objects_draw` の直下に表示 |
 | `objects_circularSegment` | 円弧セグメントを描画。`objects_draw` の直下に表示 |
 | `objects_line` | 3D 座標間の線分を描画。`objects_draw` の直下に表示 |

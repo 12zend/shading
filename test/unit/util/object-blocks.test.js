@@ -88,7 +88,7 @@ describe('Objects blocks', () => {
         });
     });
 
-    test('shows the shape ratio input only for star and flower', () => {
+    test('shows the shape ratio input only for star, curved star, and flower', () => {
         const ScratchBlocks = {
             Blocks: {},
             FieldDropdown: class {}
@@ -142,6 +142,9 @@ describe('Objects blocks', () => {
 
         const star = makeBlock('star');
         expect(star.ratioInput.setVisible).toHaveBeenLastCalledWith(true);
+
+        const curvedStar = makeBlock('curved star');
+        expect(curvedStar.ratioInput.setVisible).toHaveBeenLastCalledWith(true);
 
         const changing = makeBlock('polygon');
         changing.block.onChange();
@@ -509,7 +512,7 @@ describe('Objects blocks', () => {
             'COLOR', 'OPACITY',
             'T1', 'T2'
         ]);
-        expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'flower']);
+        expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'curved star', 'flower']);
         expect(info.blocks[1].arguments.RATIO.defaultValue).toBe(0.5);
         expect(info.blocks[1].text).toContain('ratio: [RATIO]');
         expect(info.menus.blendMode.items).toEqual(BLEND_MODES);

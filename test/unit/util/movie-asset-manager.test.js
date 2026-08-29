@@ -2559,7 +2559,9 @@ describe('MovieAssetManager rendering performance', () => {
         expect(events).toEqual(['scene start', 'scene end', 'draw']);
     });
 
-    test.each(['polygon', 'star', 'flower'])('renders the %s shape directly into the Pen layer', shape => {
+    test.each([
+        'polygon', 'star', 'curved star', 'flower'
+    ])('renders the %s shape directly into the Pen layer', shape => {
         const manager = makeManager();
         manager.setTargetPosition = jest.fn();
         manager.setTargetRotation = jest.fn();
@@ -2574,7 +2576,8 @@ describe('MovieAssetManager rendering performance', () => {
             fill: jest.fn(),
             globalAlpha: 1,
             lineTo: jest.fn(),
-            moveTo: jest.fn()
+            moveTo: jest.fn(),
+            quadraticCurveTo: jest.fn()
         };
         const canvas = {
             getContext: jest.fn(() => context)
@@ -2610,9 +2613,21 @@ describe('MovieAssetManager rendering performance', () => {
         expect(canvas.height).toBe(160);
         expect(canvas.movieBitmapResolution).toBe(2);
         expect(context.beginPath).toHaveBeenCalledTimes(1);
-        const pointCount = shape === 'flower' ? 60 : shape === 'star' ? 10 : 5;
+        const pointCount = shape === 'flower' ? 60 :
+            shape === 'star' || shape === 'curved star' ? 10 : 5;
         expect(context.moveTo).toHaveBeenCalledTimes(2);
-        expect(context.lineTo).toHaveBeenCalledTimes((pointCount - 1) * 2);
+        if (shape === 'curved star') {
+            expect(context.lineTo).not.toHaveBeenCalled();
+            expect(context.quadraticCurveTo).toHaveBeenCalledTimes(10);
+            const firstInnerCurve = context.quadraticCurveTo.mock.calls[5];
+            expect(firstInnerCurve[0]).toBeCloseTo(120 + (12.5 * Math.cos(1.3 * Math.PI)));
+            expect(firstInnerCurve[1]).toBeCloseTo(80 + (12.5 * Math.sin(1.3 * Math.PI)));
+            expect(firstInnerCurve[2]).toBeCloseTo(120 + (25 * Math.cos(1.1 * Math.PI)));
+            expect(firstInnerCurve[3]).toBeCloseTo(80 + (25 * Math.sin(1.1 * Math.PI)));
+        } else {
+            expect(context.lineTo).toHaveBeenCalledTimes((pointCount - 1) * 2);
+            expect(context.quadraticCurveTo).not.toHaveBeenCalled();
+        }
         expect(context.fill).toHaveBeenCalledWith('evenodd');
         expect(context.globalAlpha).toBe(0.65);
         expect(context.fillStyle).toBe('#ff0000');

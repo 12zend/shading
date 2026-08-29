@@ -1338,7 +1338,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm) => {
             const input = this.getInput('RATIO');
             if (!input) return;
             const shape = normalizeShapeType(this.getFieldValue('SHAPE'));
-            const visible = shape === 'star' || shape === 'flower';
+            const visible = shape === 'star' || shape === 'curved star' || shape === 'flower';
             const renderList = input.setVisible(visible);
             if (!visible && input.connection) {
                 input.connection.hideAll();

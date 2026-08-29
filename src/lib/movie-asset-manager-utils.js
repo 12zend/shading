@@ -183,7 +183,7 @@ const isWithinTimeWindow = (timeWindow, currentTime) => {
 
 const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
 
-const SHAPE_TYPES = ['polygon', 'star', 'flower'];
+const SHAPE_TYPES = ['polygon', 'star', 'curved star', 'flower'];
 const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'line']);
 const MAX_SHAPE_SIZE = 4096;
 const MAX_SHAPE_BITMAP_PIXELS = 1024 * 1024;
@@ -231,7 +231,8 @@ const getShapeBitmapCacheKey = configuration => {
             shape === 'circular segment' ? 0 : outerRadius * 0.5
         )))
     );
-    const ratio = shape === 'star' || shape === 'flower' ? normalizeShapeRatio(configuration.ratio) : null;
+    const ratio = shape === 'star' || shape === 'curved star' || shape === 'flower' ?
+        normalizeShapeRatio(configuration.ratio) : null;
     const angle = configuration.angle || {};
     return JSON.stringify([
         shape,
@@ -310,7 +311,8 @@ const createShapeBitmap = configuration => {
             shape === 'circular segment' ? 0 : outerRadius * 0.5
         )))
     );
-    const ratio = shape === 'star' || shape === 'flower' ? normalizeShapeRatio(configuration.ratio) : null;
+    const ratio = shape === 'star' || shape === 'curved star' || shape === 'flower' ?
+        normalizeShapeRatio(configuration.ratio) : null;
     // Keep radius in the same coordinate system as the block's default 100px outer radius. The bitmap grows
     // when a larger radius is requested instead of normalizing every shape back to the requested dimensions.
     const scale = SHAPE_RADIUS_SCALE;
@@ -340,7 +342,9 @@ const createShapeBitmap = configuration => {
 
     const radiusAt = (radiusValue, angle) => {
         if (shape === 'polygon') return radiusValue;
-        if (shape === 'star') return angle % 2 === 0 ? radiusValue : radiusValue * ratio;
+        if (shape === 'star' || shape === 'curved star') {
+            return angle % 2 === 0 ? radiusValue : radiusValue * ratio;
+        }
         const petal = (Math.cos((angle / pointCount) * sides * Math.PI * 2) + 1) / 2;
         return radiusValue * (ratio + ((1 - ratio) * Math.pow(petal, 0.45)));
     };
@@ -354,6 +358,31 @@ const createShapeBitmap = configuration => {
             const y = centerY + (Math.sin(angle) * distance);
             if (index === 0) context.moveTo(x, y);
             else context.lineTo(x, y);
+        }
+        context.closePath();
+    };
+
+    const drawCurvedStarPath = (radiusValue, reverse = false) => {
+        const pointAt = pointIndex => {
+            const normalizedIndex = (pointIndex + pointCount) % pointCount;
+            const angle = (-Math.PI / 2) + ((normalizedIndex / pointCount) * Math.PI * 2);
+            const distance = radiusAt(radiusValue, normalizedIndex) * scale * bitmapResolution;
+            return {
+                x: centerX + (Math.cos(angle) * distance),
+                y: centerY + (Math.sin(angle) * distance)
+            };
+        };
+        const start = pointAt(0);
+        context.moveTo(start.x, start.y);
+        for (let index = 0; index < sides; index++) {
+            const outerIndex = reverse ? ((sides - index) % sides) * 2 : index * 2;
+            const nextOuterIndex = reverse ?
+                (outerIndex - 2 + pointCount) % pointCount : (outerIndex + 2) % pointCount;
+            const controlIndex = reverse ?
+                (nextOuterIndex + 1) % pointCount : outerIndex + 1;
+            const control = pointAt(controlIndex);
+            const next = pointAt(nextOuterIndex);
+            context.quadraticCurveTo(control.x, control.y, next.x, next.y);
         }
         context.closePath();
     };
@@ -375,6 +404,9 @@ const createShapeBitmap = configuration => {
         } else {
             context.lineTo(outerStartX, outerStartY);
         }
+    } else if (shape === 'curved star') {
+        drawCurvedStarPath(outerRadius);
+        if (innerRadius > 0) drawCurvedStarPath(innerRadius, true);
     } else {
         drawPath(pointCount, angle => radiusAt(outerRadius, angle));
         if (innerRadius > 0) drawPath(pointCount, angle => radiusAt(innerRadius, angle), true);
