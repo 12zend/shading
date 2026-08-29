@@ -66,6 +66,9 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.initializePromises = new Set();
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
+        this.timeline.offlineRenderScheduled = false;
+        this.timeline.offlineRenderTimer = null;
+        this.timeline.offlineRendering = false;
         this.timeline.keyframes = normalizeTimelineKeyframes(settings.keyframes, this.timeline.duration);
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
@@ -234,6 +237,7 @@ const MovieAssetManagerTimelineMethods = {
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.restorePreviewRendererSize();
+        this.restoreOfflineRendering();
         this.emitTimelineChanged();
     },
 
@@ -253,6 +257,7 @@ const MovieAssetManagerTimelineMethods = {
         this.stopTimelineSounds();
         this.runtime.stopAll();
         this.restorePreviewRendererSize();
+        this.restoreOfflineRendering();
         this.setTimelineClock(0, true);
         this.timeline.pendingFrame = true;
         this.emitTimelineChanged();
@@ -365,6 +370,127 @@ const MovieAssetManagerTimelineMethods = {
             Number(this.timeline.renderEndTime) : this.timeline.duration;
     },
 
+    prepareOfflineRendering () {
+        this.timeline.offlineRendering = true;
+        this.timeline.offlineRenderToken = (Number(this.timeline.offlineRenderToken) || 0) + 1;
+        const frameLoop = this.runtime.frameLoop;
+        this.timeline.offlineFrameLoopWasRunning = Boolean(frameLoop && frameLoop.running);
+        if (this.timeline.offlineFrameLoopWasRunning && typeof frameLoop.stop === 'function') frameLoop.stop();
+        this.timeline.offlinePreviousTurboMode = this.runtime.turboMode;
+        this.runtime.turboMode = true;
+    },
+
+    restoreOfflineRendering () {
+        if (!this.timeline.offlineRendering && !this.timeline.offlineFrameLoopWasRunning) return;
+        if (this.timeline.offlineRenderTimer !== null && typeof this.timeline.offlineRenderTimer !== 'undefined') {
+            clearTimeout(this.timeline.offlineRenderTimer);
+        }
+        this.timeline.offlineRenderTimer = null;
+        this.timeline.offlineRenderScheduled = false;
+        this.timeline.offlineRendering = false;
+        this.runtime.turboMode = this.timeline.offlinePreviousTurboMode;
+        const frameLoop = this.runtime.frameLoop;
+        if (this.timeline.offlineFrameLoopWasRunning && frameLoop && !frameLoop.running &&
+            typeof frameLoop.start === 'function') frameLoop.start();
+        this.timeline.offlineFrameLoopWasRunning = false;
+        this.timeline.offlinePreviousTurboMode = null;
+    },
+
+    getOfflineRenderPromises () {
+        const promises = [];
+        const add = promise => {
+            if (promise && typeof promise.then === 'function' && promises.indexOf(promise) === -1) {
+                promises.push(promise);
+            }
+        };
+        const addSet = set => {
+            if (!(set instanceof Set)) return;
+            set.forEach(add);
+        };
+        addSet(this.timeline.initializePromises);
+        addSet(this.blockingVideoRenders);
+        add(this.frameGraphRenderPromise);
+        if (this.targetStates instanceof Map) {
+            for (const state of this.targetStates.values()) {
+                add(state.objectDrawPromise);
+                add(state.modelRenderPromise);
+                add(state.textRenderPromise);
+                add(state.videoRenderPromise);
+            }
+        }
+        return promises;
+    },
+
+    scheduleOfflineRenderStep () {
+        if (!this.timeline.offlineRendering || !this.timeline.recording ||
+            typeof this.runtime._step !== 'function' || this.timeline.offlineRenderScheduled) return;
+        this.timeline.offlineRenderScheduled = true;
+        const token = this.timeline.offlineRenderToken;
+        const run = () => {
+            this.timeline.offlineRenderTimer = null;
+            this.timeline.offlineRenderScheduled = false;
+            if (!this.timeline.offlineRendering || !this.timeline.recording ||
+                token !== this.timeline.offlineRenderToken) return;
+            this.runOfflineRenderStep();
+        };
+        this.timeline.offlineRenderTimer = setTimeout(run, 0);
+    },
+
+    runOfflineRenderStep () {
+        if (!this.timeline.offlineRendering || !this.timeline.recording) return;
+        try {
+            // Runtime._step still owns all normal Scratch sequencing and the Movie BEFORE/AFTER hooks. The
+            // difference is that the frame loop is stopped and this driver advances it only after the current
+            // deterministic frame has finished, so the wall clock can never select or stretch a movie frame.
+            this.runtime._step();
+        } catch (error) {
+            this.failOfflineRendering(error);
+            return;
+        }
+        if (!this.timeline.offlineRendering || !this.timeline.recording) return;
+        const promises = this.getOfflineRenderPromises();
+        if (promises.length) {
+            Promise.all(promises).then(
+                () => this.scheduleOfflineRenderStep(),
+                error => this.failOfflineRendering(error)
+            );
+        } else {
+            this.scheduleOfflineRenderStep();
+        }
+    },
+
+    completeOfflineRendering () {
+        if (!this.timeline.offlineRendering) return;
+        this.timeline.recording = false;
+        this.timeline.playing = false;
+        this.timeline.pendingFrame = false;
+        this.timeline.waitingForFrame = false;
+        this.timeline.waitingForVideo = false;
+        this.timeline.renderFrameThreads = [];
+        this.setTimelineClock(this.getRenderEndTime(), true);
+        this.runtime.stopAll();
+        this.restorePreviewRendererSize();
+        this.restoreOfflineRendering();
+        this.emitTimelineChanged();
+        this.emit('timelineRenderComplete', this.getTimelineState());
+    },
+
+    failOfflineRendering (error) {
+        if (!this.timeline.offlineRendering) return;
+        this.timeline.recording = false;
+        this.timeline.playing = false;
+        this.timeline.pendingFrame = false;
+        this.timeline.waitingForFrame = false;
+        this.timeline.waitingForVideo = false;
+        this.timeline.renderFrameThreads = [];
+        this.runtime.stopAll();
+        this.restorePreviewRendererSize();
+        this.setTimelineClock(this.timeline.currentTime, true);
+        this.restoreOfflineRendering();
+        this.emitTimelineChanged();
+        this.emit('renderError', error);
+    },
+
     renderTimeline (options = {}) {
         this.cancelPenFrameTransaction();
         this.cancelPendingObjectDraws();
@@ -386,7 +512,7 @@ const MovieAssetManagerTimelineMethods = {
         );
         this.timeline.currentTime = rangeStart;
         this.timeline.pendingFrame = true;
-        this.timeline.playing = true;
+        this.timeline.playing = false;
         this.timeline.recording = true;
         this.timeline.renderEndTime = rangeEnd;
         this.timeline.renderFrameIndex = Math.max(0, Math.ceil((rangeStart * this.timeline.framerate) - 1e-9));
@@ -398,13 +524,15 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.reuseFramesDuringRender = reuseFrames;
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
-        this.setTimelineClock(this.timeline.renderFrameIndex / this.timeline.framerate, false);
+        this.prepareOfflineRendering();
+        this.setTimelineClock(this.timeline.renderFrameIndex / this.timeline.framerate, true);
         const initializeThreads = this.runtime.startHats('event_initialize');
         this.timeline.initializeThreads = Array.isArray(initializeThreads) ? initializeThreads : [];
         if (!this.timeline.initializeThreads.length && !this.timeline.initializePromises.size) {
             this.timeline.initializing = false;
         }
         this.emitTimelineChanged();
+        this.scheduleOfflineRenderStep();
     },
 
     getRendererPixelRatio () {
@@ -453,11 +581,11 @@ const MovieAssetManagerTimelineMethods = {
             this.timeline.renderedThisStep = true;
             return;
         }
-        if (!this.timeline.playing && !this.timeline.pendingFrame) return;
+        if (!this.timeline.playing && !this.timeline.pendingFrame && !this.timeline.recording) return;
         if (this.timeline.recording) {
             this.setTimelineClock(
                 Math.min(this.timeline.renderFrameIndex / this.timeline.framerate, this.getRenderEndTime()),
-                false
+                true
             );
         } else if (this.timeline.playing) {
             const time = getTimelineClockTime(this.runtime.ioDevices.clock);
@@ -531,12 +659,16 @@ const MovieAssetManagerTimelineMethods = {
                     this.restorePreviewRendererSize();
                     this.setTimelineClock(this.timeline.currentTime, true);
                     this.runtime.stopAll();
+                    if (this.timeline.offlineRendering) {
+                        this.restoreOfflineRendering();
+                    }
                     this.emit('renderError', error);
                 }
             }
             this.timeline.reusedFrameThisStep = false;
             if (this.timeline.recording && this.timeline.currentTime < this.getRenderEndTime()) {
                 this.timeline.renderFrameIndex++;
+                this.timeline.pendingFrame = true;
             }
         } else if (this.timeline.playing) {
             this.timeline.currentTime = clamp(
@@ -546,7 +678,15 @@ const MovieAssetManagerTimelineMethods = {
             );
         }
         this.emitTimelineChanged();
-        if (this.timeline.playing && this.timeline.currentTime >= this.getRenderEndTime()) {
+        if (this.timeline.recording && this.timeline.currentTime >= this.getRenderEndTime()) {
+            if (this.timeline.offlineRendering) {
+                this.completeOfflineRendering();
+                return;
+            }
+            const completedRendering = this.timeline.recording;
+            this.timeline.recording = false;
+            if (completedRendering) this.emit('timelineRenderComplete', this.getTimelineState());
+        } else if (this.timeline.playing && this.timeline.currentTime >= this.getRenderEndTime()) {
             const completedRendering = this.timeline.recording;
             this.timeline.recording = false;
             this.pauseTimeline();

@@ -132,7 +132,8 @@ const MovieAssetManagerSoundExportMethods = {
         const topBlock = blocks && typeof blocks.getBlock === 'function' ? blocks.getBlock(thread.topBlock) : null;
         // Scrubbing a paused timeline evaluates render-frame scripts to refresh the stage. Keep that visual
         // preview silent while still allowing this block to be clicked and auditioned directly.
-        if (!this.timeline.playing && topBlock && topBlock.opcode === 'event_renderframe') return;
+        if (!this.timeline.playing && !this.timeline.recording && topBlock &&
+            topBlock.opcode === 'event_renderframe') return;
 
         const sound = this.getRenderingSound(util.target, args && args.SOUND_MENU);
         if (!sound) return;
@@ -194,7 +195,7 @@ const MovieAssetManagerSoundExportMethods = {
         const topBlock = blocks && typeof blocks.getBlock === 'function' ? blocks.getBlock(thread.topBlock) : null;
 
         // A paused render-frame evaluation is only a visual scrub. Clicking the block directly still auditions it.
-        if (!this.timeline.playing) {
+        if (!this.timeline.playing && !this.timeline.recording) {
             if (topBlock && topBlock.opcode === 'event_renderframe') return;
             const duration = Number.isFinite(configuration.end) ? configuration.end - configuration.start : Infinity;
             this.startRangedSoundPlayback(target, sound, {

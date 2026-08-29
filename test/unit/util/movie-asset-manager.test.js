@@ -1062,12 +1062,15 @@ describe('MovieAssetManager rendering performance', () => {
         const manager = makeTimelineManager();
         const sound = {name: 'Beat'};
         const target = {
+            blocks: {
+                getBlock: jest.fn(() => ({opcode: 'event_renderframe'}))
+            },
             id: 'main',
             soundEffects: {pan: -25, pitch: 120},
             sprite: {sounds: [sound]},
             volume: 75
         };
-        manager.timeline.playing = true;
+        manager.timeline.playing = false;
         manager.timeline.recording = true;
         manager.timeline.renderFrameIndex = 12;
 
@@ -1135,9 +1138,15 @@ describe('MovieAssetManager rendering performance', () => {
     test('records one ranged sound segment per frame with speed, cut, and block volume', () => {
         const manager = makeTimelineManager();
         const sound = {name: 'Beat', soundId: 'beat'};
-        const target = {id: 'main', sprite: {sounds: [sound]}};
+        const target = {
+            blocks: {
+                getBlock: jest.fn(() => ({opcode: 'event_renderframe'}))
+            },
+            id: 'main',
+            sprite: {sounds: [sound]}
+        };
         manager.timeline.currentTime = 2.99;
-        manager.timeline.playing = true;
+        manager.timeline.playing = false;
         manager.timeline.recording = true;
         manager.timeline.renderFrameIndex = 90;
 
@@ -1401,6 +1410,35 @@ describe('MovieAssetManager rendering performance', () => {
             ['event_renderframe'],
             ['event_renderframe']
         ]);
+    });
+
+    test('renders frames in a stopped offline VM loop at exact timer values', () => {
+        jest.useFakeTimers();
+        const manager = makeTimelineManager();
+        const frameTimes = [];
+        manager.timeline.framerate = 10;
+        manager.runtime.turboMode = false;
+        manager.runtime._step = jest.fn(() => {
+            manager.handleTimelineBeforeExecute();
+            frameTimes.push(manager.timeline.currentTime);
+            manager.handleTimelineAfterExecute();
+        });
+        manager.addRenderingFrame = jest.fn();
+
+        try {
+            manager.renderTimeline({end: 0.2});
+            expect(manager.timeline.playing).toBe(false);
+            expect(manager.runtime._step).not.toHaveBeenCalled();
+
+            jest.runAllTimers();
+
+            expect(frameTimes).toEqual([0, 0.1, 0.2]);
+            expect(manager.runtime._step).toHaveBeenCalledTimes(3);
+            expect(manager.timeline.recording).toBe(false);
+            expect(manager.runtime.turboMode).toBe(false);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('waits for initialize threads and their asynchronous asset work before the first rendering frame', async () => {
