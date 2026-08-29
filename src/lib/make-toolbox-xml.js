@@ -564,6 +564,7 @@ const operators = function (isInitialSetup, isStage, targetId, colors) {
             <value name="T1"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
             <value name="POWER"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
             <value name="SPEED"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="STRENGTH"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
         </block>
         ${blockSeparator}
         <block type="operator_gt">

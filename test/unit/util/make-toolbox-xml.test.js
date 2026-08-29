@@ -1,6 +1,13 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
+    test('exposes secondary easing controls', () => {
+        const toolbox = makeToolboxXML(false, false, 'target', []);
+
+        expect(toolbox).toContain('<block type="operator_easing">');
+        expect(toolbox).toContain('<value name="STRENGTH"><shadow type="math_number"><field name="NUM">1</field>');
+    });
+
     test('offers procedural shape blocks directly below Draw in Objects', () => {
         const categories = [{id: 'objects', xml: '<category id="objects" />'}];
         const toolbox = makeToolboxXML(false, false, 'target', categories, 'costume1');

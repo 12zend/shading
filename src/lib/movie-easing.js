@@ -20,6 +20,8 @@ const EASING_TYPES = [
     'ExpoInOut'
 ];
 
+const EASING_SECONDARY_TYPES = ['Elastic', 'Bounce'];
+
 // Keep EASING_TYPES stable for projects created with the original operator_easing block.
 // Objects uses the expanded set below as its shared animation vocabulary.
 const ANIMATION_EASING_TYPES = [
@@ -126,6 +128,21 @@ const normalizeEasingType = value => {
     return ANIMATION_EASING_TYPES.find(type => type.toLowerCase() === compact) || 'Linear';
 };
 
+const normalizeEasingType2 = value => {
+    const compact = String(value || '')
+        .replace(/[\s_-]+/g, '')
+        .toLowerCase();
+    return EASING_SECONDARY_TYPES.find(type => type.toLowerCase() === compact) || 'Elastic';
+};
+
+const normalizeStrength = value => Math.max(0, Math.abs(finiteNumber(value, 1)));
+
+const secondaryEasingOffsets = {
+    // Keep the original speed-driven Elastic behavior when strength is 1.
+    Elastic: (elapsed, speed) => 1 - Math.cos(elapsed * speed),
+    Bounce: (elapsed, speed) => Math.abs(Math.sin(elapsed * speed))
+};
+
 const calculateEasingProgress = (type, progress, power = 2) => {
     const normalizedProgress = clamp01(finiteNumber(progress));
     const easing = easingFunctions[normalizeEasingType(type)] || easingFunctions.Linear;
@@ -144,12 +161,24 @@ const calculateEasingProgress = (type, progress, power = 2) => {
  * @param {number} options.v1 Value at t1.
  * @param {number} options.t0 Start time in seconds.
  * @param {number} options.t1 End time in seconds.
- * @param {number} options.power Strength/exponent of the easing curve.
- * @param {number} options.speed Elastic angular speed in radians per second.
+ * @param {string} options.type2 Secondary easing effect.
+ * @param {number} options.power Exponent of the primary easing curve.
+ * @param {number} options.speed Secondary easing angular speed in radians per second.
+ * @param {number} options.strength Intensity of the secondary easing effect.
  * @param {number} timer Current Scratch project timer in seconds.
  * @returns {number} Interpolated value.
  */
-const calculateEasingValue = ({type, v0, v1, t0, t1, power, speed}, timer) => {
+const calculateEasingValue = ({
+    type,
+    type2 = 'Elastic',
+    v0,
+    v1,
+    t0,
+    t1,
+    power,
+    speed,
+    strength = 1
+}, timer) => {
     const startValue = finiteNumber(v0);
     const endValue = finiteNumber(v1);
     const startTime = finiteNumber(t0);
@@ -167,9 +196,11 @@ const calculateEasingValue = ({type, v0, v1, t0, t1, power, speed}, timer) => {
     const easedProgress = calculateEasingProgress(easingType, progress, power);
     const angularSpeed = finiteNumber(speed);
     const elapsed = currentTime - startTime;
-    const elasticProgress = 1 - (Math.cos(elapsed * angularSpeed) * (1 - easedProgress));
+    const secondaryType = normalizeEasingType2(type2);
+    const secondaryOffset = secondaryEasingOffsets[secondaryType](elapsed, angularSpeed);
+    const secondaryProgress = easedProgress + (secondaryOffset * (1 - easedProgress) * normalizeStrength(strength));
 
-    return startValue + ((endValue - startValue) * elasticProgress);
+    return startValue + ((endValue - startValue) * secondaryProgress);
 };
 
 /**
@@ -183,12 +214,14 @@ const calculateEasingValue = ({type, v0, v1, t0, t1, power, speed}, timer) => {
 const installMovieEasing = vm => {
     vm.runtime._primitives.operator_easing = (args, util) => calculateEasingValue({
         type: args.TYPE,
+        type2: args.TYPE2,
         v0: args.V0,
         v1: args.V1,
         t0: args.T0,
         t1: args.T1,
         power: args.POWER,
-        speed: args.SPEED
+        speed: args.SPEED,
+        strength: args.STRENGTH
     }, util.ioQuery('clock', 'projectTimer'));
 
     if (!compilerCompatBlocks.inputs.includes('operator_easing')) {
@@ -201,8 +234,10 @@ const installMovieEasing = vm => {
 export {
     ANIMATION_EASING_TYPES,
     EASING_TYPES,
+    EASING_SECONDARY_TYPES,
     calculateEasingProgress,
     calculateEasingValue,
     normalizeEasingType,
+    normalizeEasingType2,
     installMovieEasing as default
 };

@@ -191,11 +191,11 @@ speed [SPEED] volume [VOLUME] %
 通常の Scratch 演算子に加え、現行の表示ブロックとして `operator_easing` を持つ。
 
 ```text
-easing [TYPE] value [V0] ~ [V1] time [T0] ~ [T1]
-power [POWER] speed [SPEED]
+easing [TYPE] [TYPE2] value [V0] ~ [V1] time [T0] ~ [T1]
+power [POWER] speed [SPEED] strength [STRENGTH]
 ```
 
-`TYPE` は `PowerIn`、`PowerOut`、`PowerInOut`、`CircIn`、`CircOut`、`CircInOut`、`ExpoIn`、`ExpoOut`、`ExpoInOut`。時間が開始前なら `V0`、終了後なら `V1`、範囲内なら選択した easing で補間する。`T1 <= T0` の場合は、開始時刻より前なら `V0`、それ以外なら `V1` を返す。
+`TYPE` は `PowerIn`、`PowerOut`、`PowerInOut`、`CircIn`、`CircOut`、`CircInOut`、`ExpoIn`、`ExpoOut`、`ExpoInOut`。`TYPE2` は `Elastic` または `Bounce` で、一次 easing に二次エフェクトを加える。`POWER` は一次 easing の指数、`SPEED` は二次エフェクトの速度、`STRENGTH` は二次エフェクトの強度を指定する。`STRENGTH` が 0 なら二次エフェクトは無効。時間が開始前なら `V0`、終了後なら `V1`、範囲内なら選択した easing で補間する。`T1 <= T0` の場合は、開始時刻より前なら `V0`、それ以外なら `V1` を返す。
 
 Objects の色補間などが使う共通 animation vocabulary には `Linear`、`BackIn`、`BackOut`、`BackInOut` も含まれる。
 
