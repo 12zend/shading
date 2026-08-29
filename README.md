@@ -18,7 +18,7 @@ npm run electron:start
 
 For development, `npm run electron:dev` starts webpack-dev-server and Electron together.
 
-Create a platform package with `npm run package:desktop`. The result is written to `release/` (`.dmg` and `.zip` on macOS, with the platform's native targets on Windows or Linux). Use `npm run package:desktop:dir` when an unpacked app directory is preferred.
+Create the macOS and Windows packages with `npm run package:desktop`. The result is written to `release/` and includes the macOS `.dmg`/`.zip`, the Windows NSIS installer `.exe`, and a portable Windows `.exe`. Use `npm run package:desktop:dir` when unpacked app directories are preferred.
 
 Project files can be opened by selecting them in the app, passing them as command-line arguments, or opening them through the operating system's file association. Saves use a temporary file followed by an atomic replacement, and the app asks before closing a dirty project.
 

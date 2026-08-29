@@ -485,6 +485,7 @@ MovieAssetManager が扱う主要な project JSON key は次のとおり。
 - 未保存変更がある状態で閉じる場合は確認を行う。
 - macOS では明示的な GPU スイッチがない限り ANGLE Metal backend を使用する。
 - `--use-gl`、`--use-angle`、`--disable-gpu` などの明示的な起動指定は尊重する。
+- パッケージングでは macOS の `.app` 向けターゲットに加えて、Windows の NSIS インストーラー `.exe` と portable `.exe` を生成する。
 
 開発・パッケージングの主なコマンドは次のとおり。
 

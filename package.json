@@ -19,8 +19,8 @@
     "build:desktop": "node scripts/build-desktop.js",
     "electron:start": "electron electron/main.js",
     "electron:dev": "electron electron/main.js --dev",
-    "package:desktop": "npm run build:desktop && electron-builder --publish never",
-    "package:desktop:dir": "npm run build:desktop && electron-builder --dir --publish never",
+    "package:desktop": "npm run build:desktop && electron-builder --mac --win --publish never",
+    "package:desktop:dir": "npm run build:desktop && electron-builder --mac --win --dir --publish never",
     "prepublish": "node scripts/prepublish.mjs",
     "prune": "./prune-gh-pages.sh",
     "i18n:push": "tx-push-src scratch-editor interface translations/en.json",
@@ -186,7 +186,7 @@
       "target": ["dmg", "zip"]
     },
     "win": {
-      "target": ["nsis", "zip"]
+      "target": ["nsis", "portable", "zip"]
     },
     "linux": {
       "category": "Education",
