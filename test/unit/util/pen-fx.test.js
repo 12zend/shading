@@ -746,6 +746,85 @@ describe('built-in Pen FX category', () => {
         expect(engine.groupStack).toEqual([]);
     });
 
+    test('builds an expanded input only for explicitly expanded grouped effects', () => {
+        const gl = {
+            ARRAY_BUFFER: 1,
+            BLEND: 2,
+            COLOR_BUFFER_BIT: 4,
+            DEPTH_TEST: 5,
+            FRAMEBUFFER: 6,
+            FUNC_ADD: 7,
+            ONE: 8,
+            ONE_MINUS_SRC_ALPHA: 9,
+            SCISSOR_TEST: 10,
+            STATIC_DRAW: 11,
+            STENCIL_TEST: 12,
+            TEXTURE0: 13,
+            VERTEX_SHADER: 14,
+            activeTexture: jest.fn(),
+            bindBuffer: jest.fn(),
+            bindFramebuffer: jest.fn(),
+            blendEquation: jest.fn(),
+            blendFunc: jest.fn(),
+            bufferData: jest.fn(),
+            clear: jest.fn(),
+            clearColor: jest.fn(),
+            colorMask: jest.fn(),
+            compileShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            createShader: jest.fn(() => ({})),
+            deleteFramebuffer: jest.fn(),
+            deleteTexture: jest.fn(),
+            disable: jest.fn(),
+            enable: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            shaderSource: jest.fn()
+        };
+        const penFramebuffer = {framebuffer: 'pen-framebuffer'};
+        const skin = {
+            _framebuffer: penFramebuffer,
+            _size: [480, 360],
+            _texture: 'pen-texture'
+        };
+        const renderer = {
+            _allSkins: {1: skin},
+            _doExitDrawRegion: jest.fn(),
+            _gl: gl,
+            _penSkinId: 1
+        };
+        const PenFX = createPenFXClass({runtime: {renderer}});
+        const engine = new PenFX()._getEngine();
+        engine.width = 480;
+        engine.height = 360;
+        engine.framebuffers = ['engine-framebuffer'];
+        engine.textures = ['engine-texture'];
+        engine._createBufferTexture = jest.fn()
+            .mockReturnValueOnce({framebuffer: 'group-framebuffer', texture: 'group-staging'})
+            .mockReturnValueOnce({framebuffer: 'expanded-framebuffer', texture: 'expanded-source'});
+        engine._program = jest.fn(name => `${name}-program`);
+        engine._render = jest.fn();
+        engine._replaceSkin = jest.fn();
+
+        engine.beginGroup();
+        engine.groupEffectScope = 'expanded';
+
+        expect(engine._getGroupEffectSource(skin)).toBe('expanded-source');
+        expect(engine._render).toHaveBeenCalledWith('groupOver-program', 'expanded-framebuffer', [
+            {name: 'u_base', texture: 'pen-texture'},
+            {name: 'u_effect', texture: 'group-staging'}
+        ], {u_blend: 0, u_opacity: 1}, ['u_blend']);
+        engine._markExpandedGroupOutput(skin);
+
+        engine.endGroup();
+
+        expect(engine._render).toHaveBeenCalledWith('composite-program', 'engine-framebuffer', [
+            {name: 'u_base', texture: 'pen-texture'},
+            {name: 'u_effect', texture: 'group-staging'}
+        ], {u_blend: 0, u_opacity: 1}, ['u_blend']);
+        expect(gl.deleteFramebuffer).toHaveBeenCalledWith('expanded-framebuffer');
+        expect(gl.deleteTexture).toHaveBeenCalledWith('expanded-source');
+    });
+
     test('captures source and matte layers before compositing a luma matte over the baseline', () => {
         const gl = {
             ARRAY_BUFFER: 1,
@@ -870,6 +949,30 @@ describe('built-in Pen FX category', () => {
 
         penFX.applyCapturedEffects(effects);
         expect(penFX.engine.color).toHaveBeenCalledTimes(1);
+    });
+
+    test('captures expanded scope for coordinate-based grouped effects', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        const scopes = [];
+        penFX.engine = {
+            _restoreGLState: jest.fn(),
+            digitalGlitch: jest.fn(() => scopes.push(penFX.engine.groupEffectScope))
+        };
+
+        penFX.beginEffectCapture();
+        penFX.glitch({MIX: 100});
+        const effects = penFX.endEffectCapture();
+
+        expect(effects).toHaveLength(1);
+        expect(effects[0].groupEffectScope).toBe('expanded');
+        expect(penFX.engine.digitalGlitch).not.toHaveBeenCalled();
+
+        penFX.applyCapturedEffects(effects);
+
+        expect(scopes).toEqual(['expanded']);
+        expect(penFX.engine.groupEffectScope).toBeUndefined();
     });
 
     test('snapshots HSL adjust arguments when a grouped effect is captured', () => {

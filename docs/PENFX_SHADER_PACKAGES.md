@@ -103,9 +103,21 @@ tint-wave.zip
 | `inputs` | 任意 | 最大 24 個。省略時は引数なし |
 | `blockType` | 任意 | `command`（既定）または、`implementation` block の `reporter` |
 | `implementation` | v2 のみ | 既存 PenFX pipeline へ接続する adapter 定義 |
+| `groupEffectScope` | 任意 | `expanded` の場合、grouping 内でも全画面を入力として effect を実行 |
 | `separatorBefore` | 任意 | `true` の場合、このブロックの前に palette separator を表示 |
 
 `text` を書く場合、すべての input id を 1 回以上含め、定義していない placeholder を置かないでください。`text` を省略すると `name label: [ID] ...` の順で自動生成されます。
+
+通常の block は grouping の描画内容だけを `u_image` に渡します。座標を変形したり、grouping の外側へサンプルを広げたりする block は、`groupEffectScope` に `expanded` を指定してください。この場合は grouping 開始前の Pen layer と grouping の描画内容を合成した全画面が入力になります。省略時は従来どおり grouping 内の透明レイヤーだけを入力にします。
+
+たとえば、座標やテクスチャを画面全体の範囲で扱う `zigzag` block は次のように指定します。
+
+```json
+{
+  "id": "zigzag",
+  "groupEffectScope": "expanded"
+}
+```
 
 ### input の型
 

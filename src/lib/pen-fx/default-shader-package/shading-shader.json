@@ -1746,6 +1746,7 @@
       "text": "VHS tracking: [TRACKING] px chroma bleed: [CHROMA] px noise: [NOISE] % scanlines: [SCANLINES] % seed: [SEED] evolution: [EVOLUTION] mix: [MIX] %",
       "opcode": "vhs",
       "blockType": "command",
+      "groupEffectScope": "expanded",
       "implementation": {
         "type": "penfx",
         "opcode": "vhs"
@@ -1801,6 +1802,7 @@
       "text": "digital glitch slices: [SLICES] shift: [SHIFT] px RGB split: [RGB] px density: [DENSITY] % seed: [SEED] evolution: [EVOLUTION] mix: [MIX] %",
       "opcode": "glitch",
       "blockType": "command",
+      "groupEffectScope": "expanded",
       "implementation": {
         "type": "penfx",
         "opcode": "glitch"

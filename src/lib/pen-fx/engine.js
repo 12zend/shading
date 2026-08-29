@@ -49,6 +49,7 @@ const createPenFXEngine = (gl, renderer) => {
             this.matteStack = [];
             this.frameTransaction = null;
             this.blendOpacity = 1;
+            this.groupEffectScope = null;
             this.uniformCache = new WeakMap();
             this.positionCache = new WeakMap();
             this.programOverrides = null;
@@ -208,9 +209,30 @@ const createPenFXEngine = (gl, renderer) => {
             gl.disable(gl.SCISSOR_TEST);
             gl.disable(gl.BLEND);
             if (copySource) {
-                this._render(this._program('copy'), this.framebuffers[0], [{name: 'u_image', texture: skin._texture}], {}, []);
+                const source = this._getGroupEffectSource(skin);
+                this._render(this._program('copy'), this.framebuffers[0], [{name: 'u_image', texture: source}], {}, []);
             }
             return skin;
+        }
+
+        _getGroupEffectSource (skin) {
+            const entry = this.groupStack[this.groupStack.length - 1];
+            if (this.groupEffectScope !== 'expanded' || !entry || entry.skin !== skin ||
+                skin._texture !== entry.texture) return skin._texture;
+            if (!entry.effectSource) entry.effectSource = this._createBufferTexture();
+            // Build the expanded input lazily. The group remains isolated while objects are drawn, and only an
+            // explicitly expanded effect sees the completed baseline underneath the group's pixels.
+            this._renderGroupOver(entry.effectSource.framebuffer, entry.baselineTexture, entry.texture, 0, 1);
+            return entry.effectSource.texture;
+        }
+
+        _renderGroupOver (framebuffer, baseTexture, effectTexture, blendMode, opacity) {
+            // A custom shader package may override the public groupOver binding. This internal pass must always
+            // use the built-in compositor, even when it is created while a custom effect's overrides are active.
+            this.withProgramOverrides(null, () => this._render(this._program('groupOver'), framebuffer, [
+                {name: 'u_base', texture: baseTexture},
+                {name: 'u_effect', texture: effectTexture}
+            ], {u_blend: blendMode, u_opacity: opacity}, ['u_blend']));
         }
 
         _finish (skin, effectTexture, blendMode) {
@@ -245,6 +267,15 @@ const createPenFXEngine = (gl, renderer) => {
                 this._ensureSecondaryBuffer();
                 this._render(program, this.framebuffers[1], samplers, uniforms, integerUniforms);
                 this._finish(skin, this.textures[1], blendMode);
+            }
+            this._markExpandedGroupOutput(skin);
+        }
+
+        _markExpandedGroupOutput (skin) {
+            const entry = this.groupStack[this.groupStack.length - 1];
+            if (this.groupEffectScope === 'expanded' && entry && entry.skin === skin &&
+                skin._texture === entry.texture) {
+                entry.expandedOutput = true;
             }
         }
 
@@ -401,13 +432,22 @@ const createPenFXEngine = (gl, renderer) => {
                 skin._framebuffer = entry.baselineFramebuffer;
                 this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
                 if (shouldComposite && this._prepare(false, false) === skin) {
-                    // Composite the isolated group content over the untouched baseline instead of replacing it, so
-                    // the default pen backdrop and earlier drawings survive every group.
-                    this._render(this._program('groupOver'), this.framebuffers[0], [
-                        {name: 'u_base', texture: entry.baselineTexture},
-                        {name: 'u_effect', texture: entry.texture}
-                    ], {u_blend: blendIndex, u_opacity: opacity}, ['u_blend']);
-                    this._replaceSkin(skin, this.textures[0]);
+                    if (entry.expandedOutput) {
+                        // An expanded effect already rendered the baseline into the group result. Composite that
+                        // full-frame result against the baseline, rather than applying the group alpha mask again.
+                        this._render(this._program('composite'), this.framebuffers[0], [
+                            {name: 'u_base', texture: entry.baselineTexture},
+                            {name: 'u_effect', texture: entry.texture}
+                        ], {u_blend: blendIndex, u_opacity: opacity}, ['u_blend']);
+                        this._replaceSkin(skin, this.textures[0]);
+                    } else {
+                        // Composite the isolated group content over the untouched baseline instead of replacing it,
+                        // so the default pen backdrop and earlier drawings survive every group.
+                        this._renderGroupOver(
+                            this.framebuffers[0], entry.baselineTexture, entry.texture, blendIndex, opacity
+                        );
+                        this._replaceSkin(skin, this.textures[0]);
+                    }
                 }
             }
             if (passName && stillStaged) {
@@ -425,6 +465,10 @@ const createPenFXEngine = (gl, renderer) => {
             } else {
                 gl.deleteFramebuffer(entry.framebuffer);
                 gl.deleteTexture(entry.texture);
+            }
+            if (entry.effectSource) {
+                gl.deleteFramebuffer(entry.effectSource.framebuffer);
+                gl.deleteTexture(entry.effectSource.texture);
             }
         }
 
@@ -633,6 +677,10 @@ const createPenFXEngine = (gl, renderer) => {
                 }
                 gl.deleteFramebuffer(entry.framebuffer);
                 gl.deleteTexture(entry.texture);
+                if (entry.effectSource) {
+                    gl.deleteFramebuffer(entry.effectSource.framebuffer);
+                    gl.deleteTexture(entry.effectSource.texture);
+                }
             }
             this.groupStack.length = 0;
         }

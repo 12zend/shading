@@ -43,6 +43,7 @@ const manifest = {
         name: 'tint wave',
         text: 'tint wave amount: [AMOUNT] tint: [TINT] mode: [MODE] mix: [MIX] %',
         file: 'tint-wave.glsl',
+        groupEffectScope: 'expanded',
         inputs: [
             {id: 'AMOUNT', label: 'amount', type: 'number', defaultValue: 4, uniform: 'u_amount'},
             {id: 'TINT', label: 'tint', type: 'color', defaultValue: '#204080', uniform: 'u_tint'},
@@ -77,6 +78,7 @@ describe('Pen FX custom shader packages', () => {
             scale: 0.01,
             uniform: 'u_mix'
         });
+        expect(descriptor.blocks[0].groupEffectScope).toBe('expanded');
     });
 
     test('auto-discovers GLSL files when a manifest is omitted', async () => {
@@ -106,6 +108,7 @@ describe('Pen FX custom shader packages', () => {
             'displacementMap',
             'bufferStackSize'
         ]));
+        expect(descriptor.blocks.find(block => block.id === 'glitch').groupEffectScope).toBe('expanded');
         for (const program of descriptor.programs) {
             expect(program.source).toBe(programSources[program.bind].trim());
         }
@@ -186,6 +189,36 @@ describe('Pen FX custom shader packages', () => {
         expect(withShaderProgramOverrides).toHaveBeenCalledWith({
             color: 'custom:contrast-variant:program:color'
         }, expect.any(Function));
+    });
+
+    test('propagates expanded scope through implementation blocks', async () => {
+        const implementation = jest.fn();
+        const withGroupEffectScope = jest.fn((scope, callback) => callback());
+        const penFX = {
+            engine: null,
+            contrast: implementation,
+            withGroupEffectScope
+        };
+        const manager = new PenFXCustomShaderManager({runtime: {}}, penFX);
+        const descriptor = normalizePackage({
+            format: CUSTOM_SHADER_FORMAT,
+            version: 2,
+            id: 'expanded-adapter',
+            name: 'Expanded Adapter',
+            blocks: [{
+                id: 'expanded',
+                name: 'expanded',
+                text: 'expanded',
+                groupEffectScope: 'expanded',
+                implementation: {type: 'penfx', opcode: 'contrast'}
+            }]
+        });
+
+        await manager.restorePackages([descriptor]);
+        penFX[opcodeFor('expanded-adapter', 'expanded')]({}, {});
+
+        expect(withGroupEffectScope).toHaveBeenCalledWith('expanded', expect.any(Function));
+        expect(implementation).toHaveBeenCalledTimes(1);
     });
 
     test('rejects manifest inputs which target standard uniforms', () => {

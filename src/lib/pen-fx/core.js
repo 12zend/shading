@@ -18,6 +18,7 @@ const createPenFXClass = vm => {
             this.blendOpacity = 1;
             this.warned = false;
             this.effectCaptureStack = [];
+            this.groupEffectScope = null;
             this.shaderProgramOverrides = null;
             vm.runtime.penFX = this;
             this.customShaders = new PenFXCustomShaderManager(vm, this, {loadDefaultPackage: true});
@@ -51,14 +52,17 @@ const createPenFXClass = vm => {
             this.customShaders.openImportPicker();
         }
 
-        _executeSafe(callback, blendMode, blendOpacity, renderContext = null) {
+        _executeSafe(callback, blendMode, blendOpacity, renderContext = null, effect = null) {
             const previousBlendMode = this.blendMode;
             const previousBlendOpacity = this.blendOpacity;
             let engine;
+            let previousGroupEffectScope;
             try {
                 this.blendMode = blendMode;
                 this.blendOpacity = blendOpacity;
                 engine = this._getEngine();
+                previousGroupEffectScope = engine.groupEffectScope;
+                engine.groupEffectScope = effect && effect.groupEffectScope === 'expanded' ? 'expanded' : null;
                 engine.blendOpacity = this.blendOpacity;
                 callback(engine, renderContext);
             } catch (error) {
@@ -66,7 +70,10 @@ const createPenFXClass = vm => {
             } finally {
                 // _prepare disables blending before compiling the selected program. If compilation or rendering fails,
                 // leaving that state active makes the transparent Pen framebuffer cover the stage as opaque black.
-                if (engine && typeof engine._restoreGLState === 'function') engine._restoreGLState();
+                if (engine) {
+                    engine.groupEffectScope = previousGroupEffectScope;
+                    if (typeof engine._restoreGLState === 'function') engine._restoreGLState();
+                }
                 this.blendMode = previousBlendMode;
                 this.blendOpacity = previousBlendOpacity;
             }
@@ -91,12 +98,16 @@ const createPenFXClass = vm => {
                     () => effectCallback(engine, renderContext)
                 );
             }
-            const effect = Object.freeze({
+            const effectData = {
                 blendMode: this.blendMode,
                 blendOpacity: this.blendOpacity,
                 callback,
                 targetId: options.target && options.target.id || null
-            });
+            };
+            if (options.groupEffectScope === 'expanded' || this.groupEffectScope === 'expanded') {
+                effectData.groupEffectScope = 'expanded';
+            }
+            const effect = Object.freeze(effectData);
             if (this.effectCaptureStack.length) {
                 this.effectCaptureStack[this.effectCaptureStack.length - 1].push(effect);
                 return;
@@ -108,7 +119,8 @@ const createPenFXClass = vm => {
                 effect.callback,
                 effect.blendMode,
                 effect.blendOpacity,
-                this._getEffectRenderContext(effect)
+                this._getEffectRenderContext(effect),
+                effect
             );
         }
 
@@ -119,6 +131,16 @@ const createPenFXClass = vm => {
                 return callback();
             } finally {
                 this.shaderProgramOverrides = previous;
+            }
+        }
+
+        withGroupEffectScope(scope, callback) {
+            const previous = this.groupEffectScope;
+            this.groupEffectScope = scope === 'expanded' ? 'expanded' : null;
+            try {
+                return callback();
+            } finally {
+                this.groupEffectScope = previous;
             }
         }
 
@@ -136,7 +158,8 @@ const createPenFXClass = vm => {
                     effect.callback,
                     effect.blendMode,
                     effect.blendOpacity,
-                    renderContext || this._getEffectRenderContext(effect)
+                    renderContext || this._getEffectRenderContext(effect),
+                    effect
                 );
             }
         }

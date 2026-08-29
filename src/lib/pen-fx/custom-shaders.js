@@ -253,11 +253,18 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
     if (!BLOCK_TYPES.has(blockType) || (!implementation && blockType !== 'command')) {
         throw new Error(`Shader block ${id} has unsupported block type ${blockType}.`);
     }
+    let groupEffectScope = null;
+    if (rawBlock.groupEffectScope !== undefined && rawBlock.groupEffectScope !== null) {
+        groupEffectScope = String(rawBlock.groupEffectScope).toLowerCase();
+        if (groupEffectScope !== 'expanded') {
+            throw new Error(`Shader block ${id} has unsupported groupEffectScope ${rawBlock.groupEffectScope}.`);
+        }
+    }
     const opcode = rawBlock.opcode == null ? null : assertString(rawBlock.opcode, `Shader block ${id} opcode`, 64);
     if (opcode && (!implementation || !/^[A-Za-z][A-Za-z0-9]*$/.test(opcode))) {
         throw new Error(`Shader block ${id} has an invalid compatibility opcode.`);
     }
-    return {
+    const normalizedBlock = {
         id,
         name,
         text,
@@ -269,6 +276,8 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         blockType,
         separatorBefore: rawBlock.separatorBefore === true
     };
+    if (groupEffectScope) normalizedBlock.groupEffectScope = groupEffectScope;
+    return normalizedBlock;
 };
 
 const normalizeProgram = (rawProgram, source, usedIds) => {
@@ -684,7 +693,14 @@ class PenFXCustomShaderManager {
                     this.implementationMethods.set(implementationOpcode, implementation);
                 }
                 this.penFX[opcode] = (args, util) => {
-                    const invoke = () => implementation.call(this.penFX, args || {}, util);
+                    const runImplementation = () => implementation.call(this.penFX, args || {}, util);
+                    const invoke = () => {
+                        if (shaderBlock.groupEffectScope === 'expanded' &&
+                            typeof this.penFX.withGroupEffectScope === 'function') {
+                            return this.penFX.withGroupEffectScope('expanded', runImplementation);
+                        }
+                        return runImplementation();
+                    };
                     if (programOverrideState.overrides &&
                         typeof this.penFX.withShaderProgramOverrides === 'function') {
                         return this.penFX.withShaderProgramOverrides(programOverrideState.overrides, invoke);
@@ -723,7 +739,7 @@ class PenFXCustomShaderManager {
                         uniforms,
                         integerUniforms,
                         this.penFX.blendMode
-                    ));
+                    ), {groupEffectScope: shaderBlock.groupEffectScope});
                 };
             }
             if (this.penFX.engine && shaderBlock.source) {
