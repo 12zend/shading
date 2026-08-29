@@ -730,7 +730,13 @@ const createPenFXEngine = (gl, renderer) => {
                 const value = uniforms[name];
                 const location = this._location(program, name);
                 if (integerUniforms.indexOf(name) !== -1) {
-                    gl.uniform1i(location, value);
+                    if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+                        if (value.length === 2) gl.uniform2iv(location, value);
+                        else if (value.length === 3) gl.uniform3iv(location, value);
+                        else if (value.length === 4) gl.uniform4iv(location, value);
+                    } else {
+                        gl.uniform1i(location, value);
+                    }
                 } else if (Array.isArray(value) || ArrayBuffer.isView(value)) {
                     if (value.length === 2) gl.uniform2fv(location, value);
                     else if (value.length === 3) gl.uniform3fv(location, value);

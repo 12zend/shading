@@ -92,7 +92,9 @@ describe('Pen FX custom shader packages', () => {
 
         expect(descriptor.name).toBe('quick effects');
         expect(descriptor.blocks.map(block => block.name)).toEqual(['soft glow', 'color shift']);
-        expect(descriptor.blocks.every(block => block.inputs.length === 0)).toBe(true);
+        expect(descriptor.blocks.every(block => block.autoInputs)).toBe(true);
+        expect(descriptor.blocks.every(block => block.inputs.map(input => input.id).join(',') ===
+            'AMOUNT,TINT_X,TINT_Y,TINT_Z,MODE,MIX')).toBe(true);
     });
 
     test('ships every built-in PenFX block and fragment program in the default zip', async () => {
@@ -313,6 +315,98 @@ describe('Pen FX custom shader packages', () => {
         callOrder.length = 0;
         await vm.deserializeProject(saved);
         expect(callOrder).toEqual(['refresh', 'deserialize']);
+    });
+
+    test('creates and updates one editable block with automatically discovered uniforms', async () => {
+        const customShader = jest.fn();
+        const engine = {
+            customShader,
+            registerCustomShader: jest.fn(),
+            unregisterCustomShader: jest.fn(),
+            validateCustomShader: jest.fn()
+        };
+        const vm = {
+            runtime: {
+                emitProjectChanged: jest.fn(),
+                movieAssetManager: {timeline: {currentTime: 2, framerate: 30}}
+            },
+            extensionManager: {
+                isExtensionLoaded: () => true,
+                refreshBlocks: jest.fn(async () => undefined)
+            }
+        };
+        const penFX = {
+            blendMode: 'normal',
+            engine: null,
+            _getEngine: () => {
+                penFX.engine = engine;
+                return engine;
+            },
+            _safe: callback => callback(engine)
+        };
+        const manager = new PenFXCustomShaderManager(vm, penFX);
+        const source = `
+            precision highp float;
+            varying vec2 v_uv;
+            uniform sampler2D u_image;
+            uniform vec2 u_offset;
+            uniform bool u_enabled;
+            void main() { gl_FragColor = texture2D(u_image, v_uv + u_offset); }
+        `;
+
+        const created = await manager.createShader({name: 'Offset', source});
+        expect(created.inputs.map(input => input.id)).toEqual(['OFFSET_X', 'OFFSET_Y', 'ENABLED']);
+        expect(manager.getToolboxBlocks().find(block => block && block.opcode === 'shader_offset_main')).toMatchObject({
+            text: 'Offset offset x: [OFFSET_X] offset y: [OFFSET_Y] enabled: [ENABLED]'
+        });
+
+        const result = penFX[opcodeFor('offset', 'main')]({
+            OFFSET_X: 0.25,
+            OFFSET_Y: -0.5,
+            ENABLED: true
+        });
+        expect(result).toBeUndefined();
+        expect(result).not.toBeInstanceOf(Promise);
+        expect(customShader).toHaveBeenCalledWith('custom:offset:main', {
+            u_resolution: [0, 0],
+            u_time: 2,
+            u_frame: 60,
+            u_offset: [0.25, -0.5],
+            u_enabled: 1
+        }, ['u_frame', 'u_enabled'], 'normal');
+
+        const updated = await manager.updateShader(created.key, {
+            name: 'Offset Plus',
+            source: source.replace('uniform bool u_enabled;', 'uniform bool u_enabled; uniform float u_amount;')
+        });
+        expect(updated.name).toBe('Offset Plus');
+        expect(updated.inputs.map(input => input.id)).toEqual(['OFFSET_X', 'OFFSET_Y', 'ENABLED', 'AMOUNT']);
+        expect(manager.serializePackages()[0].blocks[0].source).toContain('uniform float u_amount');
+        expect(vm.runtime.emitProjectChanged).toHaveBeenCalledTimes(2);
+    });
+
+    test('keeps the previous editable shader when an update does not compile', async () => {
+        const engine = {
+            registerCustomShader: jest.fn(),
+            unregisterCustomShader: jest.fn(),
+            validateCustomShader: jest.fn(source => {
+                if (source.indexOf('broken') !== -1) throw new Error('compile failed');
+            })
+        };
+        const penFX = {
+            engine: null,
+            _getEngine: () => {
+                penFX.engine = engine;
+                return engine;
+            }
+        };
+        const manager = new PenFXCustomShaderManager({runtime: {}}, penFX);
+        const created = await manager.createShader({name: 'Safe Shader', source: fragmentSource});
+
+        await expect(manager.updateShader(created.key, {
+            source: `${fragmentSource}\n// broken`
+        })).rejects.toThrow('compile failed');
+        expect(manager.getShader(created.key).source).toBe(fragmentSource.trim());
     });
 
 });

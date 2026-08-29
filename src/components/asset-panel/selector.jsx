@@ -57,9 +57,9 @@ const Selector = props => {
             <Box className={styles.listArea}>
                 {items.map((item, index) => (
                     <SortableAsset
-                        id={item.name}
+                        id={item.id || item.name}
                         index={isRelevantDrag ? ordering.indexOf(index) : index}
-                        key={item.name}
+                        key={item.id || item.name}
                         onAddSortable={onAddSortable}
                         onRemoveSortable={onRemoveSortable}
                     >
@@ -103,6 +103,7 @@ Selector.propTypes = {
     draggingType: PropTypes.oneOf(Object.keys(DragConstants)),
     isRtl: PropTypes.bool,
     items: PropTypes.arrayOf(PropTypes.shape({
+        id: PropTypes.string,
         url: PropTypes.string,
         thumbnail: PropTypes.node,
         name: PropTypes.any // modified by folders addon

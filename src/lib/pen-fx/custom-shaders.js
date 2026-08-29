@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import JSZip from '@turbowarp/jszip';
+import EventEmitter from 'events';
 import ArgumentType from 'scratch-vm/src/extension-support/argument-type';
 import BlockType from 'scratch-vm/src/extension-support/block-type';
 
@@ -8,6 +9,7 @@ import {boolean, color, number} from './helpers';
 import {BLEND_MODES, FRACTAL_NOISE_TYPES, FRACTAL_OVERFLOW_TYPES, FRACTAL_TYPES} from './constants';
 import {markMovieProject} from '../project-format';
 import defaultShaderManifest from './default-shader-package/shading-shader.json';
+import {inferShaderInputs} from './shader-uniforms';
 
 const CUSTOM_SHADER_PROJECT_KEY = 'penFXShaders';
 const CUSTOM_SHADER_FORMAT = 'shading.app/penfx-shader';
@@ -53,6 +55,19 @@ const DEFAULT_LEGACY_MENUS = {
 };
 const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.map(block => block.implementation.opcode));
 const PENFX_PROGRAM_BINDINGS = new Set(defaultShaderManifest.programs.map(program => program.bind));
+const DEFAULT_SHADER_SOURCE = `precision highp float;
+
+varying vec2 v_uv;
+uniform sampler2D u_image;
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform int u_frame;
+
+void main() {
+    vec4 pixel = texture2D(u_image, v_uv);
+    gl_FragColor = pixel;
+}
+`;
 
 // The binary is intentionally loaded only by webpack. Jest exercises the same file from disk directly,
 // without teaching its module resolver about inline webpack loaders.
@@ -147,10 +162,27 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
             `${blockLabel} input ${id} uniform`,
             64
         );
-        if (!/^u_[A-Za-z][A-Za-z0-9_]*$/.test(uniform) || STANDARD_UNIFORMS.has(uniform)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(uniform) || STANDARD_UNIFORMS.has(uniform)) {
             throw new Error(`${blockLabel} input ${id} has invalid or reserved uniform ${uniform}.`);
         }
         result.uniform = uniform;
+        if (rawInput.uniformType !== undefined) {
+            result.uniformType = assertString(
+                rawInput.uniformType,
+                `${blockLabel} input ${id} uniform type`,
+                16
+            );
+        }
+        if (rawInput.component !== undefined || rawInput.vectorSize !== undefined) {
+            const component = Number(rawInput.component);
+            const vectorSize = Number(rawInput.vectorSize);
+            if (!Number.isInteger(vectorSize) || vectorSize < 2 || vectorSize > 4 ||
+                !Number.isInteger(component) || component < 0 || component >= vectorSize) {
+                throw new Error(`${blockLabel} input ${id} has invalid vector component metadata.`);
+            }
+            result.component = component;
+            result.vectorSize = vectorSize;
+        }
     }
     if (type === 'menu') {
         if (!Array.isArray(rawInput.items) || rawInput.items.length < 1 || rawInput.items.length > 32) {
@@ -224,8 +256,18 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
     if (new Set(normalizedInputs.map(input => input.id)).size !== normalizedInputs.length) {
         throw new Error(`Shader block ${id} input ids must be unique.`);
     }
-    if (!implementation && new Set(normalizedInputs.map(input => input.uniform)).size !== normalizedInputs.length) {
-        throw new Error(`Shader block ${id} uniforms must be unique.`);
+    if (!implementation) {
+        const uniformInputs = new Map();
+        for (const input of normalizedInputs) {
+            const componentKey = input.component === undefined ? 'scalar' : String(input.component);
+            if (!uniformInputs.has(input.uniform)) uniformInputs.set(input.uniform, new Set());
+            const components = uniformInputs.get(input.uniform);
+            if (components.has(componentKey) || (componentKey === 'scalar' && components.size) ||
+                (componentKey !== 'scalar' && components.has('scalar'))) {
+                throw new Error(`Shader block ${id} uniform inputs must be unique.`);
+            }
+            components.add(componentKey);
+        }
     }
     const generatedText = [name].concat(normalizedInputs.map(input => `${input.label}: [${input.id}]`)).join(' ');
     const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`, 1024);
@@ -274,7 +316,9 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         implementation,
         opcode,
         blockType,
-        separatorBefore: rawBlock.separatorBefore === true
+        separatorBefore: rawBlock.separatorBefore === true,
+        editorManaged: rawBlock.editorManaged === true,
+        autoInputs: rawBlock.autoInputs === true
     };
     if (groupEffectScope) normalizedBlock.groupEffectScope = groupEffectScope;
     return normalizedBlock;
@@ -403,10 +447,11 @@ const parseShaderZip = async (data, archiveName = 'shader.zip') => {
             blocks.push({
                 id,
                 name: humanize(entry.name.split('/').pop()),
-                text: humanize(entry.name.split('/').pop()),
                 file: normalizePath(entry.name, 'GLSL file path'),
                 source,
-                inputs: []
+                inputs: inferShaderInputs(source, MAX_INPUTS),
+                editorManaged: true,
+                autoInputs: true
             });
         }
         const baseName = String(archiveName || 'shader.zip').replace(/\.zip$/i, '');
@@ -491,6 +536,16 @@ const readBlobAsArrayBuffer = blob => {
     });
 };
 
+const readBlobAsText = blob => {
+    if (blob && typeof blob.text === 'function') return blob.text();
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Could not read shader file.'));
+        reader.readAsText(blob);
+    });
+};
+
 const createDefaultPackageShell = () => {
     const shell = cloneJSON(defaultShaderManifest);
     shell.programs = [];
@@ -499,8 +554,9 @@ const createDefaultPackageShell = () => {
     return descriptor;
 };
 
-class PenFXCustomShaderManager {
+class PenFXCustomShaderManager extends EventEmitter {
     constructor (vm, penFX, options = {}) {
+        super();
         this.vm = vm;
         this.penFX = penFX;
         this.packages = new Map();
@@ -572,6 +628,177 @@ class PenFXCustomShaderManager {
         return Array.from(this.packages.values())
             .filter(packageDescriptor => !packageDescriptor.isDefault)
             .map(packageDescriptor => cloneJSON(packageDescriptor));
+    }
+
+    getShaders () {
+        const shaders = [];
+        for (const packageDescriptor of this.packages.values()) {
+            if (packageDescriptor.isDefault) continue;
+            for (const shaderBlock of packageDescriptor.blocks) {
+                if (!shaderBlock.source || shaderBlock.implementation) continue;
+                shaders.push({
+                    key: `${packageDescriptor.id}:${shaderBlock.id}`,
+                    packageId: packageDescriptor.id,
+                    blockId: shaderBlock.id,
+                    packageName: packageDescriptor.name,
+                    name: shaderBlock.name,
+                    file: shaderBlock.file,
+                    source: shaderBlock.source,
+                    inputs: cloneJSON(shaderBlock.inputs),
+                    autoInputs: shaderBlock.autoInputs === true,
+                    editorManaged: shaderBlock.editorManaged === true
+                });
+            }
+        }
+        return shaders;
+    }
+
+    getShader (key) {
+        return this.getShaders().find(shader => shader.key === key) || null;
+    }
+
+    _findShaderBlock (packages, key) {
+        const separator = String(key || '').indexOf(':');
+        if (separator < 1) return null;
+        const packageId = key.slice(0, separator);
+        const blockId = key.slice(separator + 1);
+        const packageIndex = packages.findIndex(packageDescriptor => packageDescriptor.id === packageId);
+        if (packageIndex < 0) return null;
+        const blockIndex = packages[packageIndex].blocks.findIndex(shaderBlock => shaderBlock.id === blockId);
+        if (blockIndex < 0) return null;
+        return {packageIndex, blockIndex};
+    }
+
+    _nextPackageId (name) {
+        const base = slug(name);
+        let id = base;
+        let suffix = 2;
+        while (this.packages.has(id) || id === DEFAULT_SHADER_PACKAGE_ID) {
+            const suffixText = `-${suffix++}`;
+            id = `${base.slice(0, 48 - suffixText.length)}${suffixText}`;
+        }
+        return id;
+    }
+
+    _nextShaderName (requestedName) {
+        const base = assertString(requestedName, 'Shader name', 64);
+        const existingNames = new Set(this.getShaders().map(shader => shader.name.toLowerCase()));
+        if (!existingNames.has(base.toLowerCase())) return base;
+        let suffix = 2;
+        let candidate;
+        do {
+            const suffixText = ` ${suffix++}`;
+            candidate = `${base.slice(0, 64 - suffixText.length)}${suffixText}`;
+        } while (existingNames.has(candidate.toLowerCase()));
+        return candidate;
+    }
+
+    async _commitCustomPackages (customPackages) {
+        const allPackages = this.defaultPackage ? [this.defaultPackage].concat(customPackages) : customPackages;
+        this._replacePackages(allPackages);
+        await this._refreshBlocks();
+        if (this.vm && this.vm.runtime && typeof this.vm.runtime.emitProjectChanged === 'function') {
+            this.vm.runtime.emitProjectChanged();
+        }
+    }
+
+    async createShader (options = {}) {
+        const name = this._nextShaderName(options.name || 'Shader');
+        const source = String(options.source === undefined ? DEFAULT_SHADER_SOURCE : options.source)
+            .replace(/\r\n?/g, '\n');
+        const packageId = this._nextPackageId(name);
+        const blockId = 'main';
+        const packageDescriptor = normalizePackage({
+            format: CUSTOM_SHADER_FORMAT,
+            version: CUSTOM_SHADER_VERSION,
+            id: packageId,
+            name,
+            blocks: [{
+                id: blockId,
+                name,
+                file: `${packageId}.glsl`,
+                source,
+                inputs: inferShaderInputs(source, MAX_INPUTS),
+                editorManaged: true,
+                autoInputs: true
+            }]
+        });
+        const engine = this.penFX._getEngine();
+        this._validatePackageShaders(engine, packageDescriptor);
+        const packages = this.serializePackages();
+        packages.push(packageDescriptor);
+        await this._commitCustomPackages(packages);
+        return this.getShader(`${packageId}:${blockId}`);
+    }
+
+    async updateShader (key, changes = {}) {
+        const packages = this.serializePackages();
+        const location = this._findShaderBlock(packages, key);
+        if (!location) throw new Error('Shader not found.');
+        const packageDescriptor = packages[location.packageIndex];
+        const shaderBlock = packageDescriptor.blocks[location.blockIndex];
+        if (shaderBlock.implementation || !shaderBlock.source) throw new Error('This shader cannot be edited.');
+        const previousName = shaderBlock.name;
+        if (changes.name !== undefined) {
+            shaderBlock.name = assertString(changes.name, 'Shader name', 64);
+        }
+        if (changes.source !== undefined) {
+            shaderBlock.source = String(changes.source).replace(/\r\n?/g, '\n');
+        }
+        if (shaderBlock.autoInputs || changes.autoInputs === true) {
+            shaderBlock.inputs = inferShaderInputs(shaderBlock.source, MAX_INPUTS);
+            shaderBlock.autoInputs = true;
+            shaderBlock.editorManaged = true;
+        }
+        if (changes.name !== undefined || shaderBlock.autoInputs) delete shaderBlock.text;
+        if (packageDescriptor.blocks.length === 1 &&
+            (packageDescriptor.name === previousName || shaderBlock.editorManaged)) {
+            packageDescriptor.name = shaderBlock.name;
+        }
+        const normalizedPackage = normalizePackage(packageDescriptor);
+        const engine = this.penFX._getEngine();
+        this._validatePackageShaders(engine, normalizedPackage);
+        packages[location.packageIndex] = normalizedPackage;
+        await this._commitCustomPackages(packages);
+        return this.getShader(key);
+    }
+
+    async duplicateShader (key) {
+        const shader = this.getShader(key);
+        if (!shader) throw new Error('Shader not found.');
+        return this.createShader({name: `${shader.name} copy`, source: shader.source});
+    }
+
+    async deleteShader (key) {
+        const packages = this.serializePackages();
+        const location = this._findShaderBlock(packages, key);
+        if (!location) return false;
+        const packageDescriptor = packages[location.packageIndex];
+        if (packageDescriptor.blocks.length === 1) {
+            packages.splice(location.packageIndex, 1);
+        } else {
+            packageDescriptor.blocks.splice(location.blockIndex, 1);
+            packages[location.packageIndex] = normalizePackage(packageDescriptor);
+        }
+        await this._commitCustomPackages(packages);
+        return true;
+    }
+
+    async importFile (file) {
+        const fileName = String(file && file.name || 'shader.glsl');
+        if (/\.zip$/i.test(fileName)) {
+            return this.importZip(await readBlobAsArrayBuffer(file), fileName);
+        }
+        if (!/\.glsl$/i.test(fileName)) throw new Error('Choose a .glsl file or a shader package .zip.');
+        if (file && Number.isFinite(file.size) && file.size > MAX_SHADER_CHARACTERS * 4) {
+            throw new Error('Shader file is too large.');
+        }
+        const source = await readBlobAsText(file);
+        if (source.length > MAX_SHADER_CHARACTERS) throw new Error('Shader file is too large.');
+        return this.createShader({
+            name: humanize(fileName) || 'Shader',
+            source
+        });
     }
 
     getToolboxBlocks () {
@@ -714,30 +941,36 @@ class PenFXCustomShaderManager {
                         u_time: this._timelineTime(),
                         u_frame: this._timelineFrame()
                     };
-                    const integerUniforms = ['u_frame'];
+                    const integerUniforms = new Set(['u_frame']);
                     for (const input of shaderBlock.inputs) {
                         const value = args && args[input.id] === undefined ? input.defaultValue : args[input.id];
+                        let uniformValue;
                         if (input.type === 'color') {
-                            uniforms[input.uniform] = color(value);
+                            uniformValue = color(value);
                         } else if (input.type === 'boolean') {
-                            uniforms[input.uniform] = boolean(value) ? 1 : 0;
-                            integerUniforms.push(input.uniform);
+                            uniformValue = boolean(value) ? 1 : 0;
+                            integerUniforms.add(input.uniform);
                         } else if (input.type === 'menu') {
-                            uniforms[input.uniform] = Math.max(0, input.items.indexOf(String(value)));
-                            integerUniforms.push(input.uniform);
+                            uniformValue = Math.max(0, input.items.indexOf(String(value)));
+                            integerUniforms.add(input.uniform);
                         } else {
-                            let numericValue = (number(value) * input.scale) + input.offset;
+                            uniformValue = (number(value) * input.scale) + input.offset;
                             if (input.type === 'integer') {
-                                numericValue = Math.round(numericValue);
-                                integerUniforms.push(input.uniform);
+                                uniformValue = Math.round(uniformValue);
+                                integerUniforms.add(input.uniform);
                             }
-                            uniforms[input.uniform] = numericValue;
+                        }
+                        if (input.component !== undefined) {
+                            if (!uniforms[input.uniform]) uniforms[input.uniform] = new Array(input.vectorSize).fill(0);
+                            uniforms[input.uniform][input.component] = uniformValue;
+                        } else {
+                            uniforms[input.uniform] = uniformValue;
                         }
                     }
                     this.penFX._safe(engine => engine.customShader(
                         programName,
                         uniforms,
-                        integerUniforms,
+                        Array.from(integerUniforms),
                         this.penFX.blendMode
                     ), {groupEffectScope: shaderBlock.groupEffectScope});
                 };
@@ -777,6 +1010,7 @@ class PenFXCustomShaderManager {
             this.packages.set(packageDescriptor.id, packageDescriptor);
             this._bindPackage(packageDescriptor);
         });
+        this.emit('shadersChanged');
     }
 
     _validatePackageShaders (engine, packageDescriptor) {
@@ -920,6 +1154,7 @@ export {
     CUSTOM_SHADER_FORMAT,
     CUSTOM_SHADER_PROJECT_KEY,
     CUSTOM_SHADER_VERSION,
+    DEFAULT_SHADER_SOURCE,
     DEFAULT_SHADER_PACKAGE_ID,
     PenFXCustomShaderManager,
     createDefaultPackageShell,

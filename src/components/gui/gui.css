@@ -59,7 +59,7 @@
 
 .tab-list {
     height: $stage-menu-height;
-    width: 430px;
+    width: 510px;
     display: flex;
     align-items: flex-end;
     flex-shrink: 0;
@@ -115,22 +115,25 @@
 
 /* Use z-indices to force left-on-top for tabs */
 .tab:nth-of-type(1) {
-    z-index: 5;
+    z-index: 7;
 }
 .tab:nth-of-type(2) {
-    z-index: 4;
+    z-index: 6;
 }
 .tab:nth-of-type(3) {
-    z-index: 3;
+    z-index: 5;
 }
 .tab:nth-of-type(4) {
-    z-index: 2;
+    z-index: 4;
 }
 .tab:nth-of-type(5) {
-    z-index: 1;
+    z-index: 3;
 }
 .tab:nth-of-type(6) {
-    z-index: 0;
+    z-index: 2;
+}
+.tab:nth-of-type(7) {
+    z-index: 1;
 }
 
 .tab:hover {
@@ -141,7 +144,7 @@
     height: 90%;
     color: $looks-secondary;
     background-color: $ui-white;
-    z-index: 4; /* Make sure selected is always above */
+    z-index: 8; /* Make sure selected is always above */
 }
 
 .tab img {

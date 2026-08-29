@@ -1,0 +1,399 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.file-input {
+    display: none;
+}
+
+.tile-shader {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #171922;
+}
+
+.tile-shader img {
+    width: 2.6rem;
+    height: 2.6rem;
+}
+
+.editor {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #0c0d12;
+    color: #f4f5fa;
+}
+
+.toolbar {
+    min-height: 3.5rem;
+    padding: 0.55rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-bottom: 1px solid #2b2e3a;
+    background: #171922;
+}
+
+.name-label {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #c9cbd6;
+    font-size: 0.72rem;
+    font-weight: bold;
+}
+
+.name-input {
+    width: min(15rem, 28vw);
+    height: 2rem;
+    padding: 0 0.6rem;
+    border: 1px solid #3a3e4c;
+    border-radius: $form-radius;
+    background: #0e1017;
+    color: #f4f5fa;
+    font: inherit;
+}
+
+.name-input:hover {
+    border-color: #666c82;
+}
+
+.name-input:focus {
+    outline: 3px solid $looks-transparent;
+    border-color: $looks-secondary;
+}
+
+.save-status {
+    margin-left: auto;
+    min-width: 5.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    color: #aeb2c2;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #72788e;
+}
+
+.status-dirty .status-dot,
+.status-saving .status-dot {
+    background: #f5b84b;
+}
+
+.status-saved .status-dot {
+    background: #63d6a0;
+}
+
+.status-error {
+    color: #ffb5b5;
+}
+
+.status-error .status-dot {
+    background: #ff6b6b;
+}
+
+.apply-button {
+    height: 2rem;
+    padding: 0 0.8rem;
+    border: 0;
+    border-radius: $form-radius;
+    background: $looks-secondary;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: bold;
+}
+
+.apply-button:hover:not(:disabled) {
+    background: $looks-secondary-dark;
+}
+
+.apply-button:focus-visible {
+    outline: 3px solid $looks-transparent;
+    outline-offset: 1px;
+}
+
+.apply-button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.code-editor {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background: #090a0e;
+    color: #e6e7ec;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    font-variant-ligatures: none;
+    tab-size: 4;
+}
+
+.line-numbers {
+    width: 3.6rem;
+    flex: 0 0 3.6rem;
+    padding: 1rem 0.75rem 2rem 0;
+    overflow: hidden;
+    border-right: 1px solid #252832;
+    background: #0d0e13;
+    color: #6f7482;
+    text-align: right;
+    user-select: none;
+}
+
+.line-numbers span {
+    display: block;
+    height: 1.55em;
+    font-variant-numeric: tabular-nums;
+}
+
+.code-viewport {
+    min-width: 0;
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+}
+
+.highlight,
+.textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 1rem 1.25rem 2rem;
+    border: 0;
+    white-space: pre;
+    word-wrap: normal;
+    font: inherit;
+    line-height: inherit;
+    tab-size: inherit;
+}
+
+.highlight {
+    overflow: hidden;
+    background: transparent;
+    color: #e6e7ec;
+    pointer-events: none;
+}
+
+/*
+ * User-agent styles give <code> its own monospace font. The textarea is
+ * transparent and sits on top of this element, so even a small font-metric
+ * difference makes the visible glyph and the native caret drift apart.
+ */
+.highlight code {
+    font: inherit;
+    letter-spacing: inherit;
+}
+
+.textarea {
+    z-index: 1;
+    resize: none;
+    overflow: auto;
+    outline: none;
+    background: transparent;
+    color: transparent;
+    caret-color: #ffffff;
+    -webkit-text-fill-color: transparent;
+}
+
+.textarea::selection {
+    background: rgba(121, 103, 217, 0.42);
+}
+
+.textarea:focus {
+    box-shadow: inset 0 0 0 2px rgba(133, 92, 214, 0.55);
+}
+
+.textarea::-webkit-scrollbar {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+
+.textarea::-webkit-scrollbar-track {
+    background: #0d0e13;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+    border: 3px solid #0d0e13;
+    border-radius: 0.5rem;
+    background: #454a5b;
+}
+
+.textarea::-webkit-scrollbar-corner {
+    background: #0d0e13;
+}
+
+.token-comment {
+    color: #737b70;
+}
+
+.token-preprocessor {
+    color: #bd93f9;
+}
+
+.token-string {
+    color: #f4d58d;
+}
+
+.token-number {
+    color: #f7a66c;
+}
+
+.token-keyword {
+    color: #d78bd2;
+}
+
+.token-type {
+    color: #62aef0;
+}
+
+.token-built-in {
+    color: #8bd5f7;
+}
+
+.uniform-bar {
+    min-height: 3.1rem;
+    padding: 0.55rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border-top: 1px solid #2b2e3a;
+    background: #171922;
+}
+
+.uniform-heading {
+    flex: 0 0 auto;
+    color: #aeb2c2;
+    font-size: 0.68rem;
+    font-weight: bold;
+}
+
+.uniform-list {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.uniform-chip {
+    padding: 0.26rem 0.48rem;
+    border: 1px solid #414656;
+    border-radius: $form-radius;
+    background: #222530;
+    color: #d8dae3;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.64rem;
+    white-space: nowrap;
+}
+
+.uniform-empty {
+    color: #9297a8;
+    font-size: 0.68rem;
+}
+
+.error-panel {
+    max-height: 5.5rem;
+    padding: 0.65rem 0.85rem;
+    overflow: auto;
+    border-top: 1px solid #542f39;
+    background: #2b171d;
+    color: #ffcdcd;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.empty-state {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: $assets-background;
+    color: $text-primary;
+    text-align: center;
+}
+
+.empty-state img {
+    width: 4rem;
+    height: 4rem;
+}
+
+.empty-state h2 {
+    margin: 0.9rem 0 0.4rem;
+    font-size: 1.1rem;
+}
+
+.empty-state p {
+    max-width: 34rem;
+    margin: 0 0 1rem;
+    color: $text-primary-transparent;
+    line-height: 1.45;
+}
+
+.empty-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.empty-actions button {
+    padding: 0.58rem 0.9rem;
+    border: 1px solid $looks-secondary;
+    border-radius: $form-radius;
+    background: $looks-secondary;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: bold;
+}
+
+.empty-actions button:last-child {
+    background: $ui-white;
+    color: $looks-secondary;
+}
+
+.empty-actions button:hover {
+    background: $looks-secondary-dark;
+    color: #ffffff;
+}
+
+.empty-actions button:focus-visible {
+    outline: 3px solid $looks-transparent;
+    outline-offset: 1px;
+}
+
+.empty-actions button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .apply-button,
+    .empty-actions button {
+        transition: none;
+    }
+}

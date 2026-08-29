@@ -13,6 +13,7 @@ import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
 import ModelTab from '../../containers/model-tab.jsx';
+import ShaderTab from '../../containers/shader-tab.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
@@ -55,6 +56,7 @@ import soundsIcon from '!../../lib/tw-recolor/build!./icon--sounds.svg';
 import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
 import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
 import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
+import shadersIcon from '!../../lib/tw-recolor/build!./icon--shaders.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -109,6 +111,7 @@ const GUIComponent = props => {
         fontsTabVisible,
         framerate,
         modelsTabVisible,
+        shadersTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -139,6 +142,7 @@ const GUIComponent = props => {
         onActivateVideosTab,
         onActivateFontsTab,
         onActivateModelsTab,
+        onActivateShadersTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -439,6 +443,20 @@ const GUIComponent = props => {
                                             id="movie.gui.modelsTab"
                                         />
                                     </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivateShadersTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={shadersIcon()}
+                                        />
+                                        <FormattedMessage
+                                            defaultMessage="Shader"
+                                            description="Button to get to the PenFX shader editor"
+                                            id="movie.gui.shadersTab"
+                                        />
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -487,6 +505,9 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {modelsTabVisible ? <ModelTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {shadersTabVisible ? <ShaderTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -547,6 +568,7 @@ GUIComponent.propTypes = {
     fontsTabVisible: PropTypes.bool,
     framerate: PropTypes.number.isRequired,
     modelsTabVisible: PropTypes.bool,
+    shadersTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -568,6 +590,7 @@ GUIComponent.propTypes = {
     onActivateVideosTab: PropTypes.func,
     onActivateFontsTab: PropTypes.func,
     onActivateModelsTab: PropTypes.func,
+    onActivateShadersTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
