@@ -1,10 +1,10 @@
 /* eslint-disable */
 
-import {color, mixAmount, numberOr} from '../helpers';
+import {color, depthResource, mixAmount, numberOr} from '../helpers';
 
 const FOG_TYPES = ['linear', 'smooth', 'exponential', 'exponential squared'];
 
-const install = ({Engine, PenFX, vm}) => {
+const install = ({Engine, PenFX}) => {
     Engine.prototype.fog = function (depthBuffer, type, start, end, density, curve, nearColor, farColor, mixValue, blendMode) {
         if (!depthBuffer || this._isNoOp(mixValue, blendMode)) return;
         const skin = this._prepare();
@@ -34,12 +34,14 @@ const install = ({Engine, PenFX, vm}) => {
         }, ['u_mode'], blendMode);
     };
 
-    PenFX.prototype.fog = function (args) {
+    PenFX.prototype.fog = function (args, util) {
         const typeKey = String(args.TYPE);
         const type = FOG_TYPES.includes(typeKey) ? typeKey : 'linear';
-        this._safe(engine => engine.fog(vm.runtime.movieZBuffer, type, numberOr(args.START, 100),
+        this._safe((engine, renderContext) => engine.fog(depthResource(renderContext), type, numberOr(args.START, 100),
             numberOr(args.END, 1000), numberOr(args.DENSITY, 100) / 100, numberOr(args.CURVE, 1),
-            color(args.NEARCOLOR || '#d9e7f2'), color(args.FARCOLOR || '#ffffff'), mixAmount(args.MIX), this.blendMode));
+            color(args.NEARCOLOR || '#d9e7f2'), color(args.FARCOLOR || '#ffffff'), mixAmount(args.MIX), this.blendMode), {
+            target: util && util.target
+        });
     };
 };
 

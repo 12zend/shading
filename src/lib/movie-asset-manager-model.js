@@ -15,6 +15,9 @@ import {
     cloneScale,
     getOriginalTarget
 } from './movie-asset-manager-utils';
+import {
+    createDepthResource as makeDepthResource
+} from './movie-depth-resource';
 
 const MAX_BUILDING_PRIMITIVES = 512;
 
@@ -435,7 +438,7 @@ const MovieAssetManagerModelMethods = {
             } else {
                 this.applyProjection(target);
             }
-            this.publishModelZBuffer(target);
+            this.publishModelZBuffer(target, camera);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
             return;
@@ -493,7 +496,7 @@ const MovieAssetManagerModelMethods = {
                 } else {
                     this.applyProjection(target);
                 }
-                this.publishModelZBuffer(target);
+                this.publishModelZBuffer(target, renderCamera);
                 return;
             }
         });
@@ -505,17 +508,52 @@ const MovieAssetManagerModelMethods = {
         return renderPromise;
     },
 
-    publishModelZBuffer (target) {
+    nextDepthResourceGeneration () {
+        this.depthResourceGeneration = (Number(this.depthResourceGeneration) || 0) + 1;
+        return this.depthResourceGeneration;
+    },
+
+    createDepthResource (depthBuffer, target = null, options = {}) {
+        const targetId = target && target.id ? target.id :
+            (typeof target === 'string' ? target : options.targetId);
+        return makeDepthResource(depthBuffer, {
+            ...options,
+            generation: this.nextDepthResourceGeneration(),
+            targetId
+        });
+    },
+
+    getDepthResource (target) {
+        const targetId = target && target.id ? target.id : target;
+        if (!targetId) return null;
+        const state = this.targetStates.get(targetId);
+        return state ? state.depthResource || null : null;
+    },
+
+    invalidateDepthResources (target = null) {
+        if (target) {
+            const targetId = target && target.id ? target.id : target;
+            const state = this.targetStates.get(targetId);
+            if (state) state.depthResource = null;
+            return;
+        }
+        for (const state of this.targetStates.values()) state.depthResource = null;
+    },
+
+    publishModelZBuffer (target, camera = null) {
         if (!this.modelRenderer || typeof this.modelRenderer.getDepthBuffer !== 'function') return;
         const depthBuffer = this.modelRenderer.getDepthBuffer();
         if (!depthBuffer) return;
-        const published = {
-            ...depthBuffer,
-            targetId: target && target.id
-        };
-        this.runtime.movieZBuffer = published;
+        const published = this.createDepthResource(depthBuffer, target, {
+            camera,
+            ownerPass: {
+                id: target && target.id,
+                type: 'target'
+            }
+        });
         const state = target && this.targetStates.get(target.id);
-        if (state) state.zBuffer = published;
+        if (state) state.depthResource = published;
+        return published;
     },
 
     publishFlatZBuffer (target, requestedCamera = null) {
@@ -534,13 +572,18 @@ const MovieAssetManagerModelMethods = {
         }, camera).depth;
         if (!Number.isFinite(depth) || depth <= 0) return;
         this.flatDepthVersion = (Number(this.flatDepthVersion) || 0) + 1;
-        const published = {
+        const published = this.createDepthResource({
             flatDepth: depth,
-            targetId: target.id,
             version: this.flatDepthVersion
-        };
-        this.runtime.movieZBuffer = published;
-        state.zBuffer = published;
+        }, target, {
+            camera,
+            ownerPass: {
+                id: target.id,
+                type: 'target'
+            }
+        });
+        state.depthResource = published;
+        return published;
     },
 
     queueModelRender (target, model) {

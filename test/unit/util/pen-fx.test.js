@@ -313,9 +313,11 @@ describe('built-in Pen FX category', () => {
         expect(shader).toContain('if (original.a <= 0.00001)');
     });
 
-    test('routes depth of field controls and the current 3D zBuffer without returning a promise', () => {
-        const zBuffer = {canvas: {}, near: 1, far: 1000, version: 3};
-        const vm = {runtime: {renderer: {}, movieZBuffer: zBuffer}};
+    test('routes depth of field controls and the target depth resource without returning a promise', () => {
+        const depthResource = {canvas: {}, near: 1, far: 1000, version: 3};
+        const target = {id: 'sprite'};
+        const movieAssetManager = {getDepthResource: jest.fn(() => depthResource)};
+        const vm = {runtime: {movieAssetManager, renderer: {}}};
         const PenFX = createPenFXClass(vm);
         const penFX = new PenFX();
         penFX.engine = {depthOfField: jest.fn()};
@@ -331,11 +333,12 @@ describe('built-in Pen FX category', () => {
             SHAPE: 'hexagon',
             ROTATION: 15,
             MIX: 75
-        });
+        }, {target});
 
         expect(result).toBeUndefined();
+        expect(movieAssetManager.getDepthResource).toHaveBeenCalledWith(target.id);
         expect(penFX.engine.depthOfField).toHaveBeenCalledWith(
-            zBuffer, 520, 30, 64, 28, 0.8, 1.25, 6, 'hexagon', 15, 0.75, 'normal'
+            depthResource, 520, 30, 64, 28, 0.8, 1.25, 6, 'hexagon', 15, 0.75, 'normal'
         );
     });
 
@@ -364,9 +367,11 @@ describe('built-in Pen FX category', () => {
         expect(shader).toContain('for (int i = 0; i < 20; i++)');
     });
 
-    test('routes flexible depth fog controls and the current 3D zBuffer without returning a promise', () => {
-        const zBuffer = {canvas: {}, near: 1, far: 2000, version: 4};
-        const vm = {runtime: {renderer: {}, movieZBuffer: zBuffer}};
+    test('routes flexible depth fog controls and the target depth resource without returning a promise', () => {
+        const depthResource = {canvas: {}, near: 1, far: 2000, version: 4};
+        const target = {id: 'sprite'};
+        const movieAssetManager = {getDepthResource: jest.fn(() => depthResource)};
+        const vm = {runtime: {movieAssetManager, renderer: {}}};
         const PenFX = createPenFXClass(vm);
         const penFX = new PenFX();
         penFX.engine = {fog: jest.fn()};
@@ -380,13 +385,45 @@ describe('built-in Pen FX category', () => {
             DENSITY: 65,
             CURVE: 1.75,
             MIX: 80
-        });
+        }, {target});
 
         expect(result).toBeUndefined();
+        expect(movieAssetManager.getDepthResource).toHaveBeenCalledWith(target.id);
         expect(penFX.engine.fog).toHaveBeenCalledWith(
-            zBuffer, 'exponential squared', 75, 1600, 0.65, 1.75,
+            depthResource, 'exponential squared', 75, 1600, 0.65, 1.75,
             [32 / 255, 64 / 255, 128 / 255], [1, 224 / 255, 192 / 255], 0.8, 'normal'
         );
+    });
+
+    test('uses an explicit render-pass depth resource instead of stale target depth for captured effects', () => {
+        const staleDepth = {canvas: {name: 'stale target depth'}};
+        const passDepth = {canvas: {name: 'current pass depth'}};
+        const movieAssetManager = {getDepthResource: jest.fn(() => staleDepth)};
+        const vm = {runtime: {movieAssetManager, renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {depthOfField: jest.fn()};
+        penFX.beginEffectCapture();
+
+        expect(penFX.depthOfField({MIX: 100}, {target: {id: 'sprite'}})).toBeUndefined();
+        const effects = penFX.endEffectCapture();
+        penFX.applyCapturedEffects(effects, {resources: {depth: passDepth}});
+
+        expect(penFX.engine.depthOfField).toHaveBeenCalledWith(
+            passDepth,
+            480,
+            24,
+            48,
+            24,
+            1,
+            1,
+            8,
+            'circle',
+            0,
+            1,
+            'normal'
+        );
+        expect(movieAssetManager.getDepthResource).not.toHaveBeenCalled();
     });
 
     test('uses depth-aware fog which preserves transparent pixels and supports reversed ranges', () => {

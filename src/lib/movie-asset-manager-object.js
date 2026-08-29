@@ -319,7 +319,7 @@ const MovieAssetManagerObjectMethods = {
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
             const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
             this.applyBitmap(target, canvas, 'scene');
-            this.publishModelZBuffer(target);
+            this.publishModelZBuffer(target, camera);
             this.finishObjectDraw(target, {}, 'model', false, camera);
         } finally {
             prepared.forEach(result => {

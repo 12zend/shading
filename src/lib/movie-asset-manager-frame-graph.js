@@ -1,6 +1,7 @@
 import {
     DEFAULT_BACKDROP_ASSET_ID
 } from './movie-asset-manager-constants';
+import {createDepthOwner} from './movie-depth-resource';
 import installMovieFrameGraphRenderer, {
     applyObjectTransforms,
     FRAME_GRAPH_NODE_TYPES,
@@ -65,6 +66,42 @@ const MovieAssetManagerFrameGraphMethods = {
         this.frameGraphCameraSnapshot = cloneCamera(this.camera);
         this.frameGraphCameraSnapshotVersion = this.cameraVersion;
         return this.frameGraphCameraSnapshot;
+    },
+
+    createFrameGraphPassContext (context, node) {
+        return {
+            ...context,
+            ownerPass: createDepthOwner(node, context && context.frameId),
+            resources: {depth: null}
+        };
+    },
+
+    setFrameGraphDepthResource (context, resource) {
+        if (!context || !context.resources) return;
+        context.resources.depth = resource || null;
+    },
+
+    claimFrameGraphDepthResource (context, node, target, previousResource) {
+        if (!context || !context.resources || !target || typeof this.getDepthResource !== 'function') return;
+        if (this.frameGraphRenderer && typeof context.generation === 'number' &&
+            this.frameGraphRenderer.generation !== context.generation) return;
+        const resource = this.getDepthResource(target);
+        if (!resource || resource === previousResource) return;
+        this.setFrameGraphDepthResource(context, this.createDepthResource(resource, target, {
+            camera: node && node.camera ? node.camera : resource.camera,
+            ownerPass: createDepthOwner(node, context.frameId)
+        }));
+    },
+
+    trackFrameGraphDepthResource (result, context, node, target, previousResource) {
+        if (!context || !context.resources) return result;
+        const claim = value => {
+            this.claimFrameGraphDepthResource(context, node, target, previousResource);
+            return value;
+        };
+        if (result && typeof result.then === 'function') return result.then(claim);
+        claim(result);
+        return result;
     },
 
     withFrameGraphParent (parent, callback) {
@@ -142,12 +179,14 @@ const MovieAssetManagerFrameGraphMethods = {
         if (this.frameGraphRenderer) this.frameGraphRenderer.discardFrame();
         if (Array.isArray(this.frameGraphCollectionParents)) this.frameGraphCollectionParents.length = 0;
         this.cancelPendingObjectDraws();
+        if (typeof this.invalidateDepthResources === 'function') this.invalidateDepthResources();
         this.frameGraphRenderPromise = null;
     },
 
     finishFrameGraphScope (pending, finish, generation) {
         const finishIfCurrent = () => {
-            if (!this.frameGraphRenderer || this.frameGraphRenderer.generation === generation) finish();
+            if (typeof generation !== 'number' || !this.frameGraphRenderer ||
+                this.frameGraphRenderer.generation === generation) finish();
         };
         if (!pending || typeof pending.then !== 'function') {
             finishIfCurrent();
@@ -207,16 +246,19 @@ const MovieAssetManagerFrameGraphMethods = {
             }
         }
         return executeSequence(executionItems, item => (
-            item.sceneBatch ? this.executeFrameGraphSceneBatch(item.nodes) :
+            item.sceneBatch ? this.executeFrameGraphSceneBatch(item.nodes, context) :
                 this.executeFrameGraphNode(item.node, context)
         ));
     },
 
-    collectFrameGraphThreeDraws (node, transforms = [], draws = []) {
+    collectFrameGraphThreeDraws (node, transforms = [], draws = [], analysis = null) {
         // An explicit Objects scene opts its children into one Three.js depth buffer. Ordinary Draw nodes stay on
         // Scratch's existing 2D/Pen path so their color and screen-space text semantics do not change.
         if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) {
-            if (!THREE_DRAW_KINDS.has(node.drawKind)) return null;
+            if (!THREE_DRAW_KINDS.has(node.drawKind)) {
+                if (analysis && !analysis.barrier) analysis.barrier = node;
+                return null;
+            }
             draws.push({
                 camera: node.camera,
                 cameraVersion: node.cameraVersion,
@@ -232,16 +274,38 @@ const MovieAssetManagerFrameGraphMethods = {
         } else if (node.type !== FRAME_GRAPH_NODE_TYPES.GROUP && !(
             node.type === FRAME_GRAPH_NODE_TYPES.SCENE && node.sceneKind === 'objects'
         )) {
+            if (analysis && !analysis.barrier) analysis.barrier = node;
             return null;
         }
         for (const child of node.children) {
-            const childDraws = this.collectFrameGraphThreeDraws(child, childTransforms, draws);
+            const childDraws = this.collectFrameGraphThreeDraws(child, childTransforms, draws, analysis);
             if (!childDraws) return null;
         }
         return draws;
     },
 
-    executeFrameGraphDrawBatch (draws) {
+    reportFrameGraphSceneBarrier (scene, barrier) {
+        const warning = Object.freeze({
+            barrierNodeId: barrier && barrier.id,
+            barrierType: barrier && barrier.type,
+            code: 'objects-scene-pass-barrier',
+            fallback: 'ordered-pen',
+            message: 'Objects scene contains an offscreen or non-3D pass; shared depth is unavailable.',
+            sceneNodeId: scene && scene.id
+        });
+        if (!Array.isArray(this.lastFrameGraphWarnings)) this.lastFrameGraphWarnings = [];
+        this.lastFrameGraphWarnings.push(warning);
+        if (typeof this.emit === 'function') this.emit('frameGraphWarning', warning);
+        if (!(this.frameGraphWarningKeys instanceof Set)) this.frameGraphWarningKeys = new Set();
+        const warningKey = [warning.code, warning.barrierType, barrier && barrier.operation].join(':');
+        if (!this.frameGraphWarningKeys.has(warningKey)) {
+            this.frameGraphWarningKeys.add(warningKey);
+            console.warn(`[Movie] ${warning.message}`, warning);
+        }
+        return warning;
+    },
+
+    executeFrameGraphDrawBatch (draws, context, node) {
         const first = draws[0];
         if (!first || !first.target) return;
         const capture = this.createObjectSceneCapture(first.target, first.camera);
@@ -250,14 +314,18 @@ const MovieAssetManagerFrameGraphMethods = {
             ...draw.configuration,
             movieDrawKind: draw.drawKind
         }));
-        return this.renderObjectScene(first.target, capture);
+        const previousResource = this.getDepthResource(first.target);
+        const render = this.renderObjectScene(first.target, capture);
+        return this.trackFrameGraphDepthResource(render, context, node, first.target, previousResource);
     },
 
-    executeFrameGraphSceneBatch (nodes) {
+    executeFrameGraphSceneBatch (nodes, context = null) {
         const target = nodes[0] && nodes[0].target;
         if (!target) return;
         const camera = nodes[nodes.length - 1].camera;
-        return this.executeWithFrameGraphCamera(camera, () => {
+        const ownerNode = nodes[nodes.length - 1];
+        const previousResource = this.getDepthResource(target);
+        const render = this.executeWithFrameGraphCamera(camera, () => {
             let shouldRender = false;
             for (const node of nodes) {
                 let changed = false;
@@ -273,6 +341,7 @@ const MovieAssetManagerFrameGraphMethods = {
                 return camera ? this.queueModelSceneRender(target, camera) : this.queueModelSceneRender(target);
             }
         });
+        return this.trackFrameGraphDepthResource(render, context, ownerNode, target, previousResource);
     },
 
     executeFrameGraphComposite (node, context) {
@@ -280,7 +349,7 @@ const MovieAssetManagerFrameGraphMethods = {
         if (node.operation === 'effect') {
             const effect = node.effect;
             if (penFX && effect && typeof penFX.applyCapturedEffects === 'function') {
-                penFX.applyCapturedEffects([effect]);
+                penFX.applyCapturedEffects([effect], context);
             }
             return;
         }
@@ -291,42 +360,53 @@ const MovieAssetManagerFrameGraphMethods = {
         if (node.operation === 'matte') {
             const source = node.children[0];
             const mask = node.children[1];
+            const sourceContext = this.createFrameGraphPassContext(context, source || node);
+            const maskContext = this.createFrameGraphPassContext(context, mask || node);
             if (!penFX || typeof penFX.beginMatte !== 'function' || penFX.beginMatte() === false) {
-                if (source) return this.executeFrameGraphNode(source, context);
-                return;
+                const pendingSource = source ? this.executeFrameGraphNode(source, sourceContext) : null;
+                return this.finishFrameGraphScope(pendingSource, () => {
+                    this.setFrameGraphDepthResource(context, null);
+                }, context.generation);
             }
-            const renderSource = source ? this.executeFrameGraphNode(source, context) : null;
+            const renderSource = source ? this.executeFrameGraphNode(source, sourceContext) : null;
             const renderMask = () => {
                 if (this.frameGraphRenderer &&
                     this.frameGraphRenderer.generation !== context.generation) return;
                 if (typeof penFX.beginMatteMask !== 'function' || penFX.beginMatteMask() === false) return;
-                if (mask) return this.executeFrameGraphNode(mask, context);
+                if (mask) return this.executeFrameGraphNode(mask, maskContext);
             };
             const finish = () => {
                 if (typeof penFX.endMatte === 'function') penFX.endMatte({mode: node.mode});
+                this.setFrameGraphDepthResource(context, null);
             };
             if (renderSource && typeof renderSource.then === 'function') {
                 return this.finishFrameGraphScope(renderSource.then(renderMask), finish, context.generation);
             }
             return this.finishFrameGraphScope(renderMask(), finish, context.generation);
         }
+        const passContext = this.createFrameGraphPassContext(context, node);
         if (!penFX || typeof penFX.beginGroup !== 'function') {
-            return this.executeFrameGraphChildren(node, context);
+            const pendingChildren = this.executeFrameGraphChildren(node, passContext);
+            return this.finishFrameGraphScope(pendingChildren, () => {
+                this.setFrameGraphDepthResource(context, null);
+            }, context.generation);
         }
         penFX.beginGroup();
-        const pending = this.executeFrameGraphChildren(node, context);
+        const pending = this.executeFrameGraphChildren(node, passContext);
         const finish = () => {
             if (node.operation === 'effects' && typeof penFX.applyCapturedEffects === 'function') {
-                penFX.applyCapturedEffects(node.effects);
+                penFX.applyCapturedEffects(node.effects, passContext);
             }
-            if (typeof penFX.endGroup !== 'function') return;
-            if (node.operation === 'blend') {
-                penFX.endGroup({blendMode: node.blendMode, opacity: node.opacity});
-            } else if (node.operation === 'render-pass') {
-                penFX.endGroup({composite: false, passName: node.passName});
-            } else {
-                penFX.endGroup();
+            if (typeof penFX.endGroup === 'function') {
+                if (node.operation === 'blend') {
+                    penFX.endGroup({blendMode: node.blendMode, opacity: node.opacity});
+                } else if (node.operation === 'render-pass') {
+                    penFX.endGroup({composite: false, passName: node.passName});
+                } else {
+                    penFX.endGroup();
+                }
             }
+            if (node.operation !== 'render-pass') this.setFrameGraphDepthResource(context, null);
         };
         return this.finishFrameGraphScope(pending, finish, context.generation);
     },
@@ -334,16 +414,26 @@ const MovieAssetManagerFrameGraphMethods = {
     executeFrameGraphScene (node, context) {
         if (node.sceneKind === 'frame') return this.executeFrameGraphChildren(node, context);
         if (node.sceneKind === 'objects') {
-            const draws = this.collectFrameGraphThreeDraws(node, context.transforms);
-            return draws && draws.length ? this.executeFrameGraphDrawBatch(draws) :
+            const analysis = {barrier: null};
+            const draws = this.collectFrameGraphThreeDraws(node, context.transforms, [], analysis);
+            if (!draws && analysis.barrier) this.reportFrameGraphSceneBarrier(node, analysis.barrier);
+            return draws && draws.length ? this.executeFrameGraphDrawBatch(draws, context, node) :
                 this.executeFrameGraphChildren(node, context);
         }
-        return this.executeWithFrameGraphCamera(node.camera, () => {
-            if (node.sceneKind === 'camera') {
-                return typeof node.rerenderModels === 'undefined' || node.rerenderModels ?
-                    this.applyFrameGraphCamera(node.camera) :
-                    this.applyFrameGraphCamera(node.camera, false);
-            }
+        if (node.sceneKind === 'camera') {
+            const cameraRender = this.executeWithFrameGraphCamera(node.camera, () => (
+                typeof node.rerenderModels === 'undefined' || node.rerenderModels ?
+                    this.applyFrameGraphCamera(node.camera) : this.applyFrameGraphCamera(node.camera, false)
+            ));
+            return this.finishFrameGraphScope(cameraRender, () => {
+                // A camera operation can rerender several independent targets. There is no single coherent depth
+                // surface to carry forward until an explicit Scene3D or Draw node establishes one.
+                this.setFrameGraphDepthResource(context, null);
+            }, context.generation);
+        }
+        const previousResource = node.target && typeof this.getDepthResource === 'function' ?
+            this.getDepthResource(node.target) : null;
+        const render = this.executeWithFrameGraphCamera(node.camera, () => {
             if (node.sceneKind === 'mutation') {
                 if (node.operation === 'clear-models') return this.clearModelScene(node.target, true, node.camera);
                 if (node.operation === 'render-model') {
@@ -365,19 +455,28 @@ const MovieAssetManagerFrameGraphMethods = {
             }
             return this.executeFrameGraphChildren(node, context);
         });
+        if (node.sceneKind === 'mutation') {
+            return this.trackFrameGraphDepthResource(render, context, node, node.target, previousResource);
+        }
+        return render;
     },
 
     executeFrameGraphDraw (node, context) {
-        return this.executeWithFrameGraphCamera(node.camera, () => {
+        const previousResource = node.target && typeof this.getDepthResource === 'function' ?
+            this.getDepthResource(node.target) : null;
+        const render = this.executeWithFrameGraphCamera(node.camera, () => {
             if (node.drawKind === 'pen-clear') {
                 this.beginPenFrameTransaction();
                 if (typeof this.directPenClear === 'function') this.directPenClear();
                 this.drawDefaultPenBackground();
+                if (typeof this.invalidateDepthResources === 'function') this.invalidateDepthResources();
+                this.setFrameGraphDepthResource(context, null);
                 return;
             }
             if (node.drawKind === 'pen-stamp') {
                 this.applyProjection(node.target, node.camera);
                 this.stampTarget(node.target);
+                this.setFrameGraphDepthResource(context, null);
                 return;
             }
             if (node.drawKind === 'render-pass') {
@@ -385,6 +484,7 @@ const MovieAssetManagerFrameGraphMethods = {
                 if (penFX && typeof penFX.drawRenderPass === 'function') {
                     penFX.drawRenderPass(node.passName, node.options);
                 }
+                this.setFrameGraphDepthResource(context, null);
                 return;
             }
             const configuration = applyObjectTransforms(node.configuration, context.transforms);
@@ -393,6 +493,8 @@ const MovieAssetManagerFrameGraphMethods = {
             }
             return this.drawObjectImmediately(node.target, configuration, node.camera);
         });
+        if (['pen-clear', 'pen-stamp', 'render-pass'].includes(node.drawKind)) return render;
+        return this.trackFrameGraphDepthResource(render, context, node, node.target, previousResource);
     },
 
     executeFrameGraphNode (node, context = {transforms: []}) {
@@ -411,8 +513,12 @@ const MovieAssetManagerFrameGraphMethods = {
     },
 
     renderFrameGraph (graph) {
+        this.lastFrameGraphWarnings = [];
         return this.executeFrameGraphNode(graph, {
+            frameId: graph.frameId,
             generation: graph.generation,
+            ownerPass: createDepthOwner(graph, graph.frameId),
+            resources: {depth: null},
             transforms: []
         });
     },
@@ -433,6 +539,7 @@ const MovieAssetManagerFrameGraphMethods = {
             manager.beginPenFrameTransaction();
             const result = compiledClear.apply(this, args);
             manager.drawDefaultPenBackground();
+            if (typeof manager.invalidateDepthResources === 'function') manager.invalidateDepthResources();
             return result;
         };
         const interpreterClear = primitives.pen_clear;
@@ -441,6 +548,7 @@ const MovieAssetManagerFrameGraphMethods = {
             manager.beginPenFrameTransaction();
             const result = interpreterClear.apply(this, args);
             manager.drawDefaultPenBackground();
+            if (typeof manager.invalidateDepthResources === 'function') manager.invalidateDepthResources();
             return result;
         };
         if (typeof pen._stamp === 'function') {

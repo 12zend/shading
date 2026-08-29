@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import Cast from 'scratch-vm/src/util/cast';
+import {getContextDepthResource} from '../movie-depth-resource';
 
 const number = value => {
     const result = Cast.toNumber(value);
@@ -23,6 +24,8 @@ const color = value => {
 };
 
 const boolean = value => value === true || String(value).toLowerCase() === 'true';
+
+const depthResource = getContextDepthResource;
 
 const gradient = value => {
     const defaultStops = [
@@ -55,6 +58,7 @@ const gradient = value => {
 export {
     boolean,
     color,
+    depthResource,
     evolutionAmount,
     gradient,
     mixAmount,

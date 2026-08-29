@@ -62,8 +62,11 @@ class MovieAssetManager extends EventEmitter {
         this.timelineDiagnostics = null;
         this.modelRenderer = null;
         this.flatDepthVersion = 0;
+        this.depthResourceGeneration = 0;
         this.frameGraphCollectionParents = [];
         this.frameGraphRenderPromise = null;
+        this.lastFrameGraphWarnings = [];
+        this.frameGraphWarningKeys = new Set();
         this.cameraVersion = 0;
         this.frameGraphCameraSnapshot = null;
         this.frameGraphCameraSnapshotVersion = -1;
@@ -71,7 +74,6 @@ class MovieAssetManager extends EventEmitter {
         this.penFrameTransactionActive = false;
         this.penFrameTransactionsInstalled = false;
         this.defaultStageBackgroundColor = null;
-        this.runtime.movieZBuffer = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;
         const [stageWidth, stageHeight] = this.getStageSize();

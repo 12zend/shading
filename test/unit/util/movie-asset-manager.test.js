@@ -199,6 +199,141 @@ describe('MovieAssetManager rendering performance', () => {
         });
     });
 
+    test('routes each effect to depth produced earlier in the same frame and never the previous frame', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const seenDepthResources = [];
+        manager.penFX = {
+            applyCapturedEffects: jest.fn((effects, context) => {
+                seenDepthResources.push(context.resources.depth);
+            })
+        };
+        manager.renderObjectScene = jest.fn((drawTarget, capture) => {
+            manager.getTargetState(drawTarget).depthResource = manager.createDepthResource(
+                {canvas: capture.entries[0].depthCanvas},
+                drawTarget
+            );
+        });
+        manager.applyFrameGraphCamera = jest.fn();
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+
+        const firstScene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+        expect(manager.drawObject(target, {depthCanvas: {name: 'first'}}, firstScene)).toBeUndefined();
+        expect(manager.enqueueFrameGraphEffect({callback: jest.fn()})).toBe(true);
+        const secondScene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+        expect(manager.drawObject(target, {depthCanvas: {name: 'second'}}, secondScene)).toBeUndefined();
+        expect(manager.enqueueFrameGraphEffect({callback: jest.fn()})).toBe(true);
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            camera: {position: {x: 0, y: 0, z: 10}, rotation: {x: 0, y: 0, z: 0}},
+            sceneKind: 'camera'
+        });
+        expect(manager.enqueueFrameGraphEffect({callback: jest.fn()})).toBe(true);
+        expect(manager.flushFrameGraph()).toBeUndefined();
+
+        expect(seenDepthResources).toHaveLength(3);
+        expect(seenDepthResources[0]).toEqual(expect.objectContaining({
+            ownerPass: expect.objectContaining({sceneKind: 'objects', type: FRAME_GRAPH_NODE_TYPES.SCENE}),
+            texture: {name: 'first'}
+        }));
+        expect(seenDepthResources[1]).toEqual(expect.objectContaining({
+            ownerPass: expect.objectContaining({sceneKind: 'objects', type: FRAME_GRAPH_NODE_TYPES.SCENE}),
+            texture: {name: 'second'}
+        }));
+        expect(seenDepthResources[2]).toBeNull();
+
+        manager.beginFrameGraph();
+        expect(manager.enqueueFrameGraphEffect({callback: jest.fn()})).toBe(true);
+        expect(manager.flushFrameGraph()).toBeUndefined();
+
+        expect(seenDepthResources[3]).toBeNull();
+    });
+
+    test('keeps scene depth inside an effect grouping and invalidates it at the composite boundary', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const seenDepthResources = [];
+        manager.penFX = {
+            applyCapturedEffects: jest.fn((effects, context) => {
+                seenDepthResources.push(context.resources.depth);
+            }),
+            beginGroup: jest.fn(),
+            endGroup: jest.fn()
+        };
+        manager.renderObjectScene = jest.fn(drawTarget => {
+            manager.getTargetState(drawTarget).depthResource = manager.createDepthResource({
+                canvas: {name: 'group scene depth'}
+            }, drawTarget);
+        });
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const grouping = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            effects: [{callback: jest.fn()}],
+            operation: 'effects'
+        });
+        const scene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        }, grouping);
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            configuration: {},
+            drawKind: 'object',
+            target
+        }, scene);
+        manager.enqueueFrameGraphEffect({callback: jest.fn()});
+
+        expect(manager.flushFrameGraph()).toBeUndefined();
+
+        expect(seenDepthResources[0]).toEqual(expect.objectContaining({
+            ownerPass: expect.objectContaining({sceneKind: 'objects'}),
+            texture: {name: 'group scene depth'}
+        }));
+        expect(seenDepthResources[1]).toBeNull();
+        expect(manager.penFX.beginGroup).toHaveBeenCalledTimes(1);
+        expect(manager.penFX.endGroup).toHaveBeenCalledTimes(1);
+    });
+
+    test('waits for asynchronous scene depth before executing a following effect without blocking the draw block', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const render = deferred();
+        const seenDepthResources = [];
+        manager.penFX = {
+            applyCapturedEffects: jest.fn((effects, context) => {
+                seenDepthResources.push(context.resources.depth);
+            })
+        };
+        manager.renderObjectScene = jest.fn(drawTarget => render.promise.then(() => {
+            manager.getTargetState(drawTarget).depthResource = manager.createDepthResource({
+                canvas: {name: 'async scene depth'}
+            }, drawTarget);
+        }));
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const scene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+
+        expect(manager.drawObject(target, {}, scene)).toBeUndefined();
+        manager.enqueueFrameGraphEffect({callback: jest.fn()});
+        const pendingFrame = manager.flushFrameGraph();
+
+        expect(pendingFrame).toBeInstanceOf(Promise);
+        expect(seenDepthResources).toEqual([]);
+        render.resolve();
+        await pendingFrame;
+        expect(seenDepthResources[0]).toEqual(expect.objectContaining({
+            texture: {name: 'async scene depth'}
+        }));
+    });
+
     test('batches costumes and procedural shapes only inside an explicit Three.js scene', () => {
         const manager = makeManager();
         const target = makeTarget();
@@ -292,6 +427,60 @@ describe('MovieAssetManager rendering performance', () => {
             }),
             expect.objectContaining({asset: 'outside-group'})
         ]);
+    });
+
+    test('reports an explicit pass barrier when an effect grouping prevents shared scene depth', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        manager.emit = jest.fn();
+        manager.penFX = {
+            applyCapturedEffects: jest.fn(),
+            beginGroup: jest.fn(),
+            endGroup: jest.fn()
+        };
+        manager.drawObjectImmediately = jest.fn();
+        manager.renderObjectScene = jest.fn();
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const scene = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.SCENE, {
+            sceneKind: 'objects',
+            target
+        });
+        const grouping = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {
+            effects: [],
+            operation: 'effects'
+        }, scene);
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            configuration: {},
+            drawKind: 'object',
+            target
+        }, grouping);
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            configuration: {},
+            drawKind: 'object',
+            target
+        }, scene);
+
+        try {
+            expect(manager.flushFrameGraph()).toBeUndefined();
+        } finally {
+            warn.mockRestore();
+        }
+
+        expect(manager.renderObjectScene).not.toHaveBeenCalled();
+        expect(manager.drawObjectImmediately).toHaveBeenCalledTimes(2);
+        expect(manager.lastFrameGraphWarnings).toEqual([
+            expect.objectContaining({
+                barrierType: FRAME_GRAPH_NODE_TYPES.COMPOSITE,
+                code: 'objects-scene-pass-barrier',
+                fallback: 'ordered-pen'
+            })
+        ]);
+        expect(manager.emit).toHaveBeenCalledWith(
+            'frameGraphWarning',
+            manager.lastFrameGraphWarnings[0]
+        );
     });
 
     test('batches consecutive 3D scene mutations into one model render', () => {
@@ -1793,17 +1982,31 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
     });
 
-    test('publishes the rendered 3D zBuffer for Pen FX', () => {
+    test('publishes rendered 3D depth as a target-owned resource instead of runtime global state', () => {
         const manager = makeManager();
         const target = makeTarget();
         const depthBuffer = {canvas: {name: 'depth'}, near: 4, far: 900, version: 7};
+        const camera = {
+            focalLength: 480,
+            position: {x: 1, y: 2, z: 3},
+            rotation: {x: 4, y: 5, z: 6}
+        };
         manager.modelRenderer = {getDepthBuffer: jest.fn(() => depthBuffer)};
         manager.getTargetState(target);
 
-        manager.publishModelZBuffer(target);
+        const resource = manager.publishModelZBuffer(target, camera);
 
-        expect(manager.runtime.movieZBuffer).toEqual({...depthBuffer, targetId: target.id});
-        expect(manager.getTargetState(target).zBuffer).toBe(manager.runtime.movieZBuffer);
+        expect(manager.runtime).not.toHaveProperty('movieZBuffer');
+        expect(resource).toEqual(expect.objectContaining({
+            ...depthBuffer,
+            camera,
+            generation: 1,
+            ownerPass: {id: target.id, type: 'target'},
+            targetId: target.id,
+            texture: depthBuffer.canvas
+        }));
+        expect(Object.isFrozen(resource)).toBe(true);
+        expect(manager.getTargetState(target).depthResource).toBe(resource);
     });
 
     test('renders cached models synchronously after project loading', () => {
@@ -2188,7 +2391,7 @@ describe('MovieAssetManager rendering performance', () => {
             2
         );
         expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'scene');
-        expect(manager.publishModelZBuffer).toHaveBeenCalledWith(target);
+        expect(manager.publishModelZBuffer).toHaveBeenCalledWith(target, manager.camera);
         expect(manager.finishObjectDraw).toHaveBeenCalledWith(
             target,
             {},
@@ -2715,12 +2918,12 @@ describe('MovieAssetManager rendering performance', () => {
         );
         expect(manager.runtime.renderer.updateDrawableDirectionScale.mock.invocationCallOrder.at(-1))
             .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
-        expect(manager.runtime.movieZBuffer).toEqual({
+        expect(manager.getTargetState(target).depthResource).toEqual(expect.objectContaining({
             flatDepth: 1000,
             targetId: target.id,
+            texture: null,
             version: 1
-        });
-        expect(manager.getTargetState(target).zBuffer).toBe(manager.runtime.movieZBuffer);
+        }));
 
         manager.drawObject(target, {
             ...configuration,

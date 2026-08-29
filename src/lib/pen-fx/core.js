@@ -51,7 +51,7 @@ const createPenFXClass = vm => {
             this.customShaders.openImportPicker();
         }
 
-        _executeSafe(callback, blendMode, blendOpacity) {
+        _executeSafe(callback, blendMode, blendOpacity, renderContext = null) {
             const previousBlendMode = this.blendMode;
             const previousBlendOpacity = this.blendOpacity;
             let engine;
@@ -60,7 +60,7 @@ const createPenFXClass = vm => {
                 this.blendOpacity = blendOpacity;
                 engine = this._getEngine();
                 engine.blendOpacity = this.blendOpacity;
-                callback(engine);
+                callback(engine, renderContext);
             } catch (error) {
                 console.error('[Pen FX]', error);
             } finally {
@@ -72,28 +72,44 @@ const createPenFXClass = vm => {
             }
         }
 
-        _safe(callback) {
+        _getEffectRenderContext(effect) {
+            const movieAssetManager = vm.runtime.movieAssetManager;
+            const depth = movieAssetManager && typeof movieAssetManager.getDepthResource === 'function' ?
+                movieAssetManager.getDepthResource(effect && effect.targetId) : null;
+            return {
+                resources: {depth},
+                targetId: effect && effect.targetId || null
+            };
+        }
+
+        _safe(callback, options = {}) {
             const programOverrides = this.shaderProgramOverrides;
             if (programOverrides) {
                 const effectCallback = callback;
-                callback = engine => engine.withProgramOverrides(programOverrides, () => effectCallback(engine));
+                callback = (engine, renderContext) => engine.withProgramOverrides(
+                    programOverrides,
+                    () => effectCallback(engine, renderContext)
+                );
             }
+            const effect = Object.freeze({
+                blendMode: this.blendMode,
+                blendOpacity: this.blendOpacity,
+                callback,
+                targetId: options.target && options.target.id || null
+            });
             if (this.effectCaptureStack.length) {
-                this.effectCaptureStack[this.effectCaptureStack.length - 1].push({
-                    blendMode: this.blendMode,
-                    blendOpacity: this.blendOpacity,
-                    callback
-                });
+                this.effectCaptureStack[this.effectCaptureStack.length - 1].push(effect);
                 return;
             }
             const movieAssetManager = vm.runtime.movieAssetManager;
             if (movieAssetManager && typeof movieAssetManager.enqueueFrameGraphEffect === 'function' &&
-                movieAssetManager.enqueueFrameGraphEffect({
-                    blendMode: this.blendMode,
-                    blendOpacity: this.blendOpacity,
-                    callback
-                })) return;
-            this._executeSafe(callback, this.blendMode, this.blendOpacity);
+                movieAssetManager.enqueueFrameGraphEffect(effect)) return;
+            this._executeSafe(
+                effect.callback,
+                effect.blendMode,
+                effect.blendOpacity,
+                this._getEffectRenderContext(effect)
+            );
         }
 
         withShaderProgramOverrides(overrides, callback) {
@@ -114,9 +130,14 @@ const createPenFXClass = vm => {
             return this.effectCaptureStack.pop() || [];
         }
 
-        applyCapturedEffects(effects) {
+        applyCapturedEffects(effects, renderContext = null) {
             for (const effect of effects || []) {
-                this._executeSafe(effect.callback, effect.blendMode, effect.blendOpacity);
+                this._executeSafe(
+                    effect.callback,
+                    effect.blendMode,
+                    effect.blendOpacity,
+                    renderContext || this._getEffectRenderContext(effect)
+                );
             }
         }
 

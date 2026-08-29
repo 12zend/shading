@@ -48,6 +48,7 @@ const MovieAssetManagerTransformMethods = {
                 rotationOrder: 'XYZ',
                 scale: {x: 1, y: 1, z: 1},
                 requestedMode: 'costume',
+                depthResource: null,
                 shapeSkinId: null,
                 skinId: null,
                 textKey: null,
@@ -60,8 +61,7 @@ const MovieAssetManagerTransformMethods = {
                 videoRenderPromise: null,
                 worldX: toNumber(target.x),
                 worldY: toNumber(target.y),
-                worldZ: DEFAULT_DEPTH,
-                zBuffer: null
+                worldZ: DEFAULT_DEPTH
             };
             this.targetStates.set(target.id, state);
         }
