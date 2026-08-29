@@ -176,9 +176,15 @@ const install = ({Engine, PenFX}) => {
     };
 
     PenFX.prototype.colorSpaceAdjust = function (args) {
-        this._safe(engine => engine.colorSpaceAdjust(number(args.HADD), numberOr(args.HMUL, 1),
-            number(args.SADD), numberOr(args.SMUL, 1), number(args.LADD), numberOr(args.LMUL, 1),
-            mixAmount(args.MIX), this.blendMode));
+        const hueAdd = number(args.HADD);
+        const hueMultiply = numberOr(args.HMUL, 1);
+        const saturationAdd = number(args.SADD);
+        const saturationMultiply = numberOr(args.SMUL, 1);
+        const lightnessAdd = number(args.LADD);
+        const lightnessMultiply = numberOr(args.LMUL, 1);
+        const mixValue = mixAmount(args.MIX);
+        this._safe(engine => engine.colorSpaceAdjust(hueAdd, hueMultiply, saturationAdd, saturationMultiply,
+            lightnessAdd, lightnessMultiply, mixValue, this.blendMode));
     };
 
     PenFX.prototype.toneMap = function (args) {

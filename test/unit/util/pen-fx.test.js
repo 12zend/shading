@@ -872,6 +872,30 @@ describe('built-in Pen FX category', () => {
         expect(penFX.engine.color).toHaveBeenCalledTimes(1);
     });
 
+    test('snapshots HSL adjust arguments when a grouped effect is captured', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm);
+        const penFX = new PenFX();
+        penFX.engine = {colorSpaceAdjust: jest.fn()};
+        const args = {
+            HADD: 0,
+            HMUL: 1,
+            SADD: 0,
+            SMUL: 1,
+            LADD: 0,
+            LMUL: 1,
+            MIX: 100
+        };
+
+        penFX.beginEffectCapture();
+        penFX.colorSpaceAdjust(args);
+        args.HADD = 0.2;
+        const effects = penFX.endEffectCapture();
+        penFX.applyCapturedEffects(effects);
+
+        expect(penFX.engine.colorSpaceAdjust).toHaveBeenCalledWith(0, 1, 0, 1, 0, 1, 1, 'normal');
+    });
+
     test('routes polar stretch, sort, and turbulent wavy controls to the GPU engine', () => {
         const vm = {runtime: {renderer: {}}};
         const PenFX = createPenFXClass(vm);

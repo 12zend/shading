@@ -210,6 +210,26 @@ const getProcedureParameterContext = parentThread => {
     return null;
 };
 
+const installProcedureParameterFallback = (thread, procedureParams) => {
+    if (!thread || !procedureParams || typeof thread.getParam !== 'function') return;
+
+    const getParam = thread.getParam;
+    thread.getParam = function (paramName) {
+        const value = getParam.call(this, paramName);
+        if (value !== null) return value;
+
+        // Scratch reuses a stack frame when a sequential block advances, which clears its params. Keep the
+        // grouping's procedure arguments available in that gap, but do not leak them into a nested procedure
+        // whose own (possibly empty) parameter frame is active.
+        const hasActiveProcedureFrame = Array.isArray(this.stackFrames) && this.stackFrames.some(frame => (
+            frame && frame.params !== null
+        ));
+        if (hasActiveProcedureFrame) return value;
+        return Object.prototype.hasOwnProperty.call(procedureParams, paramName) ?
+            procedureParams[paramName] : value;
+    };
+};
+
 const installProcedureParameterContext = () => {
     if (Thread.prototype[PROCEDURE_PARAMETER_CONTEXT_PATCH] ||
         typeof Thread.prototype.tryCompile !== 'function') return;
@@ -288,7 +308,10 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     branchThread.blockContainer = blocks;
     branchThread.pushStack(branchId);
     branchThread.peekStackFrame().warpMode = true;
-    if (context.procedureParams) branchThread.peekStackFrame().params = {...context.procedureParams};
+    if (context.procedureParams) {
+        branchThread.peekStackFrame().params = {...context.procedureParams};
+        installProcedureParameterFallback(branchThread, context.procedureParams);
+    }
     if (context.objectInstancePath) branchThread.objectInstancePath = context.objectInstancePath;
     if (context.objectFrameGraphParent) branchThread.objectFrameGraphParent = context.objectFrameGraphParent;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;

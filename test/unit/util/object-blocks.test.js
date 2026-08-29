@@ -1464,6 +1464,125 @@ describe('Objects blocks', () => {
         }));
     });
 
+    test('preserves custom procedure arguments for every object shape in a grouping', () => {
+        const vm = new VM();
+        installObjectBlocks(vm);
+        const runtime = vm.runtime;
+        const stageSprite = new Sprite(null, runtime);
+        stageSprite.name = 'Stage';
+        const stage = new RenderedTarget(stageSprite, runtime);
+        stage.isStage = true;
+        const sprite = new Sprite(null, runtime);
+        sprite.name = 'Sprite';
+        const target = new RenderedTarget(sprite, runtime);
+        runtime.targets = [stage, target];
+        const drawObject = jest.fn();
+        const drawShape = jest.fn();
+        runtime.movieAssetManager = {drawObject, drawShape, runWithoutWaiting: jest.fn()};
+
+        const createBlock = (id, opcode, properties = {}) => target.blocks.createBlock({
+            fields: {},
+            id,
+            inputs: {},
+            next: null,
+            parent: null,
+            shadow: false,
+            topLevel: false,
+            opcode,
+            ...properties
+        });
+        createBlock('definition', 'procedures_definition', {
+            inputs: {custom_block: {block: 'prototype'}},
+            next: 'grouping',
+            topLevel: true
+        });
+        createBlock('prototype', 'procedures_prototype', {
+            mutation: {
+                argumentdefaults: '[0]',
+                argumentids: '["y"]',
+                argumentnames: '["y"]',
+                proccode: 'paint %s'
+            },
+            parent: 'definition'
+        });
+        createBlock('grouping', 'objects_grouping', {
+            inputs: {
+                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null},
+                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+            },
+            parent: 'definition'
+        });
+        createBlock('draw', 'objects_draw', {
+            inputs: {PY: {name: 'PY', block: 'draw-argument', shadow: null}},
+            next: 'shape',
+            parent: 'grouping'
+        });
+        createBlock('shape', 'objects_shape', {
+            inputs: {PY: {name: 'PY', block: 'shape-argument', shadow: null}},
+            next: 'arc',
+            parent: 'draw'
+        });
+        createBlock('arc', 'objects_arc', {
+            inputs: {PY: {name: 'PY', block: 'arc-argument', shadow: null}},
+            next: 'segment',
+            parent: 'shape'
+        });
+        createBlock('segment', 'objects_circularSegment', {
+            inputs: {PY: {name: 'PY', block: 'segment-argument', shadow: null}},
+            next: 'line',
+            parent: 'arc'
+        });
+        createBlock('line', 'objects_line', {
+            inputs: {
+                P1Y: {name: 'P1Y', block: 'line-argument', shadow: null},
+                P2Y: {name: 'P2Y', block: 'line-argument2', shadow: null}
+            },
+            parent: 'segment'
+        });
+        for (const [id, parent] of [
+            ['draw-argument', 'draw'],
+            ['shape-argument', 'shape'],
+            ['arc-argument', 'arc'],
+            ['segment-argument', 'segment'],
+            ['line-argument', 'line'],
+            ['line-argument2', 'line']
+        ]) {
+            createBlock(id, 'argument_reporter_string_number', {
+                fields: {VALUE: {name: 'VALUE', value: 'y'}},
+                parent
+            });
+        }
+        createBlock('call', 'procedures_call', {
+            inputs: {y: {name: 'y', block: 'value', shadow: null}},
+            mutation: {argumentids: '["y"]', proccode: 'paint %s'},
+            topLevel: true
+        });
+        createBlock('value', 'text', {
+            fields: {TEXT: {name: 'TEXT', value: '10'}},
+            parent: 'call'
+        });
+
+        const thread = runtime._pushThread('call', target);
+        runtime.sequencer.stepThread(thread);
+
+        expect(drawObject).toHaveBeenCalledWith(target, expect.objectContaining({
+            position: expect.objectContaining({y: 10})
+        }));
+        expect(drawShape).toHaveBeenNthCalledWith(1, target, expect.objectContaining({
+            position: expect.objectContaining({y: 10})
+        }));
+        expect(drawShape).toHaveBeenNthCalledWith(2, target, expect.objectContaining({
+            position: expect.objectContaining({y: 10})
+        }));
+        expect(drawShape).toHaveBeenNthCalledWith(3, target, expect.objectContaining({
+            position: expect.objectContaining({y: 10})
+        }));
+        expect(drawShape).toHaveBeenNthCalledWith(4, target, expect.objectContaining({
+            position1: expect.objectContaining({y: 10}),
+            position2: expect.objectContaining({y: 10})
+        }));
+    });
+
     test('finishes an asynchronous grouped draw before applying captured effects', async () => {
         let resolveDraw;
         const pendingDraw = new Promise(resolve => {
