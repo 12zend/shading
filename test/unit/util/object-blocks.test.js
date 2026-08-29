@@ -1217,6 +1217,32 @@ describe('Objects blocks', () => {
         }));
     });
 
+    test('sets line dimensions to 100 instead of reusing a previous shape size', () => {
+        const manager = {drawShape: jest.fn(), runWithoutWaiting: jest.fn()};
+        const ObjectBlocks = createObjectBlocksClass({runtime: {movieAssetManager: manager}});
+        const objectBlocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(objectBlocks.line({
+            COLOR: '#ffffff',
+            OPACITY: 100,
+            P1X: 0,
+            P1Y: 0,
+            P1Z: 480,
+            P2X: 100,
+            P2Y: 100,
+            P2Z: 480,
+            T1: 0,
+            T2: Infinity,
+            THICKNESS: 5
+        }, util)).toBeUndefined();
+        expect(manager.drawShape).toHaveBeenCalledWith(util.target, expect.objectContaining({
+            height: 100,
+            shape: 'line',
+            width: 100
+        }));
+    });
+
     test('stack-clicks an Objects reporter without compiling it as an invalid command block', () => {
         const vm = new VM();
         installObjectBlocks(vm);

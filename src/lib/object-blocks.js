@@ -1017,9 +1017,11 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     line (args, util) {
         this.drawProceduralShape('line', args, util, {
+            height: 100,
             position1: {x: args.P1X, y: args.P1Y, z: args.P1Z},
             position2: {x: args.P2X, y: args.P2Y, z: args.P2Z},
-            thickness: args.THICKNESS
+            thickness: args.THICKNESS,
+            width: 100
         });
     }
 
