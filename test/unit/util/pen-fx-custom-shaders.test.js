@@ -357,7 +357,12 @@ describe('Pen FX custom shader packages', () => {
         const created = await manager.createShader({name: 'Offset', source});
         expect(created.inputs.map(input => input.id)).toEqual(['OFFSET_X', 'OFFSET_Y', 'ENABLED']);
         expect(manager.getToolboxBlocks().find(block => block && block.opcode === 'shader_offset_main')).toMatchObject({
-            text: 'Offset offset x: [OFFSET_X] offset y: [OFFSET_Y] enabled: [ENABLED]'
+            text: 'Offset offset x: [OFFSET_X] offset y: [OFFSET_Y] enabled: [ENABLED]',
+            arguments: {
+                OFFSET_X: {type: 'number', defaultValue: 0},
+                OFFSET_Y: {type: 'number', defaultValue: 0},
+                ENABLED: {type: 'Boolean', defaultValue: false}
+            }
         });
 
         const result = penFX[opcodeFor('offset', 'main')]({

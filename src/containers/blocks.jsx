@@ -19,6 +19,7 @@ import {BLOCKS_DEFAULT_SCALE, STAGE_DISPLAY_SIZES} from '../lib/layout-constants
 import DropAreaHOC from '../lib/drop-area-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
 import defineDynamicBlock from '../lib/define-dynamic-block';
+import replaceToolbox from '../lib/replace-toolbox';
 import {Theme} from '../lib/themes';
 import {injectExtensionBlockTheme, injectExtensionCategoryTheme} from '../lib/themes/blockHelpers';
 
@@ -145,6 +146,7 @@ class Blocks extends React.Component {
         this.state = {
             prompt: null
         };
+        this.forceToolboxRebuild = false;
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
         this.toolboxUpdateQueue = [];
     }
@@ -344,7 +346,8 @@ class Blocks extends React.Component {
 
         const categoryId = this.workspace.toolbox_.getSelectedCategoryId();
         const offset = this.workspace.toolbox_.getCategoryScrollOffset();
-        this.workspace.updateToolbox(this.props.toolboxXML);
+        replaceToolbox(this.workspace, this.props.toolboxXML, this.forceToolboxRebuild);
+        this.forceToolboxRebuild = false;
         this._renderedToolboxXML = this.props.toolboxXML;
 
         // In order to catch any changes that mutate the toolbox during "normal runtime"
@@ -645,6 +648,7 @@ class Blocks extends React.Component {
     }
     handleBlocksInfoUpdate (categoryInfo) {
         // @todo Later we should replace this to avoid all the warnings from redefining blocks.
+        if (categoryInfo.id === 'penfx') this.forceToolboxRebuild = true;
         this.handleExtensionAdded(categoryInfo);
     }
     handleCategorySelected (categoryId) {

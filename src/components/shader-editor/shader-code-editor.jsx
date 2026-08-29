@@ -2,6 +2,10 @@ import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import React from 'react';
 
+import {
+    getEditorKeyEdit,
+    normalizeEditorKey
+} from '../../lib/shader-editor-commands';
 import styles from './shader-editor.css';
 
 const KEYWORDS = new Set([
@@ -59,12 +63,15 @@ const highlightGLSL = source => {
 class ShaderCodeEditor extends React.PureComponent {
     constructor (props) {
         super(props);
+        this.applyEdit = this.applyEdit.bind(this);
+        this.handleBeforeInput = this.handleBeforeInput.bind(this);
         this.handleChange = this.handleChange.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleScroll = this.handleScroll.bind(this);
         this.setHighlight = this.setHighlight.bind(this);
         this.setLineNumbers = this.setLineNumbers.bind(this);
         this.setTextarea = this.setTextarea.bind(this);
+        this.pendingSelection = null;
     }
 
     componentDidUpdate () {
@@ -72,27 +79,71 @@ class ShaderCodeEditor extends React.PureComponent {
     }
 
     handleChange (event) {
+        const nativeEvent = event.nativeEvent || {};
+        const character = nativeEvent.data;
+        const pendingSelection = this.pendingSelection;
+        this.pendingSelection = null;
+        if (nativeEvent.inputType === 'insertText' && character && character.length === 1 && pendingSelection) {
+            const edit = getEditorKeyEdit(
+                this.props.value,
+                pendingSelection.start,
+                pendingSelection.end,
+                character
+            );
+            if (edit) {
+                this.applyEdit(edit, true);
+                return;
+            }
+        }
         this.props.onChange(event.target.value);
     }
 
+    applyEdit (edit, forceChange = false) {
+        if (forceChange || edit.value !== this.props.value) this.props.onChange(edit.value);
+        requestAnimationFrame(() => {
+            if (!this.textarea) return;
+            this.textarea.selectionStart = edit.selectionStart;
+            this.textarea.selectionEnd = edit.selectionEnd;
+        });
+    }
+
+    handleBeforeInput (event) {
+        if (this.props.readOnly) return;
+        const character = event.data || (event.nativeEvent && event.nativeEvent.data);
+        if (!character || character.length !== 1) return;
+        const edit = getEditorKeyEdit(
+            this.props.value,
+            event.target.selectionStart,
+            event.target.selectionEnd,
+            character
+        );
+        if (!edit) return;
+        event.preventDefault();
+        this.pendingSelection = null;
+        this.applyEdit(edit);
+    }
+
     handleKeyDown (event) {
+        this.pendingSelection = {
+            end: event.target.selectionEnd,
+            start: event.target.selectionStart
+        };
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
             event.preventDefault();
             this.props.onSave();
             return;
         }
-        if (event.key !== 'Tab' || this.props.readOnly) return;
+        if (this.props.readOnly || event.metaKey || event.ctrlKey || event.altKey) return;
+        const edit = getEditorKeyEdit(
+            this.props.value,
+            event.target.selectionStart,
+            event.target.selectionEnd,
+            normalizeEditorKey(event.key, event.code, event.shiftKey, event.keyCode)
+        );
+        if (!edit) return;
         event.preventDefault();
-        const start = event.target.selectionStart;
-        const end = event.target.selectionEnd;
-        const replacement = '    ';
-        const value = `${this.props.value.slice(0, start)}${replacement}${this.props.value.slice(end)}`;
-        this.props.onChange(value);
-        requestAnimationFrame(() => {
-            if (!this.textarea) return;
-            this.textarea.selectionStart = start + replacement.length;
-            this.textarea.selectionEnd = start + replacement.length;
-        });
+        this.pendingSelection = null;
+        this.applyEdit(edit);
     }
 
     handleScroll () {
@@ -147,6 +198,7 @@ class ShaderCodeEditor extends React.PureComponent {
                         ref={this.setTextarea}
                         spellCheck={false}
                         value={this.props.value}
+                        onBeforeInput={this.handleBeforeInput}
                         onChange={this.handleChange}
                         onKeyDown={this.handleKeyDown}
                         onScroll={this.handleScroll}
