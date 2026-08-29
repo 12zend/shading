@@ -280,6 +280,52 @@ describe('Movie 3D projection', () => {
         expect(renderer.camera.far).toBeLessThan(600);
     });
 
+    test('keeps the near plane close when geometry surrounds the camera', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.camera = new THREE.PerspectiveCamera();
+        renderer.camera.position.set(0, 0, 0);
+        const room = new THREE.Mesh(new THREE.BoxGeometry(200, 200, 200), new THREE.MeshBasicMaterial());
+        renderer.currentObjects = [room];
+
+        renderer.updateCameraDepthRange();
+
+        expect(renderer.camera.near).toBeCloseTo(0.1);
+        expect(renderer.camera.far).toBeGreaterThan(100);
+
+        room.geometry.dispose();
+        room.material.dispose();
+    });
+
+    test('renders the model directly to the public canvas after the depth pass', () => {
+        const renderer = Object.create(ModelRenderer.prototype);
+        renderer.renderTarget = {};
+        renderer.renderer = {
+            outputColorSpace: THREE.SRGBColorSpace,
+            clear: jest.fn(),
+            render: jest.fn(),
+            setRenderTarget: jest.fn()
+        };
+        renderer.scene = {};
+        renderer.camera = {};
+        renderer.screenScene = {};
+        renderer.screenCamera = {};
+        renderer.screenQuad = {material: null};
+        renderer.depthCopyMaterial = {};
+        renderer.canvas = {};
+        renderer.depthCanvas = {height: 4, width: 4};
+        renderer.depthContext = {drawImage: jest.fn()};
+        renderer.depthVersion = 0;
+
+        renderer.renderSceneWithZBuffer();
+
+        expect(renderer.renderer.render).toHaveBeenNthCalledWith(1, renderer.scene, renderer.camera);
+        expect(renderer.renderer.render).toHaveBeenNthCalledWith(2, renderer.screenScene, renderer.screenCamera);
+        expect(renderer.renderer.render).toHaveBeenNthCalledWith(3, renderer.scene, renderer.camera);
+        expect(renderer.depthContext.drawImage).toHaveBeenCalledWith(renderer.canvas, 0, 0, 4, 4);
+        expect(renderer.depthVersion).toBe(1);
+        expect(renderer.renderer.outputColorSpace).toBe(THREE.SRGBColorSpace);
+    });
+
     test('does not render geometry assigned to fully transparent materials', () => {
         const root = new THREE.Group();
         const hiddenMaterial = new THREE.MeshBasicMaterial({opacity: 0, transparent: true});

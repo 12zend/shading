@@ -836,10 +836,9 @@ class ModelRenderer {
         this.renderer.shadowMap.autoUpdate = false;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        // Render the scene into a color target with a real GPU depth attachment. The color target is copied
-        // back to the public canvas, while the depth attachment is packed into depthCanvas for consumers which
-        // use another WebGL context (notably Pen FX). Keeping the transfer as a canvas avoids a synchronous
-        // readPixels stall on every Movie frame.
+        // Render the scene into a color target with a real GPU depth attachment. The depth attachment is packed
+        // into depthCanvas for consumers which use another WebGL context (notably Pen FX). The model's color is
+        // rendered directly to the public canvas after this pass, avoiding a fragile color-copy shader.
         this.renderTarget = new THREE.WebGLRenderTarget(MODEL_RENDER_SIZE, MODEL_RENDER_SIZE, {
             depthBuffer: true,
             format: THREE.RGBAFormat,
@@ -847,7 +846,9 @@ class ModelRenderer {
             minFilter: THREE.LinearFilter,
             stencilBuffer: false
         });
-        this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+        // Non-XR render targets are rendered in linear space by Three.js. Keep the attachment linear so sampling
+        // it never applies an implicit sRGB conversion before the result is displayed on the public canvas.
+        this.renderTarget.texture.colorSpace = THREE.LinearSRGBColorSpace;
         this.renderTarget.texture.generateMipmaps = false;
         this.renderTarget.depthTexture = new THREE.DepthTexture(
             MODEL_RENDER_SIZE,
@@ -870,12 +871,11 @@ class ModelRenderer {
         const screenGeometry = new THREE.PlaneGeometry(2, 2);
         this.screenScene = new THREE.Scene();
         this.screenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        this.colorCopyMaterial = new THREE.ShaderMaterial({
+        this.depthCopyMaterial = new THREE.ShaderMaterial({
             blending: THREE.NoBlending,
             depthTest: false,
             depthWrite: false,
-            transparent: false,
-            uniforms: {u_image: {value: this.renderTarget.texture}},
+            uniforms: {u_depth: {value: this.renderTarget.depthTexture}},
             vertexShader: `
                 varying vec2 v_uv;
                 void main() {
@@ -883,20 +883,6 @@ class ModelRenderer {
                     gl_Position = vec4(position.xy, 0.0, 1.0);
                 }
             `,
-            fragmentShader: `
-                varying vec2 v_uv;
-                uniform sampler2D u_image;
-                void main() {
-                    gl_FragColor = texture2D(u_image, v_uv);
-                }
-            `
-        });
-        this.depthCopyMaterial = new THREE.ShaderMaterial({
-            blending: THREE.NoBlending,
-            depthTest: false,
-            depthWrite: false,
-            uniforms: {u_depth: {value: this.renderTarget.depthTexture}},
-            vertexShader: this.colorCopyMaterial.vertexShader,
             fragmentShader: `
                 varying vec2 v_uv;
                 uniform sampler2D u_depth;
@@ -913,7 +899,8 @@ class ModelRenderer {
                 }
             `
         });
-        this.screenQuad = new THREE.Mesh(screenGeometry, this.colorCopyMaterial);
+        this.screenQuad = new THREE.Mesh(screenGeometry, this.depthCopyMaterial);
+        this.screenQuad.frustumCulled = false;
         this.screenScene.add(this.screenQuad);
 
         this.scene = new THREE.Scene();
@@ -1133,9 +1120,11 @@ class ModelRenderer {
         const point = this.depthPoint || (this.depthPoint = new THREE.Vector3());
         let closest = Infinity;
         let farthest = 0;
+        let containsCamera = false;
         for (const object of this.currentObjects) {
             bounds.setFromObject(object);
             if (bounds.isEmpty()) continue;
+            containsCamera = containsCamera || bounds.containsPoint(this.camera.position);
             for (let index = 0; index < 8; index++) {
                 point.set(
                     index & 1 ? bounds.max.x : bounds.min.x,
@@ -1156,6 +1145,14 @@ class ModelRenderer {
         }
         const span = Math.max(1, farthest - closest);
         const margin = Math.max(1, span * 0.05);
+        // A room/shell can surround the camera. In that case the nearest visible surface is inside the AABB, so
+        // using only its forward-facing corners produces a near plane in the middle of the room and clips it when
+        // the camera rotates. Keep the near plane close whenever an object's bounds contain the camera.
+        if (containsCamera) {
+            this.camera.near = 0.1;
+            this.camera.far = Math.max(this.camera.near + 1, farthest + margin);
+            return;
+        }
         this.camera.near = Math.max(0.01, closest - margin);
         this.camera.far = Math.max(this.camera.near + 1, farthest + margin);
     }
@@ -1165,6 +1162,7 @@ class ModelRenderer {
             return this.renderer.render(this.scene, this.camera);
         }
         const outputColorSpace = this.renderer.outputColorSpace;
+        let depthCopied = false;
         try {
             this.renderer.setRenderTarget(this.renderTarget);
             this.renderer.clear();
@@ -1172,20 +1170,29 @@ class ModelRenderer {
             this.renderer.setRenderTarget(null);
 
             // Depth bytes must not pass through an sRGB transfer curve: Pen FX decodes these exact RGB values.
-            this.renderer.outputColorSpace = THREE.NoColorSpace;
+            this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
             this.screenQuad.material = this.depthCopyMaterial;
             this.renderer.render(this.screenScene, this.screenCamera);
             if (this.depthContext) {
                 this.depthContext.drawImage(this.canvas, 0, 0, this.depthCanvas.width, this.depthCanvas.height);
+                depthCopied = true;
             }
-
-            this.screenQuad.material = this.colorCopyMaterial;
-            this.renderer.render(this.screenScene, this.screenCamera);
-            this.depthVersion++;
+        } catch (error) {
+            // Depth export is auxiliary. A failure here must not prevent the model from being shown on the
+            // public canvas, which is also the color source used by the Movie renderer.
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn('Movie 3D depth export failed; rendering the model directly.', error);
+            }
         } finally {
             this.renderer.setRenderTarget(null);
             this.renderer.outputColorSpace = outputColorSpace;
         }
+
+        // Render the authoritative color image directly to the public canvas. Copying the render target through
+        // a second shader is fragile across Three.js revisions and can turn a valid scene into a blank canvas when
+        // the copy program fails to compile.
+        this.renderer.render(this.scene, this.camera);
+        if (depthCopied) this.depthVersion++;
     }
 
     getDepthBuffer () {
@@ -1388,7 +1395,6 @@ class ModelRenderer {
         this.clearLightObjects();
         if (this.renderTarget) this.renderTarget.dispose();
         if (this.screenQuad && this.screenQuad.geometry) this.screenQuad.geometry.dispose();
-        if (this.colorCopyMaterial) this.colorCopyMaterial.dispose();
         if (this.depthCopyMaterial) this.depthCopyMaterial.dispose();
         this.renderer.dispose();
     }
