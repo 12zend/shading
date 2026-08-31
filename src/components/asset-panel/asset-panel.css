@@ -4,6 +4,8 @@
 .wrapper {
     display: flex;
     flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
     border: 1px solid $ui-black-transparent;
     background: $assets-background;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -24,6 +26,8 @@
     display: flex;
     flex-grow: 1;
     flex-shrink: 1;
+    min-width: 0;
+    min-height: 0;
     overflow: visible;
 }
 

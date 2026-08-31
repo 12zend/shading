@@ -22,6 +22,8 @@
 .editor {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -134,6 +136,7 @@
 }
 
 .code-editor {
+    min-width: 0;
     min-height: 0;
     flex: 1;
     display: flex;
@@ -209,6 +212,7 @@
     z-index: 1;
     resize: none;
     overflow: auto;
+    overscroll-behavior: contain;
     outline: none;
     background: transparent;
     color: transparent;
