@@ -724,6 +724,18 @@ const myBlocksShader = function () {
     `;
 };
 
+const myBlocksScene = function () {
+    return `
+    <category
+        name="My Blocks Scene"
+        id="myBlocksScene"
+        colour="#FF6680"
+        secondaryColour="#FF4D6A"
+        custom="MY_BLOCKS_SCENE">
+    </category>
+    `;
+};
+
 const proceduralShapeBlocks = function () {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
@@ -889,12 +901,15 @@ const xmlClose = '</xml>';
  * @property {string} id - the extension / category ID.
  * @property {string} xml - the `<category>...</category>` XML for this extension / category.
  * @param {?string} costumeName - The name of the default selected costume dropdown.
- * @param {?string} backdropName - The name of the default selected backdrop dropdown.
+ * @param {?string} _backdropName - The name of the default selected backdrop dropdown.
  * @param {?string} soundName -  The name of the default selected sound dropdown.
  * @param {?object} colors - The colors for the theme.
  * @returns {string} - a ScratchBlocks-style XML document for the contents of the toolbox.
  */
+// The backdrop argument is retained for the public toolbox builder signature;
+// the Movie toolbox supplies its own Camera category instead.
 const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categoriesXML = [],
+    // eslint-disable-next-line no-unused-vars
     costumeName = '', _backdropName = '', soundName = '', colors = defaultBlockColors) {
     isStage = isInitialSetup || isStage;
     const gap = [categorySeparator];
@@ -931,6 +946,10 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     // empty extension category is replaced by the native dynamic category.
     moveCategory('myblocksshader');
     const myBlocksShaderXML = myBlocksShader();
+    // Scene blocks are also registered as an empty VM extension category and
+    // replaced here by the dynamic category populated from the workspace.
+    moveCategory('myblocksscene');
+    const myBlocksSceneXML = myBlocksScene();
 
     // Always display TurboWarp blocks as the first extension, if it exists,
     // and also add an "is compiled?" block to the top.
@@ -952,6 +971,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         variablesXML, gap,
         myBlocksXML, gap,
         myBlocksShaderXML, gap,
+        myBlocksSceneXML, gap,
         ...(penXML ? [penXML, gap] : [])
     ];
 

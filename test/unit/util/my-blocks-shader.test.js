@@ -1,4 +1,7 @@
-import installMyBlocksShader, {MyBlocksShaderManager} from '../../../src/lib/my-blocks-shader';
+import installMyBlocksShader, {
+    MyBlocksShaderManager,
+    ShaderExpressionCompiler
+} from '../../../src/lib/my-blocks-shader';
 
 const valueInput = block => ({name: '', block, shadow: block});
 
@@ -180,6 +183,74 @@ describe('My Blocks Shader', () => {
             u_reporter_sensing_mousex: 42,
             u_list_numbers_id_length: 3
         }));
+    });
+
+    test('compiles every standard Scratch operator reporter', () => {
+        const dynamic = {
+            opcode: 'argument_reporter_string_number',
+            fields: {VALUE: {value: 'dynamic'}}
+        };
+        const number = {opcode: 'math_number', fields: {NUM: {value: '2'}}};
+        const text = {opcode: 'text', fields: {TEXT: {value: 'hello'}}};
+        const blocks = {
+            dynamic,
+            number,
+            text,
+            add: {opcode: 'operator_add', inputs: {NUM1: valueInput('dynamic'), NUM2: valueInput('number')}},
+            subtract: {opcode: 'operator_subtract', inputs: {NUM1: valueInput('dynamic'), NUM2: valueInput('number')}},
+            multiply: {opcode: 'operator_multiply', inputs: {NUM1: valueInput('dynamic'), NUM2: valueInput('number')}},
+            divide: {opcode: 'operator_divide', inputs: {NUM1: valueInput('dynamic'), NUM2: valueInput('number')}},
+            mod: {opcode: 'operator_mod', inputs: {NUM1: valueInput('dynamic'), NUM2: valueInput('number')}},
+            round: {opcode: 'operator_round', inputs: {NUM: valueInput('dynamic')}},
+            mathop: {
+                opcode: 'operator_mathop',
+                fields: {OPERATOR: {value: 'abs'}},
+                inputs: {NUM: valueInput('dynamic')}
+            },
+            random: {opcode: 'operator_random', inputs: {FROM: valueInput('dynamic'), TO: valueInput('number')}},
+            lt: {
+                opcode: 'operator_lt',
+                inputs: {OPERAND1: valueInput('dynamic'), OPERAND2: valueInput('number')}
+            },
+            gt: {
+                opcode: 'operator_gt',
+                inputs: {OPERAND1: valueInput('dynamic'), OPERAND2: valueInput('number')}
+            },
+            equals: {
+                opcode: 'operator_equals',
+                inputs: {OPERAND1: valueInput('dynamic'), OPERAND2: valueInput('number')}
+            },
+            and: {
+                opcode: 'operator_and',
+                inputs: {OPERAND1: valueInput('lt'), OPERAND2: valueInput('gt')}
+            },
+            or: {
+                opcode: 'operator_or',
+                inputs: {OPERAND1: valueInput('lt'), OPERAND2: valueInput('gt')}
+            },
+            not: {opcode: 'operator_not', inputs: {OPERAND: valueInput('equals')}},
+            join: {
+                opcode: 'operator_join',
+                inputs: {STRING1: valueInput('dynamic'), STRING2: valueInput('text')}
+            },
+            length: {opcode: 'operator_length', inputs: {STRING: valueInput('dynamic')}},
+            letter: {
+                opcode: 'operator_letter_of',
+                inputs: {LETTER: valueInput('number'), STRING: valueInput('dynamic')}
+            },
+            contains: {
+                opcode: 'operator_contains',
+                inputs: {STRING1: valueInput('dynamic'), STRING2: valueInput('text')}
+            }
+        };
+        const compiler = new ShaderExpressionCompiler(blocks, [], []);
+
+        expect(Object.keys(blocks).filter(id => !['dynamic', 'number', 'text'].includes(id)))
+            .toHaveLength(18);
+        for (const id of Object.keys(blocks)) {
+            if (['dynamic', 'number', 'text'].includes(id)) continue;
+            expect(() => compiler.expression(id)).not.toThrow();
+        }
     });
 
     test('compiles a reporter custom block used by an RGB expression', () => {

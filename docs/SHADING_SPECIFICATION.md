@@ -8,7 +8,7 @@
 - `getInfo()`、VM の primitive 登録、コンパイラー互換登録に残っているだけのブロックは、現行ブロックに含めない。
 - 非表示ブロックは、既存プロジェクトの読み込み・実行・再保存に必要な範囲でのみ互換性を維持する。
 
-現行パレットとランタイム登録は別の層である。特に Movie の旧 Looks ブロック、旧 Objects ブロック、`myblocksshader_*` は読み込みのために登録されていても、現在のユーザー向け機能一覧には含めない。
+現行パレットとランタイム登録は別の層である。Movie の旧 Looks ブロックと旧 Objects ブロックは読み込みのために登録されていても、現在のユーザー向け機能一覧には含めない。一方、My Blocks Shader と My Blocks Scene は現在のユーザー向けカテゴリとして表示する。
 
 ## 2. システム概要
 
@@ -40,8 +40,9 @@ MovieAssetManager ── PenFX compositor ── Pen framebuffer
 - `MovieAssetManager`
 - PenFX
 - My Blocks Shader のコンパイラー互換処理
+- My Blocks Scene のコンパイラーと PenFX カスタムシェーダー経路
 
-`src/containers/blocks.jsx` は Scratch Blocks 側のブロック定義、Objects のカスタム UI、PenFX のカスタム UI、My Blocks Shader の動的カテゴリ登録を行う。
+`src/containers/blocks.jsx` は Scratch Blocks 側のブロック定義、Objects のカスタム UI、PenFX のカスタム UI、My Blocks Shader と My Blocks Scene の動的カテゴリ登録を行う。
 
 `src/lib/make-toolbox-xml.js` が、実際に表示するカテゴリとブロックの一次情報である。
 
@@ -86,9 +87,10 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Variables | `data` | Scratch の変数・リスト |
 | My Blocks | `procedures` | Scratch の通常のカスタムブロック |
 | My Blocks Shader | `myBlocksShader` | シェーダー用の動的カスタムブロック |
+| My Blocks Scene | `myBlocksScene` | `scene(vec3 p)` を定義する動的カスタムブロック |
 | Pen | `pen` | ペン描画ブロック |
 
-標準の `looks` カテゴリは現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。`Pen` と `My Blocks Shader` は表示する。
+標準の `looks` カテゴリは現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。`Pen`、`My Blocks Shader`、`My Blocks Scene` は表示する。
 
 ### 3.2 Objects
 
@@ -456,7 +458,7 @@ Movie プロジェクトの marker は次の形で保存する。
 }
 ```
 
-`features` は検出された機能をソートして保存する。候補は `movie-blocks`、`pen-fx`、`my-blocks-shader`、`3d-engine`、`graphic-effects`、`video-assets`、`costume-groups`、`model-assets`、`timeline`、`pen-fx-shaders`。
+`features` は検出された機能をソートして保存する。候補は `movie-blocks`、`pen-fx`、`my-blocks-shader`、`my-blocks-scene`、`3d-engine`、`graphic-effects`、`video-assets`、`costume-groups`、`model-assets`、`timeline`、`pen-fx-shaders`。
 
 ### 10.2 保存データ
 
@@ -543,6 +545,14 @@ npm run package:desktop:dir
 
 My Blocks Shader は `myBlocksShader` カテゴリとして My Blocks の直下に表示する。compiler、procedure mutation、`myblocksshader_*` の読み込み互換処理も引き続き利用する。
 
+### 12.4 My Blocks Scene
+
+My Blocks Scene は `myBlocksScene` カテゴリとして My Blocks Shader の直下に表示する。Scene の定義は `myblocksscene_return` の条件と RGB を、内蔵 `scene.frag` の `vec3 scene(vec3 p)` 関数へコンパイルする。条件には Scratch の全標準演算ブロックを使用でき、条件が true の点は RGB を返して塗りつぶし、false の点は `vec3(0.0)` を返して空洞にする。`p x`、`p y`、`p z` はワールド空間の `p.x`、`p.y`、`p.z` を返す。
+
+Scene と Shader は `ShaderExpressionCompiler` を共有し、演算子の GLSL 変換と Scratch 互換の除算・剰余・三角関数・乱数ヘルパーを同じ実装から利用する。
+
+内蔵フラグメントシェーダーのレイマーチャーとカメラ入力は維持し、コンパイル済み Scene は PenFX の既存 custom shader 登録・描画経路でレンダリングする。`myblocksscene_*` を含むプロジェクトは `my-blocks-scene` と `3d-engine` を検出する。
+
 ## 13. 実装上のエラーと状態管理
 
 - 非同期資産の失敗は VM を Promise 待ちにせず、MovieAssetManager の render error／diagnostics 経路へ通知する。
@@ -572,6 +582,10 @@ My Blocks Shader は `myBlocksShader` カテゴリとして My Blocks の直下�
 | `src/lib/project-format.js` | `.shade`、`mb3` marker、Movie feature 検出 |
 | `src/lib/pen-fx/core.js` | PenFX runtime と合成 transaction |
 | `src/lib/pen-fx/custom-shaders.js` | shader package の検証・登録・保存 |
+| `src/lib/my-blocks-shader.js` | My Blocks Shader compiler と実行時 custom block 経路 |
+| `src/lib/my-blocks-shader-blocks.js` | My Blocks Shader の Blockly 定義、カテゴリ、procedure mutation |
+| `src/lib/my-blocks-scene.js` | My Blocks Scene compiler、内蔵 `scene.frag` への関数合成、PenFX custom shader 実行 |
+| `src/lib/my-blocks-scene-blocks.js` | My Blocks Scene の Blockly 定義、カテゴリ、procedure mutation |
 | `src/lib/model-runtime.js` | Three.js model、camera、light、depth rendering |
 | `electron/main.js`、`electron/file-store.js`、`electron/graphics.js` | デスクトップ起動、保存、GPU backend |
 

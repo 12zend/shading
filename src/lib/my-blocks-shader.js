@@ -6,6 +6,7 @@
 /* eslint-disable no-console */
 
 const SHADER_MARKER = 'myblocksshader';
+const SCENE_MARKER = 'myblocksscene';
 const SHADER_CALL_OPCODE = 'procedures_call';
 const SHADER_RETURN_OPCODE = 'myblocksshader_return';
 const SHADER_RETURN_FROM_OPCODE = 'myblocksshader_return_from';
@@ -40,6 +41,31 @@ void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
 }`;
 
+// Keep the GLSL helpers in the Shader compiler so every My Blocks family
+// compiler can use exactly the same Scratch-compatible numeric operations.
+const SHADER_COMPILER_HELPERS = `
+float shaderScratchDivide(float numerator, float denominator) {
+    if (denominator != 0.0) return numerator / denominator;
+    if (numerator > 0.0) return 1e20;
+    if (numerator < 0.0) return -1e20;
+    return 0.0;
+}
+
+float shaderScratchMod(float numerator, float denominator) {
+    return denominator == 0.0 ? 0.0 : mod(numerator, denominator);
+}
+
+float shaderScratchTan(float value) {
+    float angle = mod(mod(value, 360.0) + 360.0, 360.0);
+    if (abs(angle - 90.0) < 0.000001) return 1e20;
+    if (abs(angle - 270.0) < 0.000001) return -1e20;
+    return tan(radians(value));
+}
+
+float shaderHash(vec3 value) {
+    return fract(sin(dot(value, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+}`;
+
 const numberLiteral = value => {
     const number = Number(value);
     if (!Number.isFinite(number)) return '0.0';
@@ -67,12 +93,18 @@ const safeIdentifier = (value, prefix = 'u_arg_') => {
 
 const blockField = (block, name, fallback = '') => {
     const field = block && block.fields && block.fields[name];
-    return field && field.value !== undefined ? field.value : fallback;
+    return field && Object.prototype.hasOwnProperty.call(field, 'value') ? field.value : fallback;
 };
 
 class ShaderExpressionCompiler {
-    constructor (blocks, argumentNames, argumentIds) {
+    constructor (blocks, argumentNames, argumentIds, options = {}) {
         this.blocks = blocks;
+        const hasCompilerOptions = Object.prototype.hasOwnProperty.call(options, 'specialArguments') ||
+            Object.prototype.hasOwnProperty.call(options, 'specialExpressions') ||
+            Object.prototype.hasOwnProperty.call(options, 'specialConditions');
+        this.specialArguments = options.specialArguments || (hasCompilerOptions ? {} : options);
+        this.specialExpressions = options.specialExpressions || {};
+        this.specialConditions = options.specialConditions || {};
         this.argumentUniforms = new Map();
         this.externalUniforms = new Map();
         this.uniformNames = new Map();
@@ -143,6 +175,16 @@ class ShaderExpressionCompiler {
             if (value === null || index === null) return null;
             const offset = Math.floor(index) - 1;
             return offset >= 0 && offset < value.length ? value[offset] : '';
+        }
+        if (block.opcode === 'operator_length') {
+            const value = this.constantString(this.inputId(block, 'STRING'), literalOnly);
+            return value === null ? null : String(value.length);
+        }
+        if (block.opcode === 'operator_contains') {
+            const value = this.constantString(this.inputId(block, 'STRING1'), literalOnly);
+            const search = this.constantString(this.inputId(block, 'STRING2'), literalOnly);
+            if (value === null || search === null) return null;
+            return value.toLowerCase().includes(search.toLowerCase()) ? 'true' : 'false';
         }
         return null;
     }
@@ -215,6 +257,10 @@ class ShaderExpressionCompiler {
     condition (block, name) {
         const child = this.block(this.inputId(block, name));
         if (!child) return `(${this.input(block, name)} != 0.0)`;
+        const specialCondition = this.specialConditions[child.opcode];
+        if (typeof specialCondition !== 'undefined') {
+            return typeof specialCondition === 'function' ? specialCondition(child, this) : specialCondition;
+        }
         switch (child.opcode) {
         case 'operator_lt': {
             const constant = this.constantComparison(child, '<');
@@ -325,7 +371,8 @@ class ShaderExpressionCompiler {
     procedureInfo (procedureCode) {
         for (const prototype of Object.values(this.blocks)) {
             if (prototype.opcode !== 'procedures_prototype' || !prototype.mutation) continue;
-            if (prototype.mutation[SHADER_MARKER] === 'true') continue;
+            if (prototype.mutation[SHADER_MARKER] === 'true' ||
+                prototype.mutation[SCENE_MARKER] === 'true') continue;
             if (prototype.mutation.proccode !== procedureCode) continue;
             const definition = this.block(prototype.parent);
             if (!definition || definition.opcode !== 'procedures_definition') return null;
@@ -408,6 +455,11 @@ class ShaderExpressionCompiler {
         const block = this.block(blockId);
         if (!block) return fallback;
 
+        const specialExpression = this.specialExpressions[block.opcode];
+        if (typeof specialExpression !== 'undefined') {
+            return typeof specialExpression === 'function' ? specialExpression(block, this) : specialExpression;
+        }
+
         switch (block.opcode) {
         case 'math_number':
         case 'math_integer':
@@ -420,6 +472,9 @@ class ShaderExpressionCompiler {
         case 'argument_reporter_string_number':
         case 'argument_reporter_boolean': {
             const name = String(blockField(block, 'VALUE'));
+            if (Object.prototype.hasOwnProperty.call(this.specialArguments, name)) {
+                return this.specialArguments[name];
+            }
             if (name === 'cx') return 'cx';
             if (name === 'cy') return 'cy';
             if (/^(is compiled\?|is turbowarp\?)$/i.test(name)) return '1.0';
@@ -517,23 +572,27 @@ class ShaderExpressionCompiler {
         }
         case 'operator_join': {
             const value = this.constantString(blockId);
-            if (value === null) throw new Error('Dynamic join is not supported in shaders.');
+            // GLSL has no native string type. Literal strings still have the
+            // same numeric coercion Scratch applies when they feed an RGB
+            // input; dynamic strings are a safe numeric fallback instead of
+            // making the whole scene/shader fail to compile.
+            if (value === null) return '0.0';
             return numberLiteral(value);
         }
         case 'operator_length': {
             const value = this.constantString(this.inputId(block, 'STRING'));
-            if (value === null) throw new Error('Dynamic string length is not supported in shaders.');
+            if (value === null) return '0.0';
             return numberLiteral(value.length);
         }
         case 'operator_letter_of': {
             const value = this.constantString(blockId);
-            if (value === null) throw new Error('Dynamic letter of is not supported in shaders.');
+            if (value === null) return '0.0';
             return numberLiteral(value);
         }
         case 'operator_contains': {
             const value = this.constantString(this.inputId(block, 'STRING1'));
             const search = this.constantString(this.inputId(block, 'STRING2'));
-            if (value === null || search === null) throw new Error('Dynamic contains is not supported in shaders.');
+            if (value === null || search === null) return '0.0';
             return value.toLowerCase().includes(search.toLowerCase()) ? '1.0' : '0.0';
         }
         case 'data_lengthoflist':
@@ -650,7 +709,7 @@ class MyBlocksShaderEngine {
 
     _penSkin () {
         const id = this.renderer && this.renderer._penSkinId;
-        return id === null || id === undefined ? null : this.renderer._allSkins[id];
+        return Number.isInteger(id) ? this.renderer._allSkins[id] : null;
     }
 
     _resize (width, height) {
@@ -850,27 +909,7 @@ float cx;
 float cy;
 ${variables}
 
-float shaderScratchDivide(float numerator, float denominator) {
-    if (denominator != 0.0) return numerator / denominator;
-    if (numerator > 0.0) return 1e20;
-    if (numerator < 0.0) return -1e20;
-    return 0.0;
-}
-
-float shaderScratchMod(float numerator, float denominator) {
-    return denominator == 0.0 ? 0.0 : mod(numerator, denominator);
-}
-
-float shaderScratchTan(float value) {
-    float angle = mod(mod(value, 360.0) + 360.0, 360.0);
-    if (abs(angle - 90.0) < 0.000001) return 1e20;
-    if (abs(angle - 270.0) < 0.000001) return -1e20;
-    return tan(radians(value));
-}
-
-float shaderHash(vec3 value) {
-    return fract(sin(dot(value, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
-}
+${SHADER_COMPILER_HELPERS}
 
 vec3 shaderSample(float x, float y) {
     vec2 uv = vec2(x / u_resolution.x + 0.5, y / u_resolution.y + 0.5);
@@ -1082,19 +1121,19 @@ ${statements}
             }
         }
         // Command primitives must never return a Promise or yield the VM.
-        return undefined;
+        return;
     }
 
     call (args, util) {
         const mutation = args && args.mutation;
         const definition = this._findDefinition(util.target, mutation && mutation.shaderid);
-        if (!definition) return undefined;
+        if (!definition) return;
         return this._applyDefinition(definition, args, util);
     }
 
     callProcedure (procedureCode, params, util) {
         const definition = this._findDefinition(util.target, null, procedureCode);
-        if (!definition) return undefined;
+        if (!definition) return;
         const blocks = util.target.blocks._blocks;
         const prototype = blocks[definition.inputs.custom_block.block];
         const names = parseJSON(prototype.mutation.shaderuserargumentnames);
@@ -1127,7 +1166,7 @@ ${statements}
     }
 
     returnRGB () {
-        return undefined;
+        return;
     }
 
     getChannel () {
@@ -1165,10 +1204,17 @@ const installMyBlocksShader = vm => {
 
 export {
     SHADER_CALL_OPCODE,
+    SHADER_COMPILER_HELPERS,
     SHADER_GET_OPCODES,
     SHADER_MARKER,
+    SCENE_MARKER,
     SHADER_RETURN_FROM_OPCODE,
     SHADER_RETURN_OPCODE,
     MyBlocksShaderManager,
+    ShaderExpressionCompiler,
+    blockField,
+    numberLiteral,
+    parseJSON,
+    safeIdentifier,
     installMyBlocksShader as default
 };

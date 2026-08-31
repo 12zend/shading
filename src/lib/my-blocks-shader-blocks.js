@@ -2,6 +2,7 @@ import {
     SHADER_CALL_OPCODE,
     SHADER_GET_OPCODES,
     SHADER_MARKER,
+    SCENE_MARKER,
     SHADER_RETURN_FROM_OPCODE,
     SHADER_RETURN_OPCODE
 } from './my-blocks-shader';
@@ -23,6 +24,16 @@ const SHADER_ATTRIBUTES = [
     'shadercoordids'
 ];
 const SHADER_CALL_ATTRIBUTES = [SHADER_MARKER, 'shaderid', 'shaderproccode'];
+const SCENE_ATTRIBUTES = [
+    SCENE_MARKER,
+    'sceneid',
+    'sceneuserproccode',
+    'sceneuserargumentids',
+    'sceneuserargumentnames',
+    'sceneuserargumentdefaults',
+    'scenecoordinateids'
+];
+const SCENE_CALL_ATTRIBUTES = [SCENE_MARKER, 'sceneid', 'sceneproccode'];
 
 const lockShaderColour = block => {
     if (!block || typeof block.setColour !== 'function') return;
@@ -46,11 +57,8 @@ const uid = ScratchBlocks => {
     if (ScratchBlocks.utils && typeof ScratchBlocks.utils.genUid === 'function') {
         return ScratchBlocks.utils.genUid();
     }
-    return `shader_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-};
-
-const copyAttribute = (from, to, name) => {
-    if (from.hasAttribute(name)) to.setAttribute(name, from.getAttribute(name));
+    return `shader_${Date.now()}_${Math.random().toString(36)
+        .slice(2)}`;
 };
 
 const prepareShaderMutation = (ScratchBlocks, editorMutation) => {
@@ -105,23 +113,27 @@ const callMutationFromDefinition = definitionMutation => {
 };
 
 const patchProcedureMutations = ScratchBlocks => {
-    const prototype = ScratchBlocks.Blocks.procedures_prototype;
-    if (prototype && !prototype.myBlocksShaderPatched_) {
-        prototype.myBlocksShaderPatched_ = true;
-        const originalToDom = prototype.mutationToDom;
-        const originalFromDom = prototype.domToMutation;
-        prototype.mutationToDom = function (...args) {
+    const patchProcedureDefinition = procedureDefinition => {
+        if (!procedureDefinition || procedureDefinition.myBlocksShaderPatched_) return;
+        procedureDefinition.myBlocksShaderPatched_ = true;
+        const originalToDom = procedureDefinition.mutationToDom;
+        const originalFromDom = procedureDefinition.domToMutation;
+        procedureDefinition.mutationToDom = function (...args) {
             const mutation = originalToDom.apply(this, args);
-            if (this.myBlocksShaderAttributes_) {
-                for (const name of SHADER_ATTRIBUTES) {
-                    if (this.myBlocksShaderAttributes_[name] !== null) {
-                        mutation.setAttribute(name, this.myBlocksShaderAttributes_[name]);
+            const attributes = this.myBlocksShaderAttributes_ ?
+                {values: this.myBlocksShaderAttributes_, names: SHADER_ATTRIBUTES} :
+                (this.myBlocksSceneAttributes_ ?
+                    {values: this.myBlocksSceneAttributes_, names: SCENE_ATTRIBUTES} : null);
+            if (attributes) {
+                for (const name of attributes.names) {
+                    if (attributes.values[name] !== null) {
+                        mutation.setAttribute(name, attributes.values[name]);
                     }
                 }
             }
             return mutation;
         };
-        prototype.domToMutation = function (mutation) {
+        procedureDefinition.domToMutation = function (mutation) {
             originalFromDom.call(this, mutation);
             if (mutation.getAttribute(SHADER_MARKER) === 'true') {
                 this.myBlocksShaderAttributes_ = {};
@@ -129,23 +141,39 @@ const patchProcedureMutations = ScratchBlocks => {
                     this.myBlocksShaderAttributes_[name] = mutation.getAttribute(name);
                 }
                 lockShaderColour(this);
+            } else if (mutation.getAttribute(SCENE_MARKER) === 'true') {
+                this.myBlocksSceneAttributes_ = {};
+                for (const name of SCENE_ATTRIBUTES) {
+                    this.myBlocksSceneAttributes_[name] = mutation.getAttribute(name);
+                }
+                lockShaderColour(this);
             }
         };
-    }
+    };
+
+    // The declaration editor uses procedures_declaration rather than the
+    // procedures_prototype block. Preserve the family metadata there too so
+    // editing a Scene can keep its stable ID and user-facing arguments.
+    patchProcedureDefinition(ScratchBlocks.Blocks.procedures_prototype);
+    patchProcedureDefinition(ScratchBlocks.Blocks.procedures_declaration);
 
     const caller = ScratchBlocks.Blocks.procedures_call;
-    if (caller && caller.myBlocksShaderPatchVersion_ !== 3) {
+    if (caller && caller.myBlocksShaderPatchVersion_ !== 4) {
         caller.myBlocksShaderPatched_ = true;
-        caller.myBlocksShaderPatchVersion_ = 3;
+        caller.myBlocksShaderPatchVersion_ = 4;
         const originalToDom = caller.mutationToDom;
         const originalFromDom = caller.domToMutation;
         const originalUpdateDisplay = caller.updateDisplay_;
         const originalOnChange = caller.onchange;
         caller.mutationToDom = function (...args) {
             const mutation = originalToDom.apply(this, args);
-            if (this.myBlocksShaderAttributes_) {
-                for (const name of SHADER_CALL_ATTRIBUTES) {
-                    const value = this.myBlocksShaderAttributes_[name];
+            const attributes = this.myBlocksShaderAttributes_ ?
+                {values: this.myBlocksShaderAttributes_, names: SHADER_CALL_ATTRIBUTES} :
+                (this.myBlocksSceneAttributes_ ?
+                    {values: this.myBlocksSceneAttributes_, names: SCENE_CALL_ATTRIBUTES} : null);
+            if (attributes) {
+                for (const name of attributes.names) {
+                    const value = attributes.values[name];
                     if (value !== null) mutation.setAttribute(name, value);
                 }
             }
@@ -159,16 +187,23 @@ const patchProcedureMutations = ScratchBlocks => {
                     this.myBlocksShaderAttributes_[name] = mutation.getAttribute(name);
                 }
                 lockShaderColour(this);
+            } else if (mutation.getAttribute(SCENE_MARKER) === 'true') {
+                this.myBlocksSceneAttributes_ = {};
+                for (const name of SCENE_CALL_ATTRIBUTES) {
+                    this.myBlocksSceneAttributes_[name] = mutation.getAttribute(name);
+                }
+                lockShaderColour(this);
             }
         };
         caller.updateDisplay_ = function (...args) {
             const result = originalUpdateDisplay.apply(this, args);
-            if (this.myBlocksShaderAttributes_) lockShaderColour(this);
+            if (this.myBlocksShaderAttributes_ || this.myBlocksSceneAttributes_) lockShaderColour(this);
             return result;
         };
         caller.onchange = function (...args) {
-            const result = originalOnChange ? originalOnChange.apply(this, args) : undefined;
-            if (this.myBlocksShaderAttributes_) lockShaderColour(this);
+            let result;
+            if (originalOnChange) result = originalOnChange.apply(this, args);
+            if (this.myBlocksShaderAttributes_ || this.myBlocksSceneAttributes_) lockShaderColour(this);
             return result;
         };
     }
@@ -180,7 +215,10 @@ const patchProcedureMutations = ScratchBlocks => {
             if (!node || String(node.tagName).toLowerCase() !== 'block') return true;
             const mutation = Array.from(node.childNodes || []).find(child =>
                 child && String(child.tagName).toLowerCase() === 'mutation');
-            return !mutation || mutation.getAttribute(SHADER_MARKER) !== 'true';
+            return !mutation || (
+                mutation.getAttribute(SHADER_MARKER) !== 'true' &&
+                mutation.getAttribute(SCENE_MARKER) !== 'true'
+            );
         });
     }
 
@@ -188,14 +226,20 @@ const patchProcedureMutations = ScratchBlocks => {
         ScratchBlocks.Procedures.myBlocksShaderEditorPatched_ = true;
         const originalEdit = ScratchBlocks.Procedures.editProcedureCallback_;
         ScratchBlocks.Procedures.editProcedureCallback_ = block => {
-            if (block && block.type === SHADER_CALL_OPCODE && block.myBlocksShaderAttributes_) {
+            if (block && block.type === SHADER_CALL_OPCODE &&
+                (block.myBlocksShaderAttributes_ || block.myBlocksSceneAttributes_)) {
                 const workspace = block.workspace.isFlyout ? block.workspace.targetWorkspace : block.workspace;
-                const shaderId = block.myBlocksShaderAttributes_.shaderid;
-                const shaderPrototype = workspace.getAllBlocks().find(candidate =>
-                    candidate.type === 'procedures_prototype' &&
-                    candidate.myBlocksShaderAttributes_ &&
-                    candidate.myBlocksShaderAttributes_.shaderid === shaderId);
-                if (shaderPrototype) return originalEdit(shaderPrototype);
+                const attributes = block.myBlocksShaderAttributes_ || block.myBlocksSceneAttributes_;
+                const id = attributes.shaderid || attributes.sceneid;
+                const familyPrototype = workspace.getAllBlocks().find(candidate => {
+                    if (candidate.type !== 'procedures_prototype') return false;
+                    const candidateAttributes = candidate.myBlocksShaderAttributes_ ||
+                        candidate.myBlocksSceneAttributes_;
+                    return Boolean(candidateAttributes && (
+                        candidateAttributes.shaderid === id || candidateAttributes.sceneid === id
+                    ));
+                });
+                if (familyPrototype) return originalEdit(familyPrototype);
             }
             return originalEdit(block);
         };
@@ -282,14 +326,13 @@ const starterDefinitionXML = (ScratchBlocks, mutation) => {
         `<value name="Y">${numberShadow}${coordinateReporter('cy')}</value>` +
         '</block>'
     );
-    return '<xml>' +
-        '<block type="procedures_definition">' +
-        '<statement name="custom_block"><shadow type="procedures_prototype">' + mutationText + '</shadow></statement>' +
+    return `<xml><block type="procedures_definition">` +
+        `<statement name="custom_block"><shadow type="procedures_prototype">${mutationText}</shadow></statement>` +
         `<next><block type="${SHADER_RETURN_OPCODE}">` +
         `<value name="R">${numberShadow}${sample('r')}</value>` +
         `<value name="G">${numberShadow}${sample('g')}</value>` +
         `<value name="B">${numberShadow}${sample('b')}</value>` +
-        '</block></next></block></xml>';
+        `</block></next></block></xml>`;
 };
 
 const createDefinitionCallback = (ScratchBlocks, workspace) => mutation => {
@@ -373,7 +416,7 @@ const shaderFlyout = (ScratchBlocks, workspace) => {
             String(b.getAttribute('shaderuserproccode'))));
     const callXML = definitions.map(mutation => (
         `<block type="${SHADER_CALL_OPCODE}" gap="12">` +
-        ScratchBlocks.Xml.domToText(callMutationFromDefinition(mutation)) + '</block>'
+        `${ScratchBlocks.Xml.domToText(callMutationFromDefinition(mutation))}</block>`
     )).join('');
     const numberShadow = '<shadow type="math_number"><field name="NUM">0</field></shadow>';
     const getBlock = channel => `<block type="myblocksshader_get_${channel}">` +
@@ -384,9 +427,9 @@ const shaderFlyout = (ScratchBlocks, workspace) => {
     const returnFromBlock = `<block type="${SHADER_RETURN_FROM_OPCODE}">` +
         `<value name="X">${numberShadow}</value><value name="Y">${numberShadow}</value></block>`;
     const result = xmlNodes(ScratchBlocks,
-        `<button text="Make a Block" callbackKey="${CREATE_CALLBACK}"></button>` +
-        callXML + (callXML ? '<sep gap="36"></sep>' : '') +
-        returnBlock + returnFromBlock + getBlock('r') + getBlock('g') + getBlock('b'));
+        `<button text="Make a Block" callbackKey="${CREATE_CALLBACK}"></button>${callXML}` +
+        `${callXML ? '<sep gap="36"></sep>' : ''}${returnBlock}${returnFromBlock}` +
+        `${getBlock('r')}${getBlock('g')}${getBlock('b')}`);
     // Flyout blocks can receive their category/theme colour after domToMutation.
     // Re-apply the shader family colour once Blockly has rendered that flyout.
     if (typeof requestAnimationFrame === 'function') {
@@ -444,6 +487,7 @@ export {
     SECONDARY,
     TERTIARY,
     installMyBlocksShaderBlocks,
+    lockShaderColour,
     prepareShaderMutation,
     recolorMyBlocksShaderDefinitions,
     registerMyBlocksShaderCategory,

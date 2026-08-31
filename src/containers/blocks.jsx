@@ -50,9 +50,16 @@ import {
     stripShaderCoordinates,
     syncShaderCalls
 } from '../lib/my-blocks-shader-blocks';
+import {
+    installMyBlocksSceneBlocks,
+    registerMyBlocksSceneCategory,
+    stripSceneCoordinates,
+    syncSceneCalls
+} from '../lib/my-blocks-scene-blocks';
 import installObjectBlockDefinitions from '../lib/object-blocks-ui';
 import installPenFXBlockDefinitions from '../lib/pen-fx-ui';
 import {SHADER_MARKER} from '../lib/my-blocks-shader';
+import {SCENE_MARKER} from '../lib/my-blocks-scene';
 import installMovieAssetManager from '../lib/movie-asset-manager';
 
 // TW: Strings we add to scratch-blocks are localized here
@@ -160,6 +167,7 @@ class Blocks extends React.Component {
         this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.handleActivateCustomProcedures;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
         installMyBlocksShaderBlocks(this.ScratchBlocks);
+        installMyBlocksSceneBlocks(this.ScratchBlocks);
 
         const Msg = this.ScratchBlocks.Msg;
         Msg.PROCEDURES_RETURN = this.props.intl.formatMessage(messages.PROCEDURES_RETURN, {
@@ -183,6 +191,7 @@ class Blocks extends React.Component {
         );
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
         registerMyBlocksShaderCategory(this.ScratchBlocks, this.workspace);
+        registerMyBlocksSceneCategory(this.ScratchBlocks, this.workspace);
         AddonHooks.blocklyWorkspace = this.workspace;
         this.movieAssetManager = installMovieAssetManager(this.props.vm);
         this.movieAssetManager.on('timelineDiagnosticsChanged', this.handleMovieDiagnosticsChanged);
@@ -724,18 +733,28 @@ class Blocks extends React.Component {
         this.props.onRequestCloseCustomProcedures(data);
         const ws = this.workspace;
         ws.refreshToolboxSelection_();
-        ws.toolbox_.scrollToCategoryById(this.props.customProceduresShader ? 'myBlocksShader' : 'myBlocks');
+        const categoryId = this.props.customProceduresScene ? 'myBlocksScene' :
+            (this.props.customProceduresShader ? 'myBlocksShader' : 'myBlocks');
+        ws.toolbox_.scrollToCategoryById(categoryId);
     }
     handleActivateCustomProcedures (data, callback) {
-        if (!data || data.getAttribute(SHADER_MARKER) !== 'true') {
+        if (!data) {
             this.props.onActivateCustomProcedures(data, callback, false);
             return;
         }
-        const editorMutation = stripShaderCoordinates(data);
+        const shader = data.getAttribute(SHADER_MARKER) === 'true';
+        const scene = data.getAttribute(SCENE_MARKER) === 'true';
+        if (!shader && !scene) {
+            this.props.onActivateCustomProcedures(data, callback, false, false);
+            return;
+        }
+        const editorMutation = shader ? stripShaderCoordinates(data) : stripSceneCoordinates(data);
         this.props.onActivateCustomProcedures(editorMutation, mutation => {
             callback(mutation);
-            if (mutation) syncShaderCalls(this.ScratchBlocks, this.workspace, mutation);
-        }, true);
+            if (!mutation) return;
+            if (shader) syncShaderCalls(this.ScratchBlocks, this.workspace, mutation);
+            if (scene) syncSceneCalls(this.ScratchBlocks, this.workspace, mutation);
+        }, shader, scene);
     }
     handleDrop (dragInfo) {
         fetch(dragInfo.payload.bodyUrl)
@@ -774,6 +793,7 @@ class Blocks extends React.Component {
             customStageSize,
             customProceduresVisible,
             customProceduresShader,
+            customProceduresScene,
             extensionLibraryVisible,
             options,
             stageSize,
@@ -855,6 +875,7 @@ Blocks.propTypes = {
     }),
     customProceduresVisible: PropTypes.bool,
     customProceduresShader: PropTypes.bool,
+    customProceduresScene: PropTypes.bool,
     extensionLibraryVisible: PropTypes.bool,
     isRtl: PropTypes.bool,
     isVisible: PropTypes.bool,
@@ -926,14 +947,15 @@ const mapStateToProps = state => ({
     toolboxXML: state.scratchGui.toolbox.toolboxXML,
     customProceduresVisible: state.scratchGui.customProcedures.active,
     customProceduresShader: state.scratchGui.customProcedures.shader,
+    customProceduresScene: state.scratchGui.customProcedures.scene,
     workspaceMetrics: state.scratchGui.workspaceMetrics,
     useCatBlocks: isTimeTravel2020(state)
 });
 
 const mapDispatchToProps = dispatch => ({
     onActivateColorPicker: callback => dispatch(activateColorPicker(callback)),
-    onActivateCustomProcedures: (data, callback, shader) =>
-        dispatch(activateCustomProcedures(data, callback, shader)),
+    onActivateCustomProcedures: (data, callback, shader, scene) =>
+        dispatch(activateCustomProcedures(data, callback, shader, scene)),
     onOpenConnectionModal: id => {
         dispatch(setConnectionModalExtensionId(id));
         dispatch(openConnectionModal());
