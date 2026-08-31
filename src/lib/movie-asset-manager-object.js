@@ -52,6 +52,20 @@ const MovieAssetManagerObjectMethods = {
     getObjectEvaluationTime (configuration) {
         const localTime = Number(configuration && configuration.evaluationTime);
         if (Number.isFinite(localTime)) return localTime;
+
+        const source = String((configuration && configuration.source) || '').toLowerCase();
+        const videoMode = String((configuration && configuration.videoMode) || '').toLowerCase();
+        if (source === 'video' && videoMode === 'video') {
+            const clock = this.runtime && this.runtime.ioDevices && this.runtime.ioDevices.clock;
+            if (clock && typeof clock.projectTimer === 'function') {
+                const sensingTime = Number(clock.projectTimer());
+                const rawTime = typeof clock.projectTimerWithoutOffset === 'function' ?
+                    Number(clock.projectTimerWithoutOffset()) : null;
+                const hasTimerOffset = Number.isFinite(rawTime) && Math.abs(sensingTime - rawTime) > 1e-9;
+                const timelineIsActive = this.timeline && (this.timeline.playing || this.timeline.recording);
+                if (Number.isFinite(sensingTime) && (!timelineIsActive || hasTimerOffset)) return sensingTime;
+            }
+        }
         return this.timeline ? toNumber(this.timeline.currentTime) : 0;
     },
 
@@ -429,7 +443,7 @@ const MovieAssetManagerObjectMethods = {
             dedupeKey: key,
             duration: Math.max(0, playback.end - currentTime),
             frame: this.timeline.renderFrameIndex,
-            offset: playback.mediaTime,
+            offset: this.getVideoSourceTimeAtTime(video, playback.mediaTime),
             playbackRate: playback.speed,
             video,
             volume
@@ -462,8 +476,10 @@ const MovieAssetManagerObjectMethods = {
                 entry.version !== version) return;
             this.setObjectVideoAudioProperties(entry.element, playback);
             const duration = Number(entry.element.duration);
-            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : playback.mediaTime;
-            entry.element.currentTime = clamp(playback.mediaTime, 0, maximumTime);
+            const requestedTime = entry.video ?
+                this.getVideoSourceTimeAtTime(entry.video, playback.mediaTime) : playback.mediaTime;
+            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : requestedTime;
+            entry.element.currentTime = clamp(requestedTime, 0, maximumTime);
             const playResult = entry.element.play();
             if (playResult && typeof playResult.then === 'function') return playResult;
         }).catch(error => {
@@ -511,17 +527,20 @@ const MovieAssetManagerObjectMethods = {
                 element,
                 startPromise: null,
                 targetId: target.id,
-                version: 0
+                version: 0,
+                video
             };
             this.objectVideoAudio.set(key, entry);
         }
 
         this.setObjectVideoAudioProperties(entry.element, playback);
+        entry.video = video;
+        const requestedTime = this.getVideoSourceTimeAtTime(video, playback.mediaTime);
         if (entry.element.readyState >= 1 && Number.isFinite(Number(entry.element.currentTime)) &&
-            Math.abs(Number(entry.element.currentTime) - playback.mediaTime) > 0.15) {
+            Math.abs(Number(entry.element.currentTime) - requestedTime) > 0.15) {
             const duration = Number(entry.element.duration);
-            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : playback.mediaTime;
-            entry.element.currentTime = clamp(playback.mediaTime, 0, maximumTime);
+            const maximumTime = Number.isFinite(duration) ? Math.max(0, duration - 0.001) : requestedTime;
+            entry.element.currentTime = clamp(requestedTime, 0, maximumTime);
         }
         if (entry.element.paused !== false) this.startObjectVideoAudio(key, entry, playback);
     },
@@ -641,8 +660,7 @@ const MovieAssetManagerObjectMethods = {
 
     async decodeObjectVideoFrame (state, video, frame) {
         const element = await this.prepareObjectVideoElement(state, video);
-        const time = video.duration > 0 ?
-            clamp((frame - 1) / video.frameRate, 0, Math.max(0, video.duration - 0.001)) : 0;
+        const time = this.getVideoSourceTime(video, frame);
         if (element.readyState < 2) await once(element, 'loadeddata');
         if (Math.abs(element.currentTime - time) > 0.0001) {
             const seeked = once(element, 'seeked');

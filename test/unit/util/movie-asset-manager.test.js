@@ -3128,6 +3128,62 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.stopObjectVideoAudio).toHaveBeenCalledWith(target, configuration);
     });
 
+    test('uses the Sensing timer for timed Objects video when a timer offset is active', () => {
+        const manager = makeTimelineManager();
+        const configuration = {source: 'video', videoMode: 'video'};
+        const clock = manager.runtime.ioDevices.clock;
+        manager.timeline.playing = true;
+        manager.timeline.currentTime = 2;
+        clock.projectTimer.mockReturnValue(3.5);
+        clock.projectTimerWithoutOffset.mockReturnValue(2);
+
+        expect(manager.getObjectEvaluationTime(configuration)).toBe(3.5);
+        expect(clock.projectTimer).toHaveBeenCalled();
+        expect(clock.projectTimerWithoutOffset).toHaveBeenCalled();
+    });
+
+    test('keeps an Objects video on the timeline clock when no Sensing offset is active', () => {
+        const manager = makeTimelineManager();
+        const configuration = {source: 'video', videoMode: 'video'};
+        const clock = manager.runtime.ioDevices.clock;
+        manager.timeline.playing = true;
+        manager.timeline.currentTime = 2;
+        clock.projectTimer.mockReturnValue(2.5);
+        clock.projectTimerWithoutOffset.mockReturnValue(2.5);
+
+        expect(manager.getObjectEvaluationTime(configuration)).toBe(2);
+    });
+
+    test('stores video cuts as non-destructive source bounds and maps local frames', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        target.getName = jest.fn(() => 'Sprite');
+        manager.runtime.getTargetById = jest.fn(() => target);
+        manager.runtime.targets = [target];
+        manager.changed = jest.fn();
+        const video = {assetId: 'video', duration: 10, frameRate: 30, name: 'clip'};
+        manager.videos.set(target.id, [video]);
+
+        const edited = manager.trimVideo(target.id, 0, 2, 5);
+
+        expect(edited).toMatchObject({
+            duration: 3,
+            sourceDuration: 10,
+            trimEnd: 5,
+            trimStart: 2
+        });
+        expect(edited.assetId).toBe(video.assetId);
+        expect(manager.getVideoSourceTime(edited, 1)).toBe(2);
+        expect(manager.getVideoSourceTime(edited, 31)).toBeCloseTo(3);
+        expect(manager.serializeJSON(target.id)[0]).toMatchObject({
+            duration: 3,
+            sourceDuration: 10,
+            trimEnd: 5,
+            trimStart: 2
+        });
+        expect(manager.changed).toHaveBeenCalledWith(target.id);
+    });
+
     test('plays Objects video audio with speed-linked pitch, block volume, and addon project volume', async () => {
         const manager = makeManager();
         const target = makeTarget();

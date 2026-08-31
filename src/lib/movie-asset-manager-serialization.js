@@ -176,6 +176,7 @@ const MovieAssetManagerSerializationMethods = {
             const target = originalTargets.find(item => item.id === videoTargetId);
             if (!target) continue;
             for (const video of videos) {
+                const bounds = this.getVideoTrimBounds(video);
                 result.push({
                     targetId: videoTargetId,
                     targetIndex: originalTargets.indexOf(target),
@@ -184,7 +185,10 @@ const MovieAssetManagerSerializationMethods = {
                     name: video.name,
                     md5ext: `${video.assetId}.${video.dataFormat}`,
                     mimeType: video.mimeType,
-                    duration: video.duration,
+                    duration: bounds.duration,
+                    sourceDuration: bounds.sourceDuration,
+                    trimStart: bounds.start,
+                    trimEnd: bounds.end,
                     width: video.width,
                     height: video.height,
                     frameRate: video.frameRate
@@ -234,6 +238,16 @@ const MovieAssetManagerSerializationMethods = {
             );
             const mimeType = descriptor.mimeType || MIME_TYPES[dataFormat] || 'video/mp4';
             const url = URL.createObjectURL(new Blob([data], {type: mimeType}));
+            const sourceDuration = Number(descriptor.sourceDuration) >= 0 ?
+                Number(descriptor.sourceDuration) : Number(descriptor.duration) || 0;
+            const trimStart = Math.min(
+                Math.max(0, Number(descriptor.trimStart) || 0),
+                sourceDuration
+            );
+            const trimEnd = Math.min(
+                Math.max(trimStart, Number(descriptor.trimEnd) >= 0 ? Number(descriptor.trimEnd) : sourceDuration),
+                sourceDuration
+            );
             results.push({
                 isStage: descriptor.isStage === true,
                 targetIndex: Number.isInteger(descriptor.targetIndex) ? descriptor.targetIndex : -1,
@@ -243,11 +257,14 @@ const MovieAssetManagerSerializationMethods = {
                     asset,
                     assetId,
                     dataFormat,
-                    duration: Number(descriptor.duration) || 0,
+                    duration: Math.max(0, trimEnd - trimStart),
                     frameRate: Number(descriptor.frameRate) || VIDEO_FRAME_RATE,
                     height: Number(descriptor.height) || 0,
                     mimeType,
                     name: String(descriptor.name || 'video'),
+                    sourceDuration,
+                    trimEnd,
+                    trimStart,
                     url,
                     width: Number(descriptor.width) || 0
                 }

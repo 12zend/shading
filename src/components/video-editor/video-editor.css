@@ -21,6 +21,16 @@
     color: $text-primary;
 }
 
+.editor-container {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    background: $ui-white;
+    color: $text-primary;
+}
+
 .toolbar {
     min-height: 3.25rem;
     padding: 0.5rem 0.75rem;
@@ -29,6 +39,16 @@
     gap: 1rem;
     border-bottom: 1px solid $ui-black-transparent;
     background: $ui-tertiary;
+}
+
+.toolbar-meta {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    font-size: 0.7rem;
+    color: $text-primary-transparent;
 }
 
 .name-label {
@@ -78,8 +98,194 @@
     display: block;
     max-width: 100%;
     max-height: 100%;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     background: #111111;
     border-radius: $space;
+}
+
+.edit-area {
+    padding: 0.85rem 1rem 0.7rem;
+    border-top: 1px solid $ui-black-transparent;
+    background: $ui-white;
+}
+
+.section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.45rem;
+    font-size: 0.75rem;
+}
+
+.section-header span,
+.info-row {
+    color: $text-primary-transparent;
+    font-size: 0.7rem;
+}
+
+.timeline-track {
+    position: relative;
+    height: 0.8rem;
+    margin: 0.25rem 0 0.15rem;
+}
+
+.track-base,
+.selected-track {
+    position: absolute;
+    top: 0.2rem;
+    height: 0.4rem;
+    border-radius: 0.25rem;
+}
+
+.track-base {
+    right: 0;
+    left: 0;
+    background: $ui-black-transparent;
+}
+
+.selected-track {
+    background: $looks-secondary;
+}
+
+.playhead {
+    position: absolute;
+    top: 0;
+    width: 0.15rem;
+    height: 0.8rem;
+    margin-left: -0.075rem;
+    border-radius: 0.1rem;
+    background: $text-primary;
+}
+
+.scrubber {
+    position: relative;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: 1rem;
+    margin-top: -0.9rem;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.scrubber:focus {
+    opacity: 0.35;
+}
+
+.range-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 0.55rem;
+}
+
+.time-input {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    color: $text-primary-transparent;
+    font-size: 0.7rem;
+}
+
+.time-input input {
+    min-width: 0;
+    width: 100%;
+    accent-color: $looks-secondary;
+}
+
+.time-input output {
+    min-width: 4.7rem;
+    color: $text-primary;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+}
+
+.round-button,
+.secondary-button,
+.primary-button {
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    color: $text-primary;
+    font: inherit;
+    cursor: pointer;
+}
+
+.round-button {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0.55rem;
+    border: 0;
+    border-radius: 50%;
+    background: $looks-secondary;
+}
+
+.round-button:hover {
+    background: $looks-secondary-dark;
+}
+
+.round-button img {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.secondary-button,
+.primary-button {
+    min-height: 2.25rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: bold;
+}
+
+.secondary-button:hover {
+    background: $looks-transparent;
+}
+
+.primary-button {
+    border-color: $looks-secondary;
+    background: $looks-secondary;
+    color: #ffffff;
+}
+
+.primary-button:hover {
+    background: $looks-secondary-dark;
+}
+
+.round-button:focus,
+.secondary-button:focus,
+.primary-button:focus,
+.scrubber:focus,
+.time-input input:focus {
+    outline: 3px solid $looks-transparent;
+    outline-offset: 1px;
+}
+
+.round-button:disabled,
+.secondary-button:disabled,
+.primary-button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.65rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .hint {
@@ -97,8 +303,10 @@
 
 .empty-state {
     width: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    flex-grow: 1;
     align-items: center;
     justify-content: center;
     padding: 2rem;
@@ -146,8 +354,38 @@
     font-size: 1.2rem;
 }
 
+.empty-icon img {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .empty-state button {
+    .empty-state button,
+    .round-button,
+    .secondary-button,
+    .primary-button {
         transition: none;
+    }
+}
+
+@media only screen and (max-width: 720px) {
+    .toolbar {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-meta {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    .range-controls {
+        grid-template-columns: 1fr;
+        gap: 0.4rem;
+    }
+
+    .time-input {
+        grid-template-columns: 3rem minmax(0, 1fr) auto;
     }
 }

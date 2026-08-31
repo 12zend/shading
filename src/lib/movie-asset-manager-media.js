@@ -60,6 +60,9 @@ const MovieAssetManagerMediaMethods = {
             height: metadata.height,
             mimeType,
             name: unusedName(getName(file.name), videos.map(item => item.name)),
+            sourceDuration: metadata.duration,
+            trimEnd: metadata.duration,
+            trimStart: 0,
             url,
             width: metadata.width
         };
@@ -229,7 +232,7 @@ const MovieAssetManagerMediaMethods = {
         if (!removed) return;
         this.videos.set(targetId, videos);
         URL.revokeObjectURL(removed.url);
-        for (const target of this.runtime.targets) {
+        for (const target of this.runtime.targets || []) {
             const original = getOriginalTarget(target);
             const state = this.targetStates.get(target.id);
             if (original && original.id === targetId && state && state.videoAssetId === removed.assetId) {
@@ -258,6 +261,101 @@ const MovieAssetManagerMediaMethods = {
         videos.splice(clamp(newIndex, 0, videos.length), 0, video);
         this.videos.set(targetId, videos);
         this.changed(targetId);
+    },
+
+    getVideoSourceDuration (video) {
+        const sourceDuration = Number(video && video.sourceDuration);
+        if (Number.isFinite(sourceDuration) && sourceDuration >= 0) return sourceDuration;
+        const duration = Number(video && video.duration);
+        return Number.isFinite(duration) && duration >= 0 ? duration : 0;
+    },
+
+    getVideoTrimBounds (video) {
+        const sourceDuration = this.getVideoSourceDuration(video);
+        const requestedStart = Number(video && video.trimStart);
+        const requestedEnd = Number(video && video.trimEnd);
+        const start = clamp(
+            Number.isFinite(requestedStart) ? requestedStart : 0,
+            0,
+            sourceDuration
+        );
+        const end = clamp(
+            Number.isFinite(requestedEnd) ? requestedEnd : sourceDuration,
+            start,
+            sourceDuration
+        );
+        return {
+            duration: Math.max(0, end - start),
+            end,
+            sourceDuration,
+            start
+        };
+    },
+
+    getVideoSourceTimeAtTime (video, localTime) {
+        const bounds = this.getVideoTrimBounds(video);
+        const time = Math.max(0, Number(localTime) || 0);
+        if (!(bounds.sourceDuration > 0)) return time;
+        const maximumTime = Math.max(bounds.start, bounds.end - 0.001);
+        return clamp(bounds.start + time, bounds.start, maximumTime);
+    },
+
+    getVideoSourceTime (video, frame) {
+        const bounds = this.getVideoTrimBounds(video);
+        const frameRate = Number(video && video.frameRate) > 0 ? Number(video.frameRate) : VIDEO_FRAME_RATE;
+        const localTime = bounds.duration > 0 ?
+            clamp((Number(frame) - 1) / frameRate, 0, Math.max(0, bounds.duration - 0.001)) : 0;
+        return this.getVideoSourceTimeAtTime(video, localTime);
+    },
+
+    trimVideo (targetId, index, requestedStart, requestedEnd) {
+        const videos = this.getVideos(targetId).slice();
+        const video = videos[index];
+        if (!video) return null;
+
+        const currentBounds = this.getVideoTrimBounds(video);
+        const numericStart = Number(requestedStart);
+        const numericEnd = Number(requestedEnd);
+        const start = clamp(
+            Number.isFinite(numericStart) ? numericStart : currentBounds.start,
+            0,
+            currentBounds.sourceDuration
+        );
+        const end = clamp(
+            Number.isFinite(numericEnd) ? numericEnd : currentBounds.end,
+            start,
+            currentBounds.sourceDuration
+        );
+        const nextVideo = {
+            ...video,
+            duration: Math.max(0, end - start),
+            sourceDuration: currentBounds.sourceDuration,
+            trimEnd: end,
+            trimStart: start
+        };
+        videos[index] = nextVideo;
+        this.videos.set(targetId, videos);
+
+        for (const target of this.runtime.targets || []) {
+            const original = getOriginalTarget(target);
+            const state = this.targetStates.get(target.id);
+            if (!original || original.id !== targetId || !state) continue;
+            state.renderVersion++;
+            state.objectDrawVersion++;
+            state.objectDrawQueue.length = 0;
+            this.clearPendingVideoFrames(state);
+            state.displayedFrame = null;
+            state.displayedVideoAssetId = null;
+        }
+        this.changed(targetId);
+        return nextVideo;
+    },
+
+    resetVideoTrim (targetId, index) {
+        const video = this.getVideos(targetId)[index];
+        if (!video) return null;
+        const sourceDuration = this.getVideoSourceDuration(video);
+        return this.trimVideo(targetId, index, 0, sourceDuration);
     },
 
     changed (targetId) {
@@ -424,8 +522,7 @@ const MovieAssetManagerMediaMethods = {
 
     async decodeVideoFrame (state, video, frame) {
         const element = await this.prepareVideoElement(state, video);
-        const time = video.duration > 0 ?
-            clamp((frame - 1) / video.frameRate, 0, Math.max(0, video.duration - 0.001)) : 0;
+        const time = this.getVideoSourceTime(video, frame);
 
         if (element.readyState < 2) await once(element, 'loadeddata');
         if (Math.abs(element.currentTime - time) > 0.0001) {

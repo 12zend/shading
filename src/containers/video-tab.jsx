@@ -5,10 +5,11 @@ import {connect} from 'react-redux';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+import VideoEditor from '../components/video-editor/video-editor.jsx';
 import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
+import playIcon from '../components/sound-editor/icon--play.svg';
 import downloadBlob from '../lib/download-blob';
 import DragConstants from '../lib/drag-constants';
-import {formatBytes} from '../lib/tw-bytes-utils';
 
 import styles from '../components/video-editor/video-editor.css';
 
@@ -27,18 +28,6 @@ const messages = defineMessages({
         defaultMessage: 'Upload an MP4, WebM, OGV, or MOV file to render exact frames and stamp them in a scene.',
         description: 'Description shown when a sprite has no video assets',
         id: 'movie.video.emptyDescription'
-    },
-    name: {
-        defaultMessage: 'Video name',
-        description: 'Label for the video name input',
-        id: 'movie.video.name'
-    },
-    stampHint: {
-        defaultMessage: 'Use “render video … at frame …”, then Pen’s “stamp”. The render block waits for the ' +
-            'exact frame, so it can be layered over an earlier 3D model stamp. Videos use a 30 fps timeline; ' +
-            'frame 1 is the first frame.',
-        description: 'Instructions for rendering a deterministic video frame as a stamp',
-        id: 'movie.video.stampHint'
     }
 });
 
@@ -52,8 +41,10 @@ class VideoTab extends React.Component {
             'handleManagerChange',
             'handleNameChange',
             'handleSelect',
+            'handleTrim',
             'handleUpload',
             'handleUploadClick',
+            'handleVideoError',
             'setFileInput'
         ]);
         this.state = {
@@ -136,6 +127,26 @@ class VideoTab extends React.Component {
         if (event.target.value !== name) event.target.value = name;
     }
 
+    handleTrim (trimStart, trimEnd) {
+        const manager = this.getManager();
+        if (!manager || !this.getVideos()[this.state.selectedVideoIndex]) return;
+        try {
+            manager.trimVideo(
+                this.props.editingTarget,
+                this.state.selectedVideoIndex,
+                trimStart,
+                trimEnd
+            );
+            this.setState({error: null});
+        } catch (error) {
+            this.setState({error: error.message});
+        }
+    }
+
+    handleVideoError (error) {
+        this.setState({error: error && error.message ? error.message : String(error)});
+    }
+
     async handleUpload (event) {
         const files = Array.from(event.target.files);
         event.target.value = null;
@@ -204,41 +215,22 @@ class VideoTab extends React.Component {
                     onChange={this.handleUpload}
                 />
                 {selectedVideo ? (
-                    <div className={styles.editor}>
-                        <div className={styles.toolbar}>
-                            <label className={styles.nameLabel}>
-                                <span>{this.props.intl.formatMessage(messages.name)}</span>
-                                <input
-                                    className={styles.nameInput}
-                                    defaultValue={selectedVideo.name}
-                                    key={selectedVideo.name}
-                                    onBlur={this.handleNameChange}
-                                />
-                            </label>
-                            <div className={styles.metadata}>
-                                <span>{`${selectedVideo.width} × ${selectedVideo.height}`}</span>
-                                <span>{`${selectedVideo.duration.toFixed(2)} s`}</span>
-                                <span>{formatBytes(selectedVideo.asset.data.byteLength)}</span>
-                            </div>
-                        </div>
-                        <div className={styles.previewArea}>
-                            <video
-                                className={styles.previewVideo}
-                                controls
-                                key={selectedVideo.assetId}
-                                playsInline
-                                preload="metadata"
-                                src={selectedVideo.url}
-                            />
-                        </div>
-                        <div className={styles.hint}>
-                            {this.props.intl.formatMessage(messages.stampHint)}
-                        </div>
-                        {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
-                    </div>
+                    <VideoEditor
+                        error={this.state.error}
+                        video={selectedVideo}
+                        onChangeName={this.handleNameChange}
+                        onError={this.handleVideoError}
+                        onTrim={this.handleTrim}
+                    />
                 ) : (
                     <div className={styles.emptyState}>
-                        <div className={styles.emptyIcon}>{'▶'}</div>
+                        <div className={styles.emptyIcon}>
+                            <img
+                                alt=""
+                                draggable={false}
+                                src={playIcon}
+                            />
+                        </div>
                         <h2>{this.props.intl.formatMessage(messages.emptyTitle)}</h2>
                         <p>{this.props.intl.formatMessage(messages.emptyDescription)}</p>
                         <button

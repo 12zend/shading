@@ -122,7 +122,7 @@ const applyThreadComposition = (configuration, util, runtime) => {
         applyObjectTransforms(configuration, thread && thread.objectTransformStack);
     if (!transformed.time) return transformed;
     if (thread && Array.isArray(thread.objectTimeScopes) && thread.objectTimeScopes.length) {
-        return {...transformed, evaluationTime: getObjectTime(runtime, util)};
+        return {...transformed, evaluationTime: getObjectTime(runtime, util, transformed)};
     }
     return {...transformed, time: applyTimeOffset(transformed.time, util)};
 };

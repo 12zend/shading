@@ -198,10 +198,12 @@ const evaluateTimeScopes = (time, scopes) => {
     return scopes.reduce((result, scope) => transformTimeByScope(result, scope), finiteNumber(time));
 };
 
-const getObjectTime = (runtime, util) => {
+const getObjectTime = (runtime, util, configuration = null) => {
     const manager = runtime && runtime.movieAssetManager;
     const timelineTime = manager && manager.timeline && Number(manager.timeline.currentTime);
-    let time = Number.isFinite(timelineTime) ? timelineTime : 0;
+    const managerTime = configuration && manager && typeof manager.getObjectEvaluationTime === 'function' ?
+        Number(manager.getObjectEvaluationTime(configuration)) : null;
+    let time = Number.isFinite(managerTime) ? managerTime : Number.isFinite(timelineTime) ? timelineTime : 0;
     if (!Number.isFinite(timelineTime) && util && typeof util.ioQuery === 'function') {
         time = finiteNumber(util.ioQuery('clock', 'projectTimer'));
     }
