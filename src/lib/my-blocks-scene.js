@@ -4,6 +4,17 @@
 
 /* eslint-disable no-console */
 
+import {Color} from 'three';
+
+import {
+    DEFAULT_DEPTH,
+    DEFAULT_FOCAL_LENGTH,
+    DEFAULT_STAGE_HEIGHT,
+    DEFAULT_STAGE_WIDTH,
+    ROTATION_ORDERS,
+    STUDIO_LIGHTING,
+    normalizeLight
+} from './model-runtime';
 import {
     SCENE_MARKER,
     SHADER_COMPILER_HELPERS,
@@ -11,7 +22,7 @@ import {
     parseJSON,
     safeIdentifier
 } from './my-blocks-shader';
-import sceneFragmentShader from './my-blocks-scene-shader';
+import sceneFragmentShader, {SCENE_MAX_LIGHTS} from './my-blocks-scene-shader';
 
 const SCENE_RETURN_OPCODE = 'myblocksscene_return';
 const SCENE_GET_OPCODES = {
@@ -33,7 +44,11 @@ class MyBlocksSceneExtension {
     }
 }
 
-const sceneFunctionPattern = /vec3\s+scene\s*\(\s*vec3\s+p\s*\)\s*\{[\s\S]*?\n\}/;
+const sceneFunctionPattern = new RegExp(
+    'bool\\s+sceneContains\\s*\\(\\s*vec3\\s+p\\s*\\)\\s*\\{[\\s\\S]*?\\n\\}' +
+    '\\s*vec3\\s+scene\\s*\\(\\s*vec3\\s+p\\s*\\)\\s*' +
+    '\\{[\\s\\S]*?\\n\\}'
+);
 // Kept out of the Blockly palette, but understood when loading projects made
 // before the block was replaced by ordinary Scratch operators.
 const LEGACY_SCENE_INSIDE_BOX_OPCODE = 'myblocksscene_inside_box';
@@ -48,6 +63,27 @@ const SCENE_SPECIAL_EXPRESSIONS = Object.keys(SCENE_GET_OPCODES).reduce((result,
 }, {
     [LEGACY_SCENE_INSIDE_BOX_OPCODE]: (block, compiler) =>
         `(${legacyInsideBoxCondition(block, compiler)} ? 1.0 : 0.0)`
+});
+
+const colorToSceneRGB = value => {
+    const color = new Color();
+    try {
+        color.set(value || 0xffffff);
+        color.convertLinearToSRGB();
+    } catch (error) {
+        color.set(0xffffff);
+    }
+    return [
+        Number.isFinite(color.r) ? color.r : 1,
+        Number.isFinite(color.g) ? color.g : 1,
+        Number.isFinite(color.b) ? color.b : 1
+    ];
+};
+
+const sceneLightUniformNames = index => ({
+    color: `u_scene_light_color_${index}`,
+    params: `u_scene_light_params_${index}`,
+    position: `u_scene_light_position_${index}`
 });
 
 class MyBlocksSceneManager {
@@ -147,7 +183,6 @@ class MyBlocksSceneManager {
         const condition = compiler.condition(returnBlock, 'CONDITION');
         const color = `vec3(${compiler.input(returnBlock, 'R')}, ` +
             `${compiler.input(returnBlock, 'G')}, ${compiler.input(returnBlock, 'B')})`;
-        const returnedColor = `${condition} ? ${color} : vec3(0.0)`;
         const variables = Array.from(compiler.variables.keys())
             .map(name => `float ${name};`)
             .join('\n');
@@ -155,13 +190,13 @@ class MyBlocksSceneManager {
             .map(([name, uniform]) => `    ${name} = ${uniform};`)
             .join('\n');
         const functions = Array.from(compiler.functions.values()).join('\n\n');
-        const body = [
+        const evaluation = [
             '    cx = p.x;\n    cy = p.y;',
             variableInitializers,
-            statements,
-            `    return ${returnedColor};`
+            statements
         ].filter(Boolean).join('\n');
-        const sceneFunction = `vec3 scene(vec3 p) {\n${body}\n}`;
+        const sceneContainsFunction = `bool sceneContains(vec3 p) {\n${evaluation}\n    return ${condition};\n}`;
+        const sceneFunction = `vec3 scene(vec3 p) {\n    return sceneContains(p) ? ${color} : vec3(0.0);\n}`;
         if (!sceneFunctionPattern.test(sceneFragmentShader)) {
             throw new Error('The built-in scene shader is missing vec3 scene(vec3 p).');
         }
@@ -171,7 +206,8 @@ class MyBlocksSceneManager {
             .join('\n');
         const compilerPrelude = [variables, SHADER_COMPILER_HELPERS, functions]
             .filter(Boolean).join('\n\n');
-        const generatedScene = [compilerPrelude, sceneFunction].filter(Boolean).join('\n\n');
+        const generatedScene = [compilerPrelude, sceneContainsFunction, sceneFunction]
+            .filter(Boolean).join('\n\n');
         return sceneFragmentShader
             .replace(sceneFunctionPattern, generatedScene)
             .replace('uniform vec3 camrot;', `uniform vec3 camrot;\nuniform float u_random_seed;\n` +
@@ -355,14 +391,90 @@ class MyBlocksSceneManager {
     }
 
     _cameraUniforms () {
-        const camera = this.runtime && this.runtime.movieAssetManager &&
-            this.runtime.movieAssetManager.camera;
+        const manager = this.runtime && this.runtime.movieAssetManager;
+        const camera = manager && manager.camera;
         const position = (camera && camera.position) || {};
         const rotation = (camera && camera.rotation) || {};
+        const rotationOrder = camera && ROTATION_ORDERS.indexOf(camera.rotationOrder);
         return {
-            campos: [this._number(position.x), this._number(position.y), this._number(position.z)],
-            camrot: [this._number(rotation.x), this._number(rotation.y), this._number(rotation.z)]
+            // Scene uses the same -Z-forward basis as the source fragment
+            // shader and Three.js. Camera blocks remain Movie +Z-forward, so
+            // reflect the position around Z at this boundary.
+            campos: [this._number(position.x), this._number(position.y), -this._number(position.z)],
+            camrot: [this._number(rotation.x), this._number(rotation.y), this._number(rotation.z)],
+            camfocal: this._number(camera && camera.focalLength) || DEFAULT_FOCAL_LENGTH,
+            camrotorder: rotationOrder >= 0 ? rotationOrder : 0
         };
+    }
+
+    _sceneViewportUniform () {
+        const manager = this.runtime && this.runtime.movieAssetManager;
+        const stageSize = manager && typeof manager.getStageSize === 'function' ? manager.getStageSize() : null;
+        return [
+            this._number(stageSize && stageSize[0]) || DEFAULT_STAGE_WIDTH,
+            this._number(stageSize && stageSize[1]) || DEFAULT_STAGE_HEIGHT
+        ];
+    }
+
+    _sceneLightingUniforms () {
+        const manager = this.runtime && this.runtime.movieAssetManager;
+        const requestedLights = manager && Array.isArray(manager.lights) ? manager.lights : null;
+        const lights = [];
+        let ambient = null;
+
+        if (requestedLights === null) {
+            ambient = STUDIO_LIGHTING.hemisphere;
+            STUDIO_LIGHTING.directional.forEach(light => {
+                lights.push({
+                    color: colorToSceneRGB(light.color),
+                    intensity: light.intensity,
+                    params: [2, 0, 0, 0],
+                    position: [light.position.x, light.position.y, light.position.z],
+                    radius: 0
+                });
+            });
+        } else {
+            requestedLights.slice(0, SCENE_MAX_LIGHTS).forEach(light => {
+                const normalized = normalizeLight(light);
+                const position = normalized.position;
+                lights.push({
+                    color: colorToSceneRGB(normalized.color),
+                    intensity: normalized.intensity,
+                    params: [normalized.type === 'spot' ? 1 : 0, normalized.angle, normalized.shadow, 0],
+                    position: [position.x, position.y, -position.z],
+                    radius: normalized.radius
+                });
+            });
+        }
+
+        const ambientSky = ambient ? colorToSceneRGB(ambient.skyColor) : [0, 0, 0];
+        const ambientGround = ambient ? colorToSceneRGB(ambient.groundColor) : [0, 0, 0];
+        const ambientDirection = ambient ? [
+            ambient.direction.x,
+            ambient.direction.y,
+            -ambient.direction.z
+        ] : [0, 1, 0];
+        const uniforms = {
+            u_scene_ambient_direction: ambientDirection,
+            u_scene_ambient_ground: ambientGround,
+            u_scene_ambient_intensity: ambient ? ambient.intensity : 0,
+            u_scene_ambient_sky: ambientSky,
+            u_scene_light_count: lights.length,
+            u_scene_spot_target: [0, 0, -DEFAULT_DEPTH]
+        };
+
+        for (let index = 0; index < SCENE_MAX_LIGHTS; index++) {
+            const names = sceneLightUniformNames(index);
+            const light = lights[index];
+            uniforms[names.position] = light ? [
+                light.position[0], light.position[1], light.position[2], light.radius
+            ] : [0, 0, 0, 0];
+            uniforms[names.color] = light ? [
+                light.color[0], light.color[1], light.color[2], light.intensity
+            ] : [0, 0, 0, 0];
+            uniforms[names.params] = light ? light.params : [0, 0, 0, 0];
+        }
+        return uniforms;
     }
 
     _getPenFXEngine () {
@@ -389,7 +501,9 @@ class MyBlocksSceneManager {
                 u_time: this._timelineTime(),
                 u_frame: this._timelineFrame(),
                 u_random_seed: this._timelineFrame()
-            }, this._cameraUniforms());
+            }, this._cameraUniforms(), {
+                u_scene_viewport: this._sceneViewportUniform()
+            }, this._sceneLightingUniforms());
             for (let i = 0; i < compiled.userIds.length; i++) {
                 const value = Number(values[compiled.userIds[i]]);
                 uniforms[compiled.uniformNames[i]] = Number.isFinite(value) ? value : 0;
@@ -406,7 +520,7 @@ class MyBlocksSceneManager {
             const render = renderEngine => renderEngine.customShader(
                 compiled.programName,
                 uniforms,
-                ['u_frame'],
+                ['u_frame', 'camrotorder', 'u_scene_light_count'],
                 blendMode
             );
             if (penFX && typeof penFX._safe === 'function') penFX._safe(render);

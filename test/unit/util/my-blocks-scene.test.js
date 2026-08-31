@@ -169,26 +169,91 @@ describe('My Blocks Scene', () => {
         const [programName, source] = engine.registerCustomShader.mock.calls[0];
         expect(programName).toBe('custom:myblocksscene:scene_scene_id');
         expect(source).toContain('vec3 scene(vec3 p)');
+        expect(source).toContain('bool sceneContains(vec3 p)');
         expect(source).toContain('abs(p.x)');
         expect(source).toContain('abs(p.y)');
         expect(source).toContain('abs(p.z)');
         expect(source).toContain(' ? vec3(0.95, 0.18, 0.06) : vec3(0.0);');
         expect(source).toContain('bool isOccupied(vec3 p)');
+        expect(source).toContain('return sceneContains(p);');
         expect(source).toContain('void main()');
         expect(source).toContain('uniform vec3 campos;');
         expect(source).toContain('uniform vec3 camrot;');
+        expect(source).toContain('uniform float camfocal;');
+        expect(source).toContain('uniform int camrotorder;');
+        expect(source).toContain('vec3 rayOrigin = campos;');
+        expect(source).toContain('vec3 cameraDirection = vec3(');
+        expect(source).toContain('uv.x * viewportHeight * 0.5');
+        expect(source).toContain('-focalLength');
+        expect(source).toContain('rotateCamera(cameraDirection, camrot, camrotorder)');
+        expect(source).toContain("uv.y = -uv.y;");
+        expect(source).toContain('const float TRACE_NEAR_DISTANCE = 32.0;');
+        expect(source).toContain('const float TRACE_FAR_DISTANCE = 1000000.0;');
+        expect(source).toContain('currentT = TRACE_NEAR_DISTANCE * pow(');
+        expect(source).not.toContain('const vec3 SCENE_MIN');
+        expect(source).not.toContain('const vec3 SCENE_MAX');
+        expect(source).toContain('sceneLighting');
+        expect(source).not.toContain('vec3(-0.6, 0.8, 1.0)');
+        expect(source).not.toContain('shadowVisibility(');
+        expect(source).toContain('vec4 scenePixel = hit.found ? vec4(pixel, 1.0) : vec4(0.0);');
+        expect(source).toContain('gl_FragColor = scenePixel + original * (1.0 - scenePixel.a);');
 
         expect(engine.customShader).toHaveBeenCalledTimes(1);
         const [renderedProgram, uniforms, integerUniforms, blendMode] = engine.customShader.mock.calls[0];
         expect(renderedProgram).toBe(programName);
-        expect(integerUniforms).toEqual(['u_frame']);
+        expect(integerUniforms).toEqual(['u_frame', 'camrotorder', 'u_scene_light_count']);
         expect(blendMode).toBe('normal');
         expect(uniforms).toEqual(expect.objectContaining({
-            campos: [1, 2, 3],
+            campos: [1, 2, -3],
             camrot: [10, 20, 30],
+            camfocal: 480,
+            camrotorder: 0,
+            u_scene_light_count: 2,
+            u_scene_viewport: [480, 360],
             u_time: 1.5,
             u_frame: 36
         }));
+    });
+
+    test('passes authored Objects lights and the configured camera projection to Scene', () => {
+        const target = makeTarget();
+        const engine = {
+            customShader: jest.fn(),
+            registerCustomShader: jest.fn()
+        };
+        const vm = makeVM(target, engine);
+        vm.runtime.movieAssetManager.camera.focalLength = 600;
+        vm.runtime.movieAssetManager.camera.rotationOrder = 'ZYX';
+        vm.runtime.movieAssetManager.getStageSize = () => [800, 600];
+        vm.runtime.movieAssetManager.lights = [{
+            angle: 35,
+            color: '#ffffff',
+            intensity: 3,
+            position: {x: 10, y: 20, z: 30},
+            radius: 800,
+            shadow: 0.25,
+            type: 'spot'
+        }];
+        const manager = new MyBlocksSceneManager(vm);
+
+        expect(manager.call({mutation: {sceneid: 'scene-id'}}, {target})).toBeUndefined();
+
+        const uniforms = engine.customShader.mock.calls[0][1];
+        expect(uniforms).toEqual(expect.objectContaining({
+            camfocal: 600,
+            camrotorder: 5,
+            u_scene_light_count: 1,
+            u_scene_viewport: [800, 600],
+            u_scene_ambient_intensity: 0,
+            u_scene_light_position_0: [10, 20, -30, 800],
+            u_scene_light_params_0: [1, 35, 0.25, 0]
+        }));
+        expect(uniforms.u_scene_light_color_0.slice(0, 3)).toEqual([
+            expect.closeTo(1),
+            expect.closeTo(1),
+            expect.closeTo(1)
+        ]);
+        expect(uniforms.u_scene_light_color_0[3]).toBe(3);
     });
 
     test('maps scene coordinate reporters to the generated point expression', () => {

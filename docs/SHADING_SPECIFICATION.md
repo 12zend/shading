@@ -551,7 +551,11 @@ My Blocks Scene は `myBlocksScene` カテゴリとして My Blocks Shader の�
 
 Scene と Shader は `ShaderExpressionCompiler` を共有し、演算子の GLSL 変換と Scratch 互換の除算・剰余・三角関数・乱数ヘルパーを同じ実装から利用する。
 
-内蔵フラグメントシェーダーのレイマーチャーとカメラ入力は維持し、コンパイル済み Scene は PenFX の既存 custom shader 登録・描画経路でレンダリングする。`myblocksscene_*` を含むプロジェクトは `my-blocks-scene` と `3d-engine` を検出する。
+内蔵フラグメントシェーダーのレイマーチャーは PenFX の既存 custom shader 登録・描画経路でレンダリングする。レイの原点には MovieAssetManager の Camera 位置を使い、`v_uv` から作った方向ベクトルを Scratch の座標系（+Y が上）へ変換してから Camera の回転順序で回転し、レイを生成する。Scene の GLSL は元の `scene.frag` と Three.js に合わせて -Z 前方の基底を使うため、Camera の位置と回転は Movie の +Z 前方の基底から境界で変換する。横幅のアスペクト比は実際の描画先の `u_resolution` から求めるため、フルスクリーンや書き出し時も画面幅に合う。Scene 式の未占有点は alpha 0 の透明な寄与として、既存の Pen／Shader レイヤーへ source-over 合成するため、黒い背景を塗らない。
+
+Scene の式は固定のワールド空間ボックスで切らない。したがって `px < -1` や `px > 1` のような条件は、x 方向に無限に続く形として評価される。通常の物体は近距離を高密度に、無限平面などは遠距離を対数間隔に探索する。空のレイを GPU 上で無限ループにしないための数値上の終端距離は設けるが、`p.x`、`p.y`、`p.z` 自体を ±1.5 などの箱へクランプするものではない。
+
+Scene の固定ライトは持たない。`lights === null` のときは Objects の studio lighting、`looks_addpointlight`／`looks_addlight` または `looks_clearlight` 実行後は Objects と同じ authored light 配列を使い、位置、色、強度、半径、スポット角、影の強さを Scene のライティング uniform へ渡す。
 
 ## 13. 実装上のエラーと状態管理
 

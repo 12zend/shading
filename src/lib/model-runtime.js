@@ -9,6 +9,20 @@ const DEFAULT_FOV = 2 * Math.atan((Math.max(DEFAULT_STAGE_WIDTH, DEFAULT_STAGE_H
     DEFAULT_FOCAL_LENGTH) * (180 / Math.PI);
 const DEFAULT_DEPTH = 480;
 const ROTATION_ORDERS = ['XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX'];
+// Keep the preview-oriented studio setup in one place. My Blocks Scene uses
+// the same values when Movie has not received an authored lighting block.
+const STUDIO_LIGHTING = Object.freeze({
+    hemisphere: Object.freeze({
+        direction: Object.freeze({x: 0, y: 1, z: 0}),
+        groundColor: 0x303848,
+        intensity: 1.8,
+        skyColor: 0xffffff
+    }),
+    directional: Object.freeze([
+        Object.freeze({color: 0xffffff, intensity: 2.2, position: Object.freeze({x: 2, y: 3, z: 4})}),
+        Object.freeze({color: 0x8eb8ff, intensity: 0.9, position: Object.freeze({x: -4, y: 1, z: 2})})
+    ])
+});
 const MMD_FRAME_RATE = 30;
 const POINT_SHADOW_MAP_SIZE = 256;
 const SPOT_SHADOW_MAP_SIZE = 512;
@@ -1088,12 +1102,19 @@ class ModelRenderer {
                 }
             });
         } else {
-            this.addLightObject(new THREE.HemisphereLight(0xffffff, 0x303848, 1.8));
-            const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-            keyLight.position.set(2, 3, 4);
+            const studioHemisphere = STUDIO_LIGHTING.hemisphere;
+            this.addLightObject(new THREE.HemisphereLight(
+                studioHemisphere.skyColor,
+                studioHemisphere.groundColor,
+                studioHemisphere.intensity
+            ));
+            const studioKey = STUDIO_LIGHTING.directional[0];
+            const keyLight = new THREE.DirectionalLight(studioKey.color, studioKey.intensity);
+            keyLight.position.set(studioKey.position.x, studioKey.position.y, studioKey.position.z);
             this.addLightObject(keyLight);
-            const fillLight = new THREE.DirectionalLight(0x8eb8ff, 0.9);
-            fillLight.position.set(-4, 1, 2);
+            const studioFill = STUDIO_LIGHTING.directional[1];
+            const fillLight = new THREE.DirectionalLight(studioFill.color, studioFill.intensity);
+            fillLight.position.set(studioFill.position.x, studioFill.position.y, studioFill.position.z);
             this.addLightObject(fillLight);
             this.usesShadows = false;
         }
@@ -1406,6 +1427,7 @@ export {
     DEFAULT_FOCAL_LENGTH,
     DEFAULT_STAGE_HEIGHT,
     DEFAULT_STAGE_WIDTH,
+    STUDIO_LIGHTING,
     ROTATION_ORDERS,
     ModelRenderer,
     attachMotionToGLB,
