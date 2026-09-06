@@ -333,11 +333,6 @@ class Tab extends EventTargetShim {
                 from: () => [q("[class^='stop-all_stop-all']")],
                 until: () => []
             },
-            timelineHeader: {
-                element: () => q('[data-movie-timeline-addons]'),
-                from: () => [],
-                until: () => []
-            },
             afterSoundTab: {
                 element: () => q("[class^='react-tabs_react-tabs__tab-list']"),
                 from: () => [q("[class^='react-tabs_react-tabs__tab-list']").children[2]],
@@ -513,7 +508,7 @@ class Tab extends EventTargetShim {
                     // procedures_prototype also has a procedure code but we do not want to color them.
                     if (!this.isInsertionMarker() && this.type === 'procedures_call') {
                         const block = this.procCode_ && vm.runtime.getAddonBlock(this.procCode_);
-                        if (block && !block.myBlocksShader && !block.myBlocksScene) {
+                        if (block) {
                             const theme = reduxInstance.state.scratchGui.theme.theme;
                             const colors = theme.getBlockColors().addons;
                             this.colour_ = colors.primary;

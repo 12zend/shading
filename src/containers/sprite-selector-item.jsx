@@ -144,7 +144,7 @@ class SpriteSelectorItem extends React.PureComponent {
                 onDuplicateButtonClick={onDuplicateButtonClick ? this.handleDuplicate : null}
                 onExportButtonClick={onExportButtonClick ? this.handleExport : null}
                 onRenameButtonClick={onRenameButtonClick ? this.handleRename : null}
-                onMouseDown={this.props.dragType ? this.handleMouseDown : null}
+                onMouseDown={this.handleMouseDown}
                 onMouseEnter={this.handleMouseEnter}
                 onMouseLeave={this.handleMouseLeave}
                 {...props}

@@ -18,7 +18,7 @@ const manifest = {
     },
     {
       "name": "GarboMuffin",
-      "link": "https://github.com/12zend/shading"
+      "link": "https://scratch.mit.edu/users/GarboMuffin/"
     }
   ],
   "enabledByDefault": false,

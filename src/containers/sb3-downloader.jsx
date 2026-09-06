@@ -9,14 +9,13 @@ import {showStandardAlert, showAlertWithTimeout} from '../reducers/alerts';
 import {setFileHandle} from '../reducers/tw';
 import {getIsShowingProject} from '../reducers/project-state';
 import log from '../lib/log';
-import {getProjectExtension, MOVIE_PROJECT_EXTENSION} from '../lib/project-format';
 
 // from sb-file-uploader-hoc.jsx
 const getProjectTitleFromFilename = fileInputFilename => {
     if (!fileInputFilename) return '';
     // only parse title with valid scratch project extensions
-    // (.sb, .sb2, .sb3, Movie's .shade, and legacy .mb3)
-    const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade|mb3)$/i);
+    // (.sb, .sb2, and .sb3)
+    const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
     if (!matches) return '';
     return matches[1].substring(0, 100); // truncate project title to max 100 chars
 };
@@ -97,16 +96,13 @@ class SB3Downloader extends React.Component {
             return;
         }
         try {
-            const extension = this.props.projectFilename.split('.').pop()
-                .toLowerCase();
-            const isMovieProject = extension === MOVIE_PROJECT_EXTENSION;
             const handle = await this.props.showSaveFilePicker({
                 suggestedName: this.props.projectFilename,
                 types: [
                     {
-                        description: isMovieProject ? 'Movie 3 Project' : 'Scratch 3 Project',
+                        description: 'Scratch 3 Project',
                         accept: {
-                            'application/octet-stream': [`.${extension}`]
+                            'application/octet-stream': '.sb3'
                         }
                     }
                 ],
@@ -123,13 +119,6 @@ class SB3Downloader extends React.Component {
         }
     }
     async saveToLastFile () {
-        const expectedExtension = this.props.projectFilename.split('.').pop()
-            .toLowerCase();
-        const currentExtension = this.props.fileHandle && this.props.fileHandle.name.split('.').pop()
-            .toLowerCase();
-        if (!this.props.fileHandle || currentExtension !== expectedExtension) {
-            return this.saveAsNew();
-        }
         try {
             await this.saveToHandle(this.props.fileHandle);
         } catch (e) {
@@ -277,12 +266,12 @@ class SB3Downloader extends React.Component {
     }
 }
 
-const getProjectFilename = (curTitle, defaultTitle, extension) => {
+const getProjectFilename = (curTitle, defaultTitle) => {
     let filenameTitle = curTitle;
     if (!filenameTitle || filenameTitle.length === 0) {
         filenameTitle = defaultTitle;
     }
-    return `${filenameTitle.substring(0, 100)}.${extension}`;
+    return `${filenameTitle.substring(0, 100)}.sb3`;
 };
 
 SB3Downloader.propTypes = {
@@ -316,11 +305,7 @@ const mapStateToProps = state => ({
     saveProjectSb3: state.scratchGui.vm.saveProjectSb3.bind(state.scratchGui.vm),
     saveProjectSb3Stream: state.scratchGui.vm.saveProjectSb3Stream.bind(state.scratchGui.vm),
     canSaveProject: getIsShowingProject(state.scratchGui.projectState.loadingState),
-    projectFilename: getProjectFilename(
-        state.scratchGui.projectTitle,
-        projectTitleInitialState,
-        getProjectExtension(state.scratchGui.vm.runtime)
-    )
+    projectFilename: getProjectFilename(state.scratchGui.projectTitle, projectTitleInitialState)
 });
 
 const mapDispatchToProps = dispatch => ({
@@ -336,5 +321,3 @@ export default connect(
     mapStateToProps,
     mapDispatchToProps
 )(SB3Downloader);
-
-export {getProjectFilename};

@@ -2,27 +2,6 @@ import BlockItem from "./blockly/BlockItem.js";
 import BlockInstance from "./blockly/BlockInstance.js";
 import Utils from "./blockly/Utils.js";
 
-export const isSearchableEventBlock = type => type.substr(0, 10) === "event_when" ||
-  type === "event_initialize" || type === "event_renderframe";
-
-export const getSelectedEditorTab = state => {
-  const editorTab = state.scratchGui.editorTab;
-  return editorTab ? editorTab.activeTabIndex : 0;
-};
-
-export const openFindBar = (findBar, focusID, instanceBlock, onError) => {
-  if (!findBar.findInput) return false;
-
-  try {
-    findBar.findInput.focus();
-    findBar.showDropDown(focusID, instanceBlock);
-    return true;
-  } catch (error) {
-    onError(error);
-    return false;
-  }
-};
-
 export default async function ({ addon, msg, console }) {
   const Blockly = await addon.tab.traps.getBlockly();
 
@@ -45,14 +24,9 @@ export default async function ({ addon, msg, console }) {
       return Blockly.getMainWorkspace();
     }
 
-    createDom(editorRoot) {
-      const tabList = editorRoot.querySelector('[class*="gui_tab-list_"]');
-      const root = tabList || document.querySelector('[class*="menu-bar_main-menu_"]');
-      if (!root) return;
-
+    createDom(root) {
       this.findBarOuter = document.createElement("div");
       this.findBarOuter.className = "sa-find-bar";
-      if (!tabList) this.findBarOuter.classList.add("sa-find-bar-menu");
       addon.tab.displayNoneWhileDisabled(this.findBarOuter, { display: "flex" });
       root.appendChild(this.findBarOuter);
 
@@ -89,7 +63,7 @@ export default async function ({ addon, msg, console }) {
       if (!this.findBarOuter) {
         return;
       }
-      const tab = this.selectedTab;
+      const tab = addon.tab.redux.state.scratchGui.editorTab.activeTabIndex;
       const visible = tab === 0 || tab === 1 || tab === 2;
       this.findBarOuter.hidden = !visible;
     }
@@ -238,7 +212,7 @@ export default async function ({ addon, msg, console }) {
     }
 
     get selectedTab() {
-      return getSelectedEditorTab(addon.tab.redux.state);
+      return addon.tab.redux.state.scratchGui.editorTab.activeTabIndex;
     }
 
     getScratchBlocks() {
@@ -314,7 +288,7 @@ export default async function ({ addon, msg, console }) {
           continue;
         }
 
-        if (isSearchableEventBlock(root.type)) {
+        if (root.type.substr(0, 10) === "event_when") {
           addBlock("event", getDescFromField(root), root); // "When Flag Clicked"
           continue;
         }
@@ -807,8 +781,10 @@ export default async function ({ addon, msg, console }) {
         if (block.type === "procedures_definition" || (!this.jumpToDef && block.type === "procedures_call")) {
           let id = block.id ? block.id : block.getId ? block.getId() : null;
 
-          if (openFindBar(findBar, id, undefined, console.error)) return;
-          break;
+          findBar.findInput.focus();
+          findBar.showDropDown(id);
+
+          return;
         }
 
         if (
@@ -818,11 +794,12 @@ export default async function ({ addon, msg, console }) {
         ) {
           let id = block.getVars()[0];
 
-          if (openFindBar(findBar, id, block, console.error)) {
-            findBar.selVarID = id;
-            return;
-          }
-          break;
+          findBar.findInput.focus();
+          findBar.showDropDown(id, block);
+
+          findBar.selVarID = id;
+
+          return;
         }
 
         if (
@@ -833,11 +810,12 @@ export default async function ({ addon, msg, console }) {
           // todo: actually index the broadcasts...!
           let id = block.id;
 
-          if (openFindBar(findBar, id, block, console.error)) {
-            findBar.selVarID = id;
-            return;
-          }
-          break;
+          findBar.findInput.focus();
+          findBar.showDropDown(id, block);
+
+          findBar.selVarID = id;
+
+          return;
         }
       }
     }
@@ -853,7 +831,7 @@ export default async function ({ addon, msg, console }) {
   });
 
   while (true) {
-    const root = await addon.tab.waitForElement('[class*="gui_editor-wrapper_"]', {
+    const root = await addon.tab.waitForElement("ul[class*=gui_tab-list_]", {
       markAsSeen: true,
       reduxEvents: ["scratch-gui/mode/SET_PLAYER", "fontsLoaded/SET_FONTS_LOADED", "scratch-gui/locales/SELECT_LOCALE"],
       reduxCondition: (state) => !state.scratchGui.mode.isPlayerOnly,

@@ -6,24 +6,6 @@ See https://docs.turbowarp.org/development/getting-started to setup the complete
 
 If you just want to play with the GUI then it's the same process as upstream scratch-gui.
 
-## Shading Desktop
-
-The desktop app lives in this repository and uses the same `build` output as the web app. Electron serves that output from a stable localhost origin, so browser project files, IndexedDB data, and project formats remain compatible. Collaborative editing is not enabled in either app.
-
-```bash
-npm ci
-npm run build:desktop
-npm run electron:start
-```
-
-For development, `npm run electron:dev` starts webpack-dev-server and Electron together.
-
-Create the macOS and Windows packages with `npm run package:desktop`. The result is written to `release/` and includes the macOS `.dmg`/`.zip`, the Windows NSIS installer `.exe`, and a portable Windows `.exe`. Use `npm run package:desktop:dir` when unpacked app directories are preferred.
-
-Project files can be opened by selecting them in the app, passing them as command-line arguments, or opening them through the operating system's file association. Saves use a temporary file followed by an atomic replacement, and the app asks before closing a dirty project.
-
-On macOS, the desktop app selects Chromium's ANGLE Metal backend before startup. This covers the existing WebGL GPU paths used by the Scratch renderer, PenFX, and Three.js model rendering without duplicating those implementations. An explicit `--use-gl`, `--use-angle`, or `--disable-gpu` launch option is respected.
-
 ## License
 
 TurboWarp's modifications to Scratch are licensed under the GNU General Public License v3.0. See LICENSE or https://www.gnu.org/licenses/ for details.
@@ -76,7 +58,7 @@ Open a Command Prompt or Terminal in the repository and run:
 ```bash
 npm start
 ```
-Then go to [http://localhost:8601/](http://localhost:8601/) to open the editor. The player-only view is available at [http://localhost:8601/player.html](http://localhost:8601/player.html).
+Then go to [http://localhost:8601/](http://localhost:8601/) - the playground outputs the default GUI component
 
 ## Developing alongside other Scratch repositories
 

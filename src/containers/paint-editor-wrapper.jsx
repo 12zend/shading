@@ -3,7 +3,6 @@ import React from 'react';
 import bindAll from 'lodash.bindall';
 import VM from 'scratch-vm';
 import PaintEditor from '../lib/tw-scratch-paint';
-import styles from './paint-editor-theme.css';
 import {inlineSvgFonts, sanitizeSvg} from '@turbowarp/scratch-svg-renderer';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import {openFontsModal} from '../reducers/modals';
@@ -45,10 +44,6 @@ class PaintEditorWrapper extends React.Component {
     }
     handleUpdateName (name) {
         this.props.vm.renameCostume(this.props.selectedCostumeIndex, name);
-        if (this.props.onCostumeRenamed) {
-            const costume = this.props.vm.editingTarget.sprite.costumes[this.props.selectedCostumeIndex];
-            this.props.onCostumeRenamed(costume.name);
-        }
     }
     handleUpdateImage (isVector, image, rotationCenterX, rotationCenterY) {
         if (isVector) {
@@ -72,26 +67,23 @@ class PaintEditorWrapper extends React.Component {
     render () {
         if (!this.props.imageId) return null;
         const {
-            onCostumeRenamed, // eslint-disable-line no-unused-vars
             selectedCostumeIndex,
             vm,
             ...componentProps
         } = this.props;
         const costume = vm.getCostume(selectedCostumeIndex);
         return (
-            <div className={styles.paintTheme}>
-                <PaintEditor
-                    {...componentProps}
-                    image={this.props.imageFormat === 'svg' ? sanitizeSvg.sanitizeSvgText(costume) : costume}
-                    onUpdateImage={this.handleUpdateImage}
-                    onUpdateName={this.handleUpdateName}
-                    fontInlineFn={this.fontInlineFn}
-                    theme={this.props.theme.isDark() ? 'dark' : 'light'}
-                    customFonts={this.state.fonts}
-                    width={this.props.customStageSize.width}
-                    height={this.props.customStageSize.height}
-                />
-            </div>
+            <PaintEditor
+                {...componentProps}
+                image={this.props.imageFormat === 'svg' ? sanitizeSvg.sanitizeSvgText(costume) : costume}
+                onUpdateImage={this.handleUpdateImage}
+                onUpdateName={this.handleUpdateName}
+                fontInlineFn={this.fontInlineFn}
+                theme={this.props.theme.isDark() ? 'dark' : 'light'}
+                customFonts={this.state.fonts}
+                width={this.props.customStageSize.width}
+                height={this.props.customStageSize.height}
+            />
         );
     }
 }
@@ -106,7 +98,6 @@ PaintEditorWrapper.propTypes = {
     imageId: PropTypes.string.isRequired,
     theme: PropTypes.instanceOf(Theme),
     name: PropTypes.string,
-    onCostumeRenamed: PropTypes.func,
     rotationCenterX: PropTypes.number,
     rotationCenterY: PropTypes.number,
     rtl: PropTypes.bool,

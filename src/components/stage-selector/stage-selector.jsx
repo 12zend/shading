@@ -8,15 +8,27 @@ import ActionMenu from '../action-menu/action-menu.jsx';
 import styles from './stage-selector.css';
 import {isRtl} from '@turbowarp/scratch-l10n';
 
+import backdropIcon from '../action-menu/icon--backdrop.svg';
 import fileUploadIcon from '../action-menu/icon--file-upload.svg';
 import paintIcon from '../action-menu/icon--paint.svg';
-import {COSTUME_FILE_ACCEPT} from '../../lib/costume-upload-formats';
+import surpriseIcon from '../action-menu/icon--surprise.svg';
+import searchIcon from '../action-menu/icon--search.svg';
 
 const messages = defineMessages({
+    addBackdropFromLibrary: {
+        id: 'gui.spriteSelector.addBackdropFromLibrary',
+        description: 'Button to add a stage in the target pane from library',
+        defaultMessage: 'Choose a Backdrop'
+    },
     addBackdropFromPaint: {
         id: 'gui.stageSelector.addBackdropFromPaint',
         description: 'Button to add a stage in the target pane from paint',
         defaultMessage: 'Paint'
+    },
+    addBackdropFromSurprise: {
+        id: 'gui.stageSelector.addBackdropFromSurprise',
+        description: 'Button to add a random stage in the target pane',
+        defaultMessage: 'Surprise'
     },
     addBackdropFromFile: {
         id: 'gui.stageSelector.addBackdropFromFile',
@@ -41,6 +53,8 @@ const StageSelector = props => {
         onClick,
         onMouseEnter,
         onMouseLeave,
+        onNewBackdropClick,
+        onSurpriseBackdropClick,
         onEmptyBackdropClick,
         ...componentProps
     } = props;
@@ -57,14 +71,6 @@ const StageSelector = props => {
             onMouseLeave={onMouseLeave}
             {...componentProps}
         >
-            <input
-                accept={COSTUME_FILE_ACCEPT}
-                className={styles.fileInput}
-                multiple
-                ref={fileInputRef}
-                type="file"
-                onChange={onBackdropFileUpload}
-            />
             <div className={styles.header}>
                 <div className={styles.headerTitle}>
                     <FormattedMessage
@@ -91,15 +97,34 @@ const StageSelector = props => {
             <div className={styles.count}>{backdropCount}</div>
             <ActionMenu
                 className={styles.addButton}
-                img={fileUploadIcon}
-                moreButtons={[{
-                    title: intl.formatMessage(messages.addBackdropFromPaint),
-                    img: paintIcon,
-                    onClick: onEmptyBackdropClick
-                }]}
-                title={intl.formatMessage(messages.addBackdropFromFile)}
+                img={backdropIcon}
+                moreButtons={[
+                    {
+                        title: intl.formatMessage(messages.addBackdropFromFile),
+                        img: fileUploadIcon,
+                        onClick: onBackdropFileUploadClick,
+                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .gif',
+                        fileChange: onBackdropFileUpload,
+                        fileInput: fileInputRef,
+                        fileMultiple: true
+                    }, {
+                        title: intl.formatMessage(messages.addBackdropFromSurprise),
+                        img: surpriseIcon,
+                        onClick: onSurpriseBackdropClick
+
+                    }, {
+                        title: intl.formatMessage(messages.addBackdropFromPaint),
+                        img: paintIcon,
+                        onClick: onEmptyBackdropClick
+                    }, {
+                        title: intl.formatMessage(messages.addBackdropFromLibrary),
+                        img: searchIcon,
+                        onClick: onNewBackdropClick
+                    }
+                ]}
+                title={intl.formatMessage(messages.addBackdropFromLibrary)}
                 tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onBackdropFileUploadClick}
+                onClick={onNewBackdropClick}
             />
         </Box>
     );
@@ -117,6 +142,8 @@ StageSelector.propTypes = {
     onEmptyBackdropClick: PropTypes.func,
     onMouseEnter: PropTypes.func,
     onMouseLeave: PropTypes.func,
+    onNewBackdropClick: PropTypes.func,
+    onSurpriseBackdropClick: PropTypes.func,
     raised: PropTypes.bool.isRequired,
     receivedBlocks: PropTypes.bool.isRequired,
     selected: PropTypes.bool.isRequired,

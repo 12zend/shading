@@ -1,15 +1,10 @@
 import SharedAudioContext from './shared-audio-context.js';
 
 class AudioBufferPlayer {
-    constructor (channelData, sampleRate) {
-        // Keep accepting a single Float32Array for callers such as the recorder.
-        // The sound editor passes one Float32Array per channel.
-        const channels = channelData instanceof Float32Array ? [channelData] : channelData;
+    constructor (samples, sampleRate) {
         this.audioContext = new SharedAudioContext();
-        this.buffer = this.audioContext.createBuffer(channels.length, channels[0].length, sampleRate);
-        channels.forEach((samples, channel) => {
-            this.buffer.getChannelData(channel).set(samples);
-        });
+        this.buffer = this.audioContext.createBuffer(1, samples.length, sampleRate);
+        this.buffer.getChannelData(0).set(samples);
         this.source = null;
 
         this.startTime = null;

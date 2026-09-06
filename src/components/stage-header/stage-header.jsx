@@ -8,6 +8,7 @@ import VM from 'scratch-vm';
 import Box from '../box/box.jsx';
 import Button from '../button/button.jsx';
 import ToggleButtons from '../toggle-buttons/toggle-buttons.jsx';
+import Controls from '../../containers/controls.jsx';
 import {getStageDimensions, getMinWidth} from '../../lib/screen-utils';
 import {STAGE_DISPLAY_SIZES, STAGE_SIZE_MODES} from '../../lib/layout-constants';
 
@@ -77,7 +78,8 @@ const StageHeaderComponent = function (props) {
         onOpenSettings,
         isEmbedded,
         stageSize,
-        stageSizeMode
+        stageSizeMode,
+        vm
     } = props;
 
     let header = null;
@@ -143,6 +145,7 @@ const StageHeaderComponent = function (props) {
                     className={styles.stageMenuWrapper}
                     style={{width: stageDimensions.width}}
                 >
+                    <Controls vm={vm} />
                     <div
                         className={styles.fullscreenButtonsRow}
                         key="fullscreen" // addons require the HTML element to be not be re-used by in-editor buttons
@@ -195,6 +198,10 @@ const StageHeaderComponent = function (props) {
                 style={{minWidth: `${Math.max(stageDimensions.width, getMinWidth(stageSize)) + 2}px`}}
             >
                 <Box className={styles.stageMenuWrapper}>
+                    <Controls
+                        vm={vm}
+                        isSmall={stageSizeMode === STAGE_SIZE_MODES.small}
+                    />
                     <div
                         className={styles.stageSizeRow}
                         key="editor" // addons require the HTML element to be not be re-used by in-editor buttons

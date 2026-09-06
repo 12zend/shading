@@ -31,7 +31,7 @@ const getDimensions = () => {
 };
 
 const defaultStageSize = {
-    width: 640,
+    width: 480,
     height: 360
 };
 

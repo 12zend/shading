@@ -5,9 +5,8 @@ export default async function ({ addon, console }) {
   const vm = addon.tab.traps.vm;
   setup(vm);
 
-  const icon = document.createElement("button");
+  const icon = document.createElement("div");
   icon.className = "sa-vol-slider-icon";
-  icon.type = "button";
   icon.addEventListener("click", () => {
     setMuted(!isMuted());
   });
@@ -16,15 +15,11 @@ export default async function ({ addon, console }) {
     const newVolume = getVolume();
     if (newVolume === 0) {
       icon.dataset.icon = "mute";
-      icon.ariaLabel = "Unmute project";
     } else if (newVolume < 0.5) {
       icon.dataset.icon = "quiet";
-      icon.ariaLabel = "Mute project";
     } else {
       icon.dataset.icon = "loud";
-      icon.ariaLabel = "Mute project";
     }
-    icon.title = icon.ariaLabel;
   };
   onVolumeChanged(updateIcon);
 
@@ -34,8 +29,6 @@ export default async function ({ addon, console }) {
   slider.min = 0;
   slider.max = 1;
   slider.step = 0.02;
-  slider.ariaLabel = "Project volume";
-  slider.title = "Project volume";
   slider.addEventListener("input", (e) => {
     setVolume(+e.target.value);
   });
@@ -55,7 +48,7 @@ export default async function ({ addon, console }) {
   setVolume(addon.settings.get("defVol") / 100);
 
   const container = document.createElement("div");
-  container.className = "sa-vol-slider sa-vol-slider--timeline";
+  container.className = "sa-vol-slider";
   // Nested elements are needed for hover animation - see hover.css
   const innerContainer = document.createElement("div");
   innerContainer.className = "sa-vol-slider-inner";
@@ -77,11 +70,11 @@ export default async function ({ addon, console }) {
   });
 
   while (true) {
-    await addon.tab.waitForElement("[data-movie-timeline-addons]", {
+    await addon.tab.waitForElement("[class^='green-flag_green-flag']", {
       markAsSeen: true,
       reduxEvents: ["scratch-gui/mode/SET_PLAYER", "fontsLoaded/SET_FONTS_LOADED", "scratch-gui/locales/SELECT_LOCALE"],
     });
     addon.tab.displayNoneWhileDisabled(container, { display: "flex" });
-    addon.tab.appendToSharedSpace({ space: "timelineHeader", element: container, order: 0 });
+    addon.tab.appendToSharedSpace({ space: "afterStopButton", element: container, order: 0 });
   }
 }

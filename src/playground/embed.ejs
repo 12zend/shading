@@ -51,7 +51,18 @@
       <div class="splash-spinner"></div>
     </div>
 
-    <script src="<%= htmlWebpackPlugin.options.root %>embed-splash.js"></script>
+    <script>
+      (function() {
+        'use strict';
+
+        var splash = document.getElementById('splash-need-js');
+        splash.hidden = false;
+
+        window.SplashEnd = () => {
+          splash.hidden = true;
+        };
+      }());
+    </script>
 
     <div id="app"></div>
   </body>

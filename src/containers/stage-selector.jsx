@@ -5,6 +5,8 @@ import React from 'react';
 import {intlShape, injectIntl} from 'react-intl';
 
 import {connect} from 'react-redux';
+import {openBackdropLibrary} from '../reducers/modals';
+import {activateTab, COSTUMES_TAB_INDEX} from '../reducers/editor-tab';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 import {setHoveredSprite} from '../reducers/hovered-target';
 import DragConstants from '../lib/drag-constants';
@@ -17,6 +19,7 @@ import {getEventXY} from '../lib/touch-utils';
 
 import StageSelectorComponent from '../components/stage-selector/stage-selector.jsx';
 
+import {getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
 import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
 import {placeInViewport} from '../lib/backpack/code-payload.js';
 
@@ -38,7 +41,9 @@ class StageSelector extends React.Component {
         bindAll(this, [
             'handleClick',
             'handleNewBackdrop',
+            'handleSurpriseBackdrop',
             'handleEmptyBackdrop',
+            'addBackdropFromLibraryItem',
             'handleFileUploadClick',
             'handleBackdropUpload',
             'handleMouseEnter',
@@ -62,12 +67,36 @@ class StageSelector extends React.Component {
             this.handleMouseEnter();
         }
     }
+    addBackdropFromLibraryItem (item, shouldActivateTab = true) {
+        const vmBackdrop = {
+            name: item.name,
+            md5: item.md5ext,
+            rotationCenterX: item.rotationCenterX,
+            rotationCenterY: item.rotationCenterY,
+            bitmapResolution: item.bitmapResolution,
+            skinId: null
+        };
+        this.handleNewBackdrop(vmBackdrop, shouldActivateTab);
+    }
     handleClick () {
         this.props.onSelect(this.props.id);
     }
-    handleNewBackdrop (backdrops_) {
+    handleNewBackdrop (backdrops_, shouldActivateTab = true) {
         const backdrops = Array.isArray(backdrops_) ? backdrops_ : [backdrops_];
-        return Promise.all(backdrops.map(backdrop => this.props.vm.addBackdrop(backdrop.md5, backdrop)));
+        return Promise.all(backdrops.map(backdrop =>
+            this.props.vm.addBackdrop(backdrop.md5, backdrop)
+        )).then(() => {
+            if (shouldActivateTab) {
+                return this.props.onActivateTab(COSTUMES_TAB_INDEX);
+            }
+        });
+    }
+    async handleSurpriseBackdrop (e) {
+        e.stopPropagation(); // Prevent click from falling through to selecting stage.
+        const backdropLibraryContent = await getBackdropLibrary();
+        // @todo should this not add a backdrop you already have?
+        const item = backdropLibraryContent[Math.floor(Math.random() * backdropLibraryContent.length)];
+        this.addBackdropFromLibraryItem(item, false);
     }
     handleEmptyBackdrop (e) {
         e.stopPropagation(); // Prevent click from falling through to stage selector, select it manually below
@@ -137,7 +166,7 @@ class StageSelector extends React.Component {
     render () {
         const componentProps = omit(this.props, [
             'asset', 'dispatchSetHoveredSprite', 'id', 'intl',
-            'onSelect', 'onShowImporting', 'onCloseImporting',
+            'onActivateTab', 'onSelect', 'onShowImporting', 'onCloseImporting',
             'isRtl', 'workspaceMetrics'
         ]);
         return (
@@ -151,6 +180,7 @@ class StageSelector extends React.Component {
                 onEmptyBackdropClick={this.handleEmptyBackdrop}
                 onMouseEnter={this.handleMouseEnter}
                 onMouseLeave={this.handleMouseLeave}
+                onSurpriseBackdropClick={this.handleSurpriseBackdrop}
                 {...componentProps}
             />
         );
@@ -180,6 +210,13 @@ const mapStateToProps = (state, {asset, id}) => ({
 });
 
 const mapDispatchToProps = dispatch => ({
+    onNewBackdropClick: e => {
+        e.stopPropagation();
+        dispatch(openBackdropLibrary());
+    },
+    onActivateTab: tabIndex => {
+        dispatch(activateTab(tabIndex));
+    },
     dispatchSetHoveredSprite: spriteId => {
         dispatch(setHoveredSprite(spriteId));
     },

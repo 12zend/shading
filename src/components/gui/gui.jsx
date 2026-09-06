@@ -11,11 +11,8 @@ import VM from 'scratch-vm';
 
 import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
-import FontTab from '../../containers/font-tab.jsx';
-import ModelTab from '../../containers/model-tab.jsx';
-import ShaderTab from '../../containers/shader-tab.jsx';
+import TargetPane from '../../containers/target-pane.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
-import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
 import Loader from '../loader/loader.jsx';
 import Box from '../box/box.jsx';
@@ -23,7 +20,6 @@ import MenuBar from '../menu-bar/menu-bar.jsx';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
 import Watermark from '../../containers/watermark.jsx';
-import Timeline from '../timeline/timeline.jsx';
 
 import Backpack from '../../containers/backpack.jsx';
 import BrowserModal from '../browser-modal/browser-modal.jsx';
@@ -53,10 +49,6 @@ import addExtensionIcon from './icon--extensions.svg';
 import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
 import costumesIcon from '!../../lib/tw-recolor/build!./icon--costumes.svg';
 import soundsIcon from '!../../lib/tw-recolor/build!./icon--sounds.svg';
-import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
-import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
-import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
-import shadersIcon from '!../../lib/tw-recolor/build!./icon--shaders.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -108,10 +100,6 @@ const GUIComponent = props => {
         connectionModalVisible,
         costumeLibraryVisible,
         costumesTabVisible,
-        fontsTabVisible,
-        framerate,
-        modelsTabVisible,
-        shadersTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -139,10 +127,6 @@ const GUIComponent = props => {
         onToggleLoginOpen,
         onActivateCostumesTab,
         onActivateSoundsTab,
-        onActivateVideosTab,
-        onActivateFontsTab,
-        onActivateModelsTab,
-        onActivateShadersTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -163,7 +147,6 @@ const GUIComponent = props => {
         showOpenFilePicker,
         showSaveFilePicker,
         soundsTabVisible,
-        videosTabVisible,
         stageSizeMode,
         targetIsStage,
         telemetryModalVisible,
@@ -401,62 +384,6 @@ const GUIComponent = props => {
                                             id="gui.gui.soundsTab"
                                         />
                                     </Tab>
-                                    <Tab
-                                        className={tabClassNames.tab}
-                                        onClick={onActivateVideosTab}
-                                    >
-                                        <img
-                                            draggable={false}
-                                            src={videosIcon()}
-                                        />
-                                        <FormattedMessage
-                                            defaultMessage="Videos"
-                                            description="Button to get to the videos panel"
-                                            id="movie.gui.videosTab"
-                                        />
-                                    </Tab>
-                                    <Tab
-                                        className={tabClassNames.tab}
-                                        onClick={onActivateFontsTab}
-                                    >
-                                        <img
-                                            draggable={false}
-                                            src={fontsIcon()}
-                                        />
-                                        <FormattedMessage
-                                            defaultMessage="Fonts"
-                                            description="Button to get to the fonts panel"
-                                            id="movie.gui.fontsTab"
-                                        />
-                                    </Tab>
-                                    <Tab
-                                        className={tabClassNames.tab}
-                                        onClick={onActivateModelsTab}
-                                    >
-                                        <img
-                                            draggable={false}
-                                            src={modelsIcon()}
-                                        />
-                                        <FormattedMessage
-                                            defaultMessage="Models"
-                                            description="Button to get to the 3D models panel"
-                                            id="movie.gui.modelsTab"
-                                        />
-                                    </Tab>
-                                    <Tab
-                                        className={tabClassNames.tab}
-                                        onClick={onActivateShadersTab}
-                                    >
-                                        <img
-                                            draggable={false}
-                                            src={shadersIcon()}
-                                        />
-                                        <FormattedMessage
-                                            defaultMessage="Shader"
-                                            description="Button to get to the PenFX shader editor"
-                                            id="movie.gui.shadersTab"
-                                        />
-                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -492,22 +419,12 @@ const GUIComponent = props => {
                                     </Box>
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
-                                    {costumesTabVisible ? <CostumeTab vm={vm} /> : null}
+                                    {costumesTabVisible ? <CostumeTab
+                                        vm={vm}
+                                    /> : null}
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {soundsTabVisible ? <SoundTab vm={vm} /> : null}
-                                </TabPanel>
-                                <TabPanel className={tabClassNames.tabPanel}>
-                                    {videosTabVisible ? <VideoTab vm={vm} /> : null}
-                                </TabPanel>
-                                <TabPanel className={tabClassNames.tabPanel}>
-                                    {fontsTabVisible ? <FontTab vm={vm} /> : null}
-                                </TabPanel>
-                                <TabPanel className={tabClassNames.tabPanel}>
-                                    {modelsTabVisible ? <ModelTab vm={vm} /> : null}
-                                </TabPanel>
-                                <TabPanel className={tabClassNames.tabPanel}>
-                                    {shadersTabVisible ? <ShaderTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -523,10 +440,9 @@ const GUIComponent = props => {
                                 stageSize={stageSize}
                                 vm={vm}
                             />
-                            <Box className={styles.timelineWrapper}>
-                                <Timeline
-                                    customStageSize={customStageSize}
-                                    framerate={framerate}
+                            <Box className={styles.targetWrapper}>
+                                <TargetPane
+                                    stageSize={stageSize}
                                     vm={vm}
                                 />
                             </Box>
@@ -565,10 +481,6 @@ GUIComponent.propTypes = {
     children: PropTypes.node,
     costumeLibraryVisible: PropTypes.bool,
     costumesTabVisible: PropTypes.bool,
-    fontsTabVisible: PropTypes.bool,
-    framerate: PropTypes.number.isRequired,
-    modelsTabVisible: PropTypes.bool,
-    shadersTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -587,10 +499,6 @@ GUIComponent.propTypes = {
     logo: PropTypes.string,
     onActivateCostumesTab: PropTypes.func,
     onActivateSoundsTab: PropTypes.func,
-    onActivateVideosTab: PropTypes.func,
-    onActivateFontsTab: PropTypes.func,
-    onActivateModelsTab: PropTypes.func,
-    onActivateShadersTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
@@ -621,7 +529,6 @@ GUIComponent.propTypes = {
     showOpenFilePicker: PropTypes.func,
     showSaveFilePicker: PropTypes.func,
     soundsTabVisible: PropTypes.bool,
-    videosTabVisible: PropTypes.bool,
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
     targetIsStage: PropTypes.bool,
     telemetryModalVisible: PropTypes.bool,
@@ -661,7 +568,6 @@ GUIComponent.defaultProps = {
 
 const mapStateToProps = state => ({
     customStageSize: state.scratchGui.customStageSize,
-    framerate: state.scratchGui.tw.framerate,
     isWindowFullScreen: state.scratchGui.tw.isWindowFullScreen,
     // This is the button's mode, as opposed to the actual current state
     blocksId: state.scratchGui.timeTravel.year.toString(),

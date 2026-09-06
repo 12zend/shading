@@ -14,12 +14,6 @@
   display: none !important;
 }
 
-.sa-find-bar-menu {
-  flex: 0 0 16em;
-  width: 16em;
-  margin-left: 0;
-}
-
 .sa-find-wrapper {
   overflow: visible;
   position: relative;

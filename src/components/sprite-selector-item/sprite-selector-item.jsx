@@ -30,15 +30,7 @@ const SpriteSelectorItem = props => (
         {typeof props.number === 'undefined' ? null : (
             <div className={styles.number}>{props.number}</div>
         )}
-        {props.thumbnail ? (
-            <div className={styles.spriteImageOuter}>
-                <div className={styles.spriteImageInner}>
-                    <div className={styles.spriteThumbnail}>
-                        {props.thumbnail}
-                    </div>
-                </div>
-            </div>
-        ) : props.costumeURL ? (
+        {props.costumeURL ? (
             <div className={styles.spriteImageOuter}>
                 <div className={styles.spriteImageInner}>
                     <img
@@ -122,8 +114,7 @@ SpriteSelectorItem.propTypes = {
     onMouseEnter: PropTypes.func,
     onMouseLeave: PropTypes.func,
     preventContextMenu: PropTypes.bool,
-    selected: PropTypes.bool.isRequired,
-    thumbnail: PropTypes.node
+    selected: PropTypes.bool.isRequired
 };
 
 export default SpriteSelectorItem;

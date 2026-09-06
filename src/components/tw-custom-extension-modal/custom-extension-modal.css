@@ -66,7 +66,8 @@
 .unsandboxed-checkbox {
     margin-right: 0.5rem;
 }
-.trusted-extension {
+.trusted-extension,
+.unsandboxed-warning {
     padding: 0.5rem;
     border-radius: 0.25rem;
 }
@@ -74,6 +75,15 @@
     background-color: rgba(94, 255, 94, 0.25);
     border: 1px solid green;
 }
+.unsandboxed-warning {
+    background-color: rgba(255, 81, 81, 0.25);
+    border: 1px solid red;
+}
+.unsandboxed-warning > *:not(:last-child) {
+    display: block;
+    margin-bottom: 4px;
+}
+
 .button-row {
     display: flex;
     justify-content: flex-end;

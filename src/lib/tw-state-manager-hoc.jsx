@@ -20,7 +20,6 @@ import {
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
 import {defaultStageSize} from '../reducers/custom-stage-size';
-import {getTeamIdFromPath, getTeamPath} from './team-route';
 
 /* eslint-disable no-alert */
 
@@ -99,12 +98,9 @@ class HashRouter extends Router {
 class FileHashRouter extends HashRouter {
     constructor (callbacks) {
         super(callbacks);
-        this.rootPath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-        this.editorPath = this.rootPath;
-        this.editorFilePath = `${this.rootPath}index.html`;
-        this.legacyEditorPath = `${this.rootPath}editor.html`;
-        this.playerPath = `${this.rootPath}player.html`;
-        this.fullscreenPath = `${this.rootPath}fullscreen.html`;
+        this.playerPath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+        this.editorPath = `${this.playerPath}editor.html`;
+        this.fullscreenPath = `${this.playerPath}fullscreen.html`;
     }
 
     onpathchange () {
@@ -113,11 +109,7 @@ class FileHashRouter extends HashRouter {
         if (pathName === this.playerPath) {
             this.onSetIsPlayerOnly(true);
             this.onSetIsFullScreen(false);
-        } else if (
-            pathName === this.editorPath ||
-            pathName === this.editorFilePath ||
-            pathName === this.legacyEditorPath
-        ) {
+        } else if (pathName === this.editorPath) {
             this.onSetIsPlayerOnly(false);
             this.onSetIsFullScreen(false);
         } else if (pathName === this.fullscreenPath) {
@@ -174,7 +166,7 @@ class WildcardRouter extends Router {
                 history.replaceState(null, null, `${location.pathname}${location.search}`);
             }
         } else {
-            // Do not detect page type here as it is already set up by index.html, player.html, etc.
+            // Do not detect page type here as it is already setup by index.html, editor.html, etc.
             this.parseURL(false);
         }
     }
@@ -201,11 +193,11 @@ class WildcardRouter extends Router {
             }
             if (type === 'fullscreen') {
                 this.onSetIsFullScreen(true);
-            } else if (type === 'player') {
-                this.onSetIsPlayerOnly(true);
+            } else if (type === 'editor') {
+                this.onSetIsPlayerOnly(false);
                 this.onSetIsFullScreen(false);
             } else {
-                this.onSetIsPlayerOnly(false);
+                this.onSetIsPlayerOnly(true);
                 this.onSetIsFullScreen(false);
             }
         };
@@ -227,8 +219,8 @@ class WildcardRouter extends Router {
         }
         if (isFullScreen) {
             parts.push('fullscreen');
-        } else if (isPlayerOnly) {
-            parts.push('player');
+        } else if (!isPlayerOnly) {
+            parts.push('editor');
         }
 
         const path = `${this.root}${parts.join('/')}`;
@@ -239,64 +231,11 @@ class WildcardRouter extends Router {
     }
 }
 
-class TeamRouter extends Router {
-    constructor (callbacks) {
-        super(callbacks);
-        // Collaboration is opt-in: a plain root link keeps its URL until the
-        // user generates a collaboration link in the collaboration panel.
-        this.teamId = getTeamIdFromPath();
-    }
-
-    onhashchange () {
-        this.onSetProjectId(defaultProjectId);
-        this.parsePageType();
-    }
-
-    onpathchange () {
-        this.teamId = getTeamIdFromPath() || this.teamId;
-        this.onSetProjectId(defaultProjectId);
-        this.parsePageType();
-    }
-
-    parsePageType () {
-        const parts = location.pathname.split('/').filter(Boolean);
-        const teamIndex = parts.indexOf(this.teamId);
-        const pageType = teamIndex === -1 ? '' : parts[teamIndex + 1];
-        if (pageType === 'fullscreen') {
-            this.onSetIsFullScreen(true);
-            this.onSetIsPlayerOnly(false);
-        } else if (pageType === 'player') {
-            this.onSetIsPlayerOnly(true);
-            this.onSetIsFullScreen(false);
-        } else {
-            this.onSetIsPlayerOnly(false);
-            this.onSetIsFullScreen(false);
-        }
-    }
-
-    generateURL ({isPlayerOnly, isFullScreen}) {
-        if (!this.teamId) {
-            const prefix = process.env.ROOT && process.env.ROOT !== '/' ?
-                `/${process.env.ROOT.replace(/^\/+|\/+$/g, '')}` : '';
-            let path = prefix || '/';
-            if (isFullScreen) path += '/fullscreen';
-            else if (isPlayerOnly) path += '/player';
-            return `${path}${location.search}${location.hash}`;
-        }
-        let path = getTeamPath(this.teamId);
-        if (isFullScreen) path += '/fullscreen';
-        else if (isPlayerOnly) path += '/player';
-        getCanonicalLinkElement().href = `${location.origin}${getTeamPath(this.teamId)}`;
-        return `${path}${location.search}${location.hash}`;
-    }
-}
-
 const routers = {
     none: Router,
     hash: HashRouter,
     filehash: FileHashRouter,
-    wildcard: WildcardRouter,
-    team: TeamRouter
+    wildcard: WildcardRouter
 };
 
 /**
@@ -306,7 +245,7 @@ const routers = {
  * @returns {Router} The optimal router for the current environment
  */
 const createRouter = (style, callbacks) => {
-    const supportedStyles = ['none', 'hash', 'team'];
+    const supportedStyles = ['none', 'hash'];
 
     // FileHashRouter is not supported on non-http(s) protocols.
     const isHTTP = location.protocol === 'http:' || location.protocol === 'https:';
@@ -379,13 +318,8 @@ const TWStateManager = function (WrappedComponent) {
                 }
             }
 
-            // High quality pen rendering is always enabled in Shading.
-            this.props.vm.renderer.setUseHighQualityRender(true);
-
-            // Remove the old opt-in parameter from links while retaining all other URL options.
             if (urlParams.has('hqpen')) {
-                urlParams.delete('hqpen');
-                setSearchParams(urlParams);
+                this.props.vm.renderer.setUseHighQualityRender(true);
             }
 
             if (urlParams.has('turbo')) {
@@ -468,6 +402,7 @@ const TWStateManager = function (WrappedComponent) {
                 this.props.customStageSize !== prevProps.customStageSize ||
                 this.props.runtimeOptions !== prevProps.runtimeOptions ||
                 this.props.compilerOptions !== prevProps.compilerOptions ||
+                this.props.highQualityPen !== prevProps.highQualityPen ||
                 this.props.framerate !== prevProps.framerate ||
                 this.props.interpolation !== prevProps.interpolation ||
                 this.props.turbo !== prevProps.turbo
@@ -502,6 +437,12 @@ const TWStateManager = function (WrappedComponent) {
                     searchParams.set('turbo', '');
                 } else {
                     searchParams.delete('turbo');
+                }
+
+                if (this.props.highQualityPen) {
+                    searchParams.set('hqpen', '');
+                } else {
+                    searchParams.delete('hqpen');
                 }
 
                 if (compilerOptions.enabled) {
@@ -634,7 +575,7 @@ const TWStateManager = function (WrappedComponent) {
         vm: PropTypes.instanceOf(VM)
     };
     StateManagerComponent.defaultProps = {
-        routingStyle: 'team'
+        routingStyle: process.env.ROUTING_STYLE
     };
     const mapStateToProps = state => ({
         customStageSize: state.scratchGui.customStageSize,

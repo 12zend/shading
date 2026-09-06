@@ -25,8 +25,6 @@ import {
     closeFileMenu
 } from '../reducers/menus';
 
-const PROJECT_FILE_EXTENSIONS = ['.shade', '.mb3', '.sb3', '.sb2', '.sb'];
-
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
  * @param {React.Component} WrappedComponent the component to add project file loading functionality to
@@ -43,7 +41,6 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             bindAll(this, [
                 'createFileObjects',
                 'getProjectTitleFromFilename',
-                'handleDesktopFileOpen',
                 'handleFinishedLoadingUpload',
                 'handleStartSelectingFileUpload',
                 'handleChange',
@@ -53,33 +50,13 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             // tw: We have multiple instances of this HOC alive at a time. This flag fixes issues that arise from that.
             this.expectingFileUploadFinish = false;
         }
-        componentDidMount () {
-            if (typeof window !== 'undefined' && window.shadingDesktop &&
-                typeof window.shadingDesktop.onOpenFile === 'function') {
-                this.removeDesktopOpenListener = window.shadingDesktop.onOpenFile(this.handleDesktopFileOpen);
-            }
-        }
         componentDidUpdate (prevProps) {
             if (this.props.isLoadingUpload && !prevProps.isLoadingUpload && this.expectingFileUploadFinish) {
                 this.handleFinishedLoadingUpload(); // cue step 5 below
             }
         }
         componentWillUnmount () {
-            if (this.removeDesktopOpenListener) this.removeDesktopOpenListener();
             this.removeFileObjects();
-        }
-        handleDesktopFileOpen (record) {
-            if (!record || !record.file) return;
-            this.removeFileObjects();
-            this.expectingFileUploadFinish = true;
-            this.fileReader = new FileReader();
-            this.fileReader.onload = this.onload;
-            this.handleChange({
-                target: {
-                    files: [record.file],
-                    handle: record.handle
-                }
-            });
         }
         // step 1: this is where the upload process begins
         handleStartSelectingFileUpload () {
@@ -99,10 +76,24 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             if (this.props.showOpenFilePicker) {
                 (async () => {
                     try {
-                        // Do not pass a type filter here. Chromium on macOS can grey out an unregistered custom
-                        // extension such as .shade even when it is included in the accepted extension list.
-                        // The fallback <input> below can still use an extension filter safely.
-                        const [handle] = await this.props.showOpenFilePicker({multiple: false});
+                        const [handle] = await this.props.showOpenFilePicker({
+                            multiple: false,
+                            types: [
+                                {
+                                    description: 'Scratch Project',
+                                    accept: {
+                                        // Chrome on Android tracks the MIME type of files that get downloaded and
+                                        // then actually enforces that the type must match in showOpenFilePicker()
+                                        // and does not allow the user to override the filter. As Scratch projects have
+                                        // no well-defined and well-adopted MIME types, we can't assume anything about
+                                        // what MIME type they are saved with, so we have to use the most broad MIME
+                                        // type here. Otherwise some users just won't be able to load files for no
+                                        // fault of their own.
+                                        '*/*': ['.sb', '.sb2', '.sb3']
+                                    }
+                                }
+                            ]
+                        });
                         const file = await handle.getFile();
                         this.handleChange({
                             target: {
@@ -121,7 +112,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             } else {
                 // create <input> element and add it to DOM
                 this.inputElement = document.createElement('input');
-                this.inputElement.accept = PROJECT_FILE_EXTENSIONS.join(',');
+                this.inputElement.accept = '.sb,.sb2,.sb3';
                 this.inputElement.style = 'display: none;';
                 this.inputElement.type = 'file';
                 this.inputElement.onchange = this.handleChange; // connects to step 3
@@ -158,7 +149,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
                     if (handle) {
-                        if (/\.(?:sb3|shade|mb3)$/i.test(this.fileToUpload.name)) {
+                        if (this.fileToUpload.name.endsWith('.sb3')) {
                             this.props.onSetFileHandle(handle);
                         } else {
                             this.props.onSetFileHandle(null);
@@ -194,8 +185,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         getProjectTitleFromFilename (fileInputFilename) {
             if (!fileInputFilename) return '';
             // only parse title with valid scratch project extensions
-            // (.sb, .sb2, .sb3, Movie's .shade, and legacy .mb3)
-            const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade|mb3)$/i);
+            // (.sb, .sb2, and .sb3)
+            const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
             if (!matches) return '';
             return matches[1].substring(0, 100); // truncate project title to max 100 chars
         }

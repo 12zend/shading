@@ -3,9 +3,6 @@ export default {
     COSTUME: 'COSTUME',
     SPRITE: 'SPRITE',
     CODE: 'CODE',
-    VIDEO: 'VIDEO',
-    FONT: 'FONT',
-    MODEL: 'MODEL',
 
     BACKPACK_SOUND: 'BACKPACK_SOUND',
     BACKPACK_COSTUME: 'BACKPACK_COSTUME',

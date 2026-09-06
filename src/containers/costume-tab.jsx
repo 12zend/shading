@@ -8,7 +8,6 @@ import AssetPanel from '../components/asset-panel/asset-panel.jsx';
 import PaintEditorWrapper from './paint-editor-wrapper.jsx';
 import {connect} from 'react-redux';
 import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
-import {COSTUME_FILE_ACCEPT} from '../lib/costume-upload-formats';
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
 import {emptyCostume} from '../lib/empty-assets';
@@ -114,9 +113,8 @@ class CostumeTab extends React.Component {
         }
 
         if (this.props.editingTarget === editingTarget) {
-            // Follow the editing target when its costumes change. Movie timeline object layers
-            // temporarily change currentCostume while rendering, so following it would move the
-            // costume editor away from the costume being edited.
+            // If costumes have been added or removed, change costumes to the editing target's
+            // current costume.
             const oldTarget = this.props.sprites[editingTarget] ?
                 this.props.sprites[editingTarget] : this.props.stage;
             // @todo: Find and switch to the index of the costume that is new. This is blocked by
@@ -287,7 +285,7 @@ class CostumeTab extends React.Component {
                         title: intl.formatMessage(addFileMessage),
                         img: fileUploadIcon,
                         onClick: this.handleFileUploadClick,
-                        fileAccept: COSTUME_FILE_ACCEPT,
+                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .gif',
                         fileChange: this.handleCostumeUpload,
                         fileInput: this.setFileInput,
                         fileMultiple: true
@@ -388,5 +386,3 @@ export default errorBoundaryHOC('Costume Tab')(
         mapDispatchToProps
     )(CostumeTab))
 );
-
-export {CostumeTab};

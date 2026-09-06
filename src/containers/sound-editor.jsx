@@ -1,6 +1,7 @@
 import bindAll from 'lodash.bindall';
 import PropTypes from 'prop-types';
 import React from 'react';
+import WavEncoder from 'wav-encoder';
 import VM from 'scratch-vm';
 
 import {connect} from 'react-redux';
@@ -9,10 +10,8 @@ import {
     computeChunkedRMS,
     encodeAndAddSoundToVM,
     downsampleIfNeeded,
-    dropEveryOtherSample,
-    updateSoundBuffer
+    dropEveryOtherSample
 } from '../lib/audio/audio-util.js';
-import {encodeAudio} from '../lib/audio/audio-encoder.js';
 import AudioEffects from '../lib/audio/audio-effects.js';
 import SoundEditorComponent from '../components/sound-editor/sound-editor.jsx';
 import AudioBufferPlayer from '../lib/audio/audio-buffer-player.js';
@@ -21,16 +20,6 @@ import log from '../lib/log.js';
 const UNDO_STACK_SIZE = 99;
 
 const MAX_RMS = 1.2;
-
-const getChannelData = audioBuffer => {
-    const channelData = [];
-    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-        channelData.push(audioBuffer.getChannelData(channel));
-    }
-    return channelData;
-};
-
-const getChannel = (channelData, channel) => channelData[channel] || channelData[0];
 
 class SoundEditor extends React.Component {
     constructor (props) {
@@ -60,7 +49,7 @@ class SoundEditor extends React.Component {
         ]);
         this.state = {
             copyBuffer: null,
-            chunkLevels: computeChunkedRMS(this.props.channelData[0]),
+            chunkLevels: computeChunkedRMS(this.props.samples),
             playhead: null, // null is not playing, [0 -> 1] is playing percent
             trimStart: null,
             trimEnd: null
@@ -72,7 +61,7 @@ class SoundEditor extends React.Component {
         this.ref = null;
     }
     componentDidMount () {
-        this.audioBufferPlayer = new AudioBufferPlayer(this.props.channelData, this.props.sampleRate);
+        this.audioBufferPlayer = new AudioBufferPlayer(this.props.samples, this.props.sampleRate);
 
         document.addEventListener('keydown', this.handleKeyPress);
     }
@@ -80,7 +69,7 @@ class SoundEditor extends React.Component {
         if (newProps.soundId !== this.props.soundId) { // A different sound has been selected
             this.redoStack = [];
             this.undoStack = [];
-            this.resetState(newProps.channelData, newProps.sampleRate);
+            this.resetState(newProps.samples, newProps.sampleRate);
             this.setState({
                 trimStart: null,
                 trimEnd: null
@@ -144,18 +133,21 @@ class SoundEditor extends React.Component {
             }
         }
     }
-    resetState (channelData, sampleRate) {
+    resetState (samples, sampleRate) {
         this.audioBufferPlayer.stop();
-        this.audioBufferPlayer = new AudioBufferPlayer(channelData, sampleRate);
+        this.audioBufferPlayer = new AudioBufferPlayer(samples, sampleRate);
         this.setState({
-            chunkLevels: computeChunkedRMS(channelData[0]),
+            chunkLevels: computeChunkedRMS(samples),
             playhead: null
         });
     }
-    submitNewSamples (channelData, sampleRate, skipUndo) {
-        return downsampleIfNeeded({channelData, sampleRate}, this.resampleBufferToRate)
-            .then(({channelData: newChannelData, sampleRate: newSampleRate}) =>
-                encodeAudio(newChannelData, newSampleRate, this.props.dataFormat).then(encodedData => {
+    submitNewSamples (samples, sampleRate, skipUndo) {
+        return downsampleIfNeeded({samples, sampleRate}, this.resampleBufferToRate)
+            .then(({samples: newSamples, sampleRate: newSampleRate}) =>
+                WavEncoder.encode({
+                    sampleRate: newSampleRate,
+                    channelData: [newSamples]
+                }).then(wavBuffer => {
                     if (!skipUndo) {
                         this.redoStack = [];
                         if (this.undoStack.length >= UNDO_STACK_SIZE) {
@@ -163,13 +155,11 @@ class SoundEditor extends React.Component {
                         }
                         this.undoStack.push(this.getUndoItem());
                     }
-                    this.resetState(newChannelData, newSampleRate);
-                    updateSoundBuffer(
-                        this.props.vm,
+                    this.resetState(newSamples, newSampleRate);
+                    this.props.vm.updateSoundBuffer(
                         this.props.soundIndex,
                         this.audioBufferPlayer.buffer,
-                        encodedData,
-                        this.props.dataFormat);
+                        new Uint8Array(wavBuffer));
                     return true; // Edit was successful
                 })
             )
@@ -201,21 +191,22 @@ class SoundEditor extends React.Component {
         this.props.vm.renameSound(this.props.soundIndex, name);
     }
     handleDelete () {
-        const {channelData, sampleRate} = this.copyCurrentBuffer();
-        const sampleCount = channelData[0].length;
+        const {samples, sampleRate} = this.copyCurrentBuffer();
+        const sampleCount = samples.length;
         const startIndex = Math.floor(this.state.trimStart * sampleCount);
         const endIndex = Math.floor(this.state.trimEnd * sampleCount);
-        const newChannelData = channelData.map(samples => {
-            const firstPart = samples.slice(0, startIndex);
-            const secondPart = samples.slice(endIndex, sampleCount);
-            const newLength = firstPart.length + secondPart.length;
-            if (newLength === 0) return new Float32Array(1);
-            const newSamples = new Float32Array(newLength);
+        const firstPart = samples.slice(0, startIndex);
+        const secondPart = samples.slice(endIndex, sampleCount);
+        const newLength = firstPart.length + secondPart.length;
+        let newSamples;
+        if (newLength === 0) {
+            newSamples = new Float32Array(1);
+        } else {
+            newSamples = new Float32Array(newLength);
             newSamples.set(firstPart, 0);
             newSamples.set(secondPart, firstPart.length);
-            return newSamples;
-        });
-        this.submitNewSamples(newChannelData, sampleRate).then(() => {
+        }
+        this.submitNewSamples(newSamples, sampleRate).then(() => {
             this.setState({
                 trimStart: null,
                 trimEnd: null
@@ -224,15 +215,15 @@ class SoundEditor extends React.Component {
     }
     handleDeleteInverse () {
         // Delete everything outside of the trimmers
-        const {channelData, sampleRate} = this.copyCurrentBuffer();
-        const sampleCount = channelData[0].length;
+        const {samples, sampleRate} = this.copyCurrentBuffer();
+        const sampleCount = samples.length;
         const startIndex = Math.floor(this.state.trimStart * sampleCount);
         const endIndex = Math.floor(this.state.trimEnd * sampleCount);
-        const clippedChannelData = channelData.map(samples => {
-            const clippedSamples = samples.slice(startIndex, endIndex);
-            return clippedSamples.length === 0 ? new Float32Array(1) : clippedSamples;
-        });
-        this.submitNewSamples(clippedChannelData, sampleRate).then(success => {
+        let clippedSamples = samples.slice(startIndex, endIndex);
+        if (clippedSamples.length === 0) {
+            clippedSamples = new Float32Array(1);
+        }
+        this.submitNewSamples(clippedSamples, sampleRate).then(success => {
             if (success) {
                 this.setState({
                     trimStart: null,
@@ -251,7 +242,7 @@ class SoundEditor extends React.Component {
     copyCurrentBuffer () {
         // Cannot reliably use props.samples because it gets detached by Firefox
         return {
-            channelData: getChannelData(this.audioBufferPlayer.buffer),
+            samples: this.audioBufferPlayer.buffer.getChannelData(0),
             sampleRate: this.audioBufferPlayer.buffer.sampleRate
         };
     }
@@ -266,9 +257,9 @@ class SoundEditor extends React.Component {
 
         const effects = new AudioEffects(this.audioBufferPlayer.buffer, name, trimStart, trimEnd);
         effects.process((renderedBuffer, adjustedTrimStart, adjustedTrimEnd) => {
-            const channelData = getChannelData(renderedBuffer);
+            const samples = renderedBuffer.getChannelData(0);
             const sampleRate = renderedBuffer.sampleRate;
-            this.submitNewSamples(channelData, sampleRate).then(success => {
+            this.submitNewSamples(samples, sampleRate).then(success => {
                 if (success) {
                     if (this.state.trimStart === null) {
                         this.handlePlay();
@@ -303,9 +294,9 @@ class SoundEditor extends React.Component {
     }
     handleUndo () {
         this.redoStack.push(this.getUndoItem());
-        const {channelData, sampleRate, trimStart, trimEnd} = this.undoStack.pop();
-        if (channelData) {
-            return this.submitNewSamples(channelData, sampleRate, true).then(success => {
+        const {samples, sampleRate, trimStart, trimEnd} = this.undoStack.pop();
+        if (samples) {
+            return this.submitNewSamples(samples, sampleRate, true).then(success => {
                 if (success) {
                     this.setState({trimStart: trimStart, trimEnd: trimEnd}, this.handlePlay);
                 }
@@ -313,10 +304,10 @@ class SoundEditor extends React.Component {
         }
     }
     handleRedo () {
-        const {channelData, sampleRate, trimStart, trimEnd} = this.redoStack.pop();
-        if (channelData) {
+        const {samples, sampleRate, trimStart, trimEnd} = this.redoStack.pop();
+        if (samples) {
             this.undoStack.push(this.getUndoItem());
-            return this.submitNewSamples(channelData, sampleRate, true).then(success => {
+            return this.submitNewSamples(samples, sampleRate, true).then(success => {
                 if (success) {
                     this.setState({trimStart: trimStart, trimEnd: trimEnd}, this.handlePlay);
                 }
@@ -331,10 +322,9 @@ class SoundEditor extends React.Component {
         const trimEnd = this.state.trimEnd === null ? 1.0 : this.state.trimEnd;
 
         const newCopyBuffer = this.copyCurrentBuffer();
-        const trimStartSamples = trimStart * newCopyBuffer.channelData[0].length;
-        const trimEndSamples = trimEnd * newCopyBuffer.channelData[0].length;
-        newCopyBuffer.channelData = newCopyBuffer.channelData.map(samples =>
-            samples.slice(trimStartSamples, trimEndSamples));
+        const trimStartSamples = trimStart * newCopyBuffer.samples.length;
+        const trimEndSamples = trimEnd * newCopyBuffer.samples.length;
+        newCopyBuffer.samples = newCopyBuffer.samples.slice(trimStartSamples, trimEndSamples);
 
         this.setState({
             copyBuffer: newCopyBuffer
@@ -342,24 +332,23 @@ class SoundEditor extends React.Component {
     }
     handleCopyToNew () {
         this.copy(() => {
-            encodeAndAddSoundToVM(this.props.vm, this.state.copyBuffer.channelData,
-                this.state.copyBuffer.sampleRate, this.props.name, null, this.props.dataFormat);
+            encodeAndAddSoundToVM(this.props.vm, this.state.copyBuffer.samples,
+                this.state.copyBuffer.sampleRate, this.props.name);
         });
     }
     resampleBufferToRate (buffer, newRate) {
         return new Promise((resolve, reject) => {
             const sampleRateRatio = newRate / buffer.sampleRate;
-            const newLength = sampleRateRatio * buffer.channelData[0].length;
-            const numberOfChannels = buffer.channelData.length;
+            const newLength = sampleRateRatio * buffer.samples.length;
             let offlineContext;
             // Try to use either OfflineAudioContext or webkitOfflineAudioContext to resample
             // The constructors will throw if trying to resample at an unsupported rate
             // (e.g. Safari/webkitOAC does not support lower than 44khz).
             try {
                 if (window.OfflineAudioContext) {
-                    offlineContext = new window.OfflineAudioContext(numberOfChannels, newLength, newRate);
+                    offlineContext = new window.OfflineAudioContext(1, newLength, newRate);
                 } else if (window.webkitOfflineAudioContext) {
-                    offlineContext = new window.webkitOfflineAudioContext(numberOfChannels, newLength, newRate);
+                    offlineContext = new window.webkitOfflineAudioContext(1, newLength, newRate);
                 }
             } catch {
                 // If no OAC available and downsampling by 2, downsample by dropping every other sample.
@@ -369,18 +358,15 @@ class SoundEditor extends React.Component {
                 return reject(new Error('Could not resample'));
             }
             const source = offlineContext.createBufferSource();
-            const audioBuffer = offlineContext.createBuffer(
-                numberOfChannels, buffer.channelData[0].length, buffer.sampleRate);
-            buffer.channelData.forEach((samples, channel) => {
-                audioBuffer.getChannelData(channel).set(samples);
-            });
+            const audioBuffer = offlineContext.createBuffer(1, buffer.samples.length, buffer.sampleRate);
+            audioBuffer.getChannelData(0).set(buffer.samples);
             source.buffer = audioBuffer;
             source.connect(offlineContext.destination);
             source.start();
             offlineContext.startRendering();
             offlineContext.oncomplete = ({renderedBuffer}) => {
                 resolve({
-                    channelData: getChannelData(renderedBuffer),
+                    samples: renderedBuffer.getChannelData(0),
                     sampleRate: newRate
                 });
             };
@@ -388,49 +374,36 @@ class SoundEditor extends React.Component {
     }
     paste () {
         // If there's no selection, paste at the end of the sound
-        const {channelData, sampleRate} = this.copyCurrentBuffer();
-        const currentLength = channelData[0].length;
-        const copiedLength = this.state.copyBuffer.channelData[0].length;
-        const numberOfChannels = Math.max(channelData.length, this.state.copyBuffer.channelData.length);
+        const {samples} = this.copyCurrentBuffer();
         if (this.state.trimStart === null) {
-            const newChannelData = [];
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                const newSamples = new Float32Array(currentLength + copiedLength);
-                newSamples.set(getChannel(channelData, channel), 0);
-                newSamples.set(getChannel(this.state.copyBuffer.channelData, channel), currentLength);
-                newChannelData.push(newSamples);
-            }
-            this.submitNewSamples(newChannelData, sampleRate, false).then(success => {
+            const newLength = samples.length + this.state.copyBuffer.samples.length;
+            const newSamples = new Float32Array(newLength);
+            newSamples.set(samples, 0);
+            newSamples.set(this.state.copyBuffer.samples, samples.length);
+            this.submitNewSamples(newSamples, this.props.sampleRate, false).then(success => {
                 if (success) {
                     this.handlePlay();
                 }
             });
         } else {
             // else replace the selection with the pasted sound
-            const trimStartSamples = this.state.trimStart * currentLength;
-            const trimEndSamples = this.state.trimEnd * currentLength;
-            const firstPartLength = Math.floor(trimStartSamples);
-            const lastPartLength = currentLength - Math.floor(trimEndSamples);
-            const newLength = firstPartLength + copiedLength + lastPartLength;
-            const newChannelData = [];
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                const currentSamples = getChannel(channelData, channel);
-                const firstPart = currentSamples.slice(0, trimStartSamples);
-                const lastPart = currentSamples.slice(trimEndSamples);
-                const newSamples = new Float32Array(newLength);
-                newSamples.set(firstPart, 0);
-                newSamples.set(getChannel(this.state.copyBuffer.channelData, channel), firstPart.length);
-                newSamples.set(lastPart, firstPart.length + copiedLength);
-                newChannelData.push(newSamples);
-            }
+            const trimStartSamples = this.state.trimStart * samples.length;
+            const trimEndSamples = this.state.trimEnd * samples.length;
+            const firstPart = samples.slice(0, trimStartSamples);
+            const lastPart = samples.slice(trimEndSamples);
+            const newLength = firstPart.length + this.state.copyBuffer.samples.length + lastPart.length;
+            const newSamples = new Float32Array(newLength);
+            newSamples.set(firstPart, 0);
+            newSamples.set(this.state.copyBuffer.samples, firstPart.length);
+            newSamples.set(lastPart, firstPart.length + this.state.copyBuffer.samples.length);
 
-            const trimStartSeconds = trimStartSamples / sampleRate;
+            const trimStartSeconds = trimStartSamples / this.props.sampleRate;
             const trimEndSeconds = trimStartSeconds +
-                (copiedLength / this.state.copyBuffer.sampleRate);
-            const newDurationSeconds = newChannelData[0].length / sampleRate;
+                (this.state.copyBuffer.samples.length / this.state.copyBuffer.sampleRate);
+            const newDurationSeconds = newSamples.length / this.state.copyBuffer.sampleRate;
             const adjustedTrimStart = trimStartSeconds / newDurationSeconds;
             const adjustedTrimEnd = trimEndSeconds / newDurationSeconds;
-            this.submitNewSamples(newChannelData, sampleRate, false).then(success => {
+            this.submitNewSamples(newSamples, this.props.sampleRate, false).then(success => {
                 if (success) {
                     this.setState({
                         trimStart: adjustedTrimStart,
@@ -505,14 +478,13 @@ class SoundEditor extends React.Component {
 }
 
 SoundEditor.propTypes = {
-    dataFormat: PropTypes.string,
     isStereo: PropTypes.bool,
     duration: PropTypes.number,
     size: PropTypes.number,
     isFullScreen: PropTypes.bool,
     name: PropTypes.string.isRequired,
     sampleRate: PropTypes.number,
-    channelData: PropTypes.arrayOf(PropTypes.instanceOf(Float32Array)),
+    samples: PropTypes.instanceOf(Float32Array),
     soundId: PropTypes.string,
     soundIndex: PropTypes.number,
     vm: PropTypes.instanceOf(VM).isRequired
@@ -526,12 +498,11 @@ const mapStateToProps = (state, {soundIndex}) => {
     const audioBuffer = state.scratchGui.vm.getSoundBuffer(index);
     return {
         isStereo: audioBuffer.numberOfChannels !== 1,
-        dataFormat: sound.dataFormat || 'wav',
         duration: sound.sampleCount / sound.rate,
         size: sound.asset ? sound.asset.data.byteLength : 0,
         soundId: sound.soundId,
         sampleRate: audioBuffer.sampleRate,
-        channelData: getChannelData(audioBuffer),
+        samples: audioBuffer.getChannelData(0),
         isFullScreen: state.scratchGui.mode.isFullScreen,
         name: sound.name,
         vm: state.scratchGui.vm

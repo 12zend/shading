@@ -19,16 +19,15 @@ import {BLOCKS_DEFAULT_SCALE, STAGE_DISPLAY_SIZES} from '../lib/layout-constants
 import DropAreaHOC from '../lib/drop-area-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
 import defineDynamicBlock from '../lib/define-dynamic-block';
-import replaceToolbox from '../lib/replace-toolbox';
 import {Theme} from '../lib/themes';
 import {injectExtensionBlockTheme, injectExtensionCategoryTheme} from '../lib/themes/blockHelpers';
 
 import {connect} from 'react-redux';
 import {updateToolbox} from '../reducers/toolbox';
 import {activateColorPicker} from '../reducers/color-picker';
-import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
 import {
     closeExtensionLibrary,
+    openSoundRecorder,
     openConnectionModal,
     openCustomExtensionModal
 } from '../reducers/modals';
@@ -37,30 +36,14 @@ import {setConnectionModalExtensionId} from '../reducers/connection-modal';
 import {updateMetrics} from '../reducers/workspace-metrics';
 import {isTimeTravel2020} from '../reducers/time-travel';
 
+import {
+    activateTab,
+    SOUNDS_TAB_INDEX
+} from '../reducers/editor-tab';
 import AddonHooks from '../addons/hooks.js';
 import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
 import {findTopBlock} from '../lib/backpack/code-payload.js';
-import {handleFileUpload, soundUpload} from '../lib/file-uploader.js';
 import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
-import {SOUND_FILE_ACCEPT} from '../lib/sound-upload-formats.js';
-import {
-    installMyBlocksShaderBlocks,
-    recolorMyBlocksShaderDefinitions,
-    registerMyBlocksShaderCategory,
-    stripShaderCoordinates,
-    syncShaderCalls
-} from '../lib/my-blocks-shader-blocks';
-import {
-    installMyBlocksSceneBlocks,
-    registerMyBlocksSceneCategory,
-    stripSceneCoordinates,
-    syncSceneCalls
-} from '../lib/my-blocks-scene-blocks';
-import installObjectBlockDefinitions from '../lib/object-blocks-ui';
-import installPenFXBlockDefinitions from '../lib/pen-fx-ui';
-import {SHADER_MARKER} from '../lib/my-blocks-shader';
-import {SCENE_MARKER} from '../lib/my-blocks-scene';
-import installMovieAssetManager from '../lib/movie-asset-manager';
 
 // TW: Strings we add to scratch-blocks are localized here
 const messages = defineMessages({
@@ -121,13 +104,11 @@ class Blocks extends React.Component {
             'handleConnectionModalStart',
             'handleDrop',
             'handleStatusButtonUpdate',
-            'handleImportSound',
-            'handleImportSoundUpload',
+            'handleOpenSoundRecorder',
             'handlePromptStart',
             'handlePromptCallback',
             'handlePromptClose',
             'handleCustomProceduresClose',
-            'handleActivateCustomProcedures',
             'onScriptGlowOn',
             'onScriptGlowOff',
             'onBlockGlowOn',
@@ -140,20 +121,16 @@ class Blocks extends React.Component {
             'onWorkspaceUpdate',
             'onWorkspaceMetricsChange',
             'setBlocks',
-            'setSoundFileInput',
             'setLocale',
-            'handleEnableProcedureReturns',
-            'handleMovieDiagnosticsChanged',
-            'handleMovieBlockFocus'
+            'handleEnableProcedureReturns'
         ]);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
-        this.ScratchBlocks.importSoundCallback = this.handleImportSound;
+        this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
 
         this.state = {
             prompt: null
         };
-        this.forceToolboxRebuild = false;
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
         this.toolboxUpdateQueue = [];
     }
@@ -161,13 +138,11 @@ class Blocks extends React.Component {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
-        this.ScratchBlocks.importSoundCallback = this.handleImportSound;
+        this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
 
         this.ScratchBlocks.FieldColourSlider.activateEyedropper_ = this.props.onActivateColorPicker;
-        this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.handleActivateCustomProcedures;
+        this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.props.onActivateCustomProcedures;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
-        installMyBlocksShaderBlocks(this.ScratchBlocks);
-        installMyBlocksSceneBlocks(this.ScratchBlocks);
 
         const Msg = this.ScratchBlocks.Msg;
         Msg.PROCEDURES_RETURN = this.props.intl.formatMessage(messages.PROCEDURES_RETURN, {
@@ -190,13 +165,7 @@ class Blocks extends React.Component {
             Blocks.defaultOptions
         );
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
-        registerMyBlocksShaderCategory(this.ScratchBlocks, this.workspace);
-        registerMyBlocksSceneCategory(this.ScratchBlocks, this.workspace);
         AddonHooks.blocklyWorkspace = this.workspace;
-        this.movieAssetManager = installMovieAssetManager(this.props.vm);
-        this.movieAssetManager.on('timelineDiagnosticsChanged', this.handleMovieDiagnosticsChanged);
-        this.movieAssetManager.on('focusMovieBlock', this.handleMovieBlockFocus);
-        this.handleMovieDiagnosticsChanged(this.movieAssetManager.getTimelineDiagnostics());
 
         // Register buttons under new callback keys for creating variables,
         // lists, and procedures from extensions.
@@ -318,10 +287,6 @@ class Blocks extends React.Component {
     componentWillUnmount () {
         this.detachVM();
         this.unmounted = true;
-        if (this.movieAssetManager) {
-            this.movieAssetManager.removeListener('timelineDiagnosticsChanged', this.handleMovieDiagnosticsChanged);
-            this.movieAssetManager.removeListener('focusMovieBlock', this.handleMovieBlockFocus);
-        }
         this.workspace.dispose();
         clearTimeout(this.toolboxUpdateTimeout);
 
@@ -355,8 +320,7 @@ class Blocks extends React.Component {
 
         const categoryId = this.workspace.toolbox_.getSelectedCategoryId();
         const offset = this.workspace.toolbox_.getCategoryScrollOffset();
-        replaceToolbox(this.workspace, this.props.toolboxXML, this.forceToolboxRebuild);
-        this.forceToolboxRebuild = false;
+        this.workspace.updateToolbox(this.props.toolboxXML);
         this._renderedToolboxXML = this.props.toolboxXML;
 
         // In order to catch any changes that mutate the toolbox during "normal runtime"
@@ -472,42 +436,6 @@ class Blocks extends React.Component {
     onVisualReport (data) {
         this.workspace.reportValue(data.id, data.value);
     }
-    handleMovieDiagnosticsChanged (diagnostics) {
-        if (!this.workspace) return;
-        const warningId = 'movie-determinism';
-        for (const blockId of this.movieWarningBlockIds || []) {
-            const block = this.workspace.getBlockById(blockId);
-            if (block && typeof block.setWarningText === 'function') block.setWarningText(null, warningId);
-        }
-        this.movieWarningBlockIds = new Set();
-        const target = this.props.vm.editingTarget;
-        if (!target) return;
-        const messagesByBlock = new Map();
-        for (const warning of (diagnostics && diagnostics.warnings) || []) {
-            if (warning.targetId !== target.id) continue;
-            const warningMessages = messagesByBlock.get(warning.blockId) || [];
-            warningMessages.push(warning.message);
-            messagesByBlock.set(warning.blockId, warningMessages);
-        }
-        for (const [blockId, warningMessages] of messagesByBlock) {
-            const block = this.workspace.getBlockById(blockId);
-            if (!block || typeof block.setWarningText !== 'function') continue;
-            block.setWarningText(warningMessages.join('\n\n'), warningId);
-            this.movieWarningBlockIds.add(blockId);
-        }
-    }
-    handleMovieBlockFocus (range) {
-        if (!range || !range.blockId) return;
-        if (this.props.vm.editingTarget && range.targetId && this.props.vm.editingTarget.id !== range.targetId) {
-            this.pendingMovieBlockFocus = range;
-            this.props.vm.setEditingTarget(range.targetId);
-            return;
-        }
-        const block = this.workspace && this.workspace.getBlockById(range.blockId);
-        if (!block) return;
-        if (typeof this.workspace.centerOnBlock === 'function') this.workspace.centerOnBlock(range.blockId);
-        if (typeof block.select === 'function') block.select();
-    }
     getToolboxXML () {
         // Use try/catch because this requires digging pretty deep into the VM
         // Code inside intentionally ignores several error situations (no stage, etc.)
@@ -566,7 +494,6 @@ class Blocks extends React.Component {
             log.error(error);
         }
         this.workspace.addChangeListener(this.props.vm.blockListener);
-        recolorMyBlocksShaderDefinitions(this.workspace);
 
         if (this.props.vm.editingTarget && this.props.workspaceMetrics.targets[this.props.vm.editingTarget.id]) {
             const {scrollX, scrollY, scale} = this.props.workspaceMetrics.targets[this.props.vm.editingTarget.id];
@@ -580,14 +507,6 @@ class Blocks extends React.Component {
         // fresh workspace and we don't want any changes made to another sprites
         // workspace to be 'undone' here.
         this.workspace.clearUndo();
-        this.handleMovieDiagnosticsChanged(
-            this.movieAssetManager ? this.movieAssetManager.getTimelineDiagnostics(true) : null
-        );
-        if (this.pendingMovieBlockFocus) {
-            const pendingFocus = this.pendingMovieBlockFocus;
-            this.pendingMovieBlockFocus = null;
-            this.handleMovieBlockFocus(pendingFocus);
-        }
     }
     handleMonitorsUpdate (monitors) {
         // Update the checkboxes of the relevant monitors.
@@ -646,8 +565,6 @@ class Blocks extends React.Component {
                 .map(fieldTypeName => categoryInfo.customFieldTypes[fieldTypeName].scratchBlocksDefinition));
         defineBlocks(categoryInfo.menus);
         defineBlocks(categoryInfo.blocks);
-        if (categoryInfo.id === 'objects') installObjectBlockDefinitions(this.ScratchBlocks, this.props.vm);
-        if (categoryInfo.id === 'penfx') installPenFXBlockDefinitions(this.ScratchBlocks);
 
         // Update the toolbox with new blocks if possible
         const toolboxXML = this.getToolboxXML();
@@ -657,7 +574,6 @@ class Blocks extends React.Component {
     }
     handleBlocksInfoUpdate (categoryInfo) {
         // @todo Later we should replace this to avoid all the warnings from redefining blocks.
-        if (categoryInfo.id === 'penfx') this.forceToolboxRebuild = true;
         this.handleExtensionAdded(categoryInfo);
     }
     handleCategorySelected (categoryId) {
@@ -692,26 +608,8 @@ class Blocks extends React.Component {
     handleStatusButtonUpdate () {
         this.ScratchBlocks.refreshStatusButtons(this.workspace);
     }
-    handleImportSound () {
-        this.soundFileInput.click();
-    }
-    handleImportSoundUpload (e) {
-        const target = this.props.vm.editingTarget;
-        if (!target) return;
-
-        const targetId = target.id;
-        this.props.onShowImporting();
-        handleFileUpload(e.target, (buffer, fileType, fileName) => {
-            soundUpload(buffer, fileType, this.props.vm.runtime.storage, newSound => {
-                newSound.name = fileName;
-                this.props.vm.addSound(newSound, targetId)
-                    .then(this.props.onCloseImporting)
-                    .catch(this.props.onCloseImporting);
-            }, this.props.onCloseImporting);
-        }, this.props.onCloseImporting);
-    }
-    setSoundFileInput (input) {
-        this.soundFileInput = input;
+    handleOpenSoundRecorder () {
+        this.props.onOpenSoundRecorder();
     }
 
     /*
@@ -733,28 +631,7 @@ class Blocks extends React.Component {
         this.props.onRequestCloseCustomProcedures(data);
         const ws = this.workspace;
         ws.refreshToolboxSelection_();
-        const categoryId = this.props.customProceduresScene ? 'myBlocksScene' :
-            (this.props.customProceduresShader ? 'myBlocksShader' : 'myBlocks');
-        ws.toolbox_.scrollToCategoryById(categoryId);
-    }
-    handleActivateCustomProcedures (data, callback) {
-        if (!data) {
-            this.props.onActivateCustomProcedures(data, callback, false);
-            return;
-        }
-        const shader = data.getAttribute(SHADER_MARKER) === 'true';
-        const scene = data.getAttribute(SCENE_MARKER) === 'true';
-        if (!shader && !scene) {
-            this.props.onActivateCustomProcedures(data, callback, false, false);
-            return;
-        }
-        const editorMutation = shader ? stripShaderCoordinates(data) : stripSceneCoordinates(data);
-        this.props.onActivateCustomProcedures(editorMutation, mutation => {
-            callback(mutation);
-            if (!mutation) return;
-            if (shader) syncShaderCalls(this.ScratchBlocks, this.workspace, mutation);
-            if (scene) syncSceneCalls(this.ScratchBlocks, this.workspace, mutation);
-        }, shader, scene);
+        ws.toolbox_.scrollToCategoryById('myBlocks');
     }
     handleDrop (dragInfo) {
         fetch(dragInfo.payload.bodyUrl)
@@ -792,8 +669,6 @@ class Blocks extends React.Component {
             canUseCloud,
             customStageSize,
             customProceduresVisible,
-            customProceduresShader,
-            customProceduresScene,
             extensionLibraryVisible,
             options,
             stageSize,
@@ -802,6 +677,7 @@ class Blocks extends React.Component {
             isVisible,
             onActivateColorPicker,
             onOpenConnectionModal,
+            onOpenSoundRecorder,
             onOpenCustomExtensionModal,
             reduxOnOpenCustomExtensionModal,
             updateToolboxState,
@@ -821,13 +697,6 @@ class Blocks extends React.Component {
                     componentRef={this.setBlocks}
                     onDrop={this.handleDrop}
                     {...props}
-                />
-                <input
-                    accept={SOUND_FILE_ACCEPT}
-                    ref={this.setSoundFileInput}
-                    style={{display: 'none'}}
-                    type="file"
-                    onChange={this.handleImportSoundUpload}
                 />
                 {this.state.prompt ? (
                     <Prompt
@@ -874,8 +743,6 @@ Blocks.propTypes = {
         height: PropTypes.number
     }),
     customProceduresVisible: PropTypes.bool,
-    customProceduresShader: PropTypes.bool,
-    customProceduresScene: PropTypes.bool,
     extensionLibraryVisible: PropTypes.bool,
     isRtl: PropTypes.bool,
     isVisible: PropTypes.bool,
@@ -884,9 +751,8 @@ Blocks.propTypes = {
     onActivateColorPicker: PropTypes.func,
     onActivateCustomProcedures: PropTypes.func,
     onOpenConnectionModal: PropTypes.func,
+    onOpenSoundRecorder: PropTypes.func,
     onOpenCustomExtensionModal: PropTypes.func,
-    onCloseImporting: PropTypes.func,
-    onShowImporting: PropTypes.func,
     reduxOnOpenCustomExtensionModal: PropTypes.func,
     onRequestCloseCustomProcedures: PropTypes.func,
     onRequestCloseExtensionLibrary: PropTypes.func,
@@ -946,22 +812,21 @@ const mapStateToProps = state => ({
     messages: state.locales.messages,
     toolboxXML: state.scratchGui.toolbox.toolboxXML,
     customProceduresVisible: state.scratchGui.customProcedures.active,
-    customProceduresShader: state.scratchGui.customProcedures.shader,
-    customProceduresScene: state.scratchGui.customProcedures.scene,
     workspaceMetrics: state.scratchGui.workspaceMetrics,
     useCatBlocks: isTimeTravel2020(state)
 });
 
 const mapDispatchToProps = dispatch => ({
     onActivateColorPicker: callback => dispatch(activateColorPicker(callback)),
-    onActivateCustomProcedures: (data, callback, shader, scene) =>
-        dispatch(activateCustomProcedures(data, callback, shader, scene)),
+    onActivateCustomProcedures: (data, callback) => dispatch(activateCustomProcedures(data, callback)),
     onOpenConnectionModal: id => {
         dispatch(setConnectionModalExtensionId(id));
         dispatch(openConnectionModal());
     },
-    onCloseImporting: () => dispatch(closeAlertWithId('importingAsset')),
-    onShowImporting: () => dispatch(showStandardAlert('importingAsset')),
+    onOpenSoundRecorder: () => {
+        dispatch(activateTab(SOUNDS_TAB_INDEX));
+        dispatch(openSoundRecorder());
+    },
     reduxOnOpenCustomExtensionModal: () => dispatch(openCustomExtensionModal()),
     onRequestCloseExtensionLibrary: () => {
         dispatch(closeExtensionLibrary());

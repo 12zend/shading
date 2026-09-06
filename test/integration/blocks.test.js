@@ -175,26 +175,17 @@ describe('Working with the blocks', () => {
         await expect(logs).toEqual([]);
     });
 
-    test('Pen extension is available by default', async () => {
-        await loadUri(uri);
-        await clickBlocksCategory('Pen');
-        await findByText('stamp', scope.blocksTab);
-
-        const logs = await getLogs();
-        await expect(logs).toEqual([]);
-    });
-
-    test('Import option from sound block menu opens sound file picker', async () => {
+    test('Record option from sound block menu opens sound recorder', async () => {
         await loadUri(uri);
         await clickText('Code');
         await clickBlocksCategory('Sound');
         await clickText('Meow', scope.blocksTab); // Click "play sound <Meow> until done" block
-        await clickText('import'); // Click "import..." option in the block's sound menu
-        const input = await findByXpath('//input[@type="file"]' +
-            '[contains(@accept, ".wav")]');
-        await input.sendKeys(path.resolve(__dirname, '../fixtures/movie.wav'));
-        await clickText('Sounds');
-        await findByText('movie', scope.soundsTab);
+        await clickText('record'); // Click "record..." option in the block's sound menu
+        // Access has been force denied, so close the alert that comes up
+        await driver.sleep(1000); // getUserMedia requests are very slow to fail for some reason
+        await driver.switchTo().alert()
+            .accept();
+        await findByText('Record Sound'); // Sound recorder is open
         const logs = await getLogs();
         await expect(logs).toEqual([]);
     });
@@ -276,6 +267,21 @@ describe('Working with the blocks', () => {
         await clickText('A\u00A0Bass', scope.blocksTab); // Need &nbsp; for block text
     });
 
+    // Regression test for switching between editor/player causing toolbox to stop updating
+    test('"See inside" after being on project page re-initializing variables', async () => {
+        const playerUri = path.resolve(__dirname, '../../build/player.html');
+        await loadUri(playerUri);
+        await clickText('See inside');
+        await clickBlocksCategory('Variables');
+        await clickText('my\u00A0variable');
+
+        await clickText('See Project Page');
+        await clickText('See inside');
+
+        await clickBlocksCategory('Variables');
+        await clickText('my\u00A0variable');
+    });
+
     // Regression test for switching editor tabs causing toolbox to stop updating
     test('Creating variables after adding extensions updates the toolbox', async () => {
         await loadUri(uri);
@@ -308,10 +314,10 @@ describe('Working with the blocks', () => {
         // change language
         await clickXpath(SETTINGS_MENU_XPATH);
         await clickText('Language', scope.menuBar);
-        await clickText('日本語');
+        await clickText('Deutsch');
 
-        await clickText('スクリプト');
-        await clickBlocksCategory('変数');
+        await clickText('Skripte');
+        await clickBlocksCategory('Variablen');
 
         // make sure "my variable" is still 1
         await clickText(myVariable);
@@ -324,7 +330,7 @@ describe('Working with the blocks', () => {
             .perform();
 
         // change "my variable" by 10
-        await clickText('変える', changeVariableByScope);
+        await clickText('ändere', changeVariableByScope);
 
         // check it is turned up to 11
         await clickText(myVariable);

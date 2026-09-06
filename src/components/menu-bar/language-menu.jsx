@@ -11,7 +11,6 @@ import {MenuItem, Submenu} from '../menu/menu.jsx';
 import languageIcon from '../language-selector/language-icon.svg';
 import {languageMenuOpen, openLanguageMenu} from '../../reducers/menus.js';
 import {selectLocale} from '../../reducers/locales.js';
-import {supportedLocales} from '../../lib/locale-utils.js';
 
 import styles from './settings-menu.css';
 
@@ -92,24 +91,25 @@ class LanguageMenu extends React.PureComponent {
                     place={this.props.isRtl ? 'left' : 'right'}
                 >
                     {
-                        supportedLocales.map(locale => (
-                            <MenuItem
-                                key={locale}
-                                className={styles.languageMenuItem}
-                                // eslint-disable-next-line react/jsx-no-bind
-                                onClick={() => this.props.onChangeLanguage(locale)}
-                            >
-                                <img
-                                    className={classNames(styles.check, {
-                                        [styles.selected]: this.props.currentLocale === locale
-                                    })}
-                                    src={check}
-                                    draggable={false}
-                                    {...(this.props.currentLocale === locale && {ref: this.setRef})}
-                                />
-                                {locales[locale].name}
-                            </MenuItem>
-                        ))
+                        Object.keys(locales)
+                            .map(locale => (
+                                <MenuItem
+                                    key={locale}
+                                    className={styles.languageMenuItem}
+                                    // eslint-disable-next-line react/jsx-no-bind
+                                    onClick={() => this.props.onChangeLanguage(locale)}
+                                >
+                                    <img
+                                        className={classNames(styles.check, {
+                                            [styles.selected]: this.props.currentLocale === locale
+                                        })}
+                                        src={check}
+                                        draggable={false}
+                                        {...(this.props.currentLocale === locale && {ref: this.setRef})}
+                                    />
+                                    {locales[locale].name}
+                                </MenuItem>
+                            ))
                     }
                 </Submenu>
             </MenuItem>

@@ -1,6 +1,9 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 
+import VM from 'scratch-vm';
+
+import SpriteLibrary from '../../containers/sprite-library.jsx';
 import SpriteSelectorComponent from '../sprite-selector/sprite-selector.jsx';
 import StageSelector from '../../containers/stage-selector.jsx';
 import {STAGE_DISPLAY_SIZES} from '../../lib/layout-constants';
@@ -17,6 +20,8 @@ const TargetPane = ({
     editingTarget,
     fileInputRef,
     hoveredTarget,
+    spriteLibraryVisible,
+    onActivateBlocksTab,
     onChangeSpriteDirection,
     onChangeSpriteName,
     onChangeSpriteRotationStyle,
@@ -29,13 +34,17 @@ const TargetPane = ({
     onDuplicateSprite,
     onExportSprite,
     onFileUploadClick,
+    onNewSpriteClick,
     onPaintSpriteClick,
+    onRequestCloseSpriteLibrary,
     onSelectSprite,
     onSpriteUpload,
+    onSurpriseSpriteClick,
     raiseSprites,
     stage,
     stageSize,
     sprites,
+    vm,
     ...componentProps
 }) => (
     <div
@@ -63,9 +72,11 @@ const TargetPane = ({
             onDuplicateSprite={onDuplicateSprite}
             onExportSprite={onExportSprite}
             onFileUploadClick={onFileUploadClick}
+            onNewSpriteClick={onNewSpriteClick}
             onPaintSpriteClick={onPaintSpriteClick}
             onSelectSprite={onSelectSprite}
             onSpriteUpload={onSpriteUpload}
+            onSurpriseSpriteClick={onSurpriseSpriteClick}
         />
         <div className={styles.stageSelectorWrapper}>
             {stage.id && <StageSelector
@@ -78,6 +89,15 @@ const TargetPane = ({
                 selected={stage.id === editingTarget}
                 onSelect={onSelectSprite}
             />}
+            <div>
+                {spriteLibraryVisible ? (
+                    <SpriteLibrary
+                        vm={vm}
+                        onActivateBlocksTab={onActivateBlocksTab}
+                        onRequestClose={onRequestCloseSpriteLibrary}
+                    />
+                ) : null}
+            </div>
         </div>
     </div>
 );
@@ -107,11 +127,13 @@ const spriteShape = PropTypes.shape({
 
 TargetPane.propTypes = {
     editingTarget: PropTypes.string,
+    extensionLibraryVisible: PropTypes.bool,
     fileInputRef: PropTypes.func,
     hoveredTarget: PropTypes.shape({
         hoveredSprite: PropTypes.string,
         receivedBlocks: PropTypes.bool
     }),
+    onActivateBlocksTab: PropTypes.func.isRequired,
     onChangeSpriteDirection: PropTypes.func,
     onChangeSpriteName: PropTypes.func,
     onChangeSpriteRotationStyle: PropTypes.func,
@@ -124,13 +146,19 @@ TargetPane.propTypes = {
     onDuplicateSprite: PropTypes.func,
     onExportSprite: PropTypes.func,
     onFileUploadClick: PropTypes.func,
+    onNewSpriteClick: PropTypes.func,
     onPaintSpriteClick: PropTypes.func,
+    onRequestCloseExtensionLibrary: PropTypes.func,
+    onRequestCloseSpriteLibrary: PropTypes.func,
     onSelectSprite: PropTypes.func,
     onSpriteUpload: PropTypes.func,
+    onSurpriseSpriteClick: PropTypes.func,
     raiseSprites: PropTypes.bool,
+    spriteLibraryVisible: PropTypes.bool,
     sprites: PropTypes.objectOf(spriteShape),
     stage: spriteShape,
-    stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired
+    stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
+    vm: PropTypes.instanceOf(VM)
 };
 
 export default TargetPane;

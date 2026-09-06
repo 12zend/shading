@@ -40,16 +40,16 @@ describe('Localization', () => {
 
         await clickXpath(SETTINGS_MENU_XPATH);
         await clickText('Language', scope.menuBar);
-        await clickText('日本語');
+        await clickText('Deutsch');
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks refresh
 
         // Make sure the blocks are translating
-        await clickText('調べる'); // Sensing category in Japanese
+        await clickText('Fühlen'); // Sensing category in German
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks to scroll
-        await clickText('答え'); // Find the "answer" block in Japanese
+        await clickText('Antwort'); // Find the "answer" block in German
 
         // Change to the costumes tab to confirm other parts of the GUI are translating
-        await clickText('コスチューム');
+        await clickText('Kostüme');
 
         // After switching languages, make sure Apple sprite still exists
         await rightClickText('Apple', scope.spriteTile); // Make sure it is there
@@ -63,10 +63,10 @@ describe('Localization', () => {
 
     // Regression test for #4476, blocks in wrong language when loaded with locale
     test('Loading with locale shows correct blocks', async () => {
-        await loadUri(`${uri}?locale=ja`);
-        await clickText('調べる'); // Sensing category in Japanese
+        await loadUri(`${uri}?locale=de`);
+        await clickText('Fühlen'); // Sensing category in German
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for blocks to scroll
-        await clickText('答え'); // Find the "answer" block in Japanese
+        await clickText('Antwort'); // Find the "answer" block in German
         const logs = await getLogs();
         await expect(logs).toEqual([]);
     });
@@ -87,7 +87,7 @@ describe('Localization', () => {
         await loadUri(uri);
         await clickXpath(FILE_MENU_XPATH);
         await clickText('Load from your computer');
-        const input = await findByXpath('//input[@accept=".shade,.mb3,.sb3,.sb2,.sb"]');
+        const input = await findByXpath('//input[@accept=".sb,.sb2,.sb3"]');
         await input.sendKeys(path.resolve(__dirname, '../fixtures/monitor-variable.sb3'));
 
         // Monitors are present

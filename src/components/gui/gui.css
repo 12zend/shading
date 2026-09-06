@@ -3,7 +3,6 @@
 @import "../../css/z-index.css";
 
 .page-wrapper {
-    position: relative;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -11,7 +10,6 @@
 
 .body-wrapper {
     flex-grow: 1;
-    min-height: 0;
     background-color: $ui-primary;
 }
 
@@ -52,8 +50,6 @@
     flex-basis: calc(1024px - 408px - (($space + $stage-standard-border-width) * 2));
     flex-grow: 1;
     flex-shrink: 0;
-    min-width: 0;
-    min-height: 0;
     position: relative;
 
     display: flex;
@@ -62,7 +58,7 @@
 
 .tab-list {
     height: $stage-menu-height;
-    width: 510px;
+    width: 250px; /* Match width of the toolbox */
     display: flex;
     align-items: flex-end;
     flex-shrink: 0;
@@ -86,7 +82,7 @@
     border-radius: 1rem 1rem 0 0;
     border: 1px solid $ui-black-transparent;
 
-    padding: 0.125rem 0.8rem 0;
+    padding: 0.125rem 1.25rem 0;
     font-size: 0.75rem;
 
     background-color: $ui-tertiary;
@@ -118,36 +114,24 @@
 
 /* Use z-indices to force left-on-top for tabs */
 .tab:nth-of-type(1) {
-    z-index: 7;
-}
-.tab:nth-of-type(2) {
-    z-index: 6;
-}
-.tab:nth-of-type(3) {
-    z-index: 5;
-}
-.tab:nth-of-type(4) {
-    z-index: 4;
-}
-.tab:nth-of-type(5) {
     z-index: 3;
 }
-.tab:nth-of-type(6) {
+.tab:nth-of-type(2) {
     z-index: 2;
 }
-.tab:nth-of-type(7) {
+.tab:nth-of-type(3) {
     z-index: 1;
 }
 
 .tab:hover {
-    background-color: $ui-primary;
+  background-color: $ui-primary;
 }
 
 .tab.is-selected {
     height: 90%;
     color: $looks-secondary;
     background-color: $ui-white;
-    z-index: 8; /* Make sure selected is always above */
+    z-index: 4; /* Make sure selected is always above */
 }
 
 .tab img {
@@ -195,8 +179,6 @@
 .tabs {
     position: relative;
     flex-grow: 1;
-    min-width: 0;
-    min-height: 0;
     display: flex;
     flex-direction: column;
 }
@@ -204,8 +186,6 @@
 .tab-panel {
     position: relative;
     flex-grow: 1;
-    min-width: 0;
-    min-height: 0;
     display: none;
 }
 
@@ -237,18 +217,20 @@
     flex-basis: 0;
 }
 
-.timeline-wrapper {
+.target-wrapper {
     display: flex;
     flex-grow: 1;
     flex-basis: 0;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    contain: inline-size;
 
     padding-top: $space;
     min-height: 0; /* this makes it work in Firefox */
 
+    /*
+        For making the sprite-selector a scrollable pane
+        @todo: Not working in Safari
+    */
+    /* TODO this also breaks the thermometer menu */
+    /* overflow: hidden; */
 }
 
 .extension-button-container {

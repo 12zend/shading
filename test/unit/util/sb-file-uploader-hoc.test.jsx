@@ -23,7 +23,7 @@ describe('SBFileUploaderHOC', () => {
         shallowWithIntl(component, {context: {store}})
     );
 
-    const unwrappedInstance = (props = {}) => {
+    const unwrappedInstance = () => {
         const WrappedComponent = getContainer();
         // default starting state: looking at a project you created, not logged in
         const wrapper = shallowMountWithContext(
@@ -38,7 +38,6 @@ describe('SBFileUploaderHOC', () => {
                 onLoadingFinished={jest.fn()}
                 onLoadingStarted={jest.fn()}
                 onUpdateProjectTitle={jest.fn()}
-                {...props}
             />
         );
         return wrapper
@@ -48,7 +47,6 @@ describe('SBFileUploaderHOC', () => {
     };
 
     beforeEach(() => {
-        global.FileReader = jest.fn(() => ({}));
         vm = new VM();
         store = mockStore({
             scratchGui: {
@@ -63,32 +61,9 @@ describe('SBFileUploaderHOC', () => {
         });
     });
 
-    afterEach(() => {
-        delete global.FileReader;
-    });
-
     test('correctly sets title with .sb3 filename', () => {
         const projectName = unwrappedInstance().getProjectTitleFromFilename('my project is great.sb3');
         expect(projectName).toBe('my project is great');
-    });
-
-    test('correctly sets title with .shade filename', () => {
-        const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.shade');
-        expect(projectName).toBe('my movie is great');
-    });
-
-    test('correctly sets title with legacy .mb3 filename', () => {
-        const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.mb3');
-        expect(projectName).toBe('my movie is great');
-    });
-
-    test('does not filter shade out of the native file picker', () => {
-        const showOpenFilePicker = jest.fn(() => new Promise(() => {}));
-        const instance = unwrappedInstance({showOpenFilePicker});
-
-        instance.createFileObjects();
-
-        expect(showOpenFilePicker).toHaveBeenCalledWith({multiple: false});
     });
 
     test('correctly sets title with .sb2 filename', () => {

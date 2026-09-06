@@ -2,7 +2,7 @@
 const manifest = {
   "noTranslations": true,
   "name": "Project volume slider",
-  "description": "Adds a project volume slider to the timeline.",
+  "description": "Adds a volume slider next to the green flag controls.",
   "credits": [
     {
       "name": "samq64",

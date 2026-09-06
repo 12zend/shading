@@ -128,6 +128,28 @@ BooleanSetting.propTypes = {
     label: PropTypes.node.isRequired
 };
 
+const HighQualityPen = props => (
+    <BooleanSetting
+        {...props}
+        label={
+            <FormattedMessage
+                defaultMessage="High Quality Pen"
+                description="High quality pen setting"
+                id="tw.settingsModal.highQualityPen"
+            />
+        }
+        help={
+            <FormattedMessage
+                // eslint-disable-next-line max-len
+                defaultMessage="Allows pen projects to render at higher resolutions and disables some coordinate rounding in the editor. Not all projects benefit from this setting and it may impact performance."
+                description="High quality pen setting help"
+                id="tw.settingsModal.highQualityPenHelp"
+            />
+        }
+        slug="high-quality-pen"
+    />
+);
+
 const CustomFPS = props => (
     <BooleanSetting
         value={props.framerate !== 30}
@@ -434,6 +456,10 @@ const SettingsModalComponent = props => (
                 value={props.interpolation}
                 onChange={props.onInterpolationChange}
             />
+            <HighQualityPen
+                value={props.highQualityPen}
+                onChange={props.onHighQualityPenChange}
+            />
             <WarpTimer
                 value={props.warpTimer}
                 onChange={props.onWarpTimerChange}
@@ -489,6 +515,8 @@ SettingsModalComponent.propTypes = {
     framerate: PropTypes.number,
     onFramerateChange: PropTypes.func,
     onCustomizeFramerate: PropTypes.func,
+    highQualityPen: PropTypes.bool,
+    onHighQualityPenChange: PropTypes.func,
     interpolation: PropTypes.bool,
     onInterpolationChange: PropTypes.func,
     infiniteClones: PropTypes.bool,

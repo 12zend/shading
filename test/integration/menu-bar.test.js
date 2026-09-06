@@ -9,8 +9,7 @@ const {
     getDriver,
     loadUri,
     rightClickText,
-    scope,
-    textExists
+    scope
 } = new SeleniumHelper();
 
 const uri = path.resolve(__dirname, '../../build/index.html');
@@ -73,7 +72,7 @@ describe('Menu bar settings', () => {
         await loadUri(uri);
         await clickXpath(FILE_MENU_XPATH);
         await clickText('Load from your computer');
-        const input = await findByXpath('//input[@accept=".shade,.mb3,.sb3,.sb2,.sb"]');
+        const input = await findByXpath('//input[@accept=".sb,.sb2,.sb3"]');
         await input.sendKeys(path.resolve(__dirname, '../fixtures/project1.sb3'));
         // No replace alert since no changes were made
         await findByText('project1-sprite');
@@ -88,7 +87,7 @@ describe('Menu bar settings', () => {
 
         await clickXpath(FILE_MENU_XPATH);
         await clickText('Load from your computer');
-        const input = await findByXpath('//input[@accept=".shade,.mb3,.sb3,.sb2,.sb"]');
+        const input = await findByXpath('//input[@accept=".sb,.sb2,.sb3"]');
         await input.sendKeys(path.resolve(__dirname, '../fixtures/project1.sb3'));
         await driver.switchTo().alert()
             .accept();
@@ -130,21 +129,19 @@ describe('Menu bar settings', () => {
 
         // Language and theme options not visible yet
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(false);
-        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
+        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(false);
 
         await clickText('Color Mode', scope.menuBar);
 
         // Only theme options visible
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(true);
-        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
+        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(false);
 
         await clickText('Language', scope.menuBar);
 
         // Only language options visible
         expect(await (await findByText('High Contrast', scope.menuBar)).isDisplayed()).toBe(false);
-        expect(await (await findByText('English', scope.menuBar)).isDisplayed()).toBe(true);
-        expect(await (await findByText('日本語', scope.menuBar)).isDisplayed()).toBe(true);
-        expect(await textExists('Esperanto', scope.menuBar)).toBe(false);
+        expect(await (await findByText('Esperanto', scope.menuBar)).isDisplayed()).toBe(true);
     });
 
     test('Menu labels hidden when width is equal to 1024', async () => {

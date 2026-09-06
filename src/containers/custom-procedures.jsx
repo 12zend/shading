@@ -4,8 +4,6 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import CustomProceduresComponent from '../components/custom-procedures/custom-procedures.jsx';
 import LazyScratchBlocks from '../lib/tw-lazy-scratch-blocks';
-import {prepareShaderMutation} from '../lib/my-blocks-shader-blocks';
-import {prepareSceneMutation} from '../lib/my-blocks-scene-blocks';
 import {connect} from 'react-redux';
 
 class CustomProcedures extends React.Component {
@@ -104,7 +102,6 @@ class CustomProcedures extends React.Component {
             this.mutationRoot.moveBy(dx, dy);
         });
         this.mutationRoot.domToMutation(this.props.mutator);
-        if (this.props.shader || this.props.scene) this.mutationRoot.setWarp(true);
         this.mutationRoot.initSvg();
         this.mutationRoot.render();
         this.setState({warp: this.mutationRoot.getWarp()});
@@ -117,12 +114,7 @@ class CustomProcedures extends React.Component {
         this.props.onRequestClose();
     }
     handleOk () {
-        let newMutation = this.mutationRoot ? this.mutationRoot.mutationToDom(true) : null;
-        if (newMutation && this.props.shader) {
-            newMutation = prepareShaderMutation(LazyScratchBlocks.get(), newMutation);
-        } else if (newMutation && this.props.scene) {
-            newMutation = prepareSceneMutation(LazyScratchBlocks.get(), newMutation);
-        }
+        const newMutation = this.mutationRoot ? this.mutationRoot.mutationToDom(true) : null;
         this.props.onRequestClose(newMutation);
     }
     handleAddLabel () {
@@ -151,8 +143,6 @@ class CustomProcedures extends React.Component {
         return (
             <CustomProceduresComponent
                 componentRef={this.setBlocks}
-                scene={this.props.scene}
-                shader={this.props.shader}
                 warp={this.state.warp}
                 onAddBoolean={this.handleAddBoolean}
                 onAddLabel={this.handleAddLabel}
@@ -178,9 +168,7 @@ CustomProcedures.propTypes = {
         }),
         comments: PropTypes.bool,
         collapse: PropTypes.bool
-    }),
-    scene: PropTypes.bool,
-    shader: PropTypes.bool
+    })
 };
 
 CustomProcedures.defaultOptions = {
@@ -195,16 +183,12 @@ CustomProcedures.defaultOptions = {
 };
 
 CustomProcedures.defaultProps = {
-    options: CustomProcedures.defaultOptions,
-    scene: false,
-    shader: false
+    options: CustomProcedures.defaultOptions
 };
 
 const mapStateToProps = state => ({
     isRtl: state.locales.isRtl,
-    mutator: state.scratchGui.customProcedures.mutator,
-    scene: state.scratchGui.customProcedures.scene,
-    shader: state.scratchGui.customProcedures.shader
+    mutator: state.scratchGui.customProcedures.mutator
 });
 
 export default connect(

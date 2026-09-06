@@ -12,8 +12,7 @@ const PaintEditor = props => React.createElement(getRealScratchPaint().default, 
 
 let hasSetupReducer = false;
 const ScratchPaintReducer = (state, action) => {
-    if (!hasSetupReducer && action.type === 'scratch-gui/navigation/ACTIVATE_TAB' &&
-        action.activeTabIndex === 1) {
+    if (!hasSetupReducer && action.type === 'scratch-gui/navigation/ACTIVATE_TAB' && action.activeTabIndex === 1) {
         hasSetupReducer = true;
     }
     if (hasSetupReducer) {
