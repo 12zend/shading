@@ -9,13 +9,13 @@ import {showStandardAlert, showAlertWithTimeout} from '../reducers/alerts';
 import {setFileHandle} from '../reducers/tw';
 import {getIsShowingProject} from '../reducers/project-state';
 import log from '../lib/log';
+import {SHADE_PROJECT_EXTENSION} from '../lib/shading/project-format';
 
 // from sb-file-uploader-hoc.jsx
 const getProjectTitleFromFilename = fileInputFilename => {
     if (!fileInputFilename) return '';
-    // only parse title with valid scratch project extensions
-    // (.sb, .sb2, and .sb3)
-    const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
+    // Accept legacy Scratch project extensions as well as Shading's .shade.
+    const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade)$/i);
     if (!matches) return '';
     return matches[1].substring(0, 100); // truncate project title to max 100 chars
 };
@@ -100,9 +100,9 @@ class SB3Downloader extends React.Component {
                 suggestedName: this.props.projectFilename,
                 types: [
                     {
-                        description: 'Scratch 3 Project',
+                        description: 'Shading Project',
                         accept: {
-                            'application/octet-stream': '.sb3'
+                            'application/octet-stream': [`.${SHADE_PROJECT_EXTENSION}`]
                         }
                     }
                 ],
@@ -119,6 +119,13 @@ class SB3Downloader extends React.Component {
         }
     }
     async saveToLastFile () {
+        const expectedExtension = `.${SHADE_PROJECT_EXTENSION}`;
+        const currentFilename = this.props.fileHandle && this.props.fileHandle.name;
+        const currentExtension = typeof currentFilename === 'string' ?
+            currentFilename.slice(currentFilename.lastIndexOf('.')).toLowerCase() : '';
+        if (!this.props.fileHandle || currentExtension !== expectedExtension) {
+            return this.saveAsNew();
+        }
         try {
             await this.saveToHandle(this.props.fileHandle);
         } catch (e) {
@@ -271,7 +278,7 @@ const getProjectFilename = (curTitle, defaultTitle) => {
     if (!filenameTitle || filenameTitle.length === 0) {
         filenameTitle = defaultTitle;
     }
-    return `${filenameTitle.substring(0, 100)}.sb3`;
+    return `${filenameTitle.substring(0, 100)}.${SHADE_PROJECT_EXTENSION}`;
 };
 
 SB3Downloader.propTypes = {
@@ -321,3 +328,5 @@ export default connect(
     mapStateToProps,
     mapDispatchToProps
 )(SB3Downloader);
+
+export {getProjectFilename, getProjectTitleFromFilename};

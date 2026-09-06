@@ -24,6 +24,9 @@ import {
 import {
     closeFileMenu
 } from '../reducers/menus';
+import {SHADE_PROJECT_EXTENSION} from './shading/project-format';
+
+const PROJECT_FILE_EXTENSIONS = [`.${SHADE_PROJECT_EXTENSION}`, '.sb3', '.sb2', '.sb'];
 
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
@@ -77,22 +80,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 (async () => {
                     try {
                         const [handle] = await this.props.showOpenFilePicker({
-                            multiple: false,
-                            types: [
-                                {
-                                    description: 'Scratch Project',
-                                    accept: {
-                                        // Chrome on Android tracks the MIME type of files that get downloaded and
-                                        // then actually enforces that the type must match in showOpenFilePicker()
-                                        // and does not allow the user to override the filter. As Scratch projects have
-                                        // no well-defined and well-adopted MIME types, we can't assume anything about
-                                        // what MIME type they are saved with, so we have to use the most broad MIME
-                                        // type here. Otherwise some users just won't be able to load files for no
-                                        // fault of their own.
-                                        '*/*': ['.sb', '.sb2', '.sb3']
-                                    }
-                                }
-                            ]
+                            multiple: false
+                            // Custom extensions such as .shade may be greyed out
+                            // by Chromium when a type filter is supplied.
                         });
                         const file = await handle.getFile();
                         this.handleChange({
@@ -112,7 +102,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             } else {
                 // create <input> element and add it to DOM
                 this.inputElement = document.createElement('input');
-                this.inputElement.accept = '.sb,.sb2,.sb3';
+                this.inputElement.accept = PROJECT_FILE_EXTENSIONS.join(',');
                 this.inputElement.style = 'display: none;';
                 this.inputElement.type = 'file';
                 this.inputElement.onchange = this.handleChange; // connects to step 3
@@ -149,7 +139,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
                     if (handle) {
-                        if (this.fileToUpload.name.endsWith('.sb3')) {
+                        if (this.fileToUpload.name.toLowerCase().endsWith(`.${SHADE_PROJECT_EXTENSION}`)) {
                             this.props.onSetFileHandle(handle);
                         } else {
                             this.props.onSetFileHandle(null);
@@ -184,9 +174,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         // used in step 6 below
         getProjectTitleFromFilename (fileInputFilename) {
             if (!fileInputFilename) return '';
-            // only parse title with valid scratch project extensions
-            // (.sb, .sb2, and .sb3)
-            const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
+            // Accept legacy Scratch project extensions as well as Shading's .shade.
+            const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade)$/i);
             if (!matches) return '';
             return matches[1].substring(0, 100); // truncate project title to max 100 chars
         }

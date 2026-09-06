@@ -1,4 +1,5 @@
 import installTimelineSound from './timeline-sound';
+import {getShadeTimelineSettings, markShadeProject} from '../project-format';
 
 const DEFAULT_DURATION = 10;
 const MIN_DURATION = 0.1;
@@ -19,6 +20,7 @@ const MAX_SYNCHRONOUS_RENDER_STEPS = 1000;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 const normalizeDuration = value => {
+    if (value === null || typeof value === 'undefined' || value === '') return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? clamp(parsed, MIN_DURATION, MAX_DURATION) : null;
 };
@@ -239,17 +241,21 @@ class ShadingTimeline {
         this.emitUpdate();
     }
 
-    setDuration (seconds) {
+    setDuration (seconds, emitProjectChanged = true) {
         const duration = normalizeDuration(seconds);
         if (duration === null) return false;
         const currentTime = this.currentTime;
+        const changed = duration !== this.duration;
         this.duration = duration;
         if (currentTime > duration) this.setClockTime(duration);
+        if (changed && emitProjectChanged && typeof this.runtime.emitProjectChanged === 'function') {
+            this.runtime.emitProjectChanged();
+        }
         this.emitUpdate();
         return true;
     }
 
-    setRenderSettings (settings = {}) {
+    setRenderSettings (settings = {}, emitProjectChanged = true) {
         let changed = false;
         const pickDefined = (first, second) => (typeof first === 'undefined' ? second : first);
         const width = normalizeRenderSize(pickDefined(settings.width, settings.renderWidth));
@@ -270,13 +276,18 @@ class ShadingTimeline {
             this.renderFramerate = framerate;
             changed = true;
         }
-        if (changed) this.emitUpdate();
+        if (changed) {
+            if (emitProjectChanged && typeof this.runtime.emitProjectChanged === 'function') {
+                this.runtime.emitProjectChanged();
+            }
+            this.emitUpdate();
+        }
         return changed;
     }
 
     restore (settings) {
-        const duration = normalizeDuration(settings && settings.duration);
-        if (duration !== null) this.duration = duration;
+        const duration = normalizeDuration(settings && settings.duration) || DEFAULT_DURATION;
+        this.duration = duration;
         this.renderWidth = normalizeRenderSize(settings && (settings.renderWidth || settings.width)) ||
             DEFAULT_RENDER_WIDTH;
         this.renderHeight = normalizeRenderSize(settings && (settings.renderHeight || settings.height)) ||
@@ -358,6 +369,28 @@ const installShadingTimeline = (vm, options = {}) => {
     const timeline = new ShadingTimeline(vm.runtime, options);
     vm.runtime.shadingTimeline = timeline;
     timeline.sound = installTimelineSound(vm.runtime, timeline);
+
+    if (typeof vm.toJSON === 'function') {
+        const originalToJSON = vm.toJSON.bind(vm);
+        vm.toJSON = (targetId, serializationOptions) => {
+            const projectJSON = JSON.parse(originalToJSON(targetId, serializationOptions));
+            // A sprite export is not a project file and must not contain
+            // project-level Shading settings.
+            if (typeof targetId !== 'undefined' && targetId !== null) {
+                return JSON.stringify(projectJSON);
+            }
+            return JSON.stringify(markShadeProject(projectJSON, timeline.toJSON()));
+        };
+    }
+
+    if (typeof vm.deserializeProject === 'function') {
+        const originalDeserializeProject = vm.deserializeProject.bind(vm);
+        vm.deserializeProject = async (projectJSON, zip) => {
+            const result = await originalDeserializeProject(projectJSON, zip);
+            timeline.restore(getShadeTimelineSettings(projectJSON));
+            return result;
+        };
+    }
     return timeline;
 };
 

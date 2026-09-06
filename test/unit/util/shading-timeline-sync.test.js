@@ -1,6 +1,7 @@
 /* eslint-env jest */
 
 import VM from 'scratch-vm';
+import JSZip from '@turbowarp/jszip';
 import {installShadingTimeline} from '../../../src/lib/shading/runtime/timeline';
 
 const makeProject = () => ({
@@ -84,5 +85,39 @@ describe('ShadingTimeline render-frame synchronization', () => {
         expect(Number(variable.value)).toBeCloseTo(2.5, 3);
 
         vm.runtime.dispose();
+    });
+
+    test('saves and restores timeline settings in a shade project', async () => {
+        const vm = new VM();
+        const timeline = installShadingTimeline(vm);
+
+        await vm.loadProject(makeProject());
+        timeline.setDuration(42.5);
+        timeline.setRenderSettings({
+            width: 1280,
+            height: 720,
+            framerate: 60
+        });
+
+        const archive = await vm.saveProjectSb3('arraybuffer');
+        const zip = await JSZip.loadAsync(archive);
+        const savedJSON = JSON.parse(await zip.file('project.json').async('string'));
+        expect(savedJSON.shade).toEqual({
+            version: 1,
+            timeline: {
+                duration: 42.5,
+                renderWidth: 1280,
+                renderHeight: 720,
+                renderFramerate: 60
+            }
+        });
+
+        const reloadedVM = new VM();
+        const reloadedTimeline = installShadingTimeline(reloadedVM);
+        await reloadedVM.loadProject(archive);
+        expect(reloadedTimeline.toJSON()).toEqual(timeline.toJSON());
+
+        vm.runtime.dispose();
+        reloadedVM.runtime.dispose();
     });
 });

@@ -547,7 +547,7 @@ const exportRestorePoint = async id => {
 /**
  * @param {VirtualMachine} vm scratch-vm instance
  * @param {number} id the restore point's ID
- * @returns {Promise<ArrayBuffer>} Resolves with sb3 file
+ * @returns {Promise<ArrayBuffer>} Resolves with shade project data
  */
 const loadRestorePoint = (vm, id) => openDB().then(db => new Promise((resolveProject, rejectProject) => {
     const storage = vm.runtime.storage;
