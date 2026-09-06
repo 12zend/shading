@@ -156,6 +156,46 @@ export default function (vm) {
 
     const eventColors = ScratchBlocks.Colours.event;
 
+    // Timeline entry points are deliberately separate from Scratch's legacy
+    // green-flag hat. This keeps old projects loadable while giving new
+    // projects explicit initialize and render-frame hooks.
+    const defineEventHat = (opcode, message) => {
+        ScratchBlocks.Blocks[opcode] = {
+            init: function () {
+                this.jsonInit({
+                    message0: message,
+                    category: ScratchBlocks.Categories.event,
+                    colour: eventColors.primary,
+                    colourSecondary: eventColors.secondary,
+                    colourTertiary: eventColors.tertiary,
+                    colourQuaternary: eventColors.quaternary,
+                    extensions: ['shape_hat']
+                });
+            }
+        };
+    };
+
+    defineEventHat('event_initialize', 'initialize');
+    defineEventHat('event_renderframe', 'render frame');
+
+    ScratchBlocks.Blocks.sound_playattime = {
+        init: function () {
+            this.jsonInit({
+                message0: 'play sound at %1 time: %2 ~ %3 speed: %4 volume: %5',
+                args0: [
+                    {type: 'input_value', name: 'SOUND_MENU'},
+                    {type: 'input_value', name: 'T1'},
+                    {type: 'input_value', name: 'T2'},
+                    {type: 'input_value', name: 'SPEED'},
+                    {type: 'input_value', name: 'VOLUME'}
+                ],
+                inputsInline: true,
+                category: ScratchBlocks.Categories.sound,
+                extensions: ['colours_sounds', 'shape_statement']
+            });
+        }
+    };
+
     ScratchBlocks.Blocks.sound_sounds_menu.init = function () {
         const json = jsonForMenuBlock('SOUND_MENU', soundsMenu, soundColors, []);
         this.jsonInit(json);

@@ -316,6 +316,33 @@ const sound = function (isInitialSetup, isStage, targetId, soundName, colors) {
                 </shadow>
             </value>
         </block>
+        <block id="${targetId}_sound_playattime" type="sound_playattime">
+            <value name="SOUND_MENU">
+                <shadow type="sound_sounds_menu">
+                    <field name="SOUND_MENU">${soundName}</field>
+                </shadow>
+            </value>
+            <value name="T1">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+            <value name="T2">
+                <shadow type="math_number">
+                    <field name="NUM">Infinity</field>
+                </shadow>
+            </value>
+            <value name="SPEED">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+            <value name="VOLUME">
+                <shadow type="math_number">
+                    <field name="NUM">100</field>
+                </shadow>
+            </value>
+        </block>
         <block type="sound_stopallsounds"/>
         ${blockSeparator}
         <block type="sound_changeeffectby">
@@ -358,7 +385,9 @@ const events = function (isInitialSetup, isStage, targetId, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
     <category name="%{BKY_CATEGORY_EVENTS}" id="events" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        <block type="event_whenflagclicked"/>
+        <block type="event_initialize"/>
+        <block type="event_renderframe"/>
+        ${blockSeparator}
         <block type="event_whenkeypressed">
         </block>
         ${isStage ? `

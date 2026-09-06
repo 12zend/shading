@@ -14,6 +14,7 @@ import CostumeTab from '../../containers/costume-tab.jsx';
 import TargetPane from '../../containers/target-pane.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
+import ShadingTimeline from '../../containers/shading-timeline.jsx';
 import Loader from '../loader/loader.jsx';
 import Box from '../box/box.jsx';
 import MenuBar from '../menu-bar/menu-bar.jsx';
@@ -440,6 +441,7 @@ const GUIComponent = props => {
                                 stageSize={stageSize}
                                 vm={vm}
                             />
+                            <ShadingTimeline vm={vm} />
                             <Box className={styles.targetWrapper}>
                                 <TargetPane
                                     stageSize={stageSize}

@@ -35,6 +35,7 @@ import storage from '../lib/storage';
 import vmListenerHOC from '../lib/vm-listener-hoc.jsx';
 import vmManagerHOC from '../lib/vm-manager-hoc.jsx';
 import cloudManagerHOC from '../lib/cloud-manager-hoc.jsx';
+import {installShadingTimeline} from '../lib/shading/runtime/timeline';
 
 import GUIComponent from '../components/gui/gui.jsx';
 import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
@@ -57,6 +58,10 @@ class GUI extends React.Component {
     componentDidMount () {
         setIsScratchDesktop(this.props.isScratchDesktop);
         this.props.onStorageInit(storage);
+        // Install the runtime before a project can be started. The timeline
+        // component is hidden in player mode, but custom timeline primitives
+        // must still be available to the VM there.
+        installShadingTimeline(this.props.vm);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }
