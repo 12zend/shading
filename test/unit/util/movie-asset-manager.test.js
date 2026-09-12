@@ -3573,7 +3573,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).textRenderPromise).toBeNull();
     });
 
-    test('renders text canvases at 8x resolution without changing their logical size', () => {
+    test('renders text canvases at 2x resolution without changing their logical size', () => {
         const manager = makeManager();
         let context;
         context = {
@@ -3595,13 +3595,13 @@ describe('MovieAssetManager rendering performance', () => {
                 'hello'
             );
 
-            expect(rendered.width).toBe(1056);
-            expect(rendered.height).toBe(1176);
+            expect(rendered.width).toBe(264);
+            expect(rendered.height).toBe(294);
             expect(rendered.movieBitmapResolution).toBe(TEXT_BITMAP_RESOLUTION);
             expect(rendered.width / rendered.movieBitmapResolution).toBe(66);
             expect(rendered.height / rendered.movieBitmapResolution).toBe(73.5);
-            expect(context.font).toBe('768px sans-serif');
-            expect(context.fillText).toHaveBeenCalledWith('hello', 128, 128);
+            expect(context.font).toBe('192px sans-serif');
+            expect(context.fillText).toHaveBeenCalledWith('hello', 32, 32);
         } finally {
             global.document = originalDocument;
         }

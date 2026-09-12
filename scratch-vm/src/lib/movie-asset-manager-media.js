@@ -30,6 +30,12 @@ const TEXT_FONT_SIZE = 96;
 const TEXT_PADDING = 16;
 const TEXT_LINE_HEIGHT = Math.round(TEXT_FONT_SIZE * 1.2);
 const TEXT_RENDER_SCALE = TEXT_BITMAP_RESOLUTION / BITMAP_RESOLUTION;
+const MAX_FONT_LOOKUP_CACHE = 128;
+
+// Font names are validated to `[-\w ]` and never contain `\0`, so `\0` safely separates
+// the font/text key parts without JSON escaping. Building one key per draw instead of
+// JSON.stringify plus a second `:`-joined key removes most per-draw string work.
+const getTextCacheKey = (font, text) => `${font.name}\0${font.family}\0${text}`;
 
 const MovieAssetManagerMediaMethods = {
     async addVideoFromFile (targetId, file) {
@@ -623,38 +629,71 @@ const MovieAssetManagerMediaMethods = {
     },
 
     getFont (requestedFont) {
+        const requested = typeof requestedFont === 'string' && requestedFont ?
+            requestedFont : String(requestedFont || 'sans-serif');
+        const lower = requested.toLowerCase();
+        if (this.fontLookupCache instanceof Map) {
+            const cached = this.fontLookupCache.get(lower);
+            if (cached) {
+                this.fontLookupCache.delete(lower);
+                this.fontLookupCache.set(lower, cached);
+                return cached;
+            }
+        } else {
+            this.fontLookupCache = new Map();
+        }
         const fonts = this.runtime.fontManager.getFonts();
-        const requested = String(requestedFont || 'sans-serif');
-        return fonts.find(font => font.name.toLowerCase() === requested.toLowerCase()) || {
+        let found = null;
+        for (let index = 0; index < fonts.length; index++) {
+            if (fonts[index].name.toLowerCase() === lower) {
+                found = fonts[index];
+                break;
+            }
+        }
+        const resolved = found || {
             family: requested,
             name: requested
         };
+        this.fontLookupCache.set(lower, resolved);
+        while (this.fontLookupCache.size > MAX_FONT_LOOKUP_CACHE) {
+            this.fontLookupCache.delete(this.fontLookupCache.keys().next().value);
+        }
+        return resolved;
     },
 
     setText (target, requestedFont, requestedText) {
         if (!target || !this.runtime.renderer) return;
         const state = this.getTargetState(target);
         const font = this.getFont(requestedFont);
-        const text = String(requestedText);
-        const textKey = `${font.name}:${font.family}:${text}`;
+        const text = typeof requestedText === 'string' ? requestedText : String(requestedText);
+        // Fast same-text check without allocating the concatenated key (common in loops that
+        // move the same text every tick). Component fields are maintained alongside textKey.
+        if (state.mode === 'text' && state.textKeyText === text &&
+            state.textKeyFontName === font.name && state.textKeyFamily === font.family &&
+            !state.textRenderPromise && state.textQueue.length === 0) return;
+        const textKey = getTextCacheKey(font, text);
         if (state.mode === 'text' && state.textKey === textKey &&
             !state.textRenderPromise && state.textQueue.length === 0) return;
         if (state.requestedMode !== 'text') state.renderVersion++;
         state.requestedMode = 'text';
         state.textKey = textKey;
+        state.textKeyFontName = font.name;
+        state.textKeyFamily = font.family;
+        state.textKeyText = text;
         this.clearPendingVideoFrames(state);
 
         const fontLoad = this.ensureFontLoaded(font.name);
         if (!fontLoad && !state.textRenderPromise && state.textQueue.length === 0) {
             // Keep loaded-font rendering synchronous. Warp-mode scripts may stamp or otherwise consume each
             // intermediate appearance before the next block changes it.
-            this.renderText(target, font, text);
+            this.renderText(target, font, text, textKey);
             return;
         }
 
         state.textQueue.push({
             font,
             fontLoad,
+            key: textKey,
             renderVersion: state.renderVersion,
             text
         });
@@ -690,32 +729,48 @@ const MovieAssetManagerMediaMethods = {
                 continue;
             }
 
-            this.renderText(target, request.font, request.text);
+            this.renderText(target, request.font, request.text, request.key);
         }
     },
 
-    createTextCanvas (font, text) {
+    createTextCanvas (font, text, cacheKey = null) {
         if (!(this.textCanvasCache instanceof Map)) {
             this.textCanvasCache = new Map();
             this.textCanvasCachePixels = 0;
         }
-        const cacheKey = `${font.name}:${font.family}:${text}`;
-        const cached = this.textCanvasCache.get(cacheKey);
+        const stringText = typeof text === 'string' ? text : String(text);
+        const key = cacheKey || getTextCacheKey(font, stringText);
+        const cached = this.textCanvasCache.get(key);
         if (cached) {
-            this.textCanvasCache.delete(cacheKey);
-            this.textCanvasCache.set(cacheKey, cached);
+            this.textCanvasCache.delete(key);
+            this.textCanvasCache.set(key, cached);
             return cached.canvas;
         }
-        const lines = text.split(/\r?\n/);
         const baseFontSize = TEXT_FONT_SIZE * TEXT_RENDER_SCALE;
         const basePadding = TEXT_PADDING * TEXT_RENDER_SCALE;
         const baseLineHeight = TEXT_LINE_HEIGHT * TEXT_RENDER_SCALE;
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        context.font = `${baseFontSize}px ${font.family}`;
-        const width = Math.max(2, ...lines.map(line => Math.ceil(context.measureText(line || ' ').width)));
+        const fontDeclaration = `${baseFontSize}px ${font.family}`;
+        context.font = fontDeclaration;
+        // Fast single-line path avoids the regex split and the spread allocation used previously.
+        // Multi-line texts use an explicit loop instead of map+spread to avoid stack growth.
+        let lineCount = 1;
+        let width = 2;
+        let lines = null;
+        if (stringText.indexOf('\n') === -1 && stringText.indexOf('\r') === -1) {
+            width = Math.max(2, Math.ceil(context.measureText(stringText || ' ').width));
+        } else {
+            lines = stringText.split(/\r?\n/);
+            lineCount = lines.length;
+            for (let index = 0; index < lines.length; index++) {
+                const lineWidth = Math.ceil(context.measureText(lines[index] || ' ').width);
+                if (lineWidth > width) width = lineWidth;
+            }
+            if (width < 2) width = 2;
+        }
         const requestedWidth = width + (basePadding * 2);
-        const requestedHeight = Math.max(2, (baseLineHeight * lines.length) + (basePadding * 2));
+        const requestedHeight = Math.max(2, (baseLineHeight * lineCount) + (basePadding * 2));
         const maxEdge = 4096;
         let scale = 1;
         if (requestedWidth > maxEdge || requestedHeight > maxEdge ||
@@ -734,10 +789,16 @@ const MovieAssetManagerMediaMethods = {
         context.font = `${fontSize}px ${font.family}`;
         context.fillStyle = '#000000';
         context.textBaseline = 'top';
-        lines.forEach((line, index) => context.fillText(line, padding, padding + (index * lineHeight)));
+        if (lines) {
+            for (let index = 0; index < lines.length; index++) {
+                context.fillText(lines[index], padding, padding + (index * lineHeight));
+            }
+        } else {
+            context.fillText(stringText, padding, padding);
+        }
         canvas.reusable = false;
         const pixels = canvas.width * canvas.height;
-        this.textCanvasCache.set(cacheKey, {canvas, pixels});
+        this.textCanvasCache.set(key, {canvas, pixels});
         this.textCanvasCachePixels += pixels;
         while (this.textCanvasCache.size > MAX_TEXT_CANVAS_CACHE ||
             this.textCanvasCachePixels > MAX_TEXT_CANVAS_PIXELS) {
@@ -749,15 +810,15 @@ const MovieAssetManagerMediaMethods = {
         return canvas;
     },
 
-    renderText (target, font, text) {
+    renderText (target, font, text, cacheKey = null) {
         if (!(this.textSkinCache instanceof Map)) {
             this.textSkinCache = new Map();
             this.textSkinCachePixels = 0;
         }
-        const key = JSON.stringify([font.name, font.family, text]);
+        const key = cacheKey || getTextCacheKey(font, text);
         let entry = this.textSkinCache.get(key);
         if (!entry) {
-            const canvas = this.createTextCanvas(font, text);
+            const canvas = this.createTextCanvas(font, text, key);
             const resolution = Number(canvas.movieBitmapResolution) > 0 ?
                 Number(canvas.movieBitmapResolution) : TEXT_BITMAP_RESOLUTION;
             entry = {
@@ -832,6 +893,9 @@ const MovieAssetManagerMediaMethods = {
         state.renderVersion++;
         state.requestedMode = 'costume';
         state.textKey = null;
+        state.textKeyFamily = null;
+        state.textKeyFontName = null;
+        state.textKeyText = null;
         state.textQueue.length = 0;
         this.clearPendingVideoFrames(state);
         state.modelRenderVersion++;

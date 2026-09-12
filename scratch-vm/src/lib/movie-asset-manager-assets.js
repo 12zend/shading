@@ -109,6 +109,7 @@ const MovieAssetManagerAssetMethods = {
     },
 
     handleFontsChanged () {
+        if (this.fontLookupCache instanceof Map) this.fontLookupCache.clear();
         this.syncFontFaces();
         this.emit('fontsChanged');
     },

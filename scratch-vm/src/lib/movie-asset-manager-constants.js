@@ -1,6 +1,9 @@
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
-const TEXT_BITMAP_RESOLUTION = BITMAP_RESOLUTION * 8;
+// Text uses 2x supersampling over base bitmaps (retina-crisp) instead of the previous 8x.
+// 8x produced 16x more pixels (64x vs base) for rasterization, GPU upload and stamping
+// with no visible gain at the logical text size, dominating Draw text cost.
+const TEXT_BITMAP_RESOLUTION = BITMAP_RESOLUTION * 2;
 const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';

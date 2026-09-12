@@ -99,15 +99,40 @@ const MovieAssetManagerSerializationMethods = {
     },
 
     ensureFontLoaded (fontName) {
-        const record = this.fontFaces.get(fontName.toLowerCase());
+        const lower = String(fontName || '').toLowerCase();
+        const record = this.fontFaces.get(lower);
         if (record) {
             if (record.face.status === 'loaded' || record.face.status === 'error') return null;
             return record.loadPromise;
         }
         if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return null;
+        if (this.fontLoadedCache instanceof Set && this.fontLoadedCache.has(lower)) return null;
+        if (this.fontLoadingPromises instanceof Map && this.fontLoadingPromises.has(lower)) {
+            return this.fontLoadingPromises.get(lower);
+        }
         const descriptor = `96px "${fontName}"`;
-        if (document.fonts.check && document.fonts.check(descriptor)) return null;
-        return document.fonts.load(descriptor).catch(() => {});
+        if (document.fonts.check) {
+            try {
+                if (document.fonts.check(descriptor)) {
+                    if (!(this.fontLoadedCache instanceof Set)) this.fontLoadedCache = new Set();
+                    this.fontLoadedCache.add(lower);
+                    return null;
+                }
+            } catch (error) {
+                // A failing check must not block text rendering; fall through to load.
+            }
+        }
+        const loadPromise = document.fonts.load(descriptor)
+            .catch(() => {})
+            .then(() => {
+                if (this.fontLoadingPromises instanceof Map) this.fontLoadingPromises.delete(lower);
+                if (!(this.fontLoadedCache instanceof Set)) this.fontLoadedCache = new Set();
+                this.fontLoadedCache.add(lower);
+            });
+        if (!(this.fontLoadingPromises instanceof Map)) this.fontLoadingPromises = new Map();
+        // Deduplicate concurrent loads for the same family issued by rapid Draw text calls.
+        this.fontLoadingPromises.set(lower, loadPromise);
+        return loadPromise;
     },
 
     serializeCostumeGroups (targetId) {

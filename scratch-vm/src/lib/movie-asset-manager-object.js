@@ -283,15 +283,36 @@ const MovieAssetManagerObjectMethods = {
             const font = this.getFont(configuration.asset);
             const fontLoad = this.ensureFontLoaded(font.name);
             if (fontLoad) await fontLoad;
-            const text = String(configuration.text);
-            bitmap = this.createTextCanvas(font, text);
+            const text = typeof configuration.text === 'string' ?
+                configuration.text : String(configuration.text);
+            const canvasKey = `${font.name}\0${font.family}\0${text}`;
+            planeCacheKey = `text:${canvasKey}`;
+            // Reuse the cached plane without allocating a canvas when the same text was drawn before.
+            // getCachedObjectImagePlane would create the canvas-backed plane on miss, so check first.
+            if (this.objectImagePlanes instanceof Map) {
+                const hitPlane = this.objectImagePlanes.get(planeCacheKey);
+                if (hitPlane) {
+                    this.objectImagePlanes.delete(planeCacheKey);
+                    this.objectImagePlanes.set(planeCacheKey, hitPlane);
+                    return {
+                        item: {
+                            animationName: '',
+                            frame: 1,
+                            sourceObject: hitPlane,
+                            transform: this.getObjectSceneTransform(target, configuration, true)
+                        },
+                        resource: hitPlane,
+                        ownsResource: false
+                    };
+                }
+            }
+            bitmap = this.createTextCanvas(font, text, canvasKey);
             const bitmapResolution = Math.max(
                 0.001,
                 toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION)
             );
             logicalWidth = bitmap.width / bitmapResolution;
             logicalHeight = bitmap.height / bitmapResolution;
-            planeCacheKey = `text:${font.name}:${font.family}:${text}`;
         } else {
             return null;
         }
@@ -811,6 +832,9 @@ const MovieAssetManagerObjectMethods = {
         state.modelAssetId = null;
         state.mode = 'shape';
         state.textKey = null;
+        state.textKeyFamily = null;
+        state.textKeyFontName = null;
+        state.textKeyText = null;
         state.projectionKey = null;
         state.penOnly = true;
         state.shapeSkinId = skinId;

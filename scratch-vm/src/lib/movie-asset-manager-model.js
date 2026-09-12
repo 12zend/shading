@@ -41,6 +41,9 @@ const MovieAssetManagerModelMethods = {
         state.modelScene = [];
         state.requestedMode = 'model';
         state.textKey = null;
+        state.textKeyFamily = null;
+        state.textKeyFontName = null;
+        state.textKeyText = null;
         state.projectionKey = null;
         this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
@@ -326,6 +329,9 @@ const MovieAssetManagerModelMethods = {
         });
         state.requestedMode = 'model';
         state.textKey = null;
+        state.textKeyFamily = null;
+        state.textKeyFontName = null;
+        state.textKeyText = null;
         this.clearPendingVideoFrames(state);
         state.textQueue.length = 0;
         if (render) {
