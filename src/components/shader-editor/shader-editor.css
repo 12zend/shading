@@ -136,6 +136,7 @@
 }
 
 .code-editor {
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
     flex: 1;
@@ -150,7 +151,79 @@
     tab-size: 4;
 }
 
+/* One native scroll owner moves glyphs, selection, caret and gutter together. */
+.code-body {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    position: relative;
+}
+
+.search-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #2b2e3a;
+    background: #171922;
+    font: 0.75rem sans-serif;
+}
+
+.search-bar label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.search-bar input,
+.search-bar button {
+    box-sizing: border-box;
+    min-height: 2rem;
+    max-width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #555c70;
+    border-radius: $form-radius;
+    background: #0e1017;
+    color: #f4f5fa;
+    font: inherit;
+}
+
+.search-bar input {
+    width: 10rem;
+    min-width: 0;
+}
+
+.search-bar button {
+    cursor: pointer;
+}
+
+.search-bar button:hover:not(:disabled) {
+    background: #343044;
+}
+
+.search-bar button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.search-bar input:focus-visible,
+.search-bar button:focus-visible {
+    outline: 2px solid #bd93f9;
+    outline-offset: 1px;
+}
+
 .line-numbers {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    align-self: flex-start;
+    min-height: 100%;
     width: 3.6rem;
     flex: 0 0 3.6rem;
     padding: 1rem 0.75rem 2rem 0;
@@ -169,18 +242,16 @@
 }
 
 .code-viewport {
+    align-self: flex-start;
+    min-height: 100%;
     min-width: 0;
     position: relative;
-    flex: 1;
-    overflow: hidden;
+    flex: 1 0 auto;
 }
 
 .highlight,
 .textarea {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
+    box-sizing: border-box;
     margin: 0;
     padding: 1rem 1.25rem 2rem;
     border: 0;
@@ -192,7 +263,9 @@
 }
 
 .highlight {
-    overflow: hidden;
+    width: max-content;
+    min-width: 100%;
+    min-height: 100%;
     background: transparent;
     color: #e6e7ec;
     pointer-events: none;
@@ -204,15 +277,20 @@
  * difference makes the visible glyph and the native caret drift apart.
  */
 .highlight code {
+    display: block;
+    width: max-content;
     font: inherit;
     letter-spacing: inherit;
 }
 
 .textarea {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     z-index: 1;
     resize: none;
-    overflow: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
     outline: none;
     background: transparent;
     color: transparent;
@@ -228,22 +306,22 @@
     box-shadow: inset 0 0 0 2px rgba(133, 92, 214, 0.55);
 }
 
-.textarea::-webkit-scrollbar {
+.code-body::-webkit-scrollbar {
     width: 0.75rem;
     height: 0.75rem;
 }
 
-.textarea::-webkit-scrollbar-track {
+.code-body::-webkit-scrollbar-track {
     background: #0d0e13;
 }
 
-.textarea::-webkit-scrollbar-thumb {
+.code-body::-webkit-scrollbar-thumb {
     border: 3px solid #0d0e13;
     border-radius: 0.5rem;
     background: #454a5b;
 }
 
-.textarea::-webkit-scrollbar-corner {
+.code-body::-webkit-scrollbar-corner {
     background: #0d0e13;
 }
 
@@ -400,4 +478,10 @@
     .empty-actions button {
         transition: none;
     }
+}
+
+.highlight mark {
+    background: rgba(245, 184, 75, 0.3);
+    box-shadow: inset 0 -1px #f5b84b;
+    color: inherit;
 }
