@@ -399,8 +399,14 @@ const createShapeBitmap = configuration => {
         const outerStartY = centerY + (Math.sin(start) * outerRadius * scale * bitmapResolution);
         context.moveTo(outerStartX, outerStartY);
         context.arc(centerX, centerY, outerRadius * scale * bitmapResolution, start, end, anticlockwise);
-        if (shape === 'arc' && innerRadius > 0) {
-            context.arc(centerX, centerY, innerRadius * scale * bitmapResolution, end, start, !anticlockwise);
+        if (shape === 'arc') {
+            if (innerRadius > 0) {
+                context.arc(centerX, centerY, innerRadius * scale * bitmapResolution, end, start, !anticlockwise);
+            } else {
+                // An arc with no inner radius is a sector. Closing the path directly between the two outer
+                // endpoints would instead turn it into the circular-segment primitive.
+                context.lineTo(centerX, centerY);
+            }
         } else {
             context.lineTo(outerStartX, outerStartY);
         }

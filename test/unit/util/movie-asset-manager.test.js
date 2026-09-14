@@ -2567,6 +2567,44 @@ describe('MovieAssetManager rendering performance', () => {
         texture.dispose();
     });
 
+    test('uses the renderer-adjusted SVG rotation center for an image plane', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const texture = new THREE.Texture({height: 100, width: 200});
+        manager.getCostumeForObjectDraw = jest.fn(() => ({
+            asset: {
+                decodeText: jest.fn(() => '<svg viewBox="-100 -50 200 100"></svg>'),
+                encodeDataURI: jest.fn()
+            },
+            bitmapResolution: 1,
+            dataFormat: 'svg',
+            rotationCenterX: -100,
+            rotationCenterY: -50,
+            size: [200, 100]
+        }));
+        manager.getBuildingTexture = jest.fn(() => ({texture}));
+
+        const prepared = await manager.prepareObjectSceneItem(target, {
+            asset: 'logo',
+            height: 100,
+            position: {x: 0, y: 0, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            size: 100,
+            source: 'costume',
+            width: 100
+        });
+        prepared.item.sourceObject.geometry.computeBoundingBox();
+
+        expect(prepared.item.sourceObject.geometry.boundingBox.min.toArray()).toEqual([0, -100, 0]);
+        expect(prepared.item.sourceObject.geometry.boundingBox.max.toArray()).toEqual([200, 0, 0]);
+
+        prepared.resource.geometry.dispose();
+        prepared.resource.material.map.dispose();
+        prepared.resource.material.dispose();
+        texture.dispose();
+    });
+
     test('keeps a following draw behind an asynchronous scene render', async () => {
         const manager = makeManager();
         const target = makeTarget();
@@ -2749,6 +2787,48 @@ describe('MovieAssetManager rendering performance', () => {
         ]);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+    });
+
+    test('renders a zero-inner-radius arc as a sector instead of a circular segment', () => {
+        const manager = makeManager();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        const context = {
+            arc: jest.fn(),
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            fill: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {
+            drawableID: 1,
+            id: 'target',
+            isStage: false,
+            visible: false
+        };
+
+        try {
+            manager.drawShape(target, {
+                angle: {start: 0, end: 350},
+                height: 100,
+                radius: {inner: 0, outer: 80},
+                shape: 'arc',
+                width: 100
+            });
+        } finally {
+            global.document = originalDocument;
+        }
+
+        expect(context.arc).toHaveBeenCalledTimes(1);
+        expect(context.arc.mock.calls[0].slice(3)).toEqual([
+            -Math.PI / 2,
+            (350 - 90) * Math.PI / 180,
+            false
+        ]);
+        expect(context.lineTo).toHaveBeenCalledWith(canvas.width / 2, canvas.height / 2);
     });
 
     test.each(['polygon', 'arc', 'circular segment'])(

@@ -20,6 +20,19 @@ import {
 
 const MAX_OBJECT_IMAGE_PLANES = 256;
 
+const getSvgViewBoxOrigin = costume => {
+    const asset = costume && costume.asset;
+    const dataFormat = String((costume && costume.dataFormat) || (asset && asset.dataFormat) || '').toLowerCase();
+    if (dataFormat !== 'svg' || !asset || typeof asset.decodeText !== 'function') return null;
+    const svg = asset.decodeText();
+    const viewBoxMatch = String(svg).match(/<svg\b[^>]*\bviewBox\s*=\s*(["'])([^"']+)\1/i);
+    if (!viewBoxMatch) return null;
+    const values = viewBoxMatch[2].trim().split(/[\s,]+/)
+        .map(Number);
+    if (values.length < 2 || !Number.isFinite(values[0]) || !Number.isFinite(values[1])) return null;
+    return {x: values[0], y: values[1]};
+};
+
 const MovieAssetManagerObjectMethods = {
     getCachedObjectImagePlane (key, bitmap, width, height, rotationCenter) {
         if (!(this.objectImagePlanes instanceof Map)) this.objectImagePlanes = new Map();
@@ -250,9 +263,14 @@ const MovieAssetManagerObjectMethods = {
                 toNumber(image.naturalWidth || image.width, 1) / resolution;
             logicalHeight = costume.size ? toNumber(costume.size[1]) / resolution :
                 toNumber(image.naturalHeight || image.height, 1) / resolution;
+            // SVG skins compensate their stored rotation center for a non-zero viewBox origin. Do the same
+            // synchronously here instead of reading the renderer skin, whose async image load may not be done yet.
+            const viewBoxOrigin = getSvgViewBoxOrigin(costume);
             rotationCenter = {
-                x: toNumber(costume.rotationCenterX, (logicalWidth * resolution) / 2) / resolution,
-                y: toNumber(costume.rotationCenterY, (logicalHeight * resolution) / 2) / resolution
+                x: (toNumber(costume.rotationCenterX, (logicalWidth * resolution) / 2) / resolution) -
+                    (viewBoxOrigin ? viewBoxOrigin.x : 0),
+                y: (toNumber(costume.rotationCenterY, (logicalHeight * resolution) / 2) / resolution) -
+                    (viewBoxOrigin ? viewBoxOrigin.y : 0)
             };
             bitmap = texture;
             planeCacheKey = `costume:${costume.assetId || costume.name}:${logicalWidth}:${logicalHeight}:` +

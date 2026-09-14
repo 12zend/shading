@@ -46,6 +46,18 @@ describe('Movie 3D projection', () => {
         texture.dispose();
     });
 
+    test('positions image planes relative to a top-left rotation center', () => {
+        const plane = createImagePlane(new THREE.Texture(), 100, 50, {x: 0, y: 0});
+        plane.geometry.computeBoundingBox();
+
+        expect(plane.geometry.boundingBox.min.toArray()).toEqual([0, -50, 0]);
+        expect(plane.geometry.boundingBox.max.toArray()).toEqual([100, 0, 0]);
+
+        plane.material.map.dispose();
+        plane.material.dispose();
+        plane.geometry.dispose();
+    });
+
     test('builds a diagonal wall with height and repeatable UV coordinates', () => {
         const wall = createBuildingPrimitive('wall', {
             x1: 0,

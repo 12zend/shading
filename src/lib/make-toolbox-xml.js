@@ -718,9 +718,6 @@ const proceduralShapeBlocks = function () {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
-    const angle = (name, value) => (
-        `<value name="${name}"><shadow type="math_angle"><field name="NUM">${value}</field></shadow></value>`
-    );
     const appearance = (timeStart = 0, timeEnd = 'Infinity') => (`
         ${number('T1', timeStart)}${number('T2', timeEnd)}
         <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
@@ -747,7 +744,7 @@ const proceduralShapeBlocks = function () {
         <block type="objects_arc">
             ${transform()}
             ${number('INNER', 50)}${number('OUTER', 100)}
-            ${angle('START', 0)}${angle('END', 360)}
+            ${number('START', 0)}${number('END', 360)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${appearance()}
         </block>
@@ -756,7 +753,7 @@ const proceduralShapeBlocks = function () {
         <block type="objects_circularSegment">
             ${transform()}
             ${number('OUTER', 100)}
-            ${angle('START', 0)}${angle('END', 360)}
+            ${number('START', 0)}${number('END', 360)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
             ${appearance()}
         </block>

@@ -2,7 +2,7 @@ const SET_CUSTOM_STAGE_SIZE = 'tw/custom-stage-size/SET';
 
 const getDimensions = () => {
     // Running in node.js
-    if (typeof URLSearchParams === 'undefined') {
+    if (typeof URLSearchParams === 'undefined' || typeof location === 'undefined') {
         return null;
     }
 
@@ -31,8 +31,8 @@ const getDimensions = () => {
 };
 
 const defaultStageSize = {
-    width: 640,
-    height: 360
+    width: 480,
+    height: 270
 };
 
 const initialState = getDimensions() || defaultStageSize;

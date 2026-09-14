@@ -3,6 +3,7 @@ jest.mock('scratch-render-fonts', () => () => ({}), {virtual: true});
 import VM from 'scratch-vm';
 
 import storeProjectOptions from '../../../src/lib/project-options';
+import {defaultStageSize} from '../../../src/reducers/custom-stage-size';
 
 const projectJSON = {
     targets: [{
@@ -33,18 +34,22 @@ const projectJSON = {
 };
 
 describe('storeProjectOptions', () => {
-    test('restores 480x360 when the GUI default is 640x360', async () => {
+    test('uses 480x270 as the GUI default', () => {
+        expect(defaultStageSize).toEqual({width: 480, height: 270});
+    });
+
+    test('restores 480x360 when the GUI default is 480x270', async () => {
         const vm = new VM();
         await vm.loadProject(JSON.stringify(projectJSON));
         vm.setStageSize(480, 360);
 
-        expect(storeProjectOptions(vm, {width: 640, height: 360})).toBeUndefined();
+        expect(storeProjectOptions(vm, defaultStageSize)).toBeUndefined();
         expect(vm.runtime._defaultStoredSettings.width).toBe(480);
         expect(vm.runtime._defaultStoredSettings.height).toBe(360);
         const archive = await vm.saveProjectSb3('arraybuffer');
 
         const reloadedVM = new VM();
-        reloadedVM.setStageSize(640, 360);
+        reloadedVM.setStageSize(defaultStageSize.width, defaultStageSize.height);
         await reloadedVM.loadProject(archive);
 
         expect(reloadedVM.runtime.stageWidth).toBe(480);
