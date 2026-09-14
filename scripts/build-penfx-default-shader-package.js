@@ -8,8 +8,9 @@ const path = require('path');
 const JSZip = require('@turbowarp/jszip');
 
 const root = path.resolve(__dirname, '..');
-const shaderSourceDirectory = path.join(root, 'src/lib/pen-fx/shaders');
-const packageDirectory = path.join(root, 'src/lib/pen-fx/default-shader-package');
+const penFXDirectory = path.join(root, 'scratch-vm/src/lib/pen-fx');
+const shaderSourceDirectory = path.join(penFXDirectory, 'shaders');
+const packageDirectory = path.join(penFXDirectory, 'default-shader-package');
 const manifestPath = path.join(packageDirectory, 'shading-shader.json');
 const outputPath = path.join(packageDirectory, 'penfx-builtins.zip');
 const stableDate = new Date('1980-01-01T00:00:00.000Z');

@@ -3,7 +3,7 @@
 shading.app の `Looks` カテゴリにある `Import shader` から、PenFX 用の shader package（zip）を読み込めます。Custom Shader（PenFX）がメインのシェーダー機能です。
 
 既存の PenFX も例外ではありません。59 個の既定ブロックと、それらが使う 26 個の fragment program は
-[`penfx-builtins.zip`](../src/lib/pen-fx/default-shader-package/penfx-builtins.zip) に入っています。起動直後は manifest から
+[`penfx-builtins.zip`](../scratch-vm/src/lib/pen-fx/default-shader-package/penfx-builtins.zip) に入っています。起動直後は manifest から
 ブロックを同期登録し、同じ ZIP の展開・compile/link 検証・program 登録を `runWithoutWaiting` で開始します。この初期化は
 Scratch VM に Promise を返さず、ブロックの実行を待たせません。
 

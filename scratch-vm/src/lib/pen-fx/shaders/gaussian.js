@@ -10,9 +10,9 @@ export default `
   uniform vec2 u_center;
   uniform float u_mix;
 
-  float axisWeight(float index, vec4 weights) {
-    float i = abs(index);
-    return i < 0.5 ? weights.x : i < 1.5 ? weights.y : i < 2.5 ? weights.z : weights.w;
+  float gaussianWeight(float index, float stepSize, float negHalfInvSigmaSq) {
+    float offset = index * stepSize;
+    return exp(offset * offset * negHalfInvSigmaSq);
   }
 
   void main() {
@@ -27,30 +27,30 @@ export default `
     float negHalfInvSigmaSq = -0.5 * invSigmaSq;
     vec2 invResolution = 1.0 / u_resolution;
     if (u_twoDimensional == 2) {
-      float gridStep = max(u_radius / 3.0, 0.125);
-      vec4 axisWeights = exp(vec4(0.0, 1.0, 4.0, 9.0) * (negHalfInvSigmaSq * gridStep * gridStep));
+      float gridStep = max(u_radius / 6.0, 0.0625);
       vec2 stepVec = u_direction * invResolution * gridStep;
-      float lineWeight = axisWeights.x + 2.0 * (axisWeights.y + axisWeights.z + axisWeights.w);
+      float lineWeight = 0.0;
       vec4 lineTotal = vec4(0.0);
-      for (int i = -3; i <= 3; i++) {
-        lineTotal += texture2D(u_image, v_uv + stepVec * float(i)) * axisWeight(float(i), axisWeights);
+      for (int i = -6; i <= 6; i++) {
+        float weight = gaussianWeight(float(i), gridStep, negHalfInvSigmaSq);
+        lineTotal += texture2D(u_image, v_uv + stepVec * float(i)) * weight;
+        lineWeight += weight;
       }
       vec4 blurred = lineTotal / lineWeight;
       gl_FragColor = mixValue == 1.0 ? blurred : mix(center, blurred, mixValue);
       return;
     }
     if (u_twoDimensional == 1) {
-      float gridStep = max(u_radius / 3.0, 0.125);
-      vec4 axisWeights = exp(vec4(0.0, 1.0, 4.0, 9.0) * (negHalfInvSigmaSq * gridStep * gridStep));
+      float gridStep = max(u_radius / 6.0, 0.0625);
       vec2 scaledStep = gridStep * invResolution;
-      float axisSum = axisWeights.x + 2.0 * (axisWeights.y + axisWeights.z + axisWeights.w);
-      float gridWeight = axisSum * axisSum;
+      float gridWeight = 0.0;
       vec4 gridTotal = vec4(0.0);
-      for (int y = -3; y <= 3; y++) {
-        float wy = axisWeight(float(y), axisWeights);
-        for (int x = -3; x <= 3; x++) {
-          gridTotal += texture2D(u_image, v_uv + vec2(float(x), float(y)) * scaledStep) *
-            (axisWeight(float(x), axisWeights) * wy);
+      for (int y = -6; y <= 6; y++) {
+        float wy = gaussianWeight(float(y), gridStep, negHalfInvSigmaSq);
+        for (int x = -6; x <= 6; x++) {
+          float weight = gaussianWeight(float(x), gridStep, negHalfInvSigmaSq) * wy;
+          gridTotal += texture2D(u_image, v_uv + vec2(float(x), float(y)) * scaledStep) * weight;
+          gridWeight += weight;
         }
       }
       vec4 blurred = gridTotal / gridWeight;
@@ -65,11 +65,11 @@ export default `
       direction = u_radialType == 0 ? vec2(-radial.y, radial.x) : radial;
     }
     direction *= invResolution;
-    float stepSize = max(u_radius / 12.0, 0.125);
+    float stepSize = max(u_radius / 24.0, 0.0625);
     vec2 stepDelta = direction * stepSize;
     vec4 total = center;
     float totalWeight = 1.0;
-    for (int i = 1; i <= 12; i++) {
+    for (int i = 1; i <= 24; i++) {
       float fi = float(i);
       float offset = fi * stepSize;
       float weight = exp(offset * offset * negHalfInvSigmaSq);

@@ -3,6 +3,30 @@ import VM from 'scratch-vm';
 import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
 
 describe('built-in Pen FX category', () => {
+    test('uses doubled Gaussian sample density on every blur path', () => {
+        const gl = {
+            VERTEX_SHADER: 1,
+            ARRAY_BUFFER: 2,
+            STATIC_DRAW: 3,
+            createShader: jest.fn(() => ({})),
+            shaderSource: jest.fn(),
+            compileShader: jest.fn(),
+            getShaderParameter: jest.fn(() => true),
+            deleteShader: jest.fn(),
+            createBuffer: jest.fn(() => ({})),
+            bindBuffer: jest.fn(),
+            bufferData: jest.fn()
+        };
+        const PenFX = createPenFXClass({runtime: {renderer: {_gl: gl}}});
+        const shader = new PenFX()._getEngine().programSources.gaussian;
+
+        expect(shader).toContain('for (int i = -6; i <= 6; i++)');
+        expect(shader).toContain('for (int y = -6; y <= 6; y++)');
+        expect(shader).toContain('for (int x = -6; x <= 6; x++)');
+        expect(shader).toContain('for (int i = 1; i <= 24; i++)');
+        expect(shader).toContain('u_radius / 24.0');
+    });
+
     test('clamps wavy samples to the image bounds instead of making them transparent', () => {
         const gl = {
             VERTEX_SHADER: 1,

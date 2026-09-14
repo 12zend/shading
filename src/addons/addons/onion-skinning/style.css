@@ -49,6 +49,10 @@
   color: var(--ui-text-primary);
   min-height: 100%;
   min-width: 100%;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 0.25em;

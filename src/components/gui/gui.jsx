@@ -245,8 +245,11 @@ const GUIComponent = props => {
                 className={styles.pageWrapper}
                 dir={isRtl ? 'rtl' : 'ltr'}
                 style={{
-                    minWidth: 1024 + Math.max(0, customStageSize.width - 480),
-                    minHeight: 640 + Math.max(0, customStageSize.height - 360)
+                    // Keep the preferred editor size when space permits, but do not extend the GUI beyond its
+                    // embedding viewport. Desktop window chrome can make the content area shorter than the
+                    // BrowserWindow minimum and otherwise clips controls at the bottom of asset editors.
+                    minWidth: `min(100%, ${1024 + Math.max(0, customStageSize.width - 480)}px)`,
+                    minHeight: `min(100%, ${640 + Math.max(0, customStageSize.height - 360)}px)`
                 }}
                 {...componentProps}
             >

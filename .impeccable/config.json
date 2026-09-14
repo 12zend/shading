@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "helvetica",
+        "createdAt": "2026-09-14T08:07:24.007Z",
+        "reason": "Existing Scratch/PenguinMod tab typography; preserving established product UI consistency"
+      }
+    ]
+  }
+}
