@@ -10,7 +10,7 @@ const parent = () => text('PARENT');
 const layer = () => text('LAYER', 'Layer 1');
 const definitions = [
     ['composition', 'initComposition', 'init composition', []],
-    ['layer', 'initLayer', 'init layer', []],
+    ['layer', 'initLayer', 'init layer composition %1', [text('COMPOSITION', 'Composition 1')]],
     ['composition', 'addComposition', 'add composition %1 resolution %2 %3 framerate: %4 background color: %5',
         [text('NAME', 'Composition 1'), number('WIDTH', 1920), number('HEIGHT', 1080), number('FRAMERATE', 30),
             color('COLOR', '#000000')]],
@@ -48,7 +48,13 @@ const definitions = [
             menu('EDGE', ['clamp', 'mirror', 'transparent']), menu('REPEAT', ['false', 'true'])]],
     ['effect', 'autoGrading', 'auto grading %1 background %2', [text('DST', 'Footage 1'), text('SRC', 'Background')]],
     ['timeline', 'time', 'time', [], 'reporter']
-].map(([category, opcode, message, args, shape]) => ({category, opcode: `shade_${opcode}`, message, args, shape}));
+].map(([category, opcode, message, args, shape]) => {
+    if (category === 'layer' && opcode.startsWith('add')) {
+        message += ` time: %${args.length + 1} ~ %${args.length + 2}`;
+        args = args.concat([number('T0'), number('T1', 'Infinity')]);
+    }
+    return {category, opcode: `shade_${opcode}`, message, args, shape};
+});
 
 const categories = {
     composition: ['Composition', '#6854b8'],
@@ -69,15 +75,21 @@ const menuOptions = (arg, vm) => {
             .map(asset => [asset.name, asset.id]));
     }
     const costumes = [];
+    const sounds = [];
     for (const target of vm.runtime.targets || []) {
         if (!target.isOriginal) continue;
+        for (const sound of (target.sprite && target.sprite.sounds) || []) {
+            const key = `sound:${encodeURIComponent(target.getName())}:${encodeURIComponent(sound.name)}`;
+            sounds.push([`Sounds: ${target.getName()}: ${sound.name}`, key]);
+        }
         for (const costume of target.getCostumes()) {
             const key = `costume:${encodeURIComponent(target.getName())}:${encodeURIComponent(costume.name)}`;
             costumes.push([`${target.getName()}: ${costume.name}`, key]);
         }
     }
     const videos = (assets ? assets.list('video') : []).map(asset => [asset.name, asset.id]);
-    return costumes.concat(videos).length ? costumes.concat(videos) : [['(no media)', '']];
+    const media = costumes.concat(videos, sounds);
+    return media.length ? media : [['(no media)', '']];
 };
 
 const registerShadingBlocks = (ScratchBlocks, vm) => {

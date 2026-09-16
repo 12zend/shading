@@ -5,6 +5,7 @@ import {installShadingTimeline} from '../../../src/lib/shading/runtime/timeline'
 import {ShadingScene} from '../../../src/lib/shading/runtime/scene';
 import {definitions, registerShadingBlocks} from '../../../src/lib/shading/blocks';
 import {gradePixels, blurPixels, autoGradePixels, edgeIndex} from '../../../src/lib/shading/effects';
+import {TimelineSound} from '../../../src/lib/shading/runtime/timeline-sound';
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 const addComposition = (scene, NAME = 'Main') => scene.addComposition({NAME, WIDTH: 320, HEIGHT: 180,
@@ -58,17 +59,46 @@ describe('Shading scene', () => {
         expect(scene.composition.layers.size).toBe(1);
         expect(scene.composition.layers.get('shape').transform).toMatchObject({position: [30, 40], scale: 200});
     });
-    test('init layer clears every composition, keeps compositions and last setters', () => {
+    test('init layer clears only the named composition and keeps last setters', () => {
         addComposition(scene, 'One'); scene.addNull({NAME: 'parent'});
         addComposition(scene, 'Two'); scene.addShape({NAME: 'child'});
         scene.setRotation({DEGREES: 45});
-        scene.initLayer();
+        scene.initLayer({COMPOSITION: 'One'});
         expect(scene.compositions.size).toBe(2);
-        expect(Array.from(scene.compositions.values()).every(c => c.layers.size === 0)).toBe(true);
+        expect(scene.compositions.get('One').layers.size).toBe(0);
+        expect(scene.compositions.get('Two').layers.size).toBe(1);
         expect(scene.settings.rotation).toBe(45);
         scene.initComposition();
         expect(scene.compositions.size).toBe(0);
         expect(scene.active).toBe('');
+    });
+    test('layer time ranges include the start, exclude the end, and default to Infinity', () => {
+        addComposition(scene);
+        scene.addShape({NAME: 'finite', T0: 2, T1: 4});
+        scene.addNull({NAME: 'forever'});
+        const finite = scene.composition.layers.get('finite');
+        scene.time = () => 1;
+        expect(scene.isLayerActive(finite)).toBe(false);
+        scene.time = () => 2;
+        expect(scene.isLayerActive(finite)).toBe(true);
+        scene.time = () => 4;
+        expect(scene.isLayerActive(finite)).toBe(false);
+        expect(scene.composition.layers.get('forever').end).toBe(Infinity);
+        expect(scene.isLayerActive(scene.composition.layers.get('forever'))).toBe(true);
+    });
+    test('render composition stays selected while blocks edit other compositions', () => {
+        const timeline = installShadingTimeline(vm);
+        const sharedScene = vm.runtime.shadingScene;
+        addComposition(sharedScene, 'Preview');
+        timeline.setRenderComposition('Preview');
+        sharedScene.addComposition({NAME: 'Other', WIDTH: 640, HEIGHT: 360, FRAMERATE: 60});
+        expect(sharedScene.active).toBe('Other');
+        expect(sharedScene.renderComposition.name).toBe('Preview');
+        expect(timeline.renderWidth).toBe(320);
+        expect(timeline.renderFramerate).toBe(24);
+        timeline.setRenderComposition('Other');
+        expect(timeline.renderWidth).toBe(640);
+        expect(timeline.toJSON().renderComposition).toBe('Other');
     });
     test('rejects parent cycles including forward references', () => {
         addComposition(scene);
@@ -85,6 +115,35 @@ describe('Shading scene', () => {
         const effects = scene.composition.layers.get('A').effects;
         expect(effects.size).toBe(1);
         expect(effects.get('blur').RADIUS).toBe(10);
+    });
+});
+
+describe('Sound footage', () => {
+    test('plays and records only active sound layers in the render composition', () => {
+        const vm = makeVM();
+        installShadingTimeline(vm);
+        const scene = vm.runtime.shadingScene;
+        addComposition(scene);
+        scene.addFootage({NAME: 'audio', MEDIA: 'sound:Stage:Music', T0: 2, T1: 4});
+        const target = {isOriginal: true, getName: () => 'Stage',
+            sprite: {sounds: [{name: 'Music', soundId: 'music'}]}};
+        vm.runtime.targets.push(target);
+        const sound = new TimelineSound(vm.runtime, {currentTime: 3, isPlaying: true});
+        sound.startPlayback = jest.fn();
+        sound.recordSoundAtTime = jest.fn();
+        scene.time = () => 3;
+        sound.syncFootage();
+        expect(sound.startPlayback).toHaveBeenCalledWith(target, target.sprite.sounds[0],
+            expect.objectContaining({offset: 1, duration: 1}));
+        sound.beginRecording();
+        sound.syncFootage();
+        expect(sound.recordSoundAtTime).toHaveBeenCalledTimes(1);
+        scene.time = () => 4;
+        sound.syncFootage();
+        expect(sound.recordSoundAtTime).toHaveBeenCalledTimes(1);
+        sound.dispose();
+        vm.runtime.targets.pop();
+        vm.runtime.dispose();
     });
 });
 

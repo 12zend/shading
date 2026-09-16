@@ -36,9 +36,12 @@ class TimelineSound {
         this.handleTimelineSeek = this.handleTimelineSeek.bind(this);
         this.handleTimelineUpdate = this.handleTimelineUpdate.bind(this);
         this.playSoundAtTime = this.playSoundAtTime.bind(this);
+        this.syncFootage = this.syncFootage.bind(this);
 
         if (!runtime._primitives) runtime._primitives = {};
         runtime._primitives.sound_playattime = this.playSoundAtTime;
+        runtime.on('AFTER_EXECUTE', this.syncFootage);
+        runtime.on('SHADING_RENDER_FRAME', this.syncFootage);
         runtime.on('PROJECT_START', this.handleProjectStart);
         runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         runtime.on('SHADING_TIMELINE_SEEK', this.handleTimelineSeek);
@@ -59,6 +62,39 @@ class TimelineSound {
 
     handleTimelineUpdate (snapshot) {
         if (snapshot && snapshot.isPlaying === false) this.stopAll();
+    }
+
+    syncFootage () {
+        const scene = this.runtime.shadingScene;
+        const composition = scene && scene.renderComposition;
+        const activeKeys = new Set();
+        if (composition) {
+            for (const layer of composition.layers.values()) {
+                if (layer.kind !== 'footage' || !layer.media.startsWith('sound:') ||
+                    !scene.isLayerActive(layer)) continue;
+                const [, targetName, soundName] = layer.media.split(':').map(decodeURIComponent);
+                const target = (this.runtime.targets || []).find(item =>
+                    item.isOriginal && item.getName() === targetName);
+                const sound = this.findSound(target, soundName);
+                if (!sound) continue;
+                const key = `footage:${composition.name}:${layer.name}:${layer.media}`;
+                activeKeys.add(key);
+                const configuration = {start: layer.start, end: layer.end, speed: 1, volume: 1};
+                if (this.recording) {
+                    this.recordSoundAtTime(target, sound, configuration, key);
+                } else if (this.timeline.isPlaying && !this.playbacks.has(key)) {
+                    this.startPlayback(target, sound, {...configuration,
+                        key,
+                        offset: this.timeline.currentTime - layer.start,
+                        duration: layer.end - this.timeline.currentTime});
+                }
+            }
+        }
+        for (const key of this.playbacks.keys()) {
+            if (key.startsWith('footage:') && (!activeKeys.has(key) || !this.timeline.isPlaying)) {
+                this.stopPlayback(key);
+            }
+        }
     }
 
     beginRecording () {
@@ -344,6 +380,8 @@ class TimelineSound {
     dispose () {
         this.stopAll();
         this.endRecording();
+        this.runtime.off('AFTER_EXECUTE', this.syncFootage);
+        this.runtime.off('SHADING_RENDER_FRAME', this.syncFootage);
         this.runtime.off('PROJECT_START', this.handleProjectStart);
         this.runtime.off('PROJECT_LOADED', this.handleProjectLoaded);
         this.runtime.off('SHADING_TIMELINE_SEEK', this.handleTimelineSeek);

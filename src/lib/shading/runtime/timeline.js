@@ -59,6 +59,7 @@ class ShadingTimeline {
     constructor (runtime, options = {}) {
         this.runtime = runtime;
         installEventHats(runtime);
+        this.renderComposition = options.renderComposition || '';
         this.duration = normalizeDuration(options.duration) || DEFAULT_DURATION;
         this.renderWidth = normalizeRenderSize(
             typeof options.renderWidth === 'undefined' ? options.width : options.renderWidth
@@ -105,6 +106,7 @@ class ShadingTimeline {
             currentTime: this.currentTime,
             duration: this.duration,
             isPlaying: this.isPlaying,
+            renderComposition: this.renderComposition,
             renderWidth: this.renderWidth,
             renderHeight: this.renderHeight,
             renderFramerate: this.renderFramerate
@@ -126,6 +128,7 @@ class ShadingTimeline {
             threads = this.runtime.startHats('event_renderframe', {}) || [];
         }
         if (options.synchronous) this.executeRenderFrameThreads(threads);
+        this.applyRenderComposition();
         this.runtime.emit('SHADING_RENDER_FRAME', this.snapshot(), threads);
         return threads;
     }
@@ -210,7 +213,17 @@ class ShadingTimeline {
         this.seek(frame * this.stepTime);
     }
 
+    ensureInitialized () {
+        if (!this.initialized) {
+            this.initialized = true;
+            const threads = this.runtime.startHats('event_initialize', {}) || [];
+            this.executeRenderFrameThreads(threads);
+            this.triggerRenderFrame({synchronous: true});
+        }
+    }
+
     play () {
+        this.ensureInitialized();
         const clock = this.clock;
         if (!clock) return;
         if (this.currentTime >= this.duration) this.setClockTime(0);
@@ -256,6 +269,22 @@ class ShadingTimeline {
         return true;
     }
 
+    setRenderComposition (name) {
+        this.renderComposition = String(name);
+        this.applyRenderComposition();
+        if (this.runtime.shadingScene) this.runtime.shadingScene.revision++;
+        if (typeof this.runtime.emitProjectChanged === 'function') this.runtime.emitProjectChanged();
+        this.runtime.requestRedraw();
+        this.triggerRenderFrame({synchronous: true});
+        this.emitUpdate();
+    }
+
+    applyRenderComposition () {
+        const scene = this.runtime.shadingScene;
+        const composition = scene && scene.renderComposition;
+        if (composition) this.setRenderSettings(composition, false);
+    }
+
     setRenderSettings (settings = {}, emitProjectChanged = true) {
         let changed = false;
         const pickDefined = (first, second) => (typeof first === 'undefined' ? second : first);
@@ -287,6 +316,7 @@ class ShadingTimeline {
     }
 
     restore (settings) {
+        this.renderComposition = (settings && settings.renderComposition) || '';
         const duration = normalizeDuration(settings && settings.duration) || DEFAULT_DURATION;
         this.duration = duration;
         this.renderWidth = normalizeRenderSize(settings && (settings.renderWidth || settings.width)) ||
@@ -302,6 +332,7 @@ class ShadingTimeline {
     toJSON () {
         return {
             duration: this.duration,
+            renderComposition: this.renderComposition,
             renderWidth: this.renderWidth,
             renderHeight: this.renderHeight,
             renderFramerate: this.renderFramerate
@@ -309,6 +340,7 @@ class ShadingTimeline {
     }
 
     handleProjectStart () {
+        this.initialized = true;
         // runtime.greenFlag() resets the clock immediately after PROJECT_START;
         // restart also resumes a clock paused by the timeline stop button.
         this.restart();
@@ -319,6 +351,7 @@ class ShadingTimeline {
     }
 
     handleProjectLoaded () {
+        this.initialized = false;
         this.stop();
     }
 
@@ -342,6 +375,7 @@ class ShadingTimeline {
     }
 
     handleAfterExecute () {
+        this.applyRenderComposition();
         const clock = this.clock;
         if (clock && !clock._paused && Number(clock.projectTimer()) >= this.duration) {
             this.setClockTime(this.duration);

@@ -31,7 +31,7 @@ class ShadingScene {
         this.previewPromise = Promise.resolve();
         this.lastPreviewKey = '';
         const preview = () => {
-            if (this.exporting || this.previewPending || !this.runtime.renderer || !this.composition) return;
+            if (this.exporting || this.previewPending || !this.runtime.renderer || !this.renderComposition) return;
             const key = `${this.revision}:${this.time()}`;
             if (key === this.lastPreviewKey) return;
             this.lastPreviewKey = key;
@@ -71,12 +71,20 @@ class ShadingScene {
     get composition () {
         return this.compositions.get(this.active);
     }
+    get renderComposition () {
+        const name = this.runtime.shadingTimeline && this.runtime.shadingTimeline.renderComposition;
+        return name ? this.compositions.get(name) : this.composition;
+    }
+    isLayerActive (layer) {
+        return this.time() >= layer.start && this.time() < layer.end;
+    }
     initComposition () {
         this.compositions.clear();
         this.active = '';
     }
-    initLayer () {
-        for (const composition of this.compositions.values()) composition.layers.clear();
+    initLayer ({COMPOSITION} = {}) {
+        const composition = this.compositions.get(String(COMPOSITION || this.active));
+        if (composition) composition.layers.clear();
     }
     addComposition (args) {
         const name = String(args.NAME);
@@ -102,7 +110,7 @@ class ShadingScene {
         if (!composition) return;
         this.active = composition.name;
         const timeline = this.runtime.shadingTimeline;
-        if (timeline) {
+        if (timeline && (!timeline.renderComposition || timeline.renderComposition === composition.name)) {
             timeline.setRenderSettings({width: composition.width,
                 height: composition.height,
                 framerate: composition.framerate}, false);
@@ -130,6 +138,8 @@ class ShadingScene {
         const previous = layers.get(name);
         layers.set(name, {name,
             kind,
+            start: Math.max(0, numeric(args.T0)),
+            end: Math.max(0, numeric(args.T1, Infinity)),
             parent,
             mode: String(args.MODE || 'normal'),
             media: String(args.MEDIA || ''),
@@ -207,7 +217,8 @@ class ShadingScene {
         return clock ? clock.projectTimer() : 0;
     }
     async prepareFrame () {
-        const layers = this.composition ? Array.from(this.composition.layers.values()) : [];
+        const layers = this.renderComposition ? Array.from(this.renderComposition.layers.values())
+            .filter(layer => this.isLayerActive(layer)) : [];
         const videos = new Set(layers.filter(l => l.kind === 'footage').map(l => l.media));
         await this.assets.prepareFrame(this.time(), videos);
         if (this.runtime.renderer && this.runtime.renderer.ready) await this.runtime.renderer.ready();

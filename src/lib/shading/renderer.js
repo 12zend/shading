@@ -325,7 +325,7 @@ class ShadingRenderer extends EventEmitter {
         }
         const rawLayers = new Map();
         for (const layer of composition.layers.values()) {
-            if (layer.kind === 'null') continue;
+            if (layer.kind === 'null' || !this.scene.isLayerActive(layer)) continue;
             let surface;
             if (layer.kind === 'adjustment') {
                 surface = canvasOf(output.width, output.height);
@@ -345,7 +345,7 @@ class ShadingRenderer extends EventEmitter {
     draw () {
         const context = this.context;
         context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        const composition = this.scene && this.scene.composition;
+        const composition = this.scene && this.scene.renderComposition;
         if (composition) {
             const surface = this.renderComposition(composition);
             const scale = Math.min(this.canvas.width / surface.width, this.canvas.height / surface.height);
@@ -361,7 +361,7 @@ class ShadingRenderer extends EventEmitter {
     }
     async drawFrame (targetCanvas) {
         if (this.scene) await this.scene.prepareFrame();
-        const composition = this.scene && this.scene.composition;
+        const composition = this.scene && this.scene.renderComposition;
         const context = targetCanvas.getContext('2d');
         context.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
         if (composition) {

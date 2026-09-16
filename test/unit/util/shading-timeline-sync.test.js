@@ -106,6 +106,7 @@ describe('ShadingTimeline render-frame synchronization', () => {
             assets: [],
             version: 1,
             timeline: {
+                renderComposition: '',
                 duration: 42.5,
                 renderWidth: 1280,
                 renderHeight: 720,

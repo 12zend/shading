@@ -20,6 +20,7 @@ class ShadingTimeline extends React.Component {
             currentTime: 0,
             duration: 10,
             isPlaying: false,
+            renderComposition: '',
             renderFramerate: DEFAULT_RENDER_FRAMERATE,
             renderHeight: DEFAULT_RENDER_HEIGHT,
             renderWidth: DEFAULT_RENDER_WIDTH,
@@ -30,6 +31,7 @@ class ShadingTimeline extends React.Component {
         bindAll(this, [
             'attachTimeline',
             'handleChangeDuration',
+            'handleChangeComposition',
             'handleChangeRenderSettings',
             'handleChangeZoom',
             'handlePlayPause',
@@ -84,6 +86,10 @@ class ShadingTimeline extends React.Component {
         if (this.timeline) this.timeline.step(direction);
     }
 
+    handleChangeComposition (name) {
+        if (this.timeline) this.timeline.setRenderComposition(name);
+    }
+
     handleChangeDuration (duration) {
         if (this.timeline) this.timeline.setDuration(Number(duration));
     }
@@ -117,6 +123,7 @@ class ShadingTimeline extends React.Component {
         return (
             <ShadingTimelineComponent
                 {...this.state}
+                onChangeComposition={this.handleChangeComposition}
                 onChangeDuration={this.handleChangeDuration}
                 onChangeRenderSettings={this.handleChangeRenderSettings}
                 onChangeZoom={this.handleChangeZoom}

@@ -67,6 +67,7 @@ class ShadingTimelineComponent extends React.Component {
         super(props);
         bindAll(this, [
             'handleKeyDown',
+            'handleCompositionChange',
             'handlePlayPause',
             'handleStop',
             'handleScrubberChange',
@@ -148,6 +149,10 @@ class ShadingTimelineComponent extends React.Component {
         if (viewport && typeof viewport.removeEventListener === 'function') {
             viewport.removeEventListener('wheel', this.handleWheel);
         }
+    }
+
+    handleCompositionChange (event) {
+        this.props.onChangeComposition(event.target.value);
     }
 
     handleWheel (event) {
@@ -628,6 +633,16 @@ class ShadingTimelineComponent extends React.Component {
                             />
                         </button>
                     </div>
+                    <label className={styles.compositionControl}>
+                        <span>{'render composition'}</span>
+                        <input
+                            aria-label="Render composition"
+                            disabled={this.state.isRendering}
+                            type="text"
+                            value={this.props.renderComposition}
+                            onChange={this.handleCompositionChange}
+                        />
+                    </label>
                     <div className={styles.readout}>
                         <span className={styles.liveDot} />
                         <span>{formatTime(currentTime)}</span>
@@ -715,6 +730,7 @@ ShadingTimelineComponent.propTypes = {
     currentTime: PropTypes.number.isRequired,
     duration: PropTypes.number.isRequired,
     isPlaying: PropTypes.bool.isRequired,
+    onChangeComposition: PropTypes.func,
     onChangeDuration: PropTypes.func.isRequired,
     onChangeRenderSettings: PropTypes.func,
     onChangeZoom: PropTypes.func.isRequired,
@@ -723,6 +739,7 @@ ShadingTimelineComponent.propTypes = {
     onSeek: PropTypes.func.isRequired,
     onStep: PropTypes.func.isRequired,
     onStop: PropTypes.func.isRequired,
+    renderComposition: PropTypes.string,
     renderFramerate: PropTypes.number,
     renderHeight: PropTypes.number,
     renderWidth: PropTypes.number,
@@ -730,6 +747,8 @@ ShadingTimelineComponent.propTypes = {
 };
 
 ShadingTimelineComponent.defaultProps = {
+    onChangeComposition: () => {},
+    renderComposition: '',
     onChangeRenderSettings: () => {},
     onRender: null,
     renderFramerate: 30,

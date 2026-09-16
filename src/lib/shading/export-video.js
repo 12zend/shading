@@ -79,9 +79,14 @@ const getStageCanvas = vm => {
 
 const hasTimelineSoundBlocks = vm => {
     const targets = vm && vm.runtime && Array.isArray(vm.runtime.targets) ? vm.runtime.targets : [];
+    const scene = vm && vm.runtime && vm.runtime.shadingScene;
+    if (scene && scene.renderComposition && Array.from(scene.renderComposition.layers.values())
+        .some(layer => layer.kind === 'footage' && layer.media.startsWith('sound:'))) return true;
+    const hasSounds = targets.some(target => target.sprite && target.sprite.sounds && target.sprite.sounds.length);
     return targets.some(target => {
         const blocks = target && target.blocks && target.blocks._blocks;
-        return blocks && Object.values(blocks).some(block => block && block.opcode === 'sound_playattime');
+        return blocks && Object.values(blocks).some(block => block &&
+            (block.opcode === 'sound_playattime' || (hasSounds && block.opcode === 'shade_addFootage')));
     });
 };
 
@@ -191,7 +196,11 @@ const getFrameRenderer = (vm, renderFrame) => {
  */
 const exportTimelineVideo = async (vm, options = {}) => {
     const {onProgress, signal} = options;
-    const {width, height, framerate} = normalizeExportSettings(options);
+    const controller = vm && vm.runtime && vm.runtime.shadingTimeline;
+    if (controller && typeof controller.ensureInitialized === 'function') controller.ensureInitialized();
+    const selected = controller && controller.renderComposition && vm.runtime.shadingScene &&
+        vm.runtime.shadingScene.renderComposition;
+    const {width, height, framerate} = normalizeExportSettings(selected || options);
     const throwIfAborted = () => {
         if (signal && signal.aborted) throw createAbortError();
     };
