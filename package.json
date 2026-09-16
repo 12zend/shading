@@ -92,8 +92,7 @@
     "scratch-audio": "github:TurboWarp/scratch-audio#develop",
     "scratch-blocks": "github:TurboWarp/scratch-blocks#develop-builds",
     "scratch-paint": "github:TurboWarp/scratch-paint#develop",
-    "scratch-render": "github:TurboWarp/scratch-render#develop",
-    "scratch-vm": "github:TurboWarp/scratch-vm#develop",
+    "scratch-vm": "file:./scratch-vm",
     "style-loader": "^0.23.0",
     "text-encoding": "0.7.0",
     "to-style": "1.3.3",
@@ -149,12 +148,14 @@
       "<rootDir>/test/helpers/enzyme-setup.js"
     ],
     "testPathIgnorePatterns": [
-      "src/test.js"
+      "src/test.js",
+      "<rootDir>/scratch-vm/"
     ],
     "moduleNameMapper": {
       "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>/test/__mocks__/fileMock.js",
       "\\.(css|less)$": "<rootDir>/test/__mocks__/styleMock.js",
-      "editor-msgs(\\.js)?$": "<rootDir>/test/__mocks__/editor-msgs-mock.js"
+      "editor-msgs(\\.js)?$": "<rootDir>/test/__mocks__/editor-msgs-mock.js",
+      "^scratch-vm(.*)$": "<rootDir>/scratch-vm$1"
     }
   },
   "overrides": {

@@ -27,6 +27,7 @@ const getShadeTimelineSettings = projectJSON => {
 const markShadeProject = (projectJSON, timeline) => {
     if (!isObject(projectJSON)) return projectJSON;
     projectJSON[SHADE_PROJECT_FORMAT_KEY] = {
+        ...projectJSON[SHADE_PROJECT_FORMAT_KEY],
         version: SHADE_PROJECT_FORMAT_VERSION,
         timeline
     };

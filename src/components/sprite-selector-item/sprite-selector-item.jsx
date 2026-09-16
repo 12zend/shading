@@ -30,7 +30,13 @@ const SpriteSelectorItem = props => (
         {typeof props.number === 'undefined' ? null : (
             <div className={styles.number}>{props.number}</div>
         )}
-        {props.costumeURL ? (
+        {props.thumbnail ? (
+            <div className={styles.spriteImageOuter}>
+                <div className={styles.spriteImageInner}>
+                    <div className={styles.spriteImage}>{props.thumbnail}</div>
+                </div>
+            </div>
+        ) : props.costumeURL ? (
             <div className={styles.spriteImageOuter}>
                 <div className={styles.spriteImageInner}>
                     <img
@@ -101,6 +107,7 @@ SpriteSelectorItem.propTypes = {
     className: PropTypes.string,
     componentRef: PropTypes.func,
     costumeURL: PropTypes.string,
+    thumbnail: PropTypes.node,
     details: PropTypes.string,
     // eslint-disable-next-line react/forbid-prop-types
     name: PropTypes.any,

@@ -1,3 +1,4 @@
+import {installShadingScene} from './scene';
 import installTimelineSound from './timeline-sound';
 import {getShadeTimelineSettings, markShadeProject} from '../project-format';
 
@@ -366,6 +367,7 @@ class ShadingTimeline {
 const installShadingTimeline = (vm, options = {}) => {
     if (!vm || !vm.runtime) return null;
     if (vm.runtime.shadingTimeline) return vm.runtime.shadingTimeline;
+    installShadingScene(vm);
     const timeline = new ShadingTimeline(vm.runtime, options);
     vm.runtime.shadingTimeline = timeline;
     timeline.sound = installTimelineSound(vm.runtime, timeline);

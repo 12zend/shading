@@ -26,3 +26,27 @@ npm-*
 
 # for act
 .secrets
+
+# Vendored scratch-vm
+# Mac OS
+/scratch-vm/**/.DS_Store
+
+# NPM
+/scratch-vm/node_modules
+/scratch-vm/**/npm-*
+
+# Testing
+/scratch-vm/.nyc_output
+/scratch-vm/coverage
+
+# Editor
+/scratch-vm/.idea
+/scratch-vm/.vscode
+
+# Build
+/scratch-vm/dist
+/scratch-vm/playground
+/scratch-vm/benchmark
+
+# Localization
+/scratch-vm/translations

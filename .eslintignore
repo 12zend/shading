@@ -9,3 +9,6 @@ src/addons/addons
 src/addons/libraries
 src/addons/api-libraries
 src/addons/generated
+
+# Vendored VM has its own lint configuration
+scratch-vm/

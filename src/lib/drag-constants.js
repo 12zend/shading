@@ -1,5 +1,7 @@
 export default {
     SOUND: 'SOUND',
+    VIDEO: 'VIDEO',
+    FONT: 'FONT',
     COSTUME: 'COSTUME',
     SPRITE: 'SPRITE',
     CODE: 'CODE',

@@ -61,6 +61,7 @@ const base = {
     resolve: {
         symlinks: false,
         alias: {
+            'scratch-vm': path.resolve(__dirname, 'scratch-vm'),
             'text-encoding$': path.resolve(__dirname, 'src/lib/tw-text-encoder'),
             'scratch-render-fonts$': path.resolve(__dirname, 'src/lib/tw-scratch-render-fonts'),
             // Webpack 4 does not consistently resolve Mediabunny's conditional
@@ -75,6 +76,7 @@ const base = {
             loader: 'babel-loader',
             include: [
                 path.resolve(__dirname, 'src'),
+                path.resolve(__dirname, 'scratch-vm/src'),
                 /node_modules[\\/]scratch-[^\\/]+[\\/]src/,
                 /node_modules[\\/]pify/,
                 /node_modules[\\/]@vernier[\\/]godirect/,

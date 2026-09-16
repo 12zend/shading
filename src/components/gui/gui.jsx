@@ -1,3 +1,6 @@
+import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
+import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
+import ShadingAssets from '../shading-assets/shading-assets.jsx';
 import classNames from 'classnames';
 import omit from 'lodash.omit';
 import PropTypes from 'prop-types';
@@ -385,6 +388,28 @@ const GUIComponent = props => {
                                             id="gui.gui.soundsTab"
                                         />
                                     </Tab>
+                                    <Tab className={tabClassNames.tab}>
+                                        <img
+                                            alt=""
+                                            draggable={false}
+                                            src={videosIcon()}
+                                        />
+                                        <FormattedMessage
+                                            id="shade.gui.videosTab"
+                                            defaultMessage="Videos"
+                                        />
+                                    </Tab>
+                                    <Tab className={tabClassNames.tab}>
+                                        <img
+                                            alt=""
+                                            draggable={false}
+                                            src={fontsIcon()}
+                                        />
+                                        <FormattedMessage
+                                            id="shade.gui.fontsTab"
+                                            defaultMessage="Fonts"
+                                        />
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -426,6 +451,18 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {soundsTabVisible ? <SoundTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {activeTabIndex === 3 ? <ShadingAssets
+                                        vm={vm}
+                                        kind="video"
+                                    /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {activeTabIndex === 4 ? <ShadingAssets
+                                        vm={vm}
+                                        kind="font"
+                                    /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (

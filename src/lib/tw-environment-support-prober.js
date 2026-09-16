@@ -1,4 +1,4 @@
-import Renderer from 'scratch-render';
+import Renderer from './shading/renderer';
 import log from './log';
 
 let cachedRendererSupport = null;

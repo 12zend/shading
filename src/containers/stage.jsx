@@ -1,7 +1,8 @@
+import {installShadingScene} from '../lib/shading/runtime/scene';
 import bindAll from 'lodash.bindall';
 import PropTypes from 'prop-types';
 import React from 'react';
-import Renderer from 'scratch-render';
+import Renderer from '../lib/shading/renderer';
 import VM from 'scratch-vm';
 import {connect} from 'react-redux';
 
@@ -70,6 +71,7 @@ class Stage extends React.Component {
                 this.props.customStageSize.width,
                 this.props.customStageSize.height
             );
+            this.renderer.scene = installShadingScene(this.props.vm);
             this.props.vm.attachRenderer(this.renderer);
 
             // Only attach a video provider once because it is stateful

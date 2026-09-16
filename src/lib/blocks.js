@@ -1,3 +1,4 @@
+import {categories as shadingCategories, registerShadingBlocks} from './shading/blocks';
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 
 /**
@@ -7,6 +8,7 @@ import LazyScratchBlocks from './tw-lazy-scratch-blocks';
  */
 export default function (vm) {
     const ScratchBlocks = LazyScratchBlocks.get();
+    registerShadingBlocks(ScratchBlocks, vm);
     const jsonForMenuBlock = function (name, menuOptionsFn, colors, start) {
         return {
             message0: '%1',
@@ -164,11 +166,11 @@ export default function (vm) {
             init: function () {
                 this.jsonInit({
                     message0: message,
-                    category: ScratchBlocks.Categories.event,
-                    colour: eventColors.primary,
-                    colourSecondary: eventColors.secondary,
-                    colourTertiary: eventColors.tertiary,
-                    colourQuaternary: eventColors.quaternary,
+                    category: 'shade_timeline',
+                    colour: shadingCategories.timeline[1],
+                    colourSecondary: shadingCategories.timeline[1],
+                    colourTertiary: shadingCategories.timeline[1],
+                    colourQuaternary: shadingCategories.timeline[1],
                     extensions: ['shape_hat']
                 });
             }

@@ -103,6 +103,7 @@ describe('ShadingTimeline render-frame synchronization', () => {
         const zip = await JSZip.loadAsync(archive);
         const savedJSON = JSON.parse(await zip.file('project.json').async('string'));
         expect(savedJSON.shade).toEqual({
+            assets: [],
             version: 1,
             timeline: {
                 duration: 42.5,

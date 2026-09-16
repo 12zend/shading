@@ -70,6 +70,7 @@ const Selector = props => {
                             })}
                             costumeURL={item.url}
                             details={item.details}
+                            thumbnail={item.thumbnail}
                             dragPayload={item.dragPayload}
                             dragType={dragType}
                             id={index}
@@ -103,6 +104,7 @@ Selector.propTypes = {
     isRtl: PropTypes.bool,
     items: PropTypes.arrayOf(PropTypes.shape({
         url: PropTypes.string,
+        thumbnail: PropTypes.node,
         name: PropTypes.any // modified by folders addon
     })),
     onAddSortable: PropTypes.func,

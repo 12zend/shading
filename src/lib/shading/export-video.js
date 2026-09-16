@@ -205,6 +205,7 @@ const exportTimelineVideo = async (vm, options = {}) => {
 
     const stageCanvas = getStageCanvas(vm);
     const stageRenderer = vm.renderer;
+    const scene = vm.runtime.shadingScene;
     const customRenderFrame = getFrameRenderer(vm, options.renderFrame);
     const hasAudioBlocks = hasTimelineSoundBlocks(vm);
     const audioContext = getAudioContext(vm);
@@ -228,6 +229,10 @@ const exportTimelineVideo = async (vm, options = {}) => {
     let videoSourceClosed = false;
     let audioRecordingStarted = false;
     try {
+        if (scene) {
+            scene.exporting = true;
+            await scene.previewPromise;
+        }
         // Use Mediabunny's compiled browser entry explicitly. Webpack 4 can
         // otherwise follow the package metadata into mediabunny/src/*.ts,
         // which it cannot parse as JavaScript.
@@ -306,6 +311,10 @@ const exportTimelineVideo = async (vm, options = {}) => {
                     vm,
                     width
                 });
+            } else if (stageRenderer && typeof stageRenderer.drawFrame === 'function') {
+                // Await video seeking and render at export resolution, not preview resolution.
+                // eslint-disable-next-line no-await-in-loop
+                await stageRenderer.drawFrame(captureCanvas);
             } else {
                 // Force a draw even when the VM has not marked the renderer
                 // dirty; the timer may be consumed by an external renderer.
@@ -389,6 +398,9 @@ const exportTimelineVideo = async (vm, options = {}) => {
         }
         throw error;
     } finally {
+        if (scene) {
+            scene.exporting = false; scene.lastPreviewKey = '';
+        }
         if (audioRecordingStarted && timelineSound && typeof timelineSound.endRecording === 'function') {
             timelineSound.endRecording();
         }
