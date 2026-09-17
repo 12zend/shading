@@ -90,7 +90,7 @@ const makeMask = (frame, options, previousFrame) => {
     const mode = ['alpha', 'bright', 'color', 'dark', 'motion'].includes(requestedMode) ?
         requestedMode : 'dark';
     const threshold = clamp(Number(options.threshold) || 0, 0, 255);
-    const blurRadius = clamp(Math.round(Number(options.blurRadius) || 0), 0, Number(options.blurRadiusLimit) || 100);
+    const blurRadius = clamp(Math.round(Number(options.blurRadius) || 0), 0, 100);
     const targetColor = Array.isArray(options.targetColor) || ArrayBuffer.isView(options.targetColor) ?
         options.targetColor : [1, 1, 1];
     const mask = new Uint8Array(frame.width * frame.height);
@@ -389,7 +389,7 @@ const drawMovieBlobOverlay = (inputFrame, boxes, options = {}, outputBuffer = nu
         if (marker) {
             const cx = clamp(Math.floor(centerX), 0, frame.width - 1);
             const cy = clamp(Math.floor(centerY), 0, frame.height - 1);
-            const markerRadius = Math.max(1, Math.round(3 * (Number(options.markerScale) || 1)), strokeWidth * 2);
+            const markerRadius = Math.max(3, strokeWidth * 2);
             for (let delta = -markerRadius; delta <= markerRadius; delta++) {
                 const horizontalX = cx + delta;
                 const verticalY = cy + delta;

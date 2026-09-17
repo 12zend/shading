@@ -743,11 +743,6 @@ const createPenFXEngine = (gl, renderer) => {
             this.matteStack.length = 0;
         }
 
-        getStageResolution () {
-            return renderer && typeof renderer.getNativeSize === 'function' ?
-                renderer.getNativeSize() : (this.resolution || [this.width, this.height]);
-        }
-
         _render (program, framebuffer, samplers, uniforms, integerUniforms) {
             // A work texture can still be bound on an otherwise-unused texture unit
             // from the previous pass. Some ANGLE backends treat that as a feedback
@@ -769,9 +764,6 @@ const createPenFXEngine = (gl, renderer) => {
                 gl.bindTexture(gl.TEXTURE_2D, samplers[i].texture);
                 gl.uniform1i(this._location(program, samplers[i].name), i);
             }
-            // ZIP built-ins use project coordinates for authored distances. Keep u_resolution in
-            // physical texels for existing user shaders and supply the logical size independently.
-            gl.uniform2fv(this._location(program, 'u_stageResolution'), this.getStageResolution());
             for (const name in uniforms) {
                 const value = uniforms[name];
                 const location = this._location(program, name);

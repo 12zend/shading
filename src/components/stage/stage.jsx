@@ -67,7 +67,6 @@ const StageComponent = props => {
                     <DOMElementRenderer
                         domElement={canvas}
                         style={{
-                            imageRendering: 'pixelated',
                             height: stageDimensions.height,
                             width: stageDimensions.width
                         }}

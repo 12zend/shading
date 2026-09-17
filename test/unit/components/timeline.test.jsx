@@ -53,19 +53,6 @@ describe('Timeline keyboard controls', () => {
         instance.manager = manager;
     });
 
-    test('offers half-resolution preview and saves it separately from output size', () => {
-        component.setProps({customStageSize: {width: 480, height: 270}});
-        instance.handleToggleSettings();
-        const select = component.find('select[name="previewScale"]');
-        expect(select.prop('value')).toBe(1);
-        expect(select.find('option[value=0.5]').text()).toBe('240×135 · 50%');
-        select.simulate('change', {target: {name: 'previewScale', value: '0.5'}});
-        instance.handleSaveSettings();
-        expect(manager.updateTimelineSettings).toHaveBeenCalledWith(expect.objectContaining({
-            previewScale: 0.5, width: 480, height: 360
-        }));
-    });
-
     test('space toggles playback while the timeline is focused', () => {
         const scrubber = {tagName: 'DIV'};
         instance.timelineElement = {contains: target => target === scrubber};
@@ -311,13 +298,12 @@ describe('Timeline keyboard controls', () => {
 
         await instance.handleExport();
 
-        expect(manager.updateTimelineSettings).toHaveBeenCalledWith(expect.objectContaining({
+        expect(manager.updateTimelineSettings).toHaveBeenCalledWith({
             duration: 12,
-            previewScale: 1,
             framerate: 24,
             height: 1080,
             width: 1920
-        }));
+        });
         expect(manager.renderAndExportTimeline).toHaveBeenCalledTimes(1);
         expect(instance.state.exporting).toBe(false);
     });
@@ -329,7 +315,7 @@ describe('Timeline keyboard controls', () => {
         });
 
         const exportButton = component.find('button').filterWhere(button =>
-            button.text() === 'Render / export'
+            button.text() === 'Export MP4'
         );
 
         expect(exportButton).toHaveLength(1);
@@ -352,7 +338,8 @@ describe('Timeline keyboard controls', () => {
             settingsOpen: true
         });
 
-        expect(component.find('select[name="sound"]')).toHaveLength(0);
+        expect(component.text()).not.toContain('Audio');
+        expect(component.find('select')).toHaveLength(0);
     });
 
     test('rendering settings preserve output resolution independently from the stage size', () => {

@@ -11,7 +11,6 @@ import {
     DEFAULT_FOV,
     focalLengthFromFOV
 } from './model-runtime';
-import installMoviePreviewRenderer from './movie-preview-renderer';
 import installMovieFrameGraphRenderer from './movie-frame-graph';
 
 import MovieAssetManagerAssets from './movie-asset-manager-assets';
@@ -91,7 +90,6 @@ class MovieAssetManager extends EventEmitter {
             offlineRenderTimer: null,
             offlineRendering: false,
             pendingFrame: true,
-            previewScale: 1,
             playing: false,
             recording: false,
             rangeEnd: TIMELINE_DEFAULT_DURATION,
@@ -103,7 +101,6 @@ class MovieAssetManager extends EventEmitter {
             waitingForVideo: false,
             width: stageWidth
         };
-        installMoviePreviewRenderer(this.runtime.renderer, this);
         this.camera = {
             fov: DEFAULT_FOV,
             focalLength: focalLengthFromFOV(DEFAULT_FOV, stageWidth, stageHeight),

@@ -744,7 +744,6 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.emit).toHaveBeenCalledWith('timelineSettingsChanged', {
             duration: 20,
             exportFormat: 'mp4',
-            previewScale: 1,
             framerate: 60,
             height: 1080,
             rangeEnd: 20,
@@ -755,7 +754,6 @@ describe('MovieAssetManager rendering performance', () => {
             previousSettings: {
                 duration: 10,
                 exportFormat: 'mp4',
-                previewScale: 1,
                 framerate: 30,
                 height: 360,
                 rangeEnd: 10,
@@ -785,17 +783,6 @@ describe('MovieAssetManager rendering performance', () => {
         expect(removeResult).toBeUndefined();
         expect(manager.getTimelineKeyframes()).toEqual([2, 8]);
         expect(manager.runtime.emitProjectChanged).toHaveBeenCalledTimes(2);
-    });
-
-    test('persists preview detail independently of export dimensions and resets older projects', () => {
-        const manager = makeTimelineManager();
-        manager.updateTimelineSettings({previewScale: 0.5, width: 1920, height: 1080, framerate: 30});
-        const saved = manager.serializeTimeline();
-        expect(saved).toMatchObject({previewScale: 0.5, width: 1920, height: 1080});
-        manager.restoreTimeline(saved);
-        expect(manager.getTimelineState().previewScale).toBe(0.5);
-        manager.restoreTimeline({width: 480, height: 270, framerate: 30});
-        expect(manager.getTimelineState().previewScale).toBe(1);
     });
 
     test('serializes and restores ordered timeline keyframes', () => {

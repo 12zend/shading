@@ -56,11 +56,7 @@ const install = ({Engine, PenFX}) => {
             const inside = value >= low && value <= high;
             selected[index] = value >= 0 && (invertMask ? !inside : inside) ? 1 : 0;
         }
-        const stageSize = this.getStageResolution();
-        const scaleX = width / stageSize[0];
-        const scaleY = height / stageSize[1];
-        const spanScale = type === 'y' ? scaleY : scaleX;
-        const requestedSpan = Math.floor(Math.abs(spanLimit) * spanScale);
+        const requestedSpan = Math.floor(Math.abs(spanLimit));
         const indices = this.pixelSortIndices;
         const lineIndices = this.pixelSortLine;
         const compare = reverse ?
@@ -70,7 +66,7 @@ const install = ({Engine, PenFX}) => {
         const applyGamma = gamma !== 1;
         const sortLine = line => {
             const lineLength = line.length;
-            const maxSpan = requestedSpan >= lineLength ? lineLength : Math.min(Math.max(1, Math.round(256 * spanScale)), Math.max(1, requestedSpan));
+            const maxSpan = requestedSpan >= lineLength ? lineLength : Math.min(256, Math.max(1, requestedSpan));
             let position = 0;
             while (position < lineLength) {
                 const pixelIndex = line[position];
@@ -123,8 +119,8 @@ const install = ({Engine, PenFX}) => {
             }
         } else {
             const tau = Math.PI * 2;
-            const cx = Math.min(width - 0.5, Math.max(0.5, width * 0.5 + centerX * scaleX));
-            const cy = Math.min(height - 0.5, Math.max(0.5, height * 0.5 + centerY * scaleY));
+            const cx = Math.min(width - 0.5, Math.max(0.5, width * 0.5 + centerX));
+            const cy = Math.min(height - 0.5, Math.max(0.5, height * 0.5 + centerY));
             const maxRadius = Math.ceil(Math.max(
                 Math.hypot(cx, cy),
                 Math.hypot(width - cx, cy),
