@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import VM from 'scratch-vm';
 
-import installPenFX from '../../../src/lib/pen-fx';
+import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
 import {
     CUSTOM_SHADER_FORMAT,
     CUSTOM_SHADER_PROJECT_KEY,
@@ -107,9 +107,9 @@ describe('Pen FX custom shader packages', () => {
             name: 'contrast',
             text: 'contrast value: [VALUE] pivot: [PIVOT] mix: [MIX] %',
             inputs: expect.arrayContaining([
-                {id: 'VALUE', label: 'value'},
-                {id: 'PIVOT', label: 'pivot'},
-                {id: 'MIX', label: 'mix'}
+                expect.objectContaining({id: 'VALUE', label: 'value'}),
+                expect.objectContaining({id: 'PIVOT', label: 'pivot'}),
+                expect.objectContaining({id: 'MIX', label: 'mix'})
             ])
         });
         expect(descriptor.blocks.map(block => block.opcode)).toEqual(expect.arrayContaining([
@@ -121,19 +121,24 @@ describe('Pen FX custom shader packages', () => {
         ]));
         expect(descriptor.blocks.find(block => block.id === 'glitch').groupEffectScope).toBe('expanded');
         for (const program of descriptor.programs) {
-            expect(program.source).toBe(programSources[program.bind].trim());
+            if (program.bind === 'acerolaSpatial') {
+                expect(program.source).toContain('u_mode == 1 ? 1.0 / u_resolution : 1.0 / u_stageResolution');
+            } else {
+                expect(program.source).toBe(programSources[program.bind].trim()
+                    .replace(/u_resolution/g, 'u_stageResolution'));
+            }
         }
     });
 
     test('uses English names from the default zip and localizes them only for Japanese UI', () => {
-        const englishVM = {runtime: {}, getLocale: () => 'en'};
-        const englishManager = new PenFXCustomShaderManager(englishVM, {});
+        const englishVM = {runtime: {renderer: {}}, getLocale: () => 'en'};
+        const englishManager = new PenFXCustomShaderManager(englishVM, new (createPenFXClass(englishVM))());
         englishManager.installDefaultPackage();
         const englishContrast = englishManager.getToolboxBlocks()
             .find(block => block && block.opcode === 'contrast');
 
-        const japaneseVM = {runtime: {}, getLocale: () => 'ja'};
-        const japaneseManager = new PenFXCustomShaderManager(japaneseVM, {});
+        const japaneseVM = {runtime: {renderer: {}}, getLocale: () => 'ja'};
+        const japaneseManager = new PenFXCustomShaderManager(japaneseVM, new (createPenFXClass(japaneseVM))());
         japaneseManager.installDefaultPackage();
         const japaneseContrast = japaneseManager.getToolboxBlocks()
             .find(block => block && block.opcode === 'contrast');

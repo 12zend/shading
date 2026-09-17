@@ -391,6 +391,7 @@ class Timeline extends React.Component {
             duration: Number(draft.duration),
             exportFormat: draft.exportFormat,
             framerate: Number(draft.framerate),
+            previewScale: Number(draft.previewScale || 1),
             height: Number(draft.height),
             rangeEnd: Number(draft.rangeEnd),
             rangeStart: Number(draft.rangeStart),
@@ -406,6 +407,7 @@ class Timeline extends React.Component {
             duration: Number(settings.duration),
             exportFormat: settings.exportFormat,
             framerate: Number(settings.framerate),
+            previewScale: Number(settings.previewScale || 1),
             height: Number(settings.height),
             rangeEnd: Number(settings.rangeEnd),
             rangeStart: Number(settings.rangeStart),
@@ -451,6 +453,25 @@ class Timeline extends React.Component {
                     >{'×'}</button>
                 </div>
                 <div className={styles.settingsGrid}>
+                    <label>
+                        <span>{'Preview resolution'}</span>
+                        <select
+                            name="previewScale"
+                            value={this.state.draft.previewScale || 1}
+                            onChange={this.handleDraftChange}
+                        >
+                            {[0.125, 0.25, 0.5, 1, 2, 4].map(scale => (
+                                <option
+                                    key={scale}
+                                    value={scale}
+                                >
+                                    {`${Math.max(1, Math.round(this.props.customStageSize.width * scale))}×${
+                                        Math.max(1, Math.round(this.props.customStageSize.height * scale))
+                                    } · ${scale === 1 ? 'Project resolution' : `${scale * 100}%`}`}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
                     <label>
                         <span>{'Render preset'}</span>
                         <select

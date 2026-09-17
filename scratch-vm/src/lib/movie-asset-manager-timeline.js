@@ -22,6 +22,7 @@ const MovieAssetManagerTimelineMethods = {
             duration: this.timeline.duration,
             exportFormat: this.timeline.exportFormat,
             framerate: this.timeline.framerate,
+            previewScale: this.normalizePreviewScale(this.timeline.previewScale),
             height: this.timeline.height,
             keyframes: this.getTimelineKeyframes(),
             rangeEnd: this.timeline.rangeEnd,
@@ -38,6 +39,7 @@ const MovieAssetManagerTimelineMethods = {
             duration: this.timeline.duration,
             exportFormat: this.normalizeRenderingFormat(this.timeline.exportFormat),
             framerate: this.timeline.framerate,
+            previewScale: this.normalizePreviewScale(this.timeline.previewScale),
             height: this.timeline.height,
             rangeEnd: clamp(
                 toNumber(this.timeline.rangeEnd, this.timeline.duration),
@@ -55,6 +57,7 @@ const MovieAssetManagerTimelineMethods = {
         const hasSettings = descriptor && typeof descriptor === 'object';
         const settings = hasSettings ? descriptor : {};
         const currentFramerate = this.runtime.frameLoop && this.runtime.frameLoop.framerate;
+        this.timeline.previewScale = this.normalizePreviewScale(settings.previewScale);
         this.timeline.currentTime = 0;
         this.timeline.duration = this.normalizeTimelineDuration(settings.duration);
         this.timeline.exportFormat = this.normalizeRenderingFormat(settings.exportFormat);
@@ -84,11 +87,22 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.timeline.width = Math.max(1, Math.round(toNumber(settings.width, stageWidth)));
+        this.refreshPreviewResolution();
         this.setTimelineClock(0, true);
         if (hasSettings) {
             this.vm.setFramerate(this.timeline.framerate);
         }
         this.emitTimelineChanged();
+    },
+
+    normalizePreviewScale (value) {
+        const scale = Number(value);
+        return Number.isFinite(scale) && scale > 0 ? clamp(scale, 0.125, 4) : 1;
+    },
+
+    refreshPreviewResolution () {
+        const renderer = this.runtime.renderer;
+        if (renderer && renderer._moviePreviewInstalled) renderer.resize();
     },
 
     normalizeTimelineDuration (value) {
@@ -105,6 +119,7 @@ const MovieAssetManagerTimelineMethods = {
             exportFormat: this.normalizeRenderingFormat(this.timeline.exportFormat),
             frameCount: Array.isArray(this.renderingFrames) ? this.renderingFrames.length : 0,
             framerate: this.timeline.framerate,
+            previewScale: this.normalizePreviewScale(this.timeline.previewScale),
             height: this.timeline.height,
             keyframes: this.getTimelineKeyframes(),
             playing: this.timeline.playing,
@@ -287,6 +302,12 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.keyframes = normalizeTimelineKeyframes(this.timeline.keyframes, this.timeline.duration);
         if (Object.prototype.hasOwnProperty.call(settings, 'exportFormat')) {
             this.timeline.exportFormat = this.normalizeRenderingFormat(settings.exportFormat);
+        }
+        if (Object.prototype.hasOwnProperty.call(settings, 'previewScale')) {
+            this.cancelPenFrameTransaction();
+            this.cancelPendingObjectDraws();
+            this.timeline.previewScale = this.normalizePreviewScale(settings.previewScale);
+            this.refreshPreviewResolution();
         }
         this.timeline.framerate = this.normalizeRenderingFramerate(settings.framerate);
         this.timeline.height = Math.max(1, Math.min(4096, Math.round(toNumber(settings.height, this.timeline.height))));

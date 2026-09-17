@@ -13,6 +13,14 @@ const install = ({Engine, PenFX}) => {
         if (!skin) return;
         const width = this.width;
         const height = this.height;
+        const stageSize = this.getStageResolution();
+        const pixelScale = width / stageSize[0];
+        options = Object.assign({}, options, {
+            blurRadius: Math.min(100, Math.max(0, Number(options.blurRadius) || 0)) * pixelScale,
+            blurRadiusLimit: 100 * pixelScale,
+            markerScale: pixelScale,
+            strokeWidth: (Number(options.strokeWidth) || 1) * pixelScale
+        });
         const pixelLength = width * height * 4;
         if (!this.blobSource || this.blobSource.length !== pixelLength) {
             this.blobSource = new Uint8Array(pixelLength);

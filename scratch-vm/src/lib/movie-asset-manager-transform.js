@@ -213,6 +213,7 @@ const MovieAssetManagerTransformMethods = {
         if (this.timeline) {
             this.timeline.width = Math.max(1, Math.round(toNumber(size[0], this.timeline.width)));
             this.timeline.height = Math.max(1, Math.round(toNumber(size[1], this.timeline.height)));
+            this.refreshPreviewResolution();
             this.emitTimelineChanged();
         }
         this.camera.focalLength = focalLengthFromFOV(this.camera.fov, size[0], size[1]);

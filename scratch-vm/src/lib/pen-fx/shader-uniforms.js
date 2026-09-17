@@ -1,6 +1,7 @@
 const STANDARD_UNIFORM_TYPES = Object.freeze({
     u_image: 'sampler2D',
     u_resolution: 'vec2',
+    u_stageResolution: 'vec2',
     u_time: 'float',
     u_frame: 'int'
 });
