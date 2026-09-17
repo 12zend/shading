@@ -686,10 +686,22 @@ const MovieAssetManagerSoundExportMethods = {
 
         let sharedAudio = null;
         const decodedClips = [];
+        // Ranged sound blocks record one clip per frame. Decode each asset only once:
+        // retaining a full AudioBuffer per clip can exhaust memory before encoding starts.
+        // Keep this cache local so subsequent exports pick up changed assets and contexts.
+        const decodedSounds = new Map();
+        const decodedVideos = new Map();
         for (const clip of clips) {
-            const decoded = clip.video ?
-                await this.decodeRenderingVideoAudio(clip.video, sharedAudio) :
-                await this.decodeRenderingSound(clip.sound, sharedAudio);
+            const source = clip.video || clip.sound;
+            const cache = clip.video ? decodedVideos : decodedSounds;
+            const key = (source && source.asset) || source;
+            if (!cache.has(key)) {
+                const decoded = clip.video ?
+                    await this.decodeRenderingVideoAudio(clip.video, sharedAudio) :
+                    await this.decodeRenderingSound(clip.sound, sharedAudio);
+                cache.set(key, decoded);
+            }
+            const decoded = cache.get(key);
             if (!decoded || !decoded.buffer) continue;
             if (!sharedAudio) sharedAudio = decoded;
             const numericPlaybackRate = Number(clip.playbackRate);

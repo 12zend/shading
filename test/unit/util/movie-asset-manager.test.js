@@ -1254,6 +1254,63 @@ describe('MovieAssetManager rendering performance', () => {
         }]);
     });
 
+    test('decodes a 198-second ranged sound once for all 5940 recorded frames', async () => {
+        const manager = makeTimelineManager();
+        const sound = {name: 'Song', asset: {}};
+        const buffer = {duration: 198};
+        const context = {};
+        manager.renderingSoundEvents = Array.from({length: 5940}, (_, frame) => ({
+            sound,
+            frame,
+            offset: frame / 30,
+            duration: 1 / 30,
+            playbackRate: 1,
+            pan: frame % 2 ? 25 : -25,
+            volume: frame % 2 ? 75 : 100
+        }));
+        manager.decodeRenderingSound = jest.fn(async () => ({buffer, context, ownsContext: false}));
+
+        const audio = await manager.decodeRenderingAudio(null, '', 30);
+
+        expect(manager.decodeRenderingSound).toHaveBeenCalledTimes(1);
+        expect(audio.clips).toHaveLength(5940);
+        expect(new Set(audio.clips.map(clip => clip.buffer))).toEqual(new Set([buffer]));
+        for (let frame = 0; frame < audio.clips.length; frame++) {
+            expect(audio.clips[frame]).toEqual({
+                buffer,
+                startTime: frame / 30,
+                offset: frame / 30,
+                duration: 1 / 30,
+                playbackRate: 1,
+                pan: frame % 2 ? 0.25 : -0.25,
+                volume: frame % 2 ? 0.75 : 1
+            });
+        }
+        // A later export must not retain a stale decoded buffer or context.
+        await manager.decodeRenderingAudio(null, '', 30);
+        expect(manager.decodeRenderingSound).toHaveBeenCalledTimes(2);
+    });
+
+    test('shares decoded assets across sound wrappers without merging distinct sounds or video decoders', async () => {
+        const manager = makeTimelineManager();
+        const asset = {};
+        const sound = {asset};
+        const otherSound = {asset: {}};
+        const video = {asset};
+        const buffer = {duration: 2};
+        manager.renderingSoundEvents = [
+            {sound}, {sound: {asset}}, {sound: otherSound}, {video}, {video}
+        ];
+        manager.decodeRenderingSound = jest.fn(async () => ({buffer, context: {}}));
+        manager.decodeRenderingVideoAudio = jest.fn(async () => null);
+
+        const audio = await manager.decodeRenderingAudio({sprite: {sounds: [{...sound, name: 'Song'}]}}, 'Song', 30);
+
+        expect(manager.decodeRenderingSound).toHaveBeenCalledTimes(2);
+        expect(manager.decodeRenderingVideoAudio).toHaveBeenCalledTimes(1);
+        expect(audio.clips).toHaveLength(4);
+    });
+
     test('turns down the entire rendering mix when audio clips overlap', () => {
         const manager = makeTimelineManager();
         const destination = {};
