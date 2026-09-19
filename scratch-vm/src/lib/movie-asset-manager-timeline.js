@@ -379,6 +379,7 @@ const MovieAssetManagerTimelineMethods = {
             if (!(set instanceof Set)) return;
             set.forEach(add);
         };
+        add(this.renderingFrameWrite);
         addSet(this.timeline.initializePromises);
         addSet(this.blockingVideoRenders);
         add(this.frameGraphRenderPromise);
@@ -431,8 +432,21 @@ const MovieAssetManagerTimelineMethods = {
         }
     },
 
-    completeOfflineRendering () {
+    completeOfflineRendering (storageReady = false) {
         if (!this.timeline.offlineRendering) return;
+        if (this.renderingFrameWrite && !storageReady) {
+            const token = this.timeline.offlineRenderToken;
+            this.renderingFrameWrite.then(() => {
+                if (this.timeline.offlineRendering && token === this.timeline.offlineRenderToken) {
+                    this.completeOfflineRendering(true);
+                }
+            }, error => {
+                if (this.timeline.offlineRendering && token === this.timeline.offlineRenderToken) {
+                    this.failOfflineRendering(error);
+                }
+            });
+            return;
+        }
         this.timeline.recording = false;
         this.timeline.playing = false;
         this.timeline.pendingFrame = false;

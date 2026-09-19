@@ -1396,6 +1396,46 @@ describe('MovieAssetManager rendering performance', () => {
         expect(clock.projectTimerWithoutOffset).toHaveBeenCalled();
     });
 
+    test('legacy capture primitive returns undefined and tracks background storage errors', () => {
+        const manager = makeTimelineManager();
+        manager.installPrimitives();
+        const ready = Promise.resolve();
+        manager.addRenderingFrame = jest.fn(() => ({ready}));
+        manager.runWithoutWaiting = jest.fn();
+        expect(manager.runtime._primitives.looks_addrenderingframe()).toBeUndefined();
+        expect(manager.runWithoutWaiting).toHaveBeenCalledWith(ready);
+    });
+
+    test('offline driver does not capture another frame before the disk write completes', async () => {
+        const manager = makeTimelineManager();
+        const write = deferred();
+        manager.timeline.recording = true;
+        manager.timeline.offlineRendering = true;
+        manager.runtime._step = jest.fn(() => { manager.renderingFrameWrite = write.promise; });
+        manager.scheduleOfflineRenderStep = jest.fn();
+        manager.runOfflineRenderStep();
+        expect(manager.scheduleOfflineRenderStep).not.toHaveBeenCalled();
+        write.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(manager.scheduleOfflineRenderStep).toHaveBeenCalledTimes(1);
+    });
+
+    test('render completion waits for the last disk write', async () => {
+        const manager = makeTimelineManager();
+        const write = deferred();
+        manager.timeline.recording = true;
+        manager.timeline.offlineRendering = true;
+        manager.renderingFrameWrite = write.promise;
+        manager.completeOfflineRendering();
+        expect(manager.timeline.recording).toBe(true);
+        expect(manager.emit).not.toHaveBeenCalledWith('timelineRenderComplete', expect.anything());
+        write.resolve();
+        await Promise.resolve();
+        expect(manager.timeline.recording).toBe(false);
+        expect(manager.emit).toHaveBeenCalledWith('timelineRenderComplete', expect.anything());
+    });
+
     test('captures rendering frames at deterministic frame times', () => {
         const manager = makeTimelineManager();
         manager.timeline.framerate = 10;

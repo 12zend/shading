@@ -106,7 +106,10 @@ const MovieAssetManagerPrimitiveMethods = {
         primitives.looks_addlight = args => this.addLight('spot', args);
         // Keep old projects working. The legacy switch block replaces the scene instead of accumulating into it.
         primitives.looks_switchmodelto = (args, util) => this.replaceModelScene(util.target, args.MODEL);
-        primitives.looks_addrenderingframe = () => this.addRenderingFrame();
+        primitives.looks_addrenderingframe = () => {
+            const frame = this.addRenderingFrame();
+            this.runWithoutWaiting(frame.ready);
+        };
         primitives.looks_clearrenderingframe = () => this.clearRenderingFrames();
         primitives.looks_exportrenderingmp4 = (args, util) => this.exportRenderingMp4(
             util && util.target,

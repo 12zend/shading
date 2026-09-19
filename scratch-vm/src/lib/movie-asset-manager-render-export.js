@@ -1,3 +1,4 @@
+import {getRenderingFrameBlob, drawRenderingFrame, withRenderingFrames} from './movie-rendering-frame-store';
 import JSZip from '@turbowarp/jszip';
 import WavEncoder from 'wav-encoder';
 
@@ -9,7 +10,6 @@ import {
     RENDERING_MAX_FRAME_RATE
 } from './movie-asset-manager-constants';
 import {
-    canvasToBlob,
     clamp,
     toNumber
 } from './movie-asset-manager-utils';
@@ -48,8 +48,9 @@ const getRenderingAudioSampleRate = (audio, vm) => {
     return DEFAULT_AUDIO_SAMPLE_RATE;
 };
 
-const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, masterGain = 1) => {
-    const frameCount = Math.max(1, Math.ceil(Math.max(0, duration) * sampleRate));
+const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, masterGain = 1, startTime = 0) => {
+    const chunkStart = Math.round(startTime * sampleRate);
+    const frameCount = Math.max(1, Math.round(Math.max(0, duration) * sampleRate));
     const mixed = audioContext.createBuffer(2, frameCount, sampleRate);
     const left = mixed.getChannelData(0);
     const right = mixed.getChannelData(1);
@@ -64,7 +65,7 @@ const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, maste
         const safePlaybackRate = Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
         const sourceOffset = Math.max(0, Number(clip.offset) || 0) * sourceRate;
         const startFrame = Math.max(0, Math.round((Number(clip.startTime) || 0) * sampleRate));
-        if (startFrame >= frameCount || sourceOffset >= sourceLeft.length) continue;
+        if (startFrame >= chunkStart + frameCount || sourceOffset >= sourceLeft.length) continue;
 
         const naturalDuration = Math.max(0, (sourceLeft.length - sourceOffset) /
             sourceRate / safePlaybackRate);
@@ -72,7 +73,7 @@ const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, maste
         const clipDuration = Number.isFinite(requestedDuration) ?
             Math.min(naturalDuration, Math.max(0, requestedDuration)) : naturalDuration;
         const outputFrames = Math.min(
-            frameCount - startFrame,
+            chunkStart + frameCount - startFrame,
             Math.max(0, Math.ceil(clipDuration * sampleRate))
         );
         const pan = Math.max(-1, Math.min(1, Number(clip.pan) || 0));
@@ -80,7 +81,7 @@ const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, maste
         const leftGain = volume * (pan > 0 ? 1 - pan : 1);
         const rightGain = volume * (pan < 0 ? 1 + pan : 1);
 
-        for (let outputIndex = 0; outputIndex < outputFrames; outputIndex++) {
+        for (let outputIndex = Math.max(0, chunkStart - startFrame); outputIndex < outputFrames; outputIndex++) {
             const sourcePosition = sourceOffset + ((outputIndex / sampleRate) * sourceRate * safePlaybackRate);
             const firstIndex = Math.floor(sourcePosition);
             if (firstIndex >= sourceLeft.length) break;
@@ -90,7 +91,7 @@ const createMixedAudioBuffer = (audioContext, clips, duration, sampleRate, maste
                 ((sourceLeft[secondIndex] - sourceLeft[firstIndex]) * interpolation);
             const sourceRightSample = sourceRight[firstIndex] +
                 ((sourceRight[secondIndex] - sourceRight[firstIndex]) * interpolation);
-            const destinationIndex = startFrame + outputIndex;
+            const destinationIndex = startFrame + outputIndex - chunkStart;
             left[destinationIndex] += sourceLeftSample * leftGain;
             right[destinationIndex] += sourceRightSample * rightGain;
         }
@@ -189,182 +190,195 @@ const MovieAssetManagerRenderExportMethods = {
         if (!Array.isArray(frames) || frames.length === 0) {
             throw new Error('Add at least one rendering frame before exporting.');
         }
-        if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') {
-            throw new Error('Rendering export is only available in a browser.');
-        }
-        if (typeof VideoEncoder === 'undefined') {
-            throw new Error('This browser cannot encode video (WebCodecs is unavailable)');
-        }
-
-        const firstFrame = frames[0];
-        const [stageWidth, stageHeight] = this.getStageSize();
-        const width = Math.max(1, Number(firstFrame.width) || stageWidth);
-        const height = Math.max(1, Number(firstFrame.height) || stageHeight);
-        const captureCanvas = createCanvas(width, height);
-        const captureContext = captureCanvas.getContext('2d');
-        if (!captureContext) throw new Error('The browser cannot create a 2D capture canvas');
-
-        // Use Mediabunny's compiled browser entry explicitly. Webpack 4 can
-        // otherwise follow the package metadata into mediabunny/src/*.ts,
-        // which it cannot parse as JavaScript.
-        const mediabunny = await import('mediabunny/dist/modules/src/index.js');
-        const {
-            BufferTarget,
-            CanvasSource,
-            Mp4OutputFormat,
-            WebMOutputFormat,
-            Output,
-            Quality,
-            AudioBufferSource,
-            getFirstEncodableAudioCodec,
-            getFirstEncodableVideoCodec
-        } = mediabunny;
-
-        const duration = frames.length / framerate;
-        const {signal, onProgress} = options;
-        const throwIfAborted = () => {
-            if (signal && signal.aborted) {
-                const error = typeof DOMException === 'function' ?
-                    new DOMException('Aborted', 'AbortError') : new Error('Aborted');
-                error.name = 'AbortError';
-                throw error;
+        const result = await withRenderingFrames(frames, async () => {
+            if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') {
+                throw new Error('Rendering export is only available in a browser.');
             }
-        };
-        throwIfAborted();
-
-        const outputFormat = format === 'webm' ? new WebMOutputFormat() : new Mp4OutputFormat();
-        const output = new Output({
-            format: outputFormat,
-            target: new BufferTarget()
-        });
-
-        const videoCodec = await getFirstEncodableVideoCodec(
-            output.format.getSupportedVideoCodecs(),
-            {width, height}
-        );
-        if (!videoCodec) {
-            throw new Error('This browser cannot encode video (no supported MP4 video codec)');
-        }
-
-        const videoSource = new CanvasSource(captureCanvas, {
-            codec: videoCodec,
-            quality: new Quality('high')
-        });
-        output.addVideoTrack(videoSource, {frameRate: framerate});
-
-        let audioSource = null;
-        let audioSampleRate = DEFAULT_AUDIO_SAMPLE_RATE;
-        let audioContextForMix = audio && audio.context;
-        if (audio && Array.isArray(audio.clips) && audio.clips.length) {
-            if (!audioContextForMix || typeof audioContextForMix.createBuffer !== 'function') {
-                // Find any usable AudioContext
-                const vmAudio = this.runtime && this.runtime.audioEngine && this.runtime.audioEngine.audioContext;
-                audioContextForMix = vmAudio || audioContextForMix;
+            if (typeof VideoEncoder === 'undefined') {
+                throw new Error('This browser cannot encode video (WebCodecs is unavailable)');
             }
-            if (!audioContextForMix || typeof audioContextForMix.createBuffer !== 'function') {
-                throw new Error('This browser cannot render timeline audio');
-            }
-            audioSampleRate = getRenderingAudioSampleRate(audio, this.vm || {runtime: this.runtime});
-            const audioCodec = await getFirstEncodableAudioCodec(
-                output.format.getSupportedAudioCodecs(),
-                {numberOfChannels: 2, sampleRate: audioSampleRate}
+
+            const firstFrame = frames[0];
+            const [stageWidth, stageHeight] = this.getStageSize();
+            const width = Math.max(1, Number(firstFrame.width) || stageWidth);
+            const height = Math.max(1, Number(firstFrame.height) || stageHeight);
+            const captureCanvas = createCanvas(width, height);
+            const captureContext = captureCanvas.getContext('2d');
+            if (!captureContext) throw new Error('The browser cannot create a 2D capture canvas');
+
+            // Use Mediabunny's compiled browser entry explicitly. Webpack 4 can
+            // otherwise follow the package metadata into mediabunny/src/*.ts,
+            // which it cannot parse as JavaScript.
+            const mediabunny = await import('mediabunny/dist/modules/src/index.js');
+            const {
+                BufferTarget,
+                CanvasSource,
+                Mp4OutputFormat,
+                WebMOutputFormat,
+                Output,
+                Quality,
+                AudioBufferSource,
+                getFirstEncodableAudioCodec,
+                getFirstEncodableVideoCodec
+            } = mediabunny;
+
+            const duration = frames.length / framerate;
+            const {signal, onProgress} = options;
+            const throwIfAborted = () => {
+                if (signal && signal.aborted) {
+                    const error = typeof DOMException === 'function' ?
+                        new DOMException('Aborted', 'AbortError') : new Error('Aborted');
+                    error.name = 'AbortError';
+                    throw error;
+                }
+            };
+            throwIfAborted();
+
+            const outputFormat = format === 'webm' ? new WebMOutputFormat() : new Mp4OutputFormat();
+            const output = new Output({
+                format: outputFormat,
+                target: new BufferTarget()
+            });
+
+            const videoCodec = await getFirstEncodableVideoCodec(
+                output.format.getSupportedVideoCodecs(),
+                {width, height}
             );
-            if (!audioCodec) {
-                throw new Error('This browser cannot encode MP4 audio');
+            if (!videoCodec) {
+                throw new Error('This browser cannot encode video (no supported MP4 video codec)');
             }
-            audioSource = new AudioBufferSource({
-                codec: audioCodec,
+
+            const videoSource = new CanvasSource(captureCanvas, {
+                codec: videoCodec,
                 quality: new Quality('high')
             });
-            output.addAudioTrack(audioSource);
-        }
+            output.addVideoTrack(videoSource, {frameRate: framerate});
 
-        let outputFinalized = false;
-        let videoSourceClosed = false;
-        try {
-            await output.start();
-            throwIfAborted();
+            let audioSource = null;
+            let audioSampleRate = DEFAULT_AUDIO_SAMPLE_RATE;
+            let audioContextForMix = audio && audio.context;
+            if (audio && Array.isArray(audio.clips) && audio.clips.length) {
+                if (!audioContextForMix || typeof audioContextForMix.createBuffer !== 'function') {
+                    // Find any usable AudioContext
+                    const vmAudio = this.runtime && this.runtime.audioEngine && this.runtime.audioEngine.audioContext;
+                    audioContextForMix = vmAudio || audioContextForMix;
+                }
+                if (!audioContextForMix || typeof audioContextForMix.createBuffer !== 'function') {
+                    throw new Error('This browser cannot render timeline audio');
+                }
+                audioSampleRate = getRenderingAudioSampleRate(audio, this.vm || {runtime: this.runtime});
+                const audioCodec = await getFirstEncodableAudioCodec(
+                    output.format.getSupportedAudioCodecs(),
+                    {numberOfChannels: 2, sampleRate: audioSampleRate}
+                );
+                if (!audioCodec) {
+                    throw new Error('This browser cannot encode MP4 audio');
+                }
+                audioSource = new AudioBufferSource({
+                    codec: audioCodec,
+                    quality: new Quality('high')
+                });
+                output.addAudioTrack(audioSource);
+            }
 
-            // Deterministic frame writing: each frame gets an explicit timestamp and duration.
-            // This guarantees every captured frame is stored exactly once with uniform spacing,
-            // unlike MediaRecorder's wall-clock sampling which can skip or duplicate frames.
-            for (let index = 0; index < frames.length; index++) {
+            let audioFramesWritten = 0;
+            const totalAudioFrames = Math.max(1, Math.ceil(duration * audioSampleRate));
+            const masterGain = audioSource ? this.getRenderingAudioMasterGain(audio.clips) : 1;
+            const addAudioUntil = async time => {
+                if (!audioSource) return;
+                const end = Math.min(totalAudioFrames, Math.round(time * audioSampleRate));
+                while (audioFramesWritten < end) {
+                    throwIfAborted();
+                    const count = Math.min(audioSampleRate, end - audioFramesWritten);
+                    const buffer = createMixedAudioBuffer(
+                        audioContextForMix, audio.clips, count / audioSampleRate,
+                        audioSampleRate, masterGain, audioFramesWritten / audioSampleRate
+                    );
+                    await audioSource.add(buffer);
+                    audioFramesWritten += count;
+                }
+            };
+
+            let outputFinalized = false;
+            let videoSourceClosed = false;
+            try {
+                await output.start();
                 throwIfAborted();
-                const frame = frames[index];
-                captureContext.clearRect(0, 0, width, height);
-                // Draw the already-captured frame onto the capture surface.
-                // Using drawImage keeps color-space and alpha handling identical to the original export.
-                captureContext.drawImage(frame, 0, 0, width, height);
-                // eslint-disable-next-line no-await-in-loop
-                await videoSource.add(index / framerate, 1 / framerate);
-                if (typeof onProgress === 'function') {
-                    try {
-                        onProgress({
-                            currentTime: Math.min(index / framerate, duration),
-                            duration,
-                            frame: index + 1,
-                            progress: (index + 1) / frames.length,
-                            totalFrames: frames.length
-                        });
-                    } catch (error) {
-                        // Progress callbacks must not break an export.
+
+                // Deterministic frame writing: each frame gets an explicit timestamp and duration.
+                // This guarantees every captured frame is stored exactly once with uniform spacing,
+                // unlike MediaRecorder's wall-clock sampling which can skip or duplicate frames.
+                for (let index = 0; index < frames.length; index++) {
+                    throwIfAborted();
+                    const frame = frames[index];
+                    captureContext.clearRect(0, 0, width, height);
+                    // Draw the already-captured frame onto the capture surface.
+                    // Using drawImage keeps color-space and alpha handling identical to the original export.
+                    await drawRenderingFrame(captureContext, frame, width, height);
+                    // eslint-disable-next-line no-await-in-loop
+                    await videoSource.add(index / framerate, 1 / framerate);
+                    // Interleave tracks so the muxer never queues a whole movie while waiting for audio.
+                    if ((index + 1) / framerate >= (audioFramesWritten / audioSampleRate) + 1) {
+                        await addAudioUntil(Math.floor((index + 1) / framerate));
+                    }
+                    if (typeof onProgress === 'function') {
+                        try {
+                            onProgress({
+                                currentTime: Math.min(index / framerate, duration),
+                                duration,
+                                frame: index + 1,
+                                progress: (index + 1) / frames.length,
+                                totalFrames: frames.length
+                            });
+                        } catch (error) {
+                            // Progress callbacks must not break an export.
+                        }
+                    }
+                    // Periodically yield so the export settings dialog can repaint during long exports.
+                    if (index % 30 === 29) {
+                        // eslint-disable-next-line no-await-in-loop
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                        throwIfAborted();
                     }
                 }
-                // Periodically yield so the export settings dialog can repaint during long exports.
-                if (index % 30 === 29) {
-                    // eslint-disable-next-line no-await-in-loop
-                    await new Promise(resolve => setTimeout(resolve, 0));
-                    throwIfAborted();
-                }
-            }
 
-            videoSource.close();
-            videoSourceClosed = true;
-            if (audioSource) {
-                const masterGain = this.getRenderingAudioMasterGain(audio.clips);
-                const audioBuffer = createMixedAudioBuffer(
-                    audioContextForMix,
-                    audio.clips,
-                    duration,
-                    audioSampleRate,
-                    masterGain
-                );
-                // eslint-disable-next-line no-await-in-loop
-                await audioSource.add(audioBuffer);
-            }
-            await output.finalize();
-            outputFinalized = true;
-            throwIfAborted();
+                videoSource.close();
+                videoSourceClosed = true;
+                await addAudioUntil(totalAudioFrames / audioSampleRate);
+                if (audioSource) audioSource.close();
+                await output.finalize();
+                outputFinalized = true;
+                throwIfAborted();
 
-            const buffer = output.target.buffer;
-            if (!buffer || !buffer.byteLength) throw new Error('Rendering produced no video data');
-            const mimeType = format === 'webm' ? 'video/webm' : 'video/mp4';
-            return new Blob([buffer], {type: mimeType});
-        } catch (error) {
-            if (videoSource && !videoSourceClosed) {
-                try {
-                    videoSource.close();
-                } catch (closeError) {
-                    // Ignore cleanup errors while reporting the original failure.
+                const buffer = output.target.buffer;
+                if (!buffer || !buffer.byteLength) throw new Error('Rendering produced no video data');
+                const mimeType = format === 'webm' ? 'video/webm' : 'video/mp4';
+                return new Blob([buffer], {type: mimeType});
+            } catch (error) {
+                if (videoSource && !videoSourceClosed) {
+                    try {
+                        videoSource.close();
+                    } catch (closeError) {
+                        // Ignore cleanup errors while reporting the original failure.
+                    }
+                }
+                if (output && !outputFinalized) {
+                    try {
+                        await output.cancel();
+                    } catch (cancelError) {
+                        // Ignore cleanup errors while reporting the original failure.
+                    }
+                }
+                throw error;
+            } finally {
+                captureCanvas.width = 0;
+                captureCanvas.height = 0;
+                if (audio && audio.ownsContext && audio.context && typeof audio.context.close === 'function') {
+                    await audio.context.close();
                 }
             }
-            if (output && !outputFinalized) {
-                try {
-                    await output.cancel();
-                } catch (cancelError) {
-                    // Ignore cleanup errors while reporting the original failure.
-                }
-            }
-            throw error;
-        } finally {
-            if (audio && audio.ownsContext && audio.context && typeof audio.context.close === 'function' &&
-                audioContextForMix !== audio.context) {
-                // Only close the temporary context if we created it; owned contexts from decodeRenderingAudio
-                // are closed by the MediaRecorder path. For mediabunny we keep the decoded context alive
-                // until the caller cleans it up, matching shading-simple's export-video behavior where
-                // the timeline's audioContext is not closed.
-            }
-        }
+        });
+        return result;
     },
 
     async exportRenderingVideo (target, requestedSound, requestedFramerate, requestedFormat = 'mp4', options = {}) {
@@ -373,22 +387,25 @@ const MovieAssetManagerRenderExportMethods = {
             throw new Error('Add at least one rendering frame before exporting.');
         }
 
-        const framerate = this.normalizeRenderingFramerate(requestedFramerate);
-        const format = this.normalizeRenderingFormat(requestedFormat) === 'webm' ? 'webm' : 'mp4';
-        const audio = await this.decodeRenderingAudio(target, requestedSound, framerate);
-        const blob = await this.encodeRenderingFrames(frames, framerate, audio, format, options);
-        const filename = format === 'webm' ? 'rendering.webm' : RENDERING_FILE_NAME;
-        downloadBlob(filename, blob);
-        this.emit('renderingExported', {
-            blob,
-            errors: (this.renderingFrameErrors || []).slice(),
-            format,
-            framerate,
-            frameCount: frames.length,
-            sound: requestedSound || '',
-            soundCount: audio ? audio.clips.length : 0
+        const result = await withRenderingFrames(frames, async () => {
+            const framerate = this.normalizeRenderingFramerate(requestedFramerate);
+            const format = this.normalizeRenderingFormat(requestedFormat) === 'webm' ? 'webm' : 'mp4';
+            const audio = await this.decodeRenderingAudio(target, requestedSound, framerate);
+            const blob = await this.encodeRenderingFrames(frames, framerate, audio, format, options);
+            const filename = format === 'webm' ? 'rendering.webm' : RENDERING_FILE_NAME;
+            downloadBlob(filename, blob);
+            this.emit('renderingExported', {
+                blob,
+                errors: (this.renderingFrameErrors || []).slice(),
+                format,
+                framerate,
+                frameCount: frames.length,
+                sound: requestedSound || '',
+                soundCount: audio ? audio.clips.length : 0
+            });
+            return blob;
         });
-        return blob;
+        return result;
     },
 
     exportRenderingMp4 (target, requestedSound, requestedFramerate) {
@@ -398,40 +415,46 @@ const MovieAssetManagerRenderExportMethods = {
     async exportRenderingPngSequence () {
         const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames.slice() : [];
         if (!frames.length) throw new Error('Add at least one rendering frame before exporting.');
-        const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
-        const zip = new JSZip();
-        const digits = Math.max(4, String(Math.max(...frameNumbers, frames.length - 1)).length);
-        for (let index = 0; index < frames.length; index++) {
-            const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? Number(frameNumbers[index]) : index;
-            const blob = await canvasToBlob(frames[index]);
-            zip.file(`frame-${String(frameNumber).padStart(digits, '0')}.png`, blob);
-        }
-        if (this.renderingFrameErrors && this.renderingFrameErrors.length) {
-            zip.file('render-errors.json', JSON.stringify(this.renderingFrameErrors, null, 2));
-        }
-        const blob = await zip.generateAsync({compression: 'DEFLATE', type: 'blob'});
-        downloadBlob('rendering-png.zip', blob);
-        this.emit('renderingExported', {
-            blob,
-            errors: (this.renderingFrameErrors || []).slice(),
-            format: 'png-sequence',
-            frameCount: frames.length
+        const result = await withRenderingFrames(frames, async () => {
+            const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
+            const zip = new JSZip();
+            const digits = Math.max(4, String(Math.max(...frameNumbers, frames.length - 1)).length);
+            for (let index = 0; index < frames.length; index++) {
+                const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? Number(frameNumbers[index]) : index;
+                const blob = await getRenderingFrameBlob(frames[index]);
+                zip.file(`frame-${String(frameNumber).padStart(digits, '0')}.png`, blob);
+            }
+            if (this.renderingFrameErrors && this.renderingFrameErrors.length) {
+                zip.file('render-errors.json', JSON.stringify(this.renderingFrameErrors, null, 2));
+            }
+            const blob = await zip.generateAsync({compression: 'STORE', type: 'blob'});
+            downloadBlob('rendering-png.zip', blob);
+            this.emit('renderingExported', {
+                blob,
+                errors: (this.renderingFrameErrors || []).slice(),
+                format: 'png-sequence',
+                frameCount: frames.length
+            });
+            return blob;
         });
-        return blob;
+        return result;
     },
 
     async exportRenderingFramePng (requestedIndex) {
         const frames = Array.isArray(this.renderingFrames) ? this.renderingFrames : [];
         if (!frames.length) throw new Error('Add at least one rendering frame before exporting.');
-        const numericIndex = Number(requestedIndex);
-        const index = Number.isFinite(numericIndex) ?
-            clamp(Math.round(numericIndex), 0, frames.length - 1) : frames.length - 1;
-        const blob = await canvasToBlob(frames[index]);
-        const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
-        const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? frameNumbers[index] : index;
-        downloadBlob(`rendering-frame-${String(frameNumber).padStart(4, '0')}.png`, blob);
-        this.emit('renderingExported', {blob, format: 'png-frame', frameCount: 1, frameNumber});
-        return blob;
+        const result = await withRenderingFrames(frames, async () => {
+            const numericIndex = Number(requestedIndex);
+            const index = Number.isFinite(numericIndex) ?
+                clamp(Math.round(numericIndex), 0, frames.length - 1) : frames.length - 1;
+            const blob = await getRenderingFrameBlob(frames[index]);
+            const frameNumbers = Array.isArray(this.renderingFrameNumbers) ? this.renderingFrameNumbers : [];
+            const frameNumber = Number.isFinite(Number(frameNumbers[index])) ? frameNumbers[index] : index;
+            downloadBlob(`rendering-frame-${String(frameNumber).padStart(4, '0')}.png`, blob);
+            this.emit('renderingExported', {blob, format: 'png-frame', frameCount: 1, frameNumber});
+            return blob;
+        });
+        return result;
     },
 
     async encodeRenderingAudioWav (audio, duration) {
@@ -497,4 +520,5 @@ const MovieAssetManagerRenderExportMethods = {
     }
 };
 
+export {createMixedAudioBuffer};
 export default MovieAssetManagerRenderExportMethods;

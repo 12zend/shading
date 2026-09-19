@@ -1,3 +1,4 @@
+import {MovieRenderingFrameStore} from './movie-rendering-frame-store';
 import {
     RENDERING_DEFAULT_FRAME_RATE
 } from './movie-asset-manager-constants';
@@ -534,7 +535,9 @@ const MovieAssetManagerSoundExportMethods = {
     addRenderingFrame () {
         if (!Array.isArray(this.renderingFrames)) this.renderingFrames = [];
         if (!Array.isArray(this.renderingFrameNumbers)) this.renderingFrameNumbers = [];
-        const frame = this.captureRenderingFrame();
+        if (!this.renderingFrameStore) this.renderingFrameStore = new MovieRenderingFrameStore();
+        const frame = this.renderingFrameStore.capture(this.captureRenderingFrame());
+        this.renderingFrameWrite = frame.ready;
         this.renderingFrames.push(frame);
         const frameIndex = Number.isFinite(Number(this.timeline.renderFrameIndex)) ?
             Number(this.timeline.renderFrameIndex) : this.renderingFrames.length - 1;
@@ -558,6 +561,9 @@ const MovieAssetManagerSoundExportMethods = {
         if (!Array.isArray(this.renderingFrameErrors)) this.renderingFrameErrors = [];
         this.renderingFrameErrors.length = 0;
         if (!options.preserveCache) {
+            if (this.renderingFrameStore) this.renderingFrameStore.release();
+            this.renderingFrameStore = null;
+            this.renderingFrameWrite = null;
             if (!(this.renderingFrameCache instanceof Map)) this.renderingFrameCache = new Map();
             this.renderingFrameCache.clear();
             if (!(this.renderingSoundEventCache instanceof Map)) this.renderingSoundEventCache = new Map();
