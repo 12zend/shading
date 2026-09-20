@@ -43,7 +43,8 @@ const createPenFXClass = vm => {
 
         _getEngine() {
             if (!this.engine) {
-                this.engine = new PenFXEngine();
+                this.engine = typeof renderer.createPenFXEngine === 'function' ?
+                    renderer.createPenFXEngine() : new PenFXEngine();
                 this.customShaders.installIntoEngine(this.engine);
             }
             return this.engine;

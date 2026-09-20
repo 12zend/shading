@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<body>
+    <script src="../../node_modules/scratch-vm/dist/web/scratch-vm.js"></script>
+    <script src="../../node_modules/scratch-storage/dist/web/scratch-storage.js"></script>
+    <script src="../../node_modules/@turbowarp/scratch-svg-renderer/dist/web/scratch-svg-renderer.js"></script>
+    <script src="../helper/page-util.js"></script>
+    <!-- note: this uses the BUILT version of scratch-render!  make sure to npm run build -->
+    <script src="../../dist/web/scratch-render.js"></script>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        canvas:hover {
+            /* make it easier to spot transparent regions */
+            background-color: rgba(1, 1, 1, 0.5);
+        }
+        tr {
+            margin-bottom: 8px;
+        }
+        td {
+            text-align: center;
+        }
+    </style>
+
+    <input type="file" id="file" name="file" accept=".sb3,.sb2,.sb">
+    <button id="manual-cpu-render">Update CPU render</button>
+    <br>
+    <table>
+        <tr>
+            <td>GPU</td>
+            <td>CPU</td>
+        </tr>
+        <tr>
+            <td><canvas id="gpu" width="480" height="360"></canvas></td>
+            <td><canvas id="cpu" width="480" height="360"></canvas></td>
+        </tr>
+        <tr>
+            <td>Color Difference</td>
+            <td>Alpha Difference</td>
+        </tr>
+        <tr>
+            <td><canvas id="color-merge" width="480" height="360"></canvas></td>
+            <td><canvas id="alpha-merge" width="480" height="360"></canvas></td>
+        </tr>
+    </table>
+    <br>
+
+    <p>For difference canvases: Hover to locate transparent parts (perfect match). Close to white means small deviation.</p>
+
+    <script>
+        // These variables are going to be available in the "window global" intentionally.
+        // Allows you easy access to debug with `vm.greenFlag()` etc.
+        window.devicePixelRatio = 1;
+        const gpuCanvas = document.getElementById('gpu');
+        var render = new ScratchRender(gpuCanvas);
+        var vm = initVM(render);
+
+        render.setBackgroundColor(1, 0, 0, 0.1);
+
+        const fileInput = document.getElementById('file');
+        const loadFile = loadFileInputIntoVM.bind(null, fileInput, vm, render);
+        function loadAndRender() {
+            loadFile()
+                .then(() => {
+                    vm.greenFlag();
+                    setTimeout(() => {
+                        renderCpu();
+                    }, 250);
+                });
+        }
+        fileInput.addEventListener('change', loadAndRender);
+        if (fileInput.files.length) {
+            loadAndRender();
+        }
+
+        const cpuCanvas = document.getElementById('cpu');
+        const cpuCtx = cpuCanvas.getContext('2d', {
+            alpha: true
+        });
+        const cpuData = cpuCtx.getImageData(0, 0, 480, 360);
+
+        const colorMergeCanvas = document.getElementById('color-merge');
+        const colorMergeCtx = colorMergeCanvas.getContext('2d', {
+            alpha: true
+        });
+        const colorMergeData = colorMergeCtx.getImageData(0, 0, 480, 360);
+
+        const alphaMergeCanvas = document.getElementById('alpha-merge');
+        const alphaMergeCtx = alphaMergeCanvas.getContext('2d', {
+            alpha: true
+        });
+        const alphaMergeData = alphaMergeCtx.getImageData(0, 0, 480, 360);
+
+        // single image re-used to cancel previous loads
+        const snapshotImage = new Image();
+
+        function renderCpu() {
+            cpuData.data.fill(255);
+
+            const drawBits = render._drawList
+                .map(id => {
+                    const drawable = render._allDrawables[id];
+                    if (!(drawable._visible && drawable.skin)) {
+                        return;
+                    }
+                    drawable.updateCPURenderAttributes();
+                    return { id, drawable };
+                })
+                .reverse()
+                .filter(Boolean);
+
+            console.time('CPU render');
+            const color = new Uint8ClampedArray(4);
+            for (let x = -239; x <= 240; x++) {
+                for (let y = -180; y < 180; y++) {
+                    render.sampleColor4b([x, y], drawBits, color);
+                    const offset = (((179 - y) * 480) + 239 + x) * 4;
+                    // putImageData wants non-premultiplied alpha, for some reason.
+                    const alpha = color[3] / 255;
+                    color[0] /= alpha;
+                    color[1] /= alpha;
+                    color[2] /= alpha;
+                    cpuData.data.set(color, offset);
+                }
+            }
+            cpuCtx.putImageData(cpuData, 0, 0);
+            console.timeEnd('CPU render');
+
+            render.requestSnapshot(snapshotDataURL => {
+                snapshotImage.onload = () => {
+                    colorMergeCtx.clearRect(0, 0, 480, 360);
+                    alphaMergeCtx.clearRect(0, 0, 480, 360);
+
+                    colorMergeCtx.drawImage(snapshotImage, 0, 0);
+                    const gpuImageData = colorMergeCtx.getImageData(0, 0, 480, 360);
+
+                    for (let i = 0; i < gpuImageData.data.length; i += 4) {
+                        if (
+                            colorMergeData.data[i + 0] === gpuImageData.data[i + 0] &&
+                            colorMergeData.data[i + 1] === gpuImageData.data[i + 1] &&
+                            colorMergeData.data[i + 2] === gpuImageData.data[i + 2]
+                        ) {
+                            colorMergeData.data[i + 0] = 0;
+                            colorMergeData.data[i + 1] = 0;
+                            colorMergeData.data[i + 2] = 0;
+                            colorMergeData.data[i + 3] = 0;
+                        } else {
+                            colorMergeData.data[i + 0] = 255 - Math.abs(gpuImageData.data[i + 0] - cpuData.data[i + 0]);
+                            colorMergeData.data[i + 1] = 255 - Math.abs(gpuImageData.data[i + 1] - cpuData.data[i + 1]);
+                            colorMergeData.data[i + 2] = 255 - Math.abs(gpuImageData.data[i + 2] - cpuData.data[i + 2]);
+                            colorMergeData.data[i + 3] = 255;
+                        }
+                    }
+                    colorMergeCtx.putImageData(colorMergeData, 0, 0);
+
+                    for (let i = 0; i < gpuImageData.data.length; i += 4) {
+                        const alphaDifference = Math.abs(gpuImageData.data[i + 3] - cpuData.data[i + 3]);
+                        if (alphaDifference === 0) {
+                            alphaMergeData.data[i + 0] = 0;
+                            alphaMergeData.data[i + 1] = 0;
+                            alphaMergeData.data[i + 2] = 0;
+                            alphaMergeData.data[i + 3] = 0;
+                        } else {
+                            alphaMergeData.data[i + 0] = 255 - alphaDifference;
+                            alphaMergeData.data[i + 1] = 255 - alphaDifference;
+                            alphaMergeData.data[i + 2] = 255 - alphaDifference;
+                            alphaMergeData.data[i + 3] = 255;
+                        }
+                    }
+                    alphaMergeCtx.putImageData(alphaMergeData, 0, 0);
+                };
+
+                snapshotImage.onerror = () => {
+                    console.error('Snapshot failed to load');
+                };
+
+                snapshotImage.src = snapshotDataURL;
+            });
+        }
+
+        document.getElementById('manual-cpu-render').addEventListener('click', renderCpu);
+    </script>
+</body>

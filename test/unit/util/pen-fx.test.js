@@ -701,6 +701,7 @@ describe('built-in Pen FX category', () => {
         });
         expect(skin.getTexture()).toBe('pen-texture');
         expect(engine.groupStack).toEqual([{
+            bounds: [],
             buffer: {framebuffer: 'group-framebuffer', texture: 'group-staging', width: 480, height: 360},
             baselineFramebuffer: penFramebuffer,
             baselineTexture: 'pen-texture',
@@ -771,6 +772,7 @@ describe('built-in Pen FX category', () => {
 
         engine.beginGroup();
         expect(engine.groupStack.length).toBe(1);
+        engine.notePenStamp(skin, 0, 0, 10, 10);
         engine.endGroup();
 
         expect(engine._render).toHaveBeenCalledWith('group-over-program', 'pen-framebuffer', [

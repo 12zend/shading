@@ -36,7 +36,7 @@ export default `
     vec2 center = u_resolution * 0.5 + u_center;
     vec2 fromCenter = pixel - center;
     float halfSize = abs(u_size) * 0.5;
-    bool active = false;
+    bool stretchActive = false;
     vec2 sampleBase = pixel;
     vec2 sampleDirection = vec2(0.0);
     float sampleStep = 1.0;
@@ -47,13 +47,13 @@ export default `
       float axisLimit = u_type == 0 ? u_resolution.x : u_resolution.y;
       float sourcePosition = clamp(axisCenter + u_position, 0.5, axisLimit - 0.5);
       float distanceFromSource = axisPosition - sourcePosition;
-      active = abs(distanceFromSource) <= halfSize;
+      stretchActive = abs(distanceFromSource) <= halfSize;
       float edgePosition = axisPosition - sign(distanceFromSource) * halfSize;
       if (u_type == 0) {
-        sampleBase.x = active ? sourcePosition : edgePosition;
+        sampleBase.x = stretchActive ? sourcePosition : edgePosition;
         sampleDirection = vec2(1.0, 0.0);
       } else {
-        sampleBase.y = active ? sourcePosition : edgePosition;
+        sampleBase.y = stretchActive ? sourcePosition : edgePosition;
         sampleDirection = vec2(0.0, 1.0);
       }
     } else if (u_type == 2) {
@@ -61,8 +61,8 @@ export default `
       float sourceRadius = max(0.0, abs(u_position));
       vec2 radial = radius > 0.0001 ? fromCenter / radius : vec2(1.0, 0.0);
       float distanceFromSource = radius - sourceRadius;
-      active = abs(distanceFromSource) <= halfSize || sourceRadius < halfSize && radius <= sourceRadius + halfSize;
-      float sampleRadius = active ? sourceRadius : max(0.0, radius - sign(distanceFromSource) * halfSize);
+      stretchActive = abs(distanceFromSource) <= halfSize || sourceRadius < halfSize && radius <= sourceRadius + halfSize;
+      float sampleRadius = stretchActive ? sourceRadius : max(0.0, radius - sign(distanceFromSource) * halfSize);
       sampleBase = center + radial * sampleRadius;
       sampleDirection = radial;
     } else {
@@ -70,16 +70,16 @@ export default `
       float angle = atan(fromCenter.y, fromCenter.x);
       float angularDistance = wrappedAngle(angle - sourceAngle);
       float halfAngle = radians(halfSize);
-      active = abs(angularDistance) <= halfAngle;
+      stretchActive = abs(angularDistance) <= halfAngle;
       float radius = length(fromCenter);
-      float sampleAngle = active ? sourceAngle : angle - sign(angularDistance) * halfAngle;
+      float sampleAngle = stretchActive ? sourceAngle : angle - sign(angularDistance) * halfAngle;
       sampleBase = center + vec2(cos(sampleAngle), sin(sampleAngle)) * radius;
       sampleStep = max(radius * (pi / 180.0), 0.25);
       sampleDirection = vec2(-sin(sourceAngle), cos(sourceAngle));
     }
 
     vec4 transformed;
-    if (active) {
+    if (stretchActive) {
       transformed = vec4(0.0);
       float samples = 0.0;
       float sampleLimit = min(abs(u_sampleSize) * 0.5, 4.0);

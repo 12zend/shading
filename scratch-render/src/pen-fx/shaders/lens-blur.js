@@ -1,4 +1,4 @@
-export default `
+const lensBlur = `
   precision highp float;
   varying vec2 v_uv;
   uniform sampler2D u_image;
@@ -40,3 +40,15 @@ export default `
     gl_FragColor = mix(original, total * (1.0 / totalWeight), clamp(u_mix, 0.0, 1.0));
   }
 `;
+
+// The kernel depends on block arguments, never on the fragment. Upload it once per command.
+const lensBlurKernel = lensBlur
+    .replace('uniform float u_blades;', 'uniform vec3 u_lensSamples[32];')
+    .replace(/    float rotationRad[\s\S]*?    for \(int i = 0; i < 32; i\+\+\) \{/, '    for (int i = 0; i < 32; i++) {')
+    .replace(/      float fi[\s\S]*?      totalWeight \+= weight;/,
+        `      vec3 sampleData = u_lensSamples[i];
+      total += texture2D(u_image, v_uv + sampleData.xy * invResolution) * sampleData.z;
+      totalWeight += sampleData.z;`);
+
+export {lensBlurKernel};
+export default lensBlur;

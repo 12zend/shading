@@ -9,7 +9,7 @@ const JSZip = require('@turbowarp/jszip');
 
 const root = path.resolve(__dirname, '..');
 const penFXDirectory = path.join(root, 'scratch-vm/src/lib/pen-fx');
-const shaderSourceDirectory = path.join(penFXDirectory, 'shaders');
+const shaderSourceDirectory = path.join(root, 'scratch-render/src/pen-fx/shaders');
 const packageDirectory = path.join(penFXDirectory, 'default-shader-package');
 const manifestPath = path.join(packageDirectory, 'shading-shader.json');
 const outputPath = path.join(packageDirectory, 'penfx-builtins.zip');

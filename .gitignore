@@ -39,3 +39,25 @@ npm-*
 
 # for act
 .secrets
+
+# Integrated scratch-render (upstream ignore rules)
+# Mac OS
+scratch-render/.DS_Store
+
+# NPM
+scratch-render/node_modules
+scratch-render/npm-*
+
+# Testing
+scratch-render/.nyc_output
+scratch-render/coverage
+
+# IDEA
+scratch-render/.idea
+
+# Build
+scratch-render/dist
+scratch-render/playground
+
+# Act
+scratch-render/.secrets

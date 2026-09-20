@@ -1,0 +1,12 @@
+.scratch-render-overlays {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+.scratch-render-overlays > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
