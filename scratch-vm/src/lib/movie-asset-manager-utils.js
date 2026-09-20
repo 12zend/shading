@@ -266,19 +266,22 @@ const createLineBitmap = configuration => {
     if (!context) return null;
     canvas.width = width;
     canvas.height = height;
-    const minX = Math.min(toNumber(point1.x), toNumber(point2.x));
-    const maxY = Math.max(toNumber(point1.y), toNumber(point2.y));
+    const deltaX = toNumber(point2.x) - toNumber(point1.x);
+    const deltaY = toNumber(point2.y) - toNumber(point1.y);
     context.clearRect(0, 0, width, height);
     context.beginPath();
     // Scratch's world coordinates grow upward while a canvas bitmap's pixel coordinates grow downward.
     // Flip only the local bitmap Y coordinate so the scene transform can keep using Scratch coordinates.
-    context.moveTo(toNumber(point1.x) - minX + padding, maxY - toNumber(point1.y) + padding);
-    context.lineTo(toNumber(point2.x) - minX + padding, maxY - toNumber(point2.y) + padding);
+    // Center around the endpoint midpoint, including any extra pixels from rounding the canvas size.
+    context.moveTo((width - deltaX) / 2, (height + deltaY) / 2);
+    context.lineTo((width + deltaX) / 2, (height - deltaY) / 2);
     context.lineWidth = thickness;
     context.strokeStyle = typeof configuration.color === 'string' && configuration.color ?
         configuration.color : '#ffffff';
     context.globalAlpha = clamp(toNumber(configuration.opacity, 100), 0, 100) / 100;
     context.stroke();
+    // Line geometry is already measured in Scratch units, unlike 2x costume bitmaps.
+    canvas.movieBitmapResolution = 1;
     canvas.reusable = false;
     return canvas;
 };

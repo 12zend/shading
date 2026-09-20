@@ -3015,6 +3015,59 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
     });
 
+    test.each([
+        [0, 0, 100, 100, 5],
+        [100, 100, 0, 0, 10],
+        [-30, 20, 70, 20, 5],
+        [20, -30, 20, 70, 5],
+        [0.2, -0.3, 100.7, 80.4, 0.5]
+    ])('preserves line endpoints (%s, %s) to (%s, %s) at thickness %s', (x1, y1, x2, y2, thickness) => {
+        const manager = makeManager();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+        manager.getCachedObjectImagePlane = jest.fn(() => ({}));
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            lineTo: jest.fn(),
+            moveTo: jest.fn(),
+            stroke: jest.fn()
+        };
+        const canvas = {getContext: jest.fn(() => context)};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => canvas)};
+        const target = {drawableID: 1, id: 'target', isStage: false, visible: false};
+        const configuration = {
+            position1: {x: x1, y: y1, z: 0},
+            position2: {x: x2, y: y2, z: 0},
+            shape: 'line',
+            thickness
+        };
+
+        try {
+            expect(manager.drawShape(target, configuration)).toBeUndefined();
+            const resolution = manager.runtime.renderer.createBitmapSkin.mock.calls[0][1];
+            const position = manager.getShapeSceneConfiguration(configuration).position;
+            const toWorld = ([x, y]) => [
+                position.x + ((x - (canvas.width / 2)) / resolution),
+                position.y - ((y - (canvas.height / 2)) / resolution)
+            ];
+            const start = toWorld(context.moveTo.mock.calls[0]);
+            const end = toWorld(context.lineTo.mock.calls[0]);
+            expect(start[0]).toBeCloseTo(x1);
+            expect(start[1]).toBeCloseTo(y1);
+            expect(end[0]).toBeCloseTo(x2);
+            expect(end[1]).toBeCloseTo(y2);
+            expect(context.lineWidth / resolution).toBe(thickness);
+
+            manager.prepareShapeSceneItem(target, configuration);
+            expect(manager.getCachedObjectImagePlane).toHaveBeenCalledWith(
+                expect.any(String), canvas, canvas.width / resolution, canvas.height / resolution
+            );
+        } finally {
+            global.document = originalDocument;
+        }
+    });
+
     test('reuses procedural stamp skins when only their transform changes', () => {
         const manager = makeManager();
         let nextSkinId = 0;
