@@ -100,6 +100,7 @@ class MovieSourceRenderer {
         }
         const resource = key ? new MovieTexture(this.renderer) :
             (this.dynamicImages.get(request.owner) || new MovieTexture(this.renderer));
+        resource.dynamic = !key;
         resource.update(bitmap, resolution, request.rotationCenter);
         if (key) {
             this.images.set(key, resource);

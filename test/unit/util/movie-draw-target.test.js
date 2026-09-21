@@ -15,7 +15,19 @@ const make = () => {
         bindTexture: jest.fn(), pixelStorei: jest.fn(), texImage2D: jest.fn(), texSubImage2D: jest.fn(),
         deleteTexture: jest.fn()};
     const renderer = {gl, _allSkins: [skin], _nativeSize: [480, 360],
-        _doExitDrawRegion: jest.fn(), _shaderManager: {getShader: () => ({program: {}})},
+        _regionId: null, _exitRegion: null,
+        enterDrawRegion (region) {
+            if (this._regionId === region) return;
+            this._doExitDrawRegion();
+            this._regionId = region;
+            region.enter();
+            this._exitRegion = region.exit;
+        },
+        _doExitDrawRegion: jest.fn(function () {
+            if (this._exitRegion) this._exitRegion();
+            this._regionId = this._exitRegion = null;
+        }),
+        _shaderManager: {getShader: jest.fn().mockReturnValue({program: {}})},
         _bufferInfo: {}, _penFXEngine: {noteDrawBounds: jest.fn()}, penStamp: jest.fn()};
     const uniforms = {u_modelMatrix: new Float32Array([
         -100, 0, 0, 0, 0, -50, 0, 0, 0, 0, 1, 0, 10, 20, 0, 1
@@ -110,4 +122,33 @@ test('trail batches flush before a source or framebuffer switch and allocate onl
     renderer._doExitDrawRegion();
     expect(gl.drawArraysInstanced).toHaveBeenLastCalledWith(gl.TRIANGLE_STRIP, 0, 4, 1);
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
+});
+
+
+test('adjacent draws reuse GPU bindings and rebind after external draws or shader changes', () => {
+    const {renderer, gl, uniforms, target} = make();
+    const source = {texture: {}, size: [100, 50]};
+    for (let index = 0; index < 1000; index++) target.draw(0, source, uniforms);
+    expect(gl.useProgram).toHaveBeenCalledTimes(1);
+    expect(twgl.setBuffersAndAttributes).toHaveBeenCalledTimes(1);
+    expect(twgl.drawBufferInfo).toHaveBeenCalledTimes(1000);
+    renderer._doExitDrawRegion();
+    target.draw(0, source, uniforms);
+    expect(gl.useProgram).toHaveBeenCalledTimes(2);
+    renderer._shaderManager.getShader.mockReturnValue({program: {effect: true}});
+    target.draw(0, source, uniforms, 1);
+    expect(gl.useProgram).toHaveBeenCalledTimes(3);
+});
+
+test('mutable sources use immediate bindings and cannot leave stale cached GL state', () => {
+    const {gl, uniforms, target} = make();
+    const source = {texture: {}, size: [100, 50]};
+    target.draw(0, source, uniforms);
+    target.draw(0, {...source, dynamic: true}, uniforms);
+    target.draw(0, {...source, dynamic: true}, uniforms);
+    target.draw(0, source, uniforms);
+    expect(gl.useProgram).toHaveBeenCalledTimes(4);
+    target.draw(0, source, uniforms);
+    expect(gl.useProgram).toHaveBeenCalledTimes(4);
+    expect(twgl.drawBufferInfo).toHaveBeenCalledTimes(5);
 });

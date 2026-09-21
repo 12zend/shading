@@ -5,6 +5,17 @@ const ShaderManager = require('./ShaderManager');
 class MovieDrawTarget {
     constructor (renderer) {
         this.renderer = renderer;
+        // Keep framebuffer/program bindings across adjacent Movie submissions. Other renderer
+        // operations leave this region before changing GL state, including frame/group swaps.
+        this.sourceRegion = {
+            enter: () => {
+                const gl = renderer.gl;
+                twgl.bindFramebufferInfo(gl, this.sourceFramebuffer);
+                gl.useProgram(this.sourceProgram.program);
+                twgl.setBuffersAndAttributes(gl, this.sourceProgram, renderer._bufferInfo);
+            },
+            exit: () => twgl.bindFramebufferInfo(renderer.gl, null)
+        };
     }
 
     // Batch adjacent motion trails in the shared Movie target. Every source change or transaction
@@ -113,11 +124,9 @@ class MovieDrawTarget {
         const skin = renderer._allSkins[bufferId];
         if (!skin || !source.texture) return;
         const gl = renderer.gl;
-        renderer._doExitDrawRegion();
         const width = renderer._nativeSize[0];
         const height = renderer._nativeSize[1];
         const quality = skin.renderQuality;
-        twgl.bindFramebufferInfo(gl, skin._framebuffer);
         // Match stage-pixel boundaries while limiting both fill work and downstream effect bounds.
         const matrix = uniforms.u_modelMatrix;
         let left = Infinity;
@@ -150,10 +159,22 @@ class MovieDrawTarget {
         if (right <= left || top <= bottom) return;
         const viewportX = (width * quality / 2) + left;
         const viewportY = (height * quality / 2) - top;
-        gl.viewport(viewportX, viewportY, right - left, top - bottom);
         const program = renderer._shaderManager.getShader(ShaderManager.DRAW_MODE.default, effectBits);
-        gl.useProgram(program.program);
-        twgl.setBuffersAndAttributes(gl, program, renderer._bufferInfo);
+        if (this.sourceFramebuffer !== skin._framebuffer || this.sourceProgram !== program) {
+            renderer._doExitDrawRegion();
+            this.sourceFramebuffer = skin._framebuffer;
+            this.sourceProgram = program;
+        }
+        if (source.dynamic) {
+            // Mutable sources upload between draws; keep their immediate submission path.
+            renderer._doExitDrawRegion();
+            twgl.bindFramebufferInfo(gl, skin._framebuffer);
+            gl.useProgram(program.program);
+            twgl.setBuffersAndAttributes(gl, program, renderer._bufferInfo);
+        } else {
+            renderer.enterDrawRegion(this.sourceRegion);
+        }
+        gl.viewport(viewportX, viewportY, right - left, top - bottom);
         twgl.setTextureParameters(gl, source.texture, {minMag: source.nearest ? gl.NEAREST : gl.LINEAR});
         twgl.setUniforms(program, {
             ...uniforms,
