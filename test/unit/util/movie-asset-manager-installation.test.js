@@ -8,6 +8,8 @@ describe('Movie asset manager VM installation', () => {
 
         installMovieAssetManager(vm);
 
+        expect(vm.runtime.ext_pen).toBeUndefined();
+        expect(vm.runtime.movieDrawing).toBeDefined();
         expect(vm.runtime._primitives.sound_playattime).toEqual(expect.any(Function));
         expect(compatBlocks.stacked).toContain('sound_playattime');
     });
@@ -17,7 +19,9 @@ describe('Movie asset manager VM installation', () => {
         vm.runtime.renderer = {_gl: {}};
 
         expect(() => vm.installShadingFeatures()).not.toThrow();
-        expect(vm.extensionManager.isExtensionLoaded('pen')).toBe(true);
+        expect(vm.extensionManager.isExtensionLoaded('pen')).toBe(false);
+        expect(vm.runtime.ext_pen).toBeUndefined();
+        expect(vm.runtime.movieDrawing).toBeDefined();
         expect(vm.runtime._primitives.sound_playattime).toEqual(expect.any(Function));
         expect(compatBlocks.stacked).toContain('sound_playattime');
     });

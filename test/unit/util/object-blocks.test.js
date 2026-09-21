@@ -153,6 +153,7 @@ describe('Objects blocks', () => {
                 setOutputShape: jest.fn(),
                 setPreviousStatement: jest.fn()
             };
+            Object.assign(block, definition);
             definition.init.call(block);
             return {block, ratioInput: inputs.RATIO};
         };
@@ -508,7 +509,7 @@ describe('Objects blocks', () => {
         expect(info.blocks.find(blockInfo => blockInfo.opcode === 'draw').text).toBe('draw [ASSET]');
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
-            'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene',
+            'clear', 'drawSprite', 'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene',
             'group', 'simulation', 'transform', 'composite', 'matte', 'renderPass', 'drawPass', 'clearPass',
             'repeat', 'timeOffset',
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
@@ -517,7 +518,7 @@ describe('Objects blocks', () => {
             'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector',
             'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
-        expect(Object.keys(info.blocks[0].arguments)).toEqual([
+        expect(Object.keys(info.blocks.find(block => block.opcode === 'draw').arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
@@ -534,7 +535,7 @@ describe('Objects blocks', () => {
         expect(japaneseInfo.name).toBe('レイヤー');
         expect(japaneseInfo.blocks.find(blockInfo => blockInfo.opcode === 'draw').text)
             .toBe('描画 [ASSET]');
-        expect(Object.keys(info.blocks[1].arguments)).toEqual([
+        expect(Object.keys(info.blocks.find(block => block.opcode === 'shape').arguments)).toEqual([
             'SHAPE', 'N',
             'RATIO',
             'PX', 'PY', 'PZ',
@@ -545,23 +546,23 @@ describe('Objects blocks', () => {
             'T1', 'T2'
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'curved star', 'flower']);
-        expect(info.blocks[1].arguments.RATIO.defaultValue).toBe(0.5);
-        expect(info.blocks[1].text).toContain('ratio: [RATIO]');
+        expect(info.blocks.find(block => block.opcode === 'shape').arguments.RATIO.defaultValue).toBe(0.5);
+        expect(info.blocks.find(block => block.opcode === 'shape').text).toContain('ratio: [RATIO]');
         expect(info.menus.blendMode.items).toEqual(BLEND_MODES);
         expect(info.menus.easing.items).toEqual(ANIMATION_EASING_TYPES);
         expect(info.menus.matteMode.items).toEqual(MATTE_MODES);
         expect(info.menus.pathComponent.items).toEqual(['x', 'y']);
-        expect(info.blocks[1].text).toContain('time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %');
-        expect(info.blocks[1].text).not.toContain('\n');
-        expect(info.blocks[0].arguments.T2.defaultValue).toBe(Infinity);
-        expect(info.blocks[1].arguments.T2.defaultValue).toBe(Infinity);
-        expect(info.blocks[2].arguments).toEqual(expect.objectContaining({
+        expect(info.blocks.find(block => block.opcode === 'shape').text).toContain('time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %');
+        expect(info.blocks.find(block => block.opcode === 'shape').text).not.toContain('\n');
+        expect(info.blocks.find(block => block.opcode === 'draw').arguments.T2.defaultValue).toBe(Infinity);
+        expect(info.blocks.find(block => block.opcode === 'shape').arguments.T2.defaultValue).toBe(Infinity);
+        expect(info.blocks.find(block => block.opcode === 'arc').arguments).toEqual(expect.objectContaining({
             START: {type: ArgumentType.NUMBER, defaultValue: 0},
             END: {type: ArgumentType.NUMBER, defaultValue: 360},
             T1: {type: expect.anything(), defaultValue: 0},
             T2: {type: expect.anything(), defaultValue: Infinity}
         }));
-        expect(info.blocks[3].arguments).toEqual(expect.objectContaining({
+        expect(info.blocks.find(block => block.opcode === 'circularSegment').arguments).toEqual(expect.objectContaining({
             START: {type: ArgumentType.NUMBER, defaultValue: 0},
             END: {type: ArgumentType.NUMBER, defaultValue: 360}
         }));

@@ -34,9 +34,9 @@ const sanitize = string => {
     return JSON.stringify(string).slice(1, -1);
 };
 
-// Pen-related constants
-const PEN_EXT = 'runtime.ext_pen';
-const PEN_STATE = `${PEN_EXT}._getPenState(target)`;
+// Legacy drawing opcodes use the same synchronous Movie commands as the interpreter.
+const DRAWING = 'runtime.movieDrawing';
+const DRAWING_STATE = `${DRAWING}.getState(target)`;
 
 /**
  * Variable pool used for factory function names.
@@ -823,43 +823,43 @@ class JSGenerator {
             break;
 
         case StackOpcode.PEN_CLEAR:
-            this.source += `${PEN_EXT}.clear();\n`;
+            this.source += `${DRAWING}.clear();\n`;
             break;
         case StackOpcode.PEN_DOWN:
-            this.source += `${PEN_EXT}._penDown(target);\n`;
+            this.source += `${DRAWING}.startTrail(target);\n`;
             break;
         case StackOpcode.PEN_COLOR_PARAM_CHANGE:
-            this.source += `${PEN_EXT}._setOrChangeColorParam(${this.descendInput(node.param)}, ${this.descendInput(node.value)}, ${PEN_STATE}, true);\n`;
+            this.source += `${DRAWING}._setOrChangeColorParam(${this.descendInput(node.param)}, ${this.descendInput(node.value)}, ${DRAWING_STATE}, true);\n`;
             break;
         case StackOpcode.PEN_SIZE_CHANGE:
-            this.source += `${PEN_EXT}._changePenSizeBy(${this.descendInput(node.size)}, target);\n`;
+            this.source += `${DRAWING}.changeSize(${this.descendInput(node.size)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_HUE_CHANGE_LEGACY:
-            this.source += `${PEN_EXT}._changePenHueBy(${this.descendInput(node.hue)}, target);\n`;
+            this.source += `${DRAWING}.changeHue(${this.descendInput(node.hue)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_SHADE_CHANGE_LEGACY:
-            this.source += `${PEN_EXT}._changePenShadeBy(${this.descendInput(node.shade)}, target);\n`;
+            this.source += `${DRAWING}.changeShade(${this.descendInput(node.shade)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_HUE_SET_LEGACY:
-            this.source += `${PEN_EXT}._setPenHueToNumber(${this.descendInput(node.hue)}, target);\n`;
+            this.source += `${DRAWING}.setHue(${this.descendInput(node.hue)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_SHADE_SET_LEGACY:
-            this.source += `${PEN_EXT}._setPenShadeToNumber(${this.descendInput(node.shade)}, target);\n`;
+            this.source += `${DRAWING}.setShade(${this.descendInput(node.shade)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_SET:
-            this.source += `${PEN_EXT}._setPenColorToColor(${this.descendInput(node.color)}, target);\n`;
+            this.source += `${DRAWING}.setColor(${this.descendInput(node.color)}, target);\n`;
             break;
         case StackOpcode.PEN_COLOR_PARAM_SET:
-            this.source += `${PEN_EXT}._setOrChangeColorParam(${this.descendInput(node.param)}, ${this.descendInput(node.value)}, ${PEN_STATE}, false);\n`;
+            this.source += `${DRAWING}._setOrChangeColorParam(${this.descendInput(node.param)}, ${this.descendInput(node.value)}, ${DRAWING_STATE}, false);\n`;
             break;
         case StackOpcode.PEN_SIZE_SET:
-            this.source += `${PEN_EXT}._setPenSizeTo(${this.descendInput(node.size)}, target);\n`;
+            this.source += `${DRAWING}.setSize(${this.descendInput(node.size)}, target);\n`;
             break;
         case StackOpcode.PEN_STAMP:
-            this.source += `${PEN_EXT}._stamp(target);\n`;
+            this.source += `${DRAWING}.drawSprite(target);\n`;
             break;
         case StackOpcode.PEN_UP:
-            this.source += `${PEN_EXT}._penUp(target);\n`;
+            this.source += `${DRAWING}.stopTrail(target);\n`;
             break;
 
         case StackOpcode.PROCEDURE_CALL: {
@@ -1205,8 +1205,8 @@ JSGenerator.unstable_exports = {
     functionNameVariablePool,
     generatorNameVariablePool,
     VariablePool,
-    PEN_EXT,
-    PEN_STATE,
+    DRAWING,
+    DRAWING_STATE,
     Frame,
     sanitize
 };

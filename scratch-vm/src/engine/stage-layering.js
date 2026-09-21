@@ -7,8 +7,8 @@ class StageLayering {
         return 'video';
     }
 
-    static get PEN_LAYER () {
-        return 'pen';
+    static get MOVIE_LAYER () {
+        return 'movie';
     }
 
     static get SPRITE_LAYER () {
@@ -20,7 +20,7 @@ class StageLayering {
         return [
             StageLayering.BACKGROUND_LAYER,
             StageLayering.VIDEO_LAYER,
-            StageLayering.PEN_LAYER,
+            StageLayering.MOVIE_LAYER,
             StageLayering.SPRITE_LAYER
         ];
     }

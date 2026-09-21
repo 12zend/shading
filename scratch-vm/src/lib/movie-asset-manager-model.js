@@ -1,11 +1,11 @@
+import MovieSourceRenderer from 'scratch-render/src/MovieSourceRenderer';
 import {
     createBuildingPrimitive,
     loadBuildingTexture,
     makeBuildingMaterial,
-    ModelRenderer,
     projectPosition,
     DEFAULT_FOCAL_LENGTH
-} from './model-runtime';
+} from 'scratch-render/src/model-runtime';
 import {
     BITMAP_RESOLUTION
 } from './movie-asset-manager-constants';
@@ -341,19 +341,14 @@ const MovieAssetManagerModelMethods = {
         return true;
     },
 
-    stampTarget (target) {
+    drawTarget (target) {
         if (!target) return;
-        if (typeof this.directPenStamp === 'function') {
-            this.directPenStamp(target);
+        if (typeof this.drawSpriteDirect === 'function') {
+            this.drawSpriteDirect(target);
             return;
         }
-        const pen = this.runtime.ext_pen;
-        if (pen && typeof pen._stamp === 'function') {
-            pen._stamp(target);
-            return;
-        }
-        const stamp = this.runtime._primitives && this.runtime._primitives.pen_stamp;
-        if (typeof stamp === 'function') stamp({}, {target});
+        const drawing = this.runtime.movieDrawing;
+        if (drawing) drawing.drawTarget(target);
     },
 
     replaceModelScene (target, requestedModel, requestedCamera = null) {
@@ -371,7 +366,7 @@ const MovieAssetManagerModelMethods = {
         state.textQueue.length = 0;
         const render = requestedCamera ? this.queueModelSceneRender(target, requestedCamera) :
             this.queueModelSceneRender(target);
-        return render || Promise.resolve();
+        return render;
     },
 
     setModelFrame (target, requestedFrame, render = true, requestedCamera = null) {
@@ -392,6 +387,20 @@ const MovieAssetManagerModelMethods = {
     // Internal compatibility alias used by project restoration and older UI integrations.
     switchModel (target, requestedModel) {
         return this.replaceModelScene(target, requestedModel);
+    },
+
+    renderPreparedModelSource (target, renderArguments, mode = 'model', penOnly = false) {
+        const state = this.getTargetState(target);
+        const entry = this.runtime.renderer.renderMovieSource({
+            kind: 'model',
+            arguments: renderArguments,
+            resolution: BITMAP_RESOLUTION,
+            skinId: state.skinId
+        });
+        state.skinId = entry.skinId;
+        // The render submission already uploaded the color target. Bind it without a second upload.
+        this.applyBitmap(target, entry.bitmap, mode, null, penOnly, entry.resolution, entry.skinId);
+        state.sharedTextSkinId = null;
     },
 
     queueModelSceneRender (target, requestedCamera = null, preservePenOnly = false) {
@@ -429,12 +438,9 @@ const MovieAssetManagerModelMethods = {
             };
         });
         if (readyItems.length && readyItems.every(Boolean) && state.requestedMode === 'model') {
-            if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
             const renderArguments = [readyItems, camera, this.getStageSize(), BITMAP_RESOLUTION];
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
-            const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-            if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
-            else this.applyBitmap(target, canvas, 'model');
+            this.renderPreparedModelSource(target, renderArguments, 'model', penOnly);
             this.publishModelZBuffer(target, camera);
             // The scene is already installed. Do not wait for an older queued clear/render request here, or
             // consecutive render-model blocks would expose an empty pen frame between them.
@@ -475,7 +481,6 @@ const MovieAssetManagerModelMethods = {
                 }));
                 if (this.targetStates.get(target.id) !== state || state.requestedMode !== 'model') return;
                 if (state.modelRenderVersion !== version) continue;
-                if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
                 const renderArguments = [
                     loadedItems.filter(Boolean),
                     renderCamera,
@@ -483,9 +488,7 @@ const MovieAssetManagerModelMethods = {
                     BITMAP_RESOLUTION
                 ];
                 if (Array.isArray(this.lights)) renderArguments.push(this.lights);
-                const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-                if (penOnly) this.applyBitmap(target, canvas, 'model', null, true);
-                else this.applyBitmap(target, canvas, 'model');
+                this.renderPreparedModelSource(target, renderArguments, 'model', penOnly);
                 this.publishModelZBuffer(target, renderCamera);
                 return;
             }
@@ -531,8 +534,9 @@ const MovieAssetManagerModelMethods = {
     },
 
     publishModelZBuffer (target, camera = null) {
-        if (!this.modelRenderer || typeof this.modelRenderer.getDepthBuffer !== 'function') return;
-        const depthBuffer = this.modelRenderer.getDepthBuffer();
+        const renderer = MovieSourceRenderer.forRenderer(this.runtime.renderer).model;
+        if (!renderer || typeof renderer.getDepthBuffer !== 'function') return;
+        const depthBuffer = renderer.getDepthBuffer();
         if (!depthBuffer) return;
         const published = this.createDepthResource(depthBuffer, target, {
             camera,
@@ -595,7 +599,7 @@ const MovieAssetManagerModelMethods = {
 
     async renderModelPreview (model, canvas, rotation = {x: -15, y: 30, z: 0}) {
         const object = await this.getModelObject(model);
-        const renderer = new ModelRenderer(canvas);
+        const renderer = MovieSourceRenderer.createPreview(canvas);
         renderer.render(object, {rotation, rotationOrder: 'XYZ'}, {
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},

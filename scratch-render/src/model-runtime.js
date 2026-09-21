@@ -1,7 +1,4 @@
-// Public Movie 3D runtime API.
-//
-// Keep this module as a compatibility facade: Movie asset-manager modules and the GUI import from
-// `./model-runtime`, while the implementation is organized by responsibility in the sibling modules.
+// Public renderer API for Movie geometry, loading, and 3D rendering.
 export {
     DEFAULT_DEPTH,
     DEFAULT_FOCAL_LENGTH,

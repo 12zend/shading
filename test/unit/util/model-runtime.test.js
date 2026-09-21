@@ -17,7 +17,7 @@ import {
     resampleAnimationClip,
     restoreMMDBoneHierarchy,
     verticalFOVFromFocalLength
-} from '../../../src/lib/model-runtime';
+} from 'scratch-render/src/model-runtime';
 
 const camera = {
     focalLength: DEFAULT_FOCAL_LENGTH,

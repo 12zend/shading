@@ -8,7 +8,7 @@ import {
     normalizeFOV,
     projectPosition,
     spritePlaneMatrix
-} from './model-runtime';
+} from 'scratch-render/src/model-runtime';
 import {FRAME_GRAPH_NODE_TYPES} from './movie-frame-graph';
 import {
     cloneCamera,

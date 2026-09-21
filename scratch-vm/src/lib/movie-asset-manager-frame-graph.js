@@ -145,7 +145,7 @@ const MovieAssetManagerFrameGraphMethods = {
         }));
     },
 
-    enqueueFrameGraphPenOperation (drawKind, target = null) {
+    enqueueFrameGraphDrawingOperation (drawKind, target = null) {
         return Boolean(this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
             drawKind,
             target
@@ -253,7 +253,7 @@ const MovieAssetManagerFrameGraphMethods = {
 
     collectFrameGraphThreeDraws (node, transforms = [], draws = [], analysis = null) {
         // An explicit Objects scene opts its children into one Three.js depth buffer. Ordinary Draw nodes stay on
-        // Scratch's existing 2D/Pen path so their color and screen-space text semantics do not change.
+        // the Movie 2D texture path so their color and screen-space text semantics do not change.
         if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) {
             if (!THREE_DRAW_KINDS.has(node.drawKind)) {
                 if (analysis && !analysis.barrier) analysis.barrier = node;
@@ -465,17 +465,17 @@ const MovieAssetManagerFrameGraphMethods = {
         const previousResource = node.target && typeof this.getDepthResource === 'function' ?
             this.getDepthResource(node.target) : null;
         const render = this.executeWithFrameGraphCamera(node.camera, () => {
-            if (node.drawKind === 'pen-clear') {
-                this.beginPenFrameTransaction();
-                if (typeof this.directPenClear === 'function') this.directPenClear();
-                this.drawDefaultPenBackground();
+            if (node.drawKind === 'clear') {
+                this.beginFrameTransaction();
+                if (typeof this.clearDrawingSurface === 'function') this.clearDrawingSurface();
+                this.drawDefaultBackground();
                 if (typeof this.invalidateDepthResources === 'function') this.invalidateDepthResources();
                 this.setFrameGraphDepthResource(context, null);
                 return;
             }
-            if (node.drawKind === 'pen-stamp') {
+            if (node.drawKind === 'sprite') {
                 this.applyProjection(node.target, node.camera);
-                this.stampTarget(node.target);
+                this.drawTarget(node.target);
                 this.setFrameGraphDepthResource(context, null);
                 return;
             }
@@ -493,7 +493,7 @@ const MovieAssetManagerFrameGraphMethods = {
             }
             return this.drawObjectImmediately(node.target, configuration, node.camera);
         });
-        if (['pen-clear', 'pen-stamp', 'render-pass'].includes(node.drawKind)) return render;
+        if (['clear', 'sprite', 'render-pass'].includes(node.drawKind)) return render;
         return this.trackFrameGraphDepthResource(render, context, node, node.target, previousResource);
     },
 
@@ -523,51 +523,15 @@ const MovieAssetManagerFrameGraphMethods = {
         });
     },
 
-    attachPenFrameTransactions (penFX) {
+    attachFrameTransactions (penFX) {
         this.penFX = penFX;
-        if (this.penFrameTransactionsInstalled) return;
-        const pen = this.runtime.ext_pen;
-        const primitives = this.runtime._primitives;
-        if (!pen || typeof pen.clear !== 'function' || !primitives ||
-            typeof primitives.pen_clear !== 'function') return;
-
-        const manager = this;
-        const compiledClear = pen.clear;
-        this.directPenClear = () => compiledClear.call(pen);
-        pen.clear = function (...args) {
-            if (manager.enqueueFrameGraphPenOperation('pen-clear')) return;
-            manager.beginPenFrameTransaction();
-            const result = compiledClear.apply(this, args);
-            manager.drawDefaultPenBackground();
-            if (typeof manager.invalidateDepthResources === 'function') manager.invalidateDepthResources();
-            return result;
-        };
-        const interpreterClear = primitives.pen_clear;
-        primitives.pen_clear = function (...args) {
-            if (manager.enqueueFrameGraphPenOperation('pen-clear')) return;
-            manager.beginPenFrameTransaction();
-            const result = interpreterClear.apply(this, args);
-            manager.drawDefaultPenBackground();
-            if (typeof manager.invalidateDepthResources === 'function') manager.invalidateDepthResources();
-            return result;
-        };
-        if (typeof pen._stamp === 'function') {
-            const compiledStamp = pen._stamp;
-            this.directPenStamp = target => compiledStamp.call(pen, target);
-            pen._stamp = function (target) {
-                if (manager.enqueueFrameGraphPenOperation('pen-stamp', target)) return;
-                return compiledStamp.call(this, target);
-            };
-        }
-        if (typeof primitives.pen_stamp === 'function') {
-            const interpreterStamp = primitives.pen_stamp;
-            primitives.pen_stamp = function (args, util) {
-                if (manager.enqueueFrameGraphPenOperation('pen-stamp', util && util.target)) return;
-                return interpreterStamp.call(this, args, util);
-            };
-        }
-        this.penFrameTransactionsInstalled = true;
-        this.drawDefaultPenBackground();
+        if (this.frameTransactionsInstalled) return;
+        const drawing = this.runtime.movieDrawing;
+        if (!drawing) return;
+        this.clearDrawingSurface = () => drawing.clearSurface();
+        this.drawSpriteDirect = target => drawing.drawTarget(target);
+        this.frameTransactionsInstalled = true;
+        this.drawDefaultBackground();
     },
 
     usesDefaultBackdrop () {
@@ -581,7 +545,7 @@ const MovieAssetManagerFrameGraphMethods = {
         return Boolean(costume && costume.assetId === DEFAULT_BACKDROP_ASSET_ID);
     },
 
-    drawDefaultPenBackground () {
+    drawDefaultBackground () {
         const renderer = this.runtime.renderer;
         if (!this.defaultStageBackgroundColor) {
             const rendererColor = renderer && renderer._backgroundColor4f;
@@ -601,29 +565,29 @@ const MovieAssetManagerFrameGraphMethods = {
         this.penFX.drawDefaultBackground(this.defaultStageBackgroundColor);
     },
 
-    beginPenFrameTransaction () {
-        if (this.penFrameTransactionActive || !this.timeline || !this.timeline.renderedThisStep ||
+    beginFrameTransaction () {
+        if (this.frameTransactionActive || !this.timeline || !this.timeline.renderedThisStep ||
             !this.penFX || typeof this.penFX.beginFrame !== 'function') return;
-        this.penFrameTransactionActive = this.penFX.beginFrame() === true;
+        this.frameTransactionActive = this.penFX.beginFrame() === true;
     },
 
-    resetPenForRenderFrame () {
+    resetDrawingForRenderFrame () {
         // beginFrame swaps in a transparent staging texture while the completed frame remains visible.
         // This is the render-frame reset: do not call pen_clear from a VM execute hook, because that would
-        // expose an empty Pen layer before compiled or interpreted render-frame scripts finish drawing.
-        this.beginPenFrameTransaction();
-        if (this.penFrameTransactionActive) this.drawDefaultPenBackground();
+        // expose an empty drawing surface before compiled or interpreted render-frame scripts finish drawing.
+        this.beginFrameTransaction();
+        if (this.frameTransactionActive) this.drawDefaultBackground();
     },
 
-    commitPenFrameTransaction () {
-        if (!this.penFrameTransactionActive) return;
-        this.penFrameTransactionActive = false;
+    commitFrameTransaction () {
+        if (!this.frameTransactionActive) return;
+        this.frameTransactionActive = false;
         if (this.penFX && typeof this.penFX.commitFrame === 'function') this.penFX.commitFrame();
     },
 
-    cancelPenFrameTransaction () {
-        if (!this.penFrameTransactionActive) return;
-        this.penFrameTransactionActive = false;
+    cancelFrameTransaction () {
+        if (!this.frameTransactionActive) return;
+        this.frameTransactionActive = false;
         if (this.penFX && typeof this.penFX.cancelFrame === 'function') this.penFX.cancelFrame();
     },
 
@@ -648,7 +612,7 @@ const MovieAssetManagerFrameGraphMethods = {
             if (!target.isStage) target.setVisible(false);
         }
         this.ensureMainTarget();
-        this.drawDefaultPenBackground();
+        this.drawDefaultBackground();
     }
 };
 

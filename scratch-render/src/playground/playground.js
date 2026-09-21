@@ -49,7 +49,7 @@ xhr.open('GET', 'https://cdn.assets.scratch.mit.edu/internalapi/asset/b7853f557e
 xhr.send();
 
 if (wantedSkin === WantedSkinType.pen) {
-    const penSkinID = renderer.createPenSkin();
+    const penSkinID = renderer.getMovieBufferId();
 
     renderer.updateDrawableProperties(drawableID2, {
         skinId: penSkinID
@@ -61,7 +61,7 @@ if (wantedSkin === WantedSkinType.pen) {
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
 
-        renderer.penLine(penSkinID, {
+        renderer.drawMovieStroke({
             color4f: [Math.random(), Math.random(), Math.random(), 1],
             diameter: 8
         },

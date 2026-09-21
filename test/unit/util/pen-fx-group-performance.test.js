@@ -31,7 +31,7 @@ describe('Objects grouping GPU resource scaling', () => {
             expect(engine.beginGroup()).toBeUndefined();
             expect(skin.getTexture()).toBe('baseline');
             expect(skin._texture).toBe('texture-1');
-            engine.notePenStamp(skin, 0, 0, 10, 10);
+            engine.noteDrawBounds(skin, 0, 0, 10, 10);
             expect(engine.endGroup()).toBeUndefined();
             expect(skin._texture).toBe('baseline');
         }
@@ -78,7 +78,7 @@ describe('Objects grouping GPU resource scaling', () => {
     test('keeps blend, opacity, expanded effects and named passes on their isolated paths', () => {
         const {engine, skin} = makeEngine();
         engine.beginGroup();
-        engine.notePenStamp(skin, 0, 0, 10, 10);
+        engine.noteDrawBounds(skin, 0, 0, 10, 10);
         engine.endGroup({opacity: 0.5});
         expect(engine._render).toHaveBeenLastCalledWith('groupOver', 'work-fb', expect.any(Array),
             {u_blend: 0, u_opacity: 0.5}, ['u_blend']);

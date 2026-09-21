@@ -181,6 +181,15 @@ class SVGSkin extends Skin {
     }
 
     /**
+     * Reuse the largest supported SVG raster regardless of the projected display size.
+     * @returns {WebGLTexture} Cached maximum-resolution texture.
+     */
+    getMaximumTexture () {
+        const scale = this._maxTextureScale * 100;
+        return this.getTexture([scale, scale]);
+    }
+
+    /**
      * Do a hard reset of the existing MIPs by deleting them.
      */
     resetMIPs () {
@@ -219,10 +228,8 @@ class SVGSkin extends Skin {
 
             const maxDimension = Math.ceil(Math.max(width, height));
             const rendererMax = this._renderer.maxTextureDimension;
-            let testScale = 2;
-            for (testScale; maxDimension * testScale <= rendererMax; testScale *= 2) {
-                this._maxTextureScale = testScale;
-            }
+            // Recompute on every costume update, including downscales for oversized SVGs.
+            this._maxTextureScale = Math.pow(2, Math.floor(Math.log2(rendererMax / maxDimension)));
 
             this.resetMIPs();
 

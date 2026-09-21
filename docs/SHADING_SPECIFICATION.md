@@ -21,7 +21,7 @@ Scratch Blocks / UI
 Scratch VM primitive
         │  同一 VM tick 内で状態または frame graph に記録
         ▼
-MovieAssetManager ── PenFX compositor ── Pen framebuffer
+MovieAssetManager ── PenFX compositor ── Movie framebuffer
         │
         └──────────── Three.js model scene / camera / lights
                                 │
@@ -54,17 +54,17 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 - ターゲットごとの Objects 描画状態
 - カメラ、ライト、モデルシーン、建築プリミティブ
 - frame graph の収集・直列実行
-- Pen frame transaction
+- Movie frame transaction
 - 音声イベントとレンダリングフレームの収集
 - プレビューおよびファイル書き出し
 - 非同期処理の状態、世代番号、キャッシュ、エラー通知
 
 ### 2.3 描画経路
 
-- 通常のコスチューム、テキスト、ビデオは Scratch の drawable/Pen 経路を利用する。
+- コスチューム、テキスト、ビデオのObjects描画はrenderer内のテクスチャ準備と直接描画を利用する。SVGコスチュームは最大のキャッシュ解像度を使う。
 - `objects_scene` の中でまとめられた Objects の描画は、Three.js の 1 つの深度バッファを共有する 3D シーンとして実行できる。
-- 通常の Draw ノードは既存の 2D/Pen の色・画面座標セマンティクスを維持する。
-- Objects の描画結果は最終的に Pen stamp として合成される。
+- 通常の Draw ノードは既存の色・画面座標セマンティクスを維持し、MovieBufferへ直接合成する。
+- PenSkinと旧スタンプAPIは削除済み。グループ隔離・エフェクト・フレーム公開用のバッファはrendererが管理する。
 - カメラは Draw/Scene ノードにスナップショットされ、同一 frame 中の後続変更で過去の描画結果が変わらない。
 
 ## 3. 現在表示されるブロック
@@ -86,9 +86,8 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Variables | `data` | Scratch の変数・リスト |
 | My Blocks | `procedures` | Scratch の通常のカスタムブロック |
 | My Blocks Scene | `myBlocksScene` | `scene(vec3 p)` を定義する動的カスタムブロック |
-| Pen | `pen` | ペン描画ブロック |
 
-標準の `looks` カテゴリは現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。`Pen` と `My Blocks Scene` は表示する。`My Blocks Shader` は削除され、Custom Shader（PenFX の `Import shader`）がメインとなる。
+標準の `looks` カテゴリは現在の Movie ツールボックスでは表示しない。古い opcode の読み込み処理は別途維持する。`Pen` は削除し、消去と現在のスプライトの描画をレイヤーカテゴリーへ移した。`My Blocks Scene` は表示する。`My Blocks Shader` は削除され、Custom Shader（PenFX の `Import shader`）がメインとなる。
 
 ### 3.2 Objects
 
@@ -141,7 +140,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 - `objects_composite` の不透明度は 0〜100 % を 0〜1 に変換する。
 - ブレンドモードは `normal`、`add`、`mul`、`screen`、`overlay`、`darken`、`lighten`、`color dodge`。
 - `objects_scene` は Objects の子描画を Three.js シーンへ集約し、同じ深度バッファで前後関係を決める。
-- Scene 外の通常 Draw は既存の Scratch/Pen 経路で描画する。
+- Scene 外の通常 Draw はMovieの直接テクスチャ描画経路で描画する。
 
 ### 3.3 Camera
 
@@ -295,10 +294,10 @@ PenFX は `penfx` extension として登録され、ツールボックス上で�
 2. 必要ならレンダラーを出力サイズへ変更し、`event_initialize` を開始する。
 3. 初期化用スレッド、資産読み込み、保留中のビジュアル処理が終わるまで内部状態で待つ。
 4. frame ごとに frame graph を開始し、決定的なタイムライン時刻を設定する。
-5. Pen を透明な staging frame へ切り替え、既定背景を描画する。
+5. MovieBuffer を透明な staging frame へ切り替え、既定背景を描画する。
 6. `event_renderframe` を起動する。
 7. frame graph、Objects 描画、ビデオ frame、テキスト、モデル、PenFX の保留処理を完了させる。
-8. 音声イベントを確定し、Pen frame を commit してから frame を保存する。
+8. 音声イベントを確定し、Movie frame を commit してから frame を保存する。
 9. 次の frame index へ進む。終了時刻に達したらプレビューサイズを復元し、完了イベントを通知する。
 
 ### 5.5 キーフレーム
@@ -330,11 +329,11 @@ frame graph は Scene、Draw、Group、Composite、Transform ノードで構成�
 
 `looks_rendervideo` の exact-frame primitive は、旧プロジェクトが直後の `stamp` で要求 frame を消費できるよう、内部で blocking video render として追跡する既存互換例外である。新規 command block の一般的な待機方式ではない。
 
-### 6.3 Pen frame transaction
+### 6.3 Movie frame transaction
 
-- `pen_clear` は frame graph 収集中なら clear ノードとして記録する。
-- `pen_stamp` は stamp ノードとして記録する。
-- `resetPenForRenderFrame` は staging frame を開始し、既定背景を描画する。
+- `objects_clear`（旧`pen_clear`も互換対応）は frame graph 収集中なら clear ノードとして記録する。
+- `objects_drawSprite`（旧`pen_stamp`も互換対応）は sprite ノードとして記録し、直接テクスチャ描画を行う。
+- `resetDrawingForRenderFrame` は staging frame を開始し、既定背景を描画する。
 - render-frame 本体と保留中の visual work が完了するまで staging frame を commit しない。
 - そのため、frame の途中で透明な空画面が露出したり、`erase all` 後の空白 frame が flicker したりしない。
 - 停止、シーク、エラー、世代変更時は transaction を commit せず cancel する。
@@ -542,7 +541,7 @@ npm run package:desktop:dir
 
 My Blocks Scene は `myBlocksScene` カテゴリとして My Blocks の直下に表示する。Scene の定義は `myblocksscene_return` の条件と RGB を、内蔵 `scene.frag` の `vec3 scene(vec3 p)` 関数へコンパイルする。条件には Scratch の全標準演算ブロックを使用でき、条件が true の点は RGB を返して塗りつぶし、false の点は `vec3(0.0)` を返して空洞にする。`p x`、`p y`、`p z` はワールド空間の `p.x`、`p.y`、`p.z` を返す。
 
-内蔵フラグメントシェーダーのレイマーチャーは PenFX の既存 custom shader 登録・描画経路でレンダリングする。レイの原点には MovieAssetManager の Camera 位置を使い、`v_uv` から作った方向ベクトルを Scratch の座標系（+Y が上）へ変換してから Camera の回転順序で回転し、レイを生成する。Scene の GLSL は元の `scene.frag` と Three.js に合わせて -Z 前方の基底を使うため、Camera の位置と回転は Movie の +Z 前方の基底から境界で変換する。横幅のアスペクト比は実際の描画先の `u_resolution` から求めるため、フルスクリーンや書き出し時も画面幅に合う。Scene 式の未占有点は alpha 0 の透明な寄与として、既存の Pen／Shader レイヤーへ source-over 合成するため、黒い背景を塗らない。
+内蔵フラグメントシェーダーのレイマーチャーは PenFX の既存 custom shader 登録・描画経路でレンダリングする。レイの原点には MovieAssetManager の Camera 位置を使い、`v_uv` から作った方向ベクトルを Scratch の座標系（+Y が上）へ変換してから Camera の回転順序で回転し、レイを生成する。Scene の GLSL は元の `scene.frag` と Three.js に合わせて -Z 前方の基底を使うため、Camera の位置と回転は Movie の +Z 前方の基底から境界で変換する。横幅のアスペクト比は実際の描画先の `u_resolution` から求めるため、フルスクリーンや書き出し時も画面幅に合う。Scene 式の未占有点は alpha 0 の透明な寄与として、Movie描画バッファへ source-over 合成するため、黒い背景を塗らない。
 
 Scene の式は固定のワールド空間ボックスで切らない。したがって `px < -1` や `px > 1` のような条件は、x 方向に無限に続く形として評価される。通常の物体は近距離を高密度に、無限平面などは遠距離を対数間隔に探索する。空のレイを GPU 上で無限ループにしないための数値上の終端距離は設けるが、`p.x`、`p.y`、`p.z` 自体を ±1.5 などの箱へクランプするものではない。
 
@@ -567,7 +566,7 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | `src/lib/object-blocks-ui.js` | Objects の資産選択・モデル・ビデオ UI |
 | `src/lib/movie-asset-manager.js` | MovieAssetManager の状態と初期化 |
 | `src/lib/movie-asset-manager-primitives.js` | Movie primitive と VM scheduling 契約 |
-| `src/lib/movie-asset-manager-frame-graph.js` | frame graph、camera snapshot、Pen transaction |
+| `src/lib/movie-asset-manager-frame-graph.js` | frame graph、camera snapshot、Movie transaction |
 | `src/lib/movie-asset-manager-timeline.js` | timeline state、再生、書き出し frame lifecycle |
 | `src/lib/movie-asset-manager-media.js` | ビデオ、フォント、コスチューム、テキスト |
 | `src/lib/movie-asset-manager-assets.js` | モデル、モーション、資産 cache |
@@ -579,7 +578,7 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | `src/lib/pen-fx/custom-shaders.js` | shader package の検証・登録・保存（Custom Shader がメイン） |
 | `src/lib/my-blocks-scene.js` | My Blocks Scene compiler、内蔵 `scene.frag` への関数合成、PenFX custom shader 実行 |
 | `src/lib/my-blocks-scene-blocks.js` | My Blocks Scene の Blockly 定義、カテゴリ、procedure mutation |
-| `src/lib/model-runtime.js` | Three.js model、camera、light、depth rendering |
+| `scratch-render/src/model-runtime.js` | Three.js model、camera、light、depth rendering |
 | `electron/main.js`、`electron/file-store.js`、`electron/graphics.js` | デスクトップ起動、保存、GPU backend |
 
 関連する検証コードは `test/unit/util/movie-project-roundtrip.test.js`、`test/unit/util/pen-fx-custom-shaders.test.js`、`test/unit/util/object-blocks.test.js`、`test/unit/util/movie-asset-manager.test.js`、`test/unit/components/timeline.test.jsx` にある。

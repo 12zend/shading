@@ -778,6 +778,8 @@ const objects = function (costumeName, locale) {
     );
     return `
     <category name="${localize(locale, 'Objects', 'レイヤー')}" id="objects" colour="#4968D4" secondaryColour="#334A99">
+        <block type="objects_clear"/>
+        <block type="objects_drawSprite"/>
         <block type="objects_draw">
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
@@ -896,7 +898,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
-    const penXML = moveCategory('pen');
+    moveCategory('pen'); // Old projects no longer install a Pen category.
 
     // Always display TurboWarp blocks as the first extension, if it exists,
     // and also add an "is compiled?" block to the top.
@@ -916,8 +918,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         sensingXML, gap,
         operatorsXML, gap,
         variablesXML, gap,
-        myBlocksXML, gap,
-        ...(penXML ? [penXML, gap] : [])
+        myBlocksXML, gap
     ];
 
     if (turbowarpXML) {

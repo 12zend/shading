@@ -3,7 +3,7 @@ import {
     convertModelToGLB,
     disposeObject,
     loadGLBObject
-} from './model-runtime';
+} from 'scratch-render/src/model-runtime';
 import {
     COSTUME_GROUP_SOURCE
 } from './movie-asset-manager-constants';

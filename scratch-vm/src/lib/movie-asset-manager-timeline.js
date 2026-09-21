@@ -177,7 +177,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     playTimeline () {
-        this.cancelPenFrameTransaction();
+        this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
         this.playedTimelineSoundBlocks.clear();
@@ -197,7 +197,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     pauseTimeline () {
-        this.cancelPenFrameTransaction();
+        this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         const clock = this.runtime.ioDevices.clock;
         if (this.timeline.playing) {
@@ -219,7 +219,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     stopTimeline () {
-        this.cancelPenFrameTransaction();
+        this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         const cancelledRendering = this.timeline.recording;
         this.playedTimelineSoundBlocks.clear();
@@ -242,7 +242,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     seekTimeline (seconds) {
-        this.cancelPenFrameTransaction();
+        this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         const wasPlaying = this.timeline.playing;
         this.playedTimelineSoundBlocks.clear();
@@ -478,7 +478,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     renderTimeline (options = {}) {
-        this.cancelPenFrameTransaction();
+        this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
@@ -606,7 +606,7 @@ const MovieAssetManagerTimelineMethods = {
         }
         this.beginObjectVideoAudioFrame();
         this.beginTimelineSoundFrame();
-        this.resetPenForRenderFrame();
+        this.resetDrawingForRenderFrame();
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     },
@@ -627,7 +627,7 @@ const MovieAssetManagerTimelineMethods = {
         if (!this.timeline.reusedFrameThisStep) {
             this.finishObjectVideoAudioFrame();
             this.finishTimelineSoundFrame();
-            this.commitPenFrameTransaction();
+            this.commitFrameTransaction();
         }
         if (this.timeline.recording) {
             if (!this.timeline.reusedFrameThisStep) {

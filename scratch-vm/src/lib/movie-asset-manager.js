@@ -10,7 +10,7 @@ import {
 import {
     DEFAULT_FOV,
     focalLengthFromFOV
-} from './model-runtime';
+} from 'scratch-render/src/model-runtime';
 import installMovieFrameGraphRenderer from './movie-frame-graph';
 
 import MovieAssetManagerAssets from './movie-asset-manager-assets';
@@ -37,13 +37,9 @@ class MovieAssetManager extends EventEmitter {
         this.fontFaces = new Map();
         this.modelObjects = new Map();
         this.objectImagePlanes = new Map();
-        this.textCanvasCache = new Map();
-        this.textCanvasCachePixels = 0;
         this.buildingPrimitiveCache = new Map();
         this.buildingMaterials = new Map();
         this.buildingTextures = new Map();
-        this.shapeSkinCache = new Map();
-        this.shapeSkinCachePixels = 0;
         this.blockingVideoRenders = new Set();
         this.renderingFrames = [];
         this.renderingFrameNumbers = [];
@@ -59,7 +55,6 @@ class MovieAssetManager extends EventEmitter {
         this.objectVideoAudio = new Map();
         this.objectVideoAudioSeen = new Set();
         this.previewRendererSize = null;
-        this.modelRenderer = null;
         this.flatDepthVersion = 0;
         this.depthResourceGeneration = 0;
         this.frameGraphCollectionParents = [];
@@ -70,8 +65,8 @@ class MovieAssetManager extends EventEmitter {
         this.frameGraphCameraSnapshot = null;
         this.frameGraphCameraSnapshotVersion = -1;
         this.projectionBatchDepth = 0;
-        this.penFrameTransactionActive = false;
-        this.penFrameTransactionsInstalled = false;
+        this.frameTransactionActive = false;
+        this.frameTransactionsInstalled = false;
         this.defaultStageBackgroundColor = null;
         // null selects the backwards-compatible studio lights; an array is the user-authored light scene.
         this.lights = null;

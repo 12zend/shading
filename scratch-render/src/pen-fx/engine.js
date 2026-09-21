@@ -1,4 +1,4 @@
-import frameMethods from '../PenFrameRenderer';
+import frameMethods from '../MovieFrameRenderer';
 /* eslint-disable */
 
 import installEffects from './effects';
@@ -147,8 +147,8 @@ const createPenFXEngine = (gl, renderer) => {
             }
         }
 
-        _penSkin () {
-            const id = renderer._penSkinId;
+        _drawSurface () {
+            const id = renderer.getMovieBufferId();
             return id === null || id === undefined ? null : renderer._allSkins[id];
         }
 
@@ -205,7 +205,7 @@ const createPenFXEngine = (gl, renderer) => {
 
         _prepare (copySource = true, honorBlendOpacity = true) {
             if (honorBlendOpacity && this.blendOpacity <= 0) return null;
-            const skin = this._penSkin();
+            const skin = this._drawSurface();
             if (!skin || !skin._texture || !skin._framebuffer || !skin._size) return null;
             if (typeof renderer._doExitDrawRegion === 'function') renderer._doExitDrawRegion();
             this._resize(skin._size[0], skin._size[1]);
@@ -283,7 +283,7 @@ const createPenFXEngine = (gl, renderer) => {
             }
         }
 
-        notePenStamp (skin, x, y, width, height) {
+        noteDrawBounds (skin, x, y, width, height) {
             const entry = this.groupStack[this.groupStack.length - 1];
             if (!entry || entry.skin !== skin || entry.texture !== skin._texture || !entry.bounds) return;
             const next = [Math.max(0, Math.floor(x)), Math.max(0, Math.floor(y)),
@@ -293,13 +293,13 @@ const createPenFXEngine = (gl, renderer) => {
                 Math.max(entry.bounds[2], next[2]), Math.max(entry.bounds[3], next[3])];
         }
 
-        invalidatePenBounds (skin) {
+        invalidateDrawBounds (skin) {
             const entry = this.groupStack[this.groupStack.length - 1];
             if (entry && entry.skin === skin && entry.texture === skin._texture) entry.bounds = null;
         }
 
         _markSkinChanged (skin) {
-            this.invalidatePenBounds(skin);
+            this.invalidateDrawBounds(skin);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.activeTexture(gl.TEXTURE0);
             gl.enable(gl.BLEND);
@@ -532,7 +532,7 @@ const createPenFXEngine = (gl, renderer) => {
             }
             if (stillStaged && shouldComposite && !entry.expandedOutput && entry.bounds && parentGroup) {
                 parentGroup.bounds = parentBounds;
-                if (entry.bounds.length) this.notePenStamp(skin, entry.bounds[0], entry.bounds[1],
+                if (entry.bounds.length) this.noteDrawBounds(skin, entry.bounds[0], entry.bounds[1],
                     entry.bounds[2] - entry.bounds[0], entry.bounds[3] - entry.bounds[1]);
             }
             if (passName && stillStaged) {

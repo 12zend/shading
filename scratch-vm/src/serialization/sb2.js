@@ -26,6 +26,7 @@ const {deserializeCostume, deserializeSound} = require('./deserialize-assets.js'
 
 // Constants used during deserialization of an SB2 file
 const CORE_EXTENSIONS = [
+    'pen', // Legacy drawing opcodes are handled by core Movie commands, without a Pen extension.
     'argument',
     'control',
     'data',

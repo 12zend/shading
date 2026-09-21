@@ -24,8 +24,8 @@ const createPenFXClass = vm => {
             vm.runtime.penFX = this;
             this.customShaders = new PenFXCustomShaderManager(vm, this, {loadDefaultPackage: true});
             const movieAssetManager = vm.runtime.movieAssetManager;
-            if (movieAssetManager && typeof movieAssetManager.attachPenFrameTransactions === 'function') {
-                movieAssetManager.attachPenFrameTransactions(this);
+            if (movieAssetManager && typeof movieAssetManager.attachFrameTransactions === 'function') {
+                movieAssetManager.attachFrameTransactions(this);
             }
         }
 
@@ -245,8 +245,7 @@ const createPenFXClass = vm => {
         }
 
         drawDefaultBackground(color4f) {
-            const pen = vm.runtime.ext_pen;
-            if (pen && typeof pen._getPenLayerID === 'function') pen._getPenLayerID();
+            if (vm.runtime.renderer) vm.runtime.renderer.getMovieBufferId();
             try {
                 this._getEngine().drawDefaultBackground(color4f);
             } catch (error) {

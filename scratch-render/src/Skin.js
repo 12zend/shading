@@ -116,6 +116,14 @@ class Skin {
     }
 
     /**
+     * Return the highest-resolution source available for direct Movie drawing.
+     * @returns {WebGLTexture} Original texture for bitmap sources.
+     */
+    getMaximumTexture () {
+        return this.getTexture([100, 100]);
+    }
+
+    /**
      * Determine if the skin's size and rotation center properties are accurate.
      * Default implementation returns true if getTexture([100, 100]) succeeds
      * as this indicates that the skin is ready to be rendered. Child classes

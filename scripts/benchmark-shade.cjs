@@ -58,7 +58,7 @@ Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/42949
   for(let repeat=0;repeat<3;repeat++){
    const start=performance.now();await frame(time);gl.finish();durations.push(performance.now()-start);
   }
-  const skin=engine._penSkin();pixels=new Uint8Array(engine.width*engine.height*4);
+  const skin=engine._drawSurface();pixels=new Uint8Array(engine.width*engine.height*4);
   gl.bindFramebuffer(gl.FRAMEBUFFER,skin._framebuffer.framebuffer);
   gl.readPixels(0,0,engine.width,engine.height,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
   const glError=gl.getError();if(glError||errors.length)throw Error(JSON.stringify({time,glError,errors}));

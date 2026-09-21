@@ -1,4 +1,7 @@
-import {createImagePlane, disposeObject, ModelRenderer, DEFAULT_DEPTH} from './model-runtime';
+import {createLineBitmap, createShapeBitmap, getShapeBitmapCacheKey, normalizeShapeType}
+    from 'scratch-render/src/MovieShapeSource';
+import MovieSourceRenderer from 'scratch-render/src/MovieSourceRenderer';
+import {createImagePlane, disposeObject, spritePlaneMatrix, DEFAULT_DEPTH} from 'scratch-render/src/model-runtime';
 import {
     BITMAP_RESOLUTION,
     COSTUME_GROUP_SOURCE
@@ -7,15 +10,9 @@ import {
     cloneCamera,
     cloneScale,
     clamp,
-    createLineBitmap,
-    createShapeBitmap,
-    getShapeBitmapCacheKey,
     isWithinTimeWindow,
-    normalizeShapeType,
     once,
-    toNumber,
-    MAX_CACHED_SHAPE_SKINS,
-    MAX_CACHED_SHAPE_SKIN_PIXELS
+    toNumber
 } from './movie-asset-manager-utils';
 
 const MAX_OBJECT_IMAGE_PLANES = 256;
@@ -172,22 +169,6 @@ const MovieAssetManagerObjectMethods = {
         return configuration;
     },
 
-    copyBitmapToCanvas (bitmap) {
-        const width = Math.max(1, Number(bitmap && (bitmap.videoWidth || bitmap.naturalWidth || bitmap.width)) || 1);
-        const height = Math.max(
-            1,
-            Number(bitmap && (bitmap.videoHeight || bitmap.naturalHeight || bitmap.height)) || 1
-        );
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Could not create an Objects scene image.');
-        context.drawImage(bitmap, 0, 0, width, height);
-        canvas.reusable = false;
-        return canvas;
-    },
-
     prepareShapeSceneItem (target, requestedConfiguration) {
         const configuration = this.getShapeSceneConfiguration(requestedConfiguration);
         if (configuration.time &&
@@ -324,7 +305,9 @@ const MovieAssetManagerObjectMethods = {
                     };
                 }
             }
-            bitmap = this.createTextCanvas(font, text, canvasKey);
+            bitmap = MovieSourceRenderer.forRenderer(this.runtime.renderer).text.createTextCanvas(
+                font, text, canvasKey
+            );
             const bitmapResolution = Math.max(
                 0.001,
                 toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION)
@@ -371,7 +354,6 @@ const MovieAssetManagerObjectMethods = {
                 if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
             }
             if (!prepared.length) return;
-            if (!this.modelRenderer) this.modelRenderer = new ModelRenderer();
             const renderArguments = [
                 prepared.map(result => result.item),
                 camera,
@@ -379,8 +361,9 @@ const MovieAssetManagerObjectMethods = {
                 BITMAP_RESOLUTION
             ];
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
-            const canvas = this.modelRenderer.renderWorldScene(...renderArguments);
-            this.applyBitmap(target, canvas, 'scene');
+            state.objectSource = this.runtime.renderer.prepareMovieSource({
+                kind: 'model', arguments: renderArguments, owner: target.id
+            });
             this.publishModelZBuffer(target, camera);
             this.finishObjectDraw(target, {}, 'model', false, camera);
         } finally {
@@ -411,7 +394,7 @@ const MovieAssetManagerObjectMethods = {
             if (graphicEffects && typeof graphicEffects.setScale === 'function') {
                 // Line shapes derive their dimensions from their endpoints and do not provide width/height.
                 // Do not turn an omitted dimension into zero in the graphic-effects state, or the line's
-                // drawable scale becomes [0, 0] before it is stamped.
+                // drawable scale becomes [0, 0] before direct projection.
                 if (typeof configuration.width !== 'undefined') {
                     graphicEffects.setScale(target, 'width', configuration.width);
                 }
@@ -424,26 +407,61 @@ const MovieAssetManagerObjectMethods = {
         }
     },
 
+    beginObjectDraw (target, source) {
+        const state = this.getTargetState(target);
+        state.renderVersion++;
+        state.requestedMode = source;
+        this.clearPendingVideoFrames(state);
+        state.textQueue.length = 0;
+        state.textKey = null;
+        state.textKeyFamily = null;
+        state.textKeyFontName = null;
+        state.textKeyText = null;
+        state.modelRenderVersion++;
+        state.modelScene = [];
+        state.modelAssetId = null;
+        state.projectionKey = null;
+    },
+
     finishObjectDraw (target, configuration, source, reapplyConfiguration = false, requestedCamera = null) {
         if (reapplyConfiguration) this.applyObjectDrawConfiguration(target, configuration);
         const state = this.getTargetState(target);
-        // Objects video is a Pen source. Keep its drawable available for stamping, but do not leave the
-        // unprocessed video visible above the Pen layer where it would cover the grouped Pen FX result.
-        // Every Objects draw is a Pen stamp. Keeping its temporary source drawable visible would let a later
-        // camera operation move that source above the already-stamped pixels, which looks like the later camera
-        // changed an earlier Draw node.
-        state.penOnly = true;
-        // Size, per-axis dimensions, and costume changes update Scratch's drawable transform directly.
-        // Reapply Movie's shared 3D transform last so draw uses the same position/rotation/scale state as
-        // the corresponding Motion and Looks blocks, including Z perspective.
-        const camera = requestedCamera || cloneCamera(this.camera);
-        if (camera) this.applyProjection(target, camera);
-        else this.applyProjection(target);
-        this.stampTarget(target);
-        if (source !== 'model') {
-            if (camera) this.publishFlatZBuffer(target, camera);
-            else this.publishFlatZBuffer(target);
+        const image = state.objectSource;
+        if (!image) return;
+        const renderer = this.runtime.renderer;
+        const camera = requestedCamera || this.camera || {
+            focalLength: 480, position: {x: 0, y: 0, z: 0}, rotation: {x: 0, y: 0, z: 0}, rotationOrder: 'XYZ'
+        };
+        const drawable = renderer._allDrawables[target.drawableID];
+        const uniforms = drawable ? {...drawable.getUniforms()} : {};
+        const scale = typeof target._getRenderedDirectionAndScale === 'function' ?
+            target._getRenderedDirectionAndScale().scale : [target.size || 100, target.size || 100];
+        if (source === 'model') {
+            uniforms.u_modelMatrix = new Float32Array([
+                -image.size[0], 0, 0, 0, 0, -image.size[1], 0, 0, 0, 0, 1, 0, 0, 0, 0, 1
+            ]);
+        } else {
+            const view = state.ignoreCamera ? {
+                focalLength: 480,
+                position: {x: 0, y: 0, z: 0},
+                rotation: {x: 0, y: 0, z: 0},
+                rotationOrder: 'XYZ'
+            } : camera;
+            uniforms.u_modelMatrix = spritePlaneMatrix({
+                position: {x: state.worldX, y: state.worldY, z: state.ignoreCamera ? 480 : state.worldZ},
+                rotation: state.rotation,
+                rotationOrder: state.rotationOrder,
+                scale: state.scale
+            }, view, image.size, image.rotationCenter, scale);
         }
+        const bufferId = renderer.getMovieBufferId();
+        if (bufferId >= 0) {
+            renderer.drawMovieTexture(bufferId, image, uniforms, drawable ? drawable.enabledEffects : 0);
+            this.runtime.requestRedraw();
+        }
+        state.penOnly = true;
+        renderer.updateDrawableVisible(target.drawableID, false);
+        if (source !== 'model') this.publishFlatZBuffer(target, camera);
     },
 
     getVideoFrameNumber (video, requestedFrame) {
@@ -597,7 +615,7 @@ const MovieAssetManagerObjectMethods = {
     },
 
     hasDisplayedObjectVideoFrame (state, video, frame) {
-        return state.mode === 'video' &&
+        return Boolean(state.objectSource) && state.mode === 'video' &&
             state.displayedVideoAssetId === video.assetId &&
             state.displayedFrame === frame &&
             !state.pendingVideoFrame &&
@@ -671,15 +689,16 @@ const MovieAssetManagerObjectMethods = {
                     this.closeVideoBitmap(frameBitmap.bitmap);
                     continue;
                 }
+                this.beginObjectDraw(target, 'video');
                 this.applyObjectDrawConfiguration(target, configuration);
-                this.applyBitmap(
-                    target,
-                    frameBitmap.bitmap,
-                    'video',
-                    null,
-                    true,
-                    frameBitmap.bitmapResolution
-                );
+                state.objectSource = this.runtime.renderer.prepareMovieSource({
+                    kind: 'video',
+                    bitmap: frameBitmap.bitmap,
+                    resolution: frameBitmap.bitmapResolution,
+                    owner: target.id
+                });
+                state.mode = 'video';
+                this.closeVideoBitmap(frameBitmap.bitmap);
                 state.currentFrame = frame;
                 state.videoAssetId = video.assetId;
                 state.displayedFrame = frame;
@@ -728,50 +747,52 @@ const MovieAssetManagerObjectMethods = {
     },
 
     performObjectDraw (target, configuration, requestedCamera = null) {
-        this.applyObjectDrawConfiguration(target, configuration);
         const source = String(configuration.source || 'costume').toLowerCase();
-        let render;
+        const state = this.getTargetState(target);
+        const renderer = this.runtime.renderer;
+        const camera = requestedCamera || this.camera;
+        const version = state.objectDrawVersion;
+        const finish = request => {
+            if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
+            this.beginObjectDraw(target, source);
+            this.applyObjectDrawConfiguration(target, configuration);
+            state.objectSource = renderer.prepareMovieSource({...request, owner: target.id});
+            if (!state.objectSource) return;
+            state.mode = source === COSTUME_GROUP_SOURCE ? 'costume' : source;
+            if (source === 'model') this.publishModelZBuffer(target, camera);
+            this.finishObjectDraw(target, configuration, source, false, camera);
+        };
         if (source === 'costume' || source === COSTUME_GROUP_SOURCE) {
-            const costume = this.getCostumeForObjectDraw(
-                target,
-                source,
-                configuration.asset,
-                configuration.frame
-            );
-            const costumeIndex = this.getCostumeIndexForObjectDraw(
-                target,
-                costume,
-                source === 'costume' ? configuration.asset : null
-            );
-            if (costumeIndex < 0 || typeof target.setCostume !== 'function') return;
-            const state = this.getTargetState(target);
-            if (state.mode !== 'costume' || target.currentCostume !== costumeIndex) {
-                target.setCostume(costumeIndex);
-            }
+            const costume = this.getCostumeForObjectDraw(target, source, configuration.asset, configuration.frame);
+            if (!costume) return;
+            const drawable = renderer._allDrawables[target.drawableID];
+            finish({kind: 'costume',
+                skinId: costume.skinId,
+                drawable,
+                scale: [toNumber(configuration.size, 100), toNumber(configuration.size, 100)]});
         } else if (source === 'text') {
-            this.setText(target, configuration.asset, configuration.text);
-            const state = this.getTargetState(target);
-            render = state.textRenderPromise;
+            const font = this.getFont(configuration.asset);
+            const prepare = () => finish({kind: 'text', font, text: String(configuration.text)});
+            const pending = this.ensureFontLoaded(font.name);
+            if (pending) return pending.then(prepare);
+            prepare();
         } else if (source === 'model') {
-            if (!this.getModelByName(target, configuration.asset)) return;
-            const state = this.getTargetState(target);
-            const frame = Number(configuration.frame);
-            state.modelFrame = Number.isFinite(frame) ? Math.max(1, frame) : 1;
-            render = requestedCamera ? this.replaceModelScene(target, configuration.asset, requestedCamera) :
-                this.replaceModelScene(target, configuration.asset);
-        } else {
-            return;
+            const model = this.getModelByName(target, configuration.asset);
+            if (!model) return;
+            const prepare = object => {
+                state.modelFrame = Math.max(1, toNumber(configuration.frame, 1));
+                finish({kind: 'model',
+                    arguments: [[{
+                        sourceObject: object,
+                        animationName: model.activeMotion,
+                        frame: state.modelFrame,
+                        transform: this.getObjectSceneTransform(target, configuration)
+                    }], camera, this.getStageSize(), BITMAP_RESOLUTION, this.lights]});
+            };
+            const record = this.modelObjects.get(model.assetId);
+            if (record && record.object) return prepare(record.object);
+            return this.getModelObject(model).then(prepare);
         }
-
-        const finishDraw = () => this.finishObjectDraw(
-            target,
-            configuration,
-            source,
-            Boolean(render && typeof render.then === 'function'),
-            requestedCamera
-        );
-        if (render && typeof render.then === 'function') return render.then(finishDraw);
-        finishDraw();
     },
 
     drawObject (target, configuration = {}, graphParent = null) {
@@ -825,7 +846,10 @@ const MovieAssetManagerObjectMethods = {
                 this.queueObjectDraw(target, drawConfiguration);
         }
         const state = this.getTargetState(target);
-        if (state.objectDrawPromise || source === 'model') {
+        const model = source === 'model' && this.getModelByName(target, drawConfiguration.asset);
+        const modelRecord = model && this.modelObjects.get(model.assetId);
+        // Unloaded models still need ordered resource preparation. Ready models execute in this VM tick.
+        if (state.objectDrawPromise || (source === 'model' && (!modelRecord || !modelRecord.object))) {
             return camera ? this.queueObjectDraw(target, drawConfiguration, camera) :
                 this.queueObjectDraw(target, drawConfiguration);
         }
@@ -837,86 +861,15 @@ const MovieAssetManagerObjectMethods = {
         const shape = normalizeShapeType(configuration.shape);
         const drawConfiguration = this.getShapeSceneConfiguration(configuration);
         const shapeConfiguration = shape === 'line' ? drawConfiguration : {...configuration, shape};
-        const skinId = this.getShapeSkin(shapeConfiguration);
-        if (skinId === null) return;
-
         const state = this.getTargetState(target);
-        state.renderVersion++;
-        state.requestedMode = 'shape';
-        this.clearPendingVideoFrames(state);
-        state.textQueue.length = 0;
-        state.modelRenderVersion++;
-        state.modelScene = [];
-        state.modelAssetId = null;
-        state.mode = 'shape';
-        state.textKey = null;
-        state.textKeyFamily = null;
-        state.textKeyFontName = null;
-        state.textKeyText = null;
-        state.projectionKey = null;
-        state.penOnly = true;
-        state.shapeSkinId = skinId;
-
+        this.beginObjectDraw(target, 'shape');
         this.applyObjectDrawConfiguration(target, drawConfiguration);
-        // Cached procedural skins follow the same cheap stamp path as costume skins. Geometry, color and opacity
-        // select the skin; position, rotation and scale only update the drawable transform.
-        this.runtime.renderer.updateDrawableSkinId(target.drawableID, skinId);
+        state.objectSource = this.runtime.renderer.prepareMovieSource({
+            kind: 'shape', configuration: shapeConfiguration
+        });
+        if (!state.objectSource) return;
+        state.mode = 'shape';
         this.finishObjectDraw(target, drawConfiguration, 'shape', false, requestedCamera);
-        this.trimShapeSkinCache(skinId);
-    },
-
-    getShapeSkin (configuration) {
-        if (!(this.shapeSkinCache instanceof Map)) {
-            this.shapeSkinCache = new Map();
-            this.shapeSkinCachePixels = 0;
-        }
-        const key = getShapeBitmapCacheKey(configuration);
-        const cached = this.shapeSkinCache.get(key);
-        if (cached) {
-            // Map insertion order is the LRU order.
-            this.shapeSkinCache.delete(key);
-            this.shapeSkinCache.set(key, cached);
-            return cached.skinId;
-        }
-
-        const bitmap = normalizeShapeType(configuration.shape) === 'line' ?
-            createLineBitmap(configuration) : createShapeBitmap(configuration);
-        if (!bitmap) return null;
-        const bitmapResolution = toNumber(bitmap.movieBitmapResolution, BITMAP_RESOLUTION);
-        const skinId = this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution);
-        if (skinId === null || typeof skinId === 'undefined') return null;
-        const pixels = Math.max(1, toNumber(bitmap.width, 1) * toNumber(bitmap.height, 1));
-        this.shapeSkinCache.set(key, {pixels, skinId});
-        this.shapeSkinCachePixels += pixels;
-        return skinId;
-    },
-
-    trimShapeSkinCache (currentSkinId) {
-        if (!(this.shapeSkinCache instanceof Map)) return;
-        const activeSkinIds = new Set([currentSkinId]);
-        for (const state of this.targetStates.values()) {
-            if (state.mode === 'shape' && state.shapeSkinId !== null) activeSkinIds.add(state.shapeSkinId);
-        }
-        while (
-            this.shapeSkinCache.size > MAX_CACHED_SHAPE_SKINS ||
-            this.shapeSkinCachePixels > MAX_CACHED_SHAPE_SKIN_PIXELS
-        ) {
-            let evictedKey = null;
-            let evicted = null;
-            for (const [key, entry] of this.shapeSkinCache) {
-                if (!activeSkinIds.has(entry.skinId)) {
-                    evictedKey = key;
-                    evicted = entry;
-                    break;
-                }
-            }
-            if (!evicted) return;
-            this.shapeSkinCache.delete(evictedKey);
-            this.shapeSkinCachePixels -= evicted.pixels;
-            if (typeof this.runtime.renderer.destroySkin === 'function') {
-                this.runtime.renderer.destroySkin(evicted.skinId);
-            }
-        }
     },
 
     drawShape (target, configuration = {}, graphParent = null) {

@@ -31,10 +31,10 @@ const indexHTML = path.resolve(__dirname, 'index.html');
         t.same(skinSize, [50, 100]);
     });
 
-    await test('Pen skin size set correctly', async t => {
+    await test('Movie surface size set correctly', async t => {
         t.plan(1);
         const skinSize = await page.evaluate(() => {
-            const skinID = render.createPenSkin();
+            const skinID = render.getMovieBufferId();
             return render.getSkinSize(skinID);
         });
         const nativeSize = await page.evaluate(() => render.getNativeSize());

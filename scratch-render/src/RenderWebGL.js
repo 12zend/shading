@@ -6,9 +6,11 @@ const twgl = require('twgl.js');
 const SVGRenderer = require('@turbowarp/scratch-svg-renderer');
 const Skin = require('./Skin');
 const BitmapSkin = require('./BitmapSkin');
+const MovieSourceRenderer = require('./MovieSourceRenderer');
+const MovieDrawTarget = require('./MovieDrawTarget');
 const Drawable = require('./Drawable');
 const Rectangle = require('./Rectangle');
-const PenSkin = require('./PenSkin');
+const MovieBuffer = require('./MovieBuffer');
 const RenderConstants = require('./RenderConstants');
 const ShaderManager = require('./ShaderManager');
 const SVGSkin = require('./SVGSkin');
@@ -113,8 +115,12 @@ const loadStyles = () => {
 
 
 class RenderWebGL extends EventEmitter {
-    /** Create the renderer-owned PenFX pipeline on this renderer's WebGL context. */
+    /**
+     * Create the renderer-owned effects pipeline on this renderer's WebGL context.
+     * @returns {object} The shared effects engine.
+     */
     createPenFXEngine () {
+        // eslint-disable-next-line global-require
         const createEngine = require('./pen-fx/engine').default;
         if (!this._penFXEngine) this._penFXEngine = new (createEngine(this._gl, this))();
         return this._penFXEngine;
@@ -251,8 +257,8 @@ class RenderWebGL extends EventEmitter {
         // Don't set this directly-- use setBackgroundColor so it stays in sync with _backgroundColor4f
         this._backgroundColor3b = new Uint8ClampedArray(3);
 
-        // tw: track id of pen skin
-        this._penSkinId = null;
+        // The renderer owns the persistent Movie drawing surface.
+        this._movieBufferId = null;
 
         this.useHighQualityRender = false;
 
@@ -326,7 +332,7 @@ class RenderWebGL extends EventEmitter {
             Skin,
             BitmapSkin,
             TextBubbleSkin,
-            PenSkin,
+            MovieBuffer,
             SVGSkin,
             CanvasMeasurementProvider,
             Rectangle,
@@ -335,7 +341,7 @@ class RenderWebGL extends EventEmitter {
         };
     }
 
-    // tw: implement high quality pen option
+    // Display resolution for the Movie drawing surface.
     setUseHighQualityRender (enabled) {
         this.dirty = true;
         this.useHighQualityRender = enabled;
@@ -343,8 +349,8 @@ class RenderWebGL extends EventEmitter {
         this._updateRenderQuality();
     }
     _updateRenderQuality () {
-        if (this._penSkinId !== null) {
-            const skin = this._allSkins[this._penSkinId];
+        if (this._movieBufferId !== null) {
+            const skin = this._allSkins[this._movieBufferId];
             if (skin) {
                 if (this.useHighQualityRender) {
                     skin.setRenderQuality(this.canvas.width / this._nativeSize[0]);
@@ -481,14 +487,14 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
-     * @return {Array<int>} the "native" size of the stage, which is used for pen, query renders, etc.
+     * @return {Array<int>} the "native" size of the stage, which is used for Movie drawing, query renders, etc.
      */
     getNativeSize () {
         return [this._nativeSize[0], this._nativeSize[1]];
     }
 
     /**
-     * Set the "native" size of the stage, which is used for pen, query renders, etc.
+     * Set the "native" size of the stage, which is used for Movie drawing, query renders, etc.
      * @param {int} width - the new width to set.
      * @param {int} height - the new height to set.
      * @private
@@ -563,6 +569,49 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
+     * Generate and upload a ready Movie source synchronously.
+     * @param {object} request Source kind, data and optional destination IDs.
+     * @returns {object} The prepared source and its skin ID.
+     */
+    renderMovieSource (request) {
+        return MovieSourceRenderer.forRenderer(this).render(request);
+    }
+
+    /**
+     * Prepare an image resource without creating a sprite skin.
+     * @param {object} request Movie source description.
+     * @returns {object} Texture and projection metrics.
+     */
+    prepareMovieSource (request) {
+        return MovieSourceRenderer.forRenderer(this).prepare(request);
+    }
+
+    /**
+     * Draw a prepared Movie texture directly, without a sprite or a stamp operation.
+     * @param {number} bufferId Destination framebuffer owner.
+     * @param {object} source Texture, logical size and sampling mode.
+     * @param {object} uniforms Transform and graphic effects.
+     * @param {number} effectBits Enabled graphic effects.
+     */
+    drawMovieTexture (bufferId, source, uniforms, effectBits = 0) {
+        if (!this._movieDrawTarget) this._movieDrawTarget = new MovieDrawTarget(this);
+        this._movieDrawTarget.draw(bufferId, source, uniforms, effectBits);
+    }
+
+    /**
+     * Rasterize a legacy motion trail directly into the current Movie attachment.
+     * @param {object} attributes Diameter and color.
+     * @param {number} x0 Start X.
+     * @param {number} y0 Start Y.
+     * @param {number} x1 End X.
+     * @param {number} y1 End Y.
+     */
+    drawMovieStroke (attributes, x0, y0, x1, y1) {
+        if (!this._movieDrawTarget) this._movieDrawTarget = new MovieDrawTarget(this);
+        this._movieDrawTarget.stroke(this.getMovieBufferId(), attributes, x0, y0, x1, y1);
+    }
+
+    /**
      * Create a new bitmap skin from a snapshot of the provided bitmap data.
      * @param {ImageData|HTMLImageElement|HTMLCanvasElement|HTMLVideoElement} bitmapData - new contents for this skin.
      * @param {!int} [costumeResolution=1] - The resolution to use for this bitmap.
@@ -594,16 +643,18 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
-     * Create a new PenSkin - a skin which implements a Scratch pen layer.
-     * @returns {!int} the ID for the new skin.
+     * Lazily own the presentation drawable and persistent Movie surface inside the renderer.
+     * @returns {number} Movie surface ID.
      */
-    createPenSkin () {
+    getMovieBufferId () {
+        if (this._movieBufferId !== null) return this._movieBufferId;
         const skinId = this._nextSkinId++;
-        const newSkin = new PenSkin(skinId, this);
-        this._allSkins[skinId] = newSkin;
-        // tw: track id of pen skin
-        this._penSkinId = skinId;
-        // tw: high quality pen may have been enabled before the pen skin was created
+        this._allSkins[skinId] = new MovieBuffer(skinId, this);
+        this._movieBufferId = skinId;
+        const drawableId = this.createDrawable('movie');
+        this.markDrawableAsNoninteractive(drawableId);
+        this.updateDrawableSkinId(drawableId, skinId);
+        this._movieDrawableId = drawableId;
         this._updateRenderQuality();
         return skinId;
     }
@@ -1874,115 +1925,26 @@ class RenderWebGL extends EventEmitter {
         return [x, y];
     }
 
-    /**
-     * Clear a pen layer.
-     * @param {int} penSkinID - the unique ID of a Pen Skin.
-     */
-    penClear (penSkinID) {
-        this.dirty = true;
-        const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
-        skin.clear();
-    }
-
-    /**
-     * Draw a point on a pen layer.
-     * @param {int} penSkinID - the unique ID of a Pen Skin.
-     * @param {PenAttributes} penAttributes - how the point should be drawn.
-     * @param {number} x - the X coordinate of the point to draw.
-     * @param {number} y - the Y coordinate of the point to draw.
-     */
-    penPoint (penSkinID, penAttributes, x, y) {
-        this.dirty = true;
-        const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
-        if (this._penFXEngine) this._penFXEngine.invalidatePenBounds(skin);
-        skin.drawPoint(penAttributes, x, y);
-    }
-
-    /**
-     * Draw a line on a pen layer.
-     * @param {int} penSkinID - the unique ID of a Pen Skin.
-     * @param {PenAttributes} penAttributes - how the line should be drawn.
-     * @param {number} x0 - the X coordinate of the beginning of the line.
-     * @param {number} y0 - the Y coordinate of the beginning of the line.
-     * @param {number} x1 - the X coordinate of the end of the line.
-     * @param {number} y1 - the Y coordinate of the end of the line.
-     */
-    penLine (penSkinID, penAttributes, x0, y0, x1, y1) {
-        this.dirty = true;
-        const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
-        if (this._penFXEngine) this._penFXEngine.invalidatePenBounds(skin);
-        skin.drawLine(penAttributes, x0, y0, x1, y1);
-    }
-
-    /**
-     * Stamp a Drawable onto a pen layer.
-     * @param {int} penSkinID - the unique ID of a Pen Skin.
-     * @param {int} stampID - the unique ID of the Drawable to use as the stamp.
-     */
-    penStamp (penSkinID, stampID) {
-        const stampDrawable = this._allDrawables[stampID];
-        if (
-            !stampDrawable ||
-            !stampDrawable.skin ||
-            !stampDrawable.skin.isMetricsReady()
-        ) {
-            return;
-        }
-
-        const bounds = stampDrawable.getFastBounds();
-        // Ideally we wouldn't need to check offscreenTouching at all here, but the camera extensions
-        // do too many crazy things to risk changing this control flow.
-        if (!this.offscreenTouching) {
-            bounds.clamp(this._xLeft, this._xRight, this._yBottom, this._yTop);
-        }
-        if (bounds.width === 0 || bounds.height === 0) {
-            return;
-        }
-
+    /** Clear the current Movie frame/group attachment without publishing an intermediate frame. */
+    clearMovieBuffer () {
         this._doExitDrawRegion();
-
-        const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
-
-        const gl = this._gl;
-        twgl.bindFramebufferInfo(gl, skin._framebuffer);
-
-        // Limit size of viewport to the bounds around the stamp Drawable and create the projection matrix for the draw.
-        // TW: We upscale the "stage space" to "screen space" and then snap the coordinates so that tiled projects
-        // don't have seems between sprites.
-        const quality = skin.renderQuality;
-        bounds.left *= quality;
-        bounds.right *= quality;
-        bounds.top *= quality;
-        bounds.bottom *= quality;
-        bounds.snapToInt();
-        if (this._penFXEngine) this._penFXEngine.notePenStamp(skin,
-            (this._nativeSize[0] * 0.5 * quality) + bounds.left,
-            (this._nativeSize[1] * 0.5 * quality) - bounds.top,
-            bounds.width, bounds.height);
-        gl.viewport(
-            (this._nativeSize[0] * 0.5 * quality) + bounds.left,
-            (this._nativeSize[1] * 0.5 * quality) - bounds.top,
-            bounds.width,
-            bounds.height
-        );
-        const projection = twgl.m4.ortho(
-            // TW: We have to convert the snapped "screen-space" back to "stage-space" for rendering.
-            bounds.left / quality,
-            bounds.right / quality,
-            bounds.top / quality,
-            bounds.bottom / quality,
-            -1,
-            1
-        );
-
-        // Draw the stamped sprite onto the PenSkin's framebuffer.
-        this._drawThese([stampID], ShaderManager.DRAW_MODE.default, projection, {
-            ignoreVisibility: true,
-            framebufferWidth: this._nativeSize[0] * quality,
-            framebufferHeight: this._nativeSize[1] * quality
-        });
-        skin._silhouetteDirty = true;
+        const surface = this._allSkins[this.getMovieBufferId()];
+        surface.clear();
+        if (this._penFXEngine) this._penFXEngine.invalidateDrawBounds(surface);
         this.dirty = true;
+    }
+
+    /**
+     * Submit a sprite's current texture through the same direct path as Objects.
+     * @param {number} drawableId Sprite drawable to draw.
+     */
+    drawMovieDrawable (drawableId) {
+        const drawable = this._allDrawables[drawableId];
+        if (!drawable || !drawable.skin || !drawable.skin.isMetricsReady()) return;
+        const source = this.prepareMovieSource({kind: 'costume', skinId: drawable.skin.id});
+        if (source) {
+            this.drawMovieTexture(this.getMovieBufferId(), source, drawable.getUniforms(), drawable.enabledEffects);
+        }
     }
 
     /* ******

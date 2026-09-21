@@ -576,6 +576,16 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             color3: TERTIARY,
             blocks: [
                 {
+                    opcode: 'clear',
+                    blockType: BlockType.COMMAND,
+                    text: translate('erase all', 'すべて消す')
+                },
+                {
+                    opcode: 'drawSprite',
+                    blockType: BlockType.COMMAND,
+                    text: translate('draw current sprite', '現在のスプライトを描画')
+                },
+                {
                     opcode: 'draw',
                     blockType: BlockType.COMMAND,
                     text: translate('draw [ASSET]', '描画 [ASSET]'),
@@ -1118,6 +1128,14 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 }
             }
         };
+    }
+
+    clear () {
+        vm.runtime.movieDrawing.clear();
+    }
+
+    drawSprite (args, util) {
+        vm.runtime.movieDrawing.drawSprite(util.target);
     }
 
     draw (args, util) {

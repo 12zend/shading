@@ -2,7 +2,6 @@ import installGraphicEffectsManager from './graphic-effects-manager';
 import installMovieEasing from './movie-easing';
 import installTimerOffset from './timer-offset';
 import installListBlocks from './list-blocks';
-import installDefaultExtensions from './default-extensions';
 import installMovieAssetManager from './movie-asset-manager';
 import installPenFX from './pen-fx';
 import installObjectBlocks from './object-blocks';
@@ -41,7 +40,6 @@ const installShadingFeatures = vm => {
     installMovieEasing(vm);
     installTimerOffset(vm);
     installListBlocks(vm);
-    installDefaultExtensions(vm);
     installMovieAssetManager(vm);
     installPenFX(vm);
     installObjectBlocks(vm);

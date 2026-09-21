@@ -1,32 +1,32 @@
 const test = require('tap').test;
 
 const Runtime = require('../../src/engine/runtime');
-const Scratch3PenBlocks = require('../../src/extensions/scratch3_pen/index');
+const MovieDrawingCommands = require('../../src/blocks/movie-drawing');
 
-test('_clampPenSize', t => {
+test('clampSize', t => {
     const rt = new Runtime();
-    const pen = new Scratch3PenBlocks(rt);
+    const pen = new MovieDrawingCommands(rt);
 
-    t.equal(pen._clampPenSize(-1), 1);
-    t.equal(pen._clampPenSize(0), 1);
-    t.equal(pen._clampPenSize(0.25), 1);
-    t.equal(pen._clampPenSize(1), 1);
-    t.equal(pen._clampPenSize(10), 10);
-    t.equal(pen._clampPenSize(1000), 1000);
-    t.equal(pen._clampPenSize(1200), 1200);
-    t.equal(pen._clampPenSize(1201), 1200);
+    t.equal(pen.clampSize(-1), 1);
+    t.equal(pen.clampSize(0), 1);
+    t.equal(pen.clampSize(0.25), 1);
+    t.equal(pen.clampSize(1), 1);
+    t.equal(pen.clampSize(10), 10);
+    t.equal(pen.clampSize(1000), 1000);
+    t.equal(pen.clampSize(1200), 1200);
+    t.equal(pen.clampSize(1201), 1200);
 
     rt.setRuntimeOptions({
         miscLimits: false
     });
-    t.equal(pen._clampPenSize(-1), 0);
-    t.equal(pen._clampPenSize(0), 0);
-    t.equal(pen._clampPenSize(0.25), 0.25);
-    t.equal(pen._clampPenSize(1), 1);
-    t.equal(pen._clampPenSize(10), 10);
-    t.equal(pen._clampPenSize(1000), 1000);
-    t.equal(pen._clampPenSize(1200), 1200);
-    t.equal(pen._clampPenSize(1201), 1201);
+    t.equal(pen.clampSize(-1), 0);
+    t.equal(pen.clampSize(0), 0);
+    t.equal(pen.clampSize(0.25), 0.25);
+    t.equal(pen.clampSize(1), 1);
+    t.equal(pen.clampSize(10), 10);
+    t.equal(pen.clampSize(1000), 1000);
+    t.equal(pen.clampSize(1200), 1200);
+    t.equal(pen.clampSize(1201), 1201);
 
     t.end();
 });

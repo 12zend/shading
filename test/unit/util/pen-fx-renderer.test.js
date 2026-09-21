@@ -75,7 +75,7 @@ describe('stamp bounds and transparent groups', () => {
         engine.groupStack.push(group);
         expect(engine._singlePass('lens-kernel', {u_radius: 20}, [], 'normal')).toBeUndefined();
         expect(engine._render).not.toHaveBeenCalled();
-        engine.invalidatePenBounds(skin);
+        engine.invalidateDrawBounds(skin);
         engine._singlePass('lens-kernel', {u_radius: 20}, [], 'normal');
         expect(engine._render).toHaveBeenCalledTimes(1);
     });
@@ -86,11 +86,11 @@ describe('stamp bounds and transparent groups', () => {
         engine.height = 270;
         const group = {skin, texture: 'pen', bounds: []};
         engine.groupStack.push(group);
-        engine.notePenStamp(skin, 10, 20, 30, 40);
-        engine.notePenStamp(skin, 5, 25, 50, 60);
+        engine.noteDrawBounds(skin, 10, 20, 30, 40);
+        engine.noteDrawBounds(skin, 5, 25, 50, 60);
         expect(group.bounds).toEqual([5, 20, 55, 85]);
-        engine.invalidatePenBounds(skin);
-        engine.notePenStamp(skin, 0, 0, 1, 1);
+        engine.invalidateDrawBounds(skin);
+        engine.noteDrawBounds(skin, 0, 0, 1, 1);
         expect(group.bounds).toBeNull();
     });
 });
@@ -102,7 +102,7 @@ describe('renderer frame target pool', () => {
         skin._size = [480, 270];
         engine.renderer = {};
         engine.gl = gl;
-        engine._penSkin = () => skin;
+        engine._drawSurface = () => skin;
         engine._resize = jest.fn();
         engine._createBufferTexture = jest.fn(() => ({texture: 'staging', framebuffer: 'staging-fb'}));
         engine._clearTransparent = jest.fn();

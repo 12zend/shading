@@ -25,7 +25,7 @@ import {
     fovFromFocalLength,
     normalizeFOV,
     disposeObject
-} from './model-runtime';
+} from 'scratch-render/src/model-runtime';
 import {markMovieProject} from './project-format';
 
 const MovieAssetManagerSerializationMethods = {

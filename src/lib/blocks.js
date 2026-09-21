@@ -1,3 +1,4 @@
+import installLegacyDrawingBlocks from './legacy-drawing-blocks';
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import installBlockNumberScrubbing from './block-number-scrubbing';
 import installObjectBlockDefinitions from './object-blocks-ui';
@@ -290,6 +291,8 @@ export default function (vm, locale = 'en') {
         category: ScratchBlocks.Categories.operators,
         extensions: ['colours_operators', 'output_number']
     });
+
+    installLegacyDrawingBlocks(ScratchBlocks, translate);
 
     const numberInput = name => ({type: 'input_value', name});
     const rotationOrderOptions = [

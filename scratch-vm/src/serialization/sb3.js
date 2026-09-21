@@ -44,6 +44,7 @@ const INPUT_DIFF_BLOCK_SHADOW = 3; // obscured shadow
 
 // Constants used during deserialization of an SB3 file
 const CORE_EXTENSIONS = [
+    'pen', // Legacy drawing opcodes are handled by core Movie commands, without a Pen extension.
     'argument',
     'colour',
     'control',

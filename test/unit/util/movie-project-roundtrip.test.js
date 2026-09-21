@@ -58,6 +58,21 @@ const projectJSON = {
 };
 
 describe('Movie project save and load', () => {
+    test('loads and saves legacy drawing blocks without loading the removed Pen extension', async () => {
+        const vm = new VM();
+        const project = JSON.parse(JSON.stringify(projectJSON));
+        project.targets[0].blocks.command.opcode = 'pen_clear';
+        project.targets[0].blocks.command.inputs = {};
+        project.extensions = ['pen'];
+        await vm.loadProject(JSON.stringify(project));
+        expect(vm.runtime.ext_pen).toBeUndefined();
+        expect(vm.extensionManager.isExtensionLoaded('pen')).toBe(false);
+        expect(vm.runtime._primitives.pen_clear).toEqual(expect.any(Function));
+        const saved = JSON.parse(vm.toJSON());
+        expect(saved.extensions || []).not.toContain('pen');
+        expect(Object.values(saved.targets[0].blocks).some(block => block.opcode === 'pen_clear')).toBe(true);
+    });
+
     test('keeps custom blocks in a marked project.json inside a shade-compatible ZIP', async () => {
         const vm = new VM();
         installMovieAssetManager(vm);

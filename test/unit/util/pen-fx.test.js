@@ -675,7 +675,7 @@ describe('built-in Pen FX category', () => {
             _allSkins: {1: skin},
             _doExitDrawRegion: jest.fn(),
             _gl: gl,
-            _penSkinId: 1
+            getMovieBufferId: () => 1
         };
         const PenFX = createPenFXClass({runtime: {renderer}});
         const engine = new PenFX()._getEngine();
@@ -757,7 +757,7 @@ describe('built-in Pen FX category', () => {
             _allSkins: {1: skin},
             _doExitDrawRegion: jest.fn(),
             _gl: gl,
-            _penSkinId: 1
+            getMovieBufferId: () => 1
         };
         const PenFX = createPenFXClass({runtime: {renderer}});
         const engine = new PenFX()._getEngine();
@@ -772,7 +772,7 @@ describe('built-in Pen FX category', () => {
 
         engine.beginGroup();
         expect(engine.groupStack.length).toBe(1);
-        engine.notePenStamp(skin, 0, 0, 10, 10);
+        engine.noteDrawBounds(skin, 0, 0, 10, 10);
         engine.endGroup();
 
         expect(engine._render).toHaveBeenCalledWith('group-over-program', 'pen-framebuffer', [
@@ -831,7 +831,7 @@ describe('built-in Pen FX category', () => {
             _allSkins: {1: skin},
             _doExitDrawRegion: jest.fn(),
             _gl: gl,
-            _penSkinId: 1
+            getMovieBufferId: () => 1
         };
         const PenFX = createPenFXClass({runtime: {renderer}});
         const engine = new PenFX()._getEngine();
@@ -909,7 +909,7 @@ describe('built-in Pen FX category', () => {
             _allSkins: {1: skin},
             _doExitDrawRegion: jest.fn(),
             _gl: gl,
-            _penSkinId: 1
+            getMovieBufferId: () => 1
         };
         const PenFX = createPenFXClass({runtime: {renderer}});
         const engine = new PenFX()._getEngine();
@@ -962,9 +962,9 @@ describe('built-in Pen FX category', () => {
         expect(penFX.engine.cancelFrame).toHaveBeenCalledTimes(1);
     });
 
-    test('draws the default background synchronously into the Pen layer', () => {
-        const pen = {_getPenLayerID: jest.fn(() => 1)};
-        const vm = {runtime: {ext_pen: pen, renderer: {}}};
+    test('draws the default background synchronously into the Movie surface', () => {
+        const renderer = {getMovieBufferId: jest.fn(() => 1)};
+        const vm = {runtime: {renderer}};
         const PenFX = createPenFXClass(vm);
         const penFX = new PenFX();
         penFX.engine = {drawDefaultBackground: jest.fn(() => true)};
@@ -972,7 +972,7 @@ describe('built-in Pen FX category', () => {
         const result = penFX.drawDefaultBackground([1, 1, 1, 1]);
 
         expect(result).toBeUndefined();
-        expect(pen._getPenLayerID).toHaveBeenCalledTimes(1);
+        expect(renderer.getMovieBufferId).toHaveBeenCalledTimes(1);
         expect(penFX.engine.drawDefaultBackground).toHaveBeenCalledWith([1, 1, 1, 1]);
     });
 

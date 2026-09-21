@@ -2,7 +2,7 @@ const Worker = require('tiny-worker');
 const path = require('path');
 const test = require('tap').test;
 
-const Scratch3PenBlocks = require('../../src/extensions/scratch3_pen/index.js');
+const MovieDrawingCommands = require('../../src/blocks/movie-drawing');
 const VirtualMachine = require('../../src/index');
 const dispatch = require('../../src/dispatch/central-dispatch');
 
@@ -28,14 +28,14 @@ test('pen', t => {
         t.notStrictEqual(originalCat, cloneCat);
 
         /** @type {PenState} */
-        const originalPenState = originalCat.getCustomState(Scratch3PenBlocks.STATE_KEY);
+        const originalPenState = originalCat.getCustomState(MovieDrawingCommands.STATE_KEY);
 
         /** @type {PenState} */
-        const clonePenState = cloneCat.getCustomState(Scratch3PenBlocks.STATE_KEY);
+        const clonePenState = cloneCat.getCustomState(MovieDrawingCommands.STATE_KEY);
 
         t.notStrictEqual(originalPenState, clonePenState);
-        t.equal(originalPenState.penAttributes.diameter, 51);
-        t.equal(clonePenState.penAttributes.diameter, 42);
+        t.equal(originalPenState.stroke.diameter, 51);
+        t.equal(clonePenState.stroke.diameter, 42);
 
         vm.quit();
         t.end();

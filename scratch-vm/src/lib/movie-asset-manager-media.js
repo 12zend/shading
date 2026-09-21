@@ -1,3 +1,4 @@
+import MovieSourceRenderer from 'scratch-render/src/MovieSourceRenderer';
 import {
     COSTUME_EXTENSIONS,
     FONT_EXTENSIONS,
@@ -5,7 +6,6 @@ import {
     MODEL_SOURCE_EXTENSIONS,
     MOTION_EXTENSIONS,
     SOUND_EXTENSIONS,
-    TEXT_BITMAP_RESOLUTION,
     VIDEO_FRAME_RATE,
     BITMAP_RESOLUTION
 } from './movie-asset-manager-constants';
@@ -24,12 +24,6 @@ import {
     unusedName
 } from './movie-asset-manager-utils';
 
-const MAX_TEXT_CANVAS_CACHE = 1024;
-const MAX_TEXT_CANVAS_PIXELS = 16 * 1024 * 1024;
-const TEXT_FONT_SIZE = 96;
-const TEXT_PADDING = 16;
-const TEXT_LINE_HEIGHT = Math.round(TEXT_FONT_SIZE * 1.2);
-const TEXT_RENDER_SCALE = TEXT_BITMAP_RESOLUTION / BITMAP_RESOLUTION;
 const MAX_FONT_LOOKUP_CACHE = 128;
 
 // Font names are validated to `[-\w ]` and never contain `\0`, so `\0` safely separates
@@ -623,7 +617,7 @@ const MovieAssetManagerMediaMethods = {
             }
         }
         return {
-            bitmap: this.copyBitmapToCanvas(element),
+            bitmap: MovieSourceRenderer.forRenderer(this.runtime.renderer).copyBitmapToCanvas(element),
             bitmapResolution: BITMAP_RESOLUTION
         };
     },
@@ -733,124 +727,18 @@ const MovieAssetManagerMediaMethods = {
         }
     },
 
-    createTextCanvas (font, text, cacheKey = null) {
-        if (!(this.textCanvasCache instanceof Map)) {
-            this.textCanvasCache = new Map();
-            this.textCanvasCachePixels = 0;
-        }
-        const stringText = typeof text === 'string' ? text : String(text);
-        const key = cacheKey || getTextCacheKey(font, stringText);
-        const cached = this.textCanvasCache.get(key);
-        if (cached) {
-            this.textCanvasCache.delete(key);
-            this.textCanvasCache.set(key, cached);
-            return cached.canvas;
-        }
-        const baseFontSize = TEXT_FONT_SIZE * TEXT_RENDER_SCALE;
-        const basePadding = TEXT_PADDING * TEXT_RENDER_SCALE;
-        const baseLineHeight = TEXT_LINE_HEIGHT * TEXT_RENDER_SCALE;
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        const fontDeclaration = `${baseFontSize}px ${font.family}`;
-        context.font = fontDeclaration;
-        // Fast single-line path avoids the regex split and the spread allocation used previously.
-        // Multi-line texts use an explicit loop instead of map+spread to avoid stack growth.
-        let lineCount = 1;
-        let width = 2;
-        let lines = null;
-        if (stringText.indexOf('\n') === -1 && stringText.indexOf('\r') === -1) {
-            width = Math.max(2, Math.ceil(context.measureText(stringText || ' ').width));
-        } else {
-            lines = stringText.split(/\r?\n/);
-            lineCount = lines.length;
-            for (let index = 0; index < lines.length; index++) {
-                const lineWidth = Math.ceil(context.measureText(lines[index] || ' ').width);
-                if (lineWidth > width) width = lineWidth;
-            }
-            if (width < 2) width = 2;
-        }
-        const requestedWidth = width + (basePadding * 2);
-        const requestedHeight = Math.max(2, (baseLineHeight * lineCount) + (basePadding * 2));
-        const maxEdge = 4096;
-        let scale = 1;
-        if (requestedWidth > maxEdge || requestedHeight > maxEdge ||
-            (requestedWidth * requestedHeight) > MAX_TEXT_CANVAS_PIXELS) {
-            const scaleX = maxEdge / requestedWidth;
-            const scaleY = maxEdge / requestedHeight;
-            const scaleArea = Math.sqrt(MAX_TEXT_CANVAS_PIXELS / (requestedWidth * requestedHeight));
-            scale = Math.min(1, scaleX, scaleY, scaleArea);
-        }
-        const fontSize = baseFontSize * scale;
-        const padding = basePadding * scale;
-        const lineHeight = baseLineHeight * scale;
-        canvas.width = Math.max(2, Math.ceil(requestedWidth * scale));
-        canvas.height = Math.max(2, Math.ceil(requestedHeight * scale));
-        canvas.movieBitmapResolution = TEXT_BITMAP_RESOLUTION * scale;
-        context.font = `${fontSize}px ${font.family}`;
-        context.fillStyle = '#000000';
-        context.textBaseline = 'top';
-        if (lines) {
-            for (let index = 0; index < lines.length; index++) {
-                context.fillText(lines[index], padding, padding + (index * lineHeight));
-            }
-        } else {
-            context.fillText(stringText, padding, padding);
-        }
-        canvas.reusable = false;
-        const pixels = canvas.width * canvas.height;
-        this.textCanvasCache.set(key, {canvas, pixels});
-        this.textCanvasCachePixels += pixels;
-        while (this.textCanvasCache.size > MAX_TEXT_CANVAS_CACHE ||
-            this.textCanvasCachePixels > MAX_TEXT_CANVAS_PIXELS) {
-            const oldestKey = this.textCanvasCache.keys().next().value;
-            const oldest = this.textCanvasCache.get(oldestKey);
-            this.textCanvasCache.delete(oldestKey);
-            this.textCanvasCachePixels -= oldest ? oldest.pixels : 0;
-        }
-        return canvas;
-    },
-
-    renderText (target, font, text, cacheKey = null) {
-        if (!(this.textSkinCache instanceof Map)) {
-            this.textSkinCache = new Map();
-            this.textSkinCachePixels = 0;
-        }
-        const key = cacheKey || getTextCacheKey(font, text);
-        let entry = this.textSkinCache.get(key);
-        if (!entry) {
-            const canvas = this.createTextCanvas(font, text, key);
-            const resolution = Number(canvas.movieBitmapResolution) > 0 ?
-                Number(canvas.movieBitmapResolution) : TEXT_BITMAP_RESOLUTION;
-            entry = {
-                canvas,
-                pixels: canvas.width * canvas.height,
-                resolution,
-                skinId: this.runtime.renderer.createBitmapSkin(canvas, resolution)
-            };
-            this.textSkinCachePixels += entry.pixels;
-        }
-        this.textSkinCache.delete(key);
-        this.textSkinCache.set(key, entry);
-        this.applyBitmap(target, entry.canvas, 'text', null, false, entry.resolution, entry.skinId);
+    renderText (target, font, text) {
+        const entry = this.runtime.renderer.renderMovieSource({kind: 'text', font, text});
+        this.applyBitmap(target, entry.bitmap, 'text', null, false, entry.resolution, entry.skinId);
         this.trimTextSkinCache();
     },
 
     trimTextSkinCache () {
-        if (!(this.textSkinCache instanceof Map)) return;
-        const empty = this.targetStates.size === 0;
-        if (!empty && this.textSkinCache.size <= 1024 && this.textSkinCachePixels <= MAX_TEXT_CANVAS_PIXELS) return;
-        // A skin bound to a target remains alive until that target changes appearance or is destroyed.
-        const active = new Set();
+        const active = [];
         for (const state of this.targetStates.values()) {
-            if (state.mode === 'text') active.add(state.sharedTextSkinId);
+            if (state.mode === 'text') active.push(state.sharedTextSkinId);
         }
-        for (const [key, entry] of this.textSkinCache) {
-            if (!empty && this.textSkinCache.size <= 1024 && this.textSkinCachePixels <= MAX_TEXT_CANVAS_PIXELS) break;
-            if (active.has(entry.skinId)) continue;
-            this.runtime.renderer.destroySkin(entry.skinId);
-            this.textSkinCache.delete(key);
-            this.textSkinCachePixels -= entry.pixels;
-        }
+        MovieSourceRenderer.forRenderer(this.runtime.renderer).trimText(active, this.targetStates.size === 0);
     },
 
     applyBitmap (target, bitmap, mode, rotationCenter, penOnly = false,
@@ -858,18 +746,16 @@ const MovieAssetManagerMediaMethods = {
         const state = this.getTargetState(target);
         state.projectionKey = null;
         state.sharedTextSkinId = sharedTextSkinId;
-        const hasRotationCenter = rotationCenter !== null && typeof rotationCenter !== 'undefined';
-        // Shared text skins are immutable. Keep the target's mutable video/model skin separate.
+        // Source upload and mutable texture reuse belong to scratch-render.
         if (sharedTextSkinId === null) {
-            if (state.skinId === null) {
-                state.skinId = hasRotationCenter ?
-                    this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution, rotationCenter) :
-                    this.runtime.renderer.createBitmapSkin(bitmap, bitmapResolution);
-            } else if (hasRotationCenter) {
-                this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, bitmapResolution, rotationCenter);
-            } else {
-                this.runtime.renderer.updateBitmapSkin(state.skinId, bitmap, bitmapResolution);
-            }
+            const entry = this.runtime.renderer.renderMovieSource({
+                kind: mode === 'video' ? 'video' : 'bitmap',
+                bitmap,
+                resolution: bitmapResolution,
+                rotationCenter,
+                skinId: state.skinId
+            });
+            state.skinId = entry.skinId;
         }
         const previousVideoBitmap = state.videoBitmap;
         state.videoBitmap = bitmap && typeof bitmap.close === 'function' ? bitmap : null;
@@ -958,6 +844,7 @@ const MovieAssetManagerMediaMethods = {
         if (state.skinId !== null && this.runtime.renderer) {
             this.runtime.renderer.destroySkin(state.skinId);
         }
+        MovieSourceRenderer.forRenderer(this.runtime.renderer).release(target.id);
         this.targetStates.delete(target.id);
         this.trimTextSkinCache();
     }

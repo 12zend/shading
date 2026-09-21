@@ -84,8 +84,7 @@ describe('Movie toolbox categories', () => {
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox).toContain('id="pen"');
-        expect(toolbox.indexOf('id="myBlocks"')).toBeLessThan(toolbox.indexOf('id="pen"'));
+        expect(toolbox).not.toContain('id="pen"');
         expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 

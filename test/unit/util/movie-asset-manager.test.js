@@ -1,3 +1,6 @@
+import MovieDrawingCommands from '../../../scratch-vm/src/blocks/movie-drawing';
+import RenderWebGL from 'scratch-render/src/RenderWebGL';
+import MovieSourceRenderer from 'scratch-render/src/MovieSourceRenderer';
 import RenderedTarget from 'scratch-vm/src/sprites/rendered-target';
 import Drawable from 'scratch-render/src/Drawable';
 import * as THREE from 'three';
@@ -10,6 +13,18 @@ import {
 import {TEXT_BITMAP_RESOLUTION} from '../../../src/lib/movie-asset-manager-constants';
 import {FRAME_GRAPH_NODE_TYPES, MovieFrameGraphRenderer} from '../../../src/lib/movie-frame-graph';
 
+jest.mock('scratch-render/src/MovieTexture', () => class {
+    constructor (renderer) { this.renderer = renderer; this.texture = {}; }
+    update (bitmap, resolution, center) {
+        this.renderer.uploadMoviePixels(bitmap, resolution);
+        this.size = [(bitmap.width || 1) / resolution, (bitmap.height || 1) / resolution];
+        this.rotationCenter = center || this.size.map(value => value / 2);
+        this.pixels = (bitmap.width || 1) * (bitmap.height || 1);
+        return this;
+    }
+    dispose () {}
+});
+
 const makeManager = () => {
     const manager = Object.create(MovieAssetManager.prototype);
     manager.runtime = {
@@ -17,7 +32,18 @@ const makeManager = () => {
         fontManager: {
             getFonts: () => []
         },
+        on: jest.fn(),
         renderer: {
+            getMovieBufferId: () => 0,
+            clearMovieBuffer: jest.fn(),
+            drawMovieDrawable: jest.fn(),
+            _allDrawables: [],
+            _allSkins: [{renderQuality: 1, isMetricsReady: () => true, size: [100, 100], rotationCenter: [50, 50],
+                getMaximumTexture: () => ({}), getTexture: () => ({}), useNearest: () => true}],
+            prepareMovieSource: jest.fn(RenderWebGL.prototype.prepareMovieSource),
+            drawMovieTexture: jest.fn(),
+            uploadMoviePixels: jest.fn(),
+            renderMovieSource: RenderWebGL.prototype.renderMovieSource,
             createBitmapSkin: jest.fn(() => 1),
             updateBitmapSkin: jest.fn(),
             updateDrawableDirectionScale: jest.fn(),
@@ -28,6 +54,11 @@ const makeManager = () => {
         requestRedraw: jest.fn(),
         requestTargetsUpdate: jest.fn()
     };
+    manager.runtime.movieAssetManager = manager;
+    const drawing = new MovieDrawingCommands(manager.runtime);
+    for (const [opcode, method] of Object.entries(drawing.getPrimitives())) {
+        manager.runtime._primitives[opcode] = method.bind(drawing);
+    }
     manager.targetStates = new Map();
     manager.videos = new Map();
     manager.models = new Map();
@@ -514,43 +545,27 @@ describe('MovieAssetManager rendering performance', () => {
         expect(pending).toBe(render.promise);
     });
 
-    test('compiled and interpreter Pen commands enqueue clear and stamp nodes and return immediately', () => {
+    test('compiled and interpreter drawing commands enqueue work without a Pen extension or VM yield', () => {
         const manager = makeManager();
         const target = makeTarget();
-        const compiledClear = jest.fn();
-        const compiledStamp = jest.fn();
-        const interpreterClear = jest.fn();
-        const interpreterStamp = jest.fn();
-        manager.runtime.ext_pen = {
-            _stamp: compiledStamp,
-            clear: compiledClear
-        };
-        manager.runtime._primitives = {
-            pen_clear: interpreterClear,
-            pen_stamp: interpreterStamp
-        };
         manager.runtime.targets = [];
-        manager.drawDefaultPenBackground = jest.fn();
+        manager.drawDefaultBackground = jest.fn();
         enableFrameGraph(manager);
-        manager.attachPenFrameTransactions({});
+        manager.attachFrameTransactions({});
         manager.beginFrameGraph();
 
-        expect(manager.runtime.ext_pen.clear()).toBeUndefined();
+        expect(manager.runtime.ext_pen).toBeUndefined();
+        expect(manager.runtime.movieDrawing.clear()).toBeUndefined();
         expect(manager.runtime._primitives.pen_clear()).toBeUndefined();
-        expect(manager.runtime.ext_pen._stamp(target)).toBeUndefined();
+        expect(manager.runtime.movieDrawing.drawSprite(target)).toBeUndefined();
         expect(manager.runtime._primitives.pen_stamp({}, {target})).toBeUndefined();
-        expect(compiledClear).not.toHaveBeenCalled();
-        expect(interpreterClear).not.toHaveBeenCalled();
-        expect(compiledStamp).not.toHaveBeenCalled();
-        expect(interpreterStamp).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.clearMovieBuffer).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.drawMovieDrawable).not.toHaveBeenCalled();
 
         manager.flushFrameGraph();
 
-        // Both execution paths share the same renderer backend after collection.
-        expect(compiledClear).toHaveBeenCalledTimes(2);
-        expect(compiledStamp).toHaveBeenCalledTimes(2);
-        expect(interpreterClear).not.toHaveBeenCalled();
-        expect(interpreterStamp).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.clearMovieBuffer).toHaveBeenCalledTimes(2);
+        expect(manager.runtime.renderer.drawMovieDrawable).toHaveBeenCalledTimes(2);
     });
 
     test('registers initialize and render frame as compiler-visible hats without command primitives', () => {
@@ -591,7 +606,7 @@ describe('MovieAssetManager rendering performance', () => {
             renameSprite: jest.fn(),
             setEditingTarget: jest.fn()
         };
-        manager.drawDefaultPenBackground = jest.fn();
+        manager.drawDefaultBackground = jest.fn();
 
         manager.handleProjectLoaded();
 
@@ -632,8 +647,8 @@ describe('MovieAssetManager rendering performance', () => {
     test('creates named costume groups from stable costume asset ids', () => {
         const manager = makeManager();
         const costumes = [
-            {assetId: 'svg-one', name: 'One'},
-            {assetId: 'svg-two', name: 'Two'},
+            {assetId: 'svg-one', name: 'One', skinId: 0},
+            {assetId: 'svg-two', name: 'Two', skinId: 0},
             {assetId: 'svg-three', name: 'Three'}
         ];
         const target = {getCostumes: () => costumes, id: 'target', isOriginal: true};
@@ -654,7 +669,7 @@ describe('MovieAssetManager rendering performance', () => {
     test('serializes and restores costume group membership without copying SVG assets', () => {
         const manager = makeManager();
         const target = {
-            getCostumes: () => [{assetId: 'svg-one', name: 'One'}, {assetId: 'svg-two', name: 'Two'}],
+            getCostumes: () => [{assetId: 'svg-one', name: 'One', skinId: 0}, {assetId: 'svg-two', name: 'Two', skinId: 0}],
             getName: () => 'Sprite',
             id: 'target',
             isOriginal: true,
@@ -2098,7 +2113,7 @@ describe('MovieAssetManager rendering performance', () => {
             model.assetId === 'cube' ? cubeObject : sphereObject
         ));
         manager.getStageSize = jest.fn(() => [480, 360]);
-        manager.modelRenderer = {
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {
             renderWorldScene: jest.fn(() => canvas)
         };
         manager.applyBitmap = jest.fn();
@@ -2108,15 +2123,15 @@ describe('MovieAssetManager rendering performance', () => {
         const completedScene = manager.renderModelToScene(target, 'Sphere');
         await completedScene;
 
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenCalledWith([
             expect.objectContaining({sourceObject: cubeObject}),
             expect.objectContaining({sourceObject: sphereObject})
         ], manager.camera, [480, 360], 2);
-        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model');
+        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model', null, false, 2, 1);
 
         await manager.clearModelScene(target);
 
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenLastCalledWith([], manager.camera, [480, 360], 2);
     });
 
     test('publishes rendered 3D depth as a target-owned resource instead of runtime global state', () => {
@@ -2128,7 +2143,7 @@ describe('MovieAssetManager rendering performance', () => {
             position: {x: 1, y: 2, z: 3},
             rotation: {x: 4, y: 5, z: 6}
         };
-        manager.modelRenderer = {getDepthBuffer: jest.fn(() => depthBuffer)};
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {getDepthBuffer: jest.fn(() => depthBuffer)};
         manager.getTargetState(target);
 
         const resource = manager.publishModelZBuffer(target, camera);
@@ -2155,7 +2170,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.models.set(target.id, [{activeMotion: 'Walk', assetId: 'cube', name: 'Cube'}]);
         manager.modelObjects.set('cube', {object: modelObject});
         manager.getStageSize = jest.fn(() => [480, 360]);
-        manager.modelRenderer = {
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {
             renderWorldScene: jest.fn(() => canvas)
         };
         manager.applyBitmap = jest.fn();
@@ -2164,14 +2179,14 @@ describe('MovieAssetManager rendering performance', () => {
         manager.setModelFrame(target, 18);
         const renderPromise = manager.renderModelToScene(target, 'Cube');
 
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenCalledWith([
             expect.objectContaining({
                 animationName: 'Walk',
                 frame: 18,
                 sourceObject: modelObject
             })
         ], manager.camera, [480, 360], 2);
-        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model');
+        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'model', null, false, 2, 1);
         return renderPromise;
     });
 
@@ -2185,7 +2200,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.models.set(target.id, [{assetId: 'cube', name: 'Cube'}]);
         manager.getModelObject = jest.fn(() => modelLoad.promise);
         manager.getStageSize = jest.fn(() => [480, 360]);
-        manager.modelRenderer = {
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {
             renderWorldScene: jest.fn(() => canvas)
         };
         manager.applyBitmap = jest.fn();
@@ -2199,7 +2214,7 @@ describe('MovieAssetManager rendering performance', () => {
         modelLoad.resolve(modelObject);
         await firstRender;
 
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith([
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenCalledWith([
             expect.objectContaining({sourceObject: modelObject}),
             expect.objectContaining({sourceObject: modelObject})
         ], manager.camera, [480, 360], 2);
@@ -2432,6 +2447,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.runtime._primitives.pen_stamp = jest.fn();
         const target = {
             getCostumeIndexByName: jest.fn(() => 2),
+            getCostumes: () => [{}, {}, {name: 'costume1', skinId: 0}],
             isStage: false,
             setCostume: jest.fn(),
             setSize: jest.fn()
@@ -2454,32 +2470,29 @@ describe('MovieAssetManager rendering performance', () => {
         expect(target.setSize).toHaveBeenCalledWith(75);
         expect(manager.runtime.graphicEffectsManager.setScale).toHaveBeenCalledWith(target, 'width', 125);
         expect(manager.runtime.graphicEffectsManager.setScale).toHaveBeenCalledWith(target, 'height', 80);
-        expect(target.setCostume).toHaveBeenCalledWith(2);
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(target.setCostume).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
         expect(manager.setTargetPosition.mock.invocationCallOrder[0])
-            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+            .toBeLessThan(manager.runtime.renderer.drawMovieTexture.mock.invocationCallOrder[0]);
         expect(manager.setTargetRotation.mock.invocationCallOrder[0])
-            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+            .toBeLessThan(manager.runtime.renderer.drawMovieTexture.mock.invocationCallOrder[0]);
         expect(manager.setTargetScale.mock.invocationCallOrder[0])
-            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+            .toBeLessThan(manager.runtime.renderer.drawMovieTexture.mock.invocationCallOrder[0]);
         expect(target.setSize.mock.invocationCallOrder[0])
-            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
+            .toBeLessThan(manager.runtime.renderer.drawMovieTexture.mock.invocationCallOrder[0]);
         expect(manager.runtime.graphicEffectsManager.setScale.mock.invocationCallOrder[1])
-            .toBeLessThan(target.setCostume.mock.invocationCallOrder[0]);
-        expect(target.setCostume.mock.invocationCallOrder[0])
-            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
-        expect(manager.applyProjection).toHaveBeenCalledWith(target);
-        expect(manager.applyProjection.mock.invocationCallOrder[0])
-            .toBeGreaterThan(target.setCostume.mock.invocationCallOrder[0]);
-        expect(manager.applyProjection.mock.invocationCallOrder[0])
-            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+            .toBeLessThan(manager.runtime.renderer.drawMovieTexture.mock.invocationCallOrder[0]);
+        expect(manager.runtime.renderer.createBitmapSkin).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.updateDrawableSkinId).not.toHaveBeenCalled();
+
     });
 
     test('draws a selected costume group frame through the original costume skin', () => {
         const manager = makeManager();
         const costumes = [
-            {assetId: 'svg-one', name: 'One'},
-            {assetId: 'svg-two', name: 'Two'}
+            {assetId: 'svg-one', name: 'One', skinId: 0},
+            {assetId: 'svg-two', name: 'Two', skinId: 0}
         ];
         const target = {
             getCostumes: () => costumes,
@@ -2502,14 +2515,15 @@ describe('MovieAssetManager rendering performance', () => {
             source: COSTUME_GROUP_SOURCE
         })).toBeUndefined();
 
-        expect(target.setCostume).toHaveBeenCalledWith(1);
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(target.setCostume).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
     });
 
     test('captures scene draws without changing or stamping the target', () => {
         const manager = makeManager();
         manager.applyObjectDrawConfiguration = jest.fn();
-        manager.stampTarget = jest.fn();
+        manager.drawTarget = jest.fn();
         const target = makeTarget();
         const capture = manager.createObjectSceneCapture(target);
 
@@ -2527,7 +2541,7 @@ describe('MovieAssetManager rendering performance', () => {
         })]);
         expect(capture.entries[0]).not.toHaveProperty('sceneCapture');
         expect(manager.applyObjectDrawConfiguration).not.toHaveBeenCalled();
-        expect(manager.stampTarget).not.toHaveBeenCalled();
+        expect(manager.drawTarget).not.toHaveBeenCalled();
     });
 
     test('renders every captured plane and model through one depth-buffered scene and stamps once', async () => {
@@ -2538,7 +2552,7 @@ describe('MovieAssetManager rendering performance', () => {
         const canvas = {name: 'scene canvas'};
         manager.camera = {name: 'camera'};
         manager.getStageSize = jest.fn(() => [480, 360]);
-        manager.modelRenderer = {
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {
             renderWorldScene: jest.fn(() => canvas)
         };
         manager.prepareObjectSceneItem = jest.fn()
@@ -2550,14 +2564,15 @@ describe('MovieAssetManager rendering performance', () => {
 
         await manager.performObjectScene(target, {entries: [{asset: 'image'}, {asset: 'model'}]});
 
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledTimes(1);
-        expect(manager.modelRenderer.renderWorldScene).toHaveBeenCalledWith(
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenCalledTimes(1);
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene).toHaveBeenCalledWith(
             [{sourceObject: plane}, {sourceObject: model}],
             manager.camera,
             [480, 360],
             2
         );
-        expect(manager.applyBitmap).toHaveBeenCalledWith(target, canvas, 'scene');
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledWith(canvas, 2);
+        expect(manager.applyBitmap).not.toHaveBeenCalled();
         expect(manager.publishModelZBuffer).toHaveBeenCalledWith(target, manager.camera);
         expect(manager.finishObjectDraw).toHaveBeenCalledWith(
             target,
@@ -2798,7 +2813,8 @@ describe('MovieAssetManager rendering performance', () => {
         expect(context.fill).toHaveBeenCalledWith('evenodd');
         expect(context.globalAlpha).toBe(0.65);
         expect(context.fillStyle).toBe('#ff0000');
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
         expect(manager.getTargetState(target).penOnly).toBe(true);
     });
 
@@ -2883,7 +2899,8 @@ describe('MovieAssetManager rendering performance', () => {
             false
         ]);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
     });
 
     test('renders a zero-inner-radius arc as a sector instead of a circular segment', () => {
@@ -2968,8 +2985,8 @@ describe('MovieAssetManager rendering performance', () => {
 
             expect(canvas.width).toBe(1024);
             expect(canvas.height).toBe(1024);
-            expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledWith(canvas, 0.25);
-            expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(1);
+            expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledWith(canvas, 0.25);
+            expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(1);
         }
     );
 
@@ -3012,7 +3029,8 @@ describe('MovieAssetManager rendering performance', () => {
         expect(context.stroke).toHaveBeenCalledTimes(1);
         expect(context.lineWidth).toBe(6);
         expect(manager.runtime.graphicEffectsManager.setScale).not.toHaveBeenCalled();
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledWith({}, {target});
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
+        expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -3045,7 +3063,7 @@ describe('MovieAssetManager rendering performance', () => {
 
         try {
             expect(manager.drawShape(target, configuration)).toBeUndefined();
-            const resolution = manager.runtime.renderer.createBitmapSkin.mock.calls[0][1];
+            const resolution = manager.runtime.renderer.uploadMoviePixels.mock.calls[0][1];
             const position = manager.getShapeSceneConfiguration(configuration).position;
             const toWorld = ([x, y]) => [
                 position.x + ((x - (canvas.width / 2)) / resolution),
@@ -3071,7 +3089,7 @@ describe('MovieAssetManager rendering performance', () => {
     test('reuses procedural stamp skins when only their transform changes', () => {
         const manager = makeManager();
         let nextSkinId = 0;
-        manager.runtime.renderer.createBitmapSkin.mockImplementation(() => ++nextSkinId);
+        manager.runtime.renderer.uploadMoviePixels.mockImplementation(() => ++nextSkinId);
         manager.setTargetPosition = jest.fn();
         manager.setTargetRotation = jest.fn();
         manager.setTargetScale = jest.fn();
@@ -3149,15 +3167,14 @@ describe('MovieAssetManager rendering performance', () => {
         }
 
         expect(global.document).toBe(originalDocument);
-        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledTimes(configurations.length);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledTimes(configurations.length);
         expect(manager.runtime.renderer.updateBitmapSkin).not.toHaveBeenCalled();
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(configurations.length * 2);
-        expect(manager.runtime.renderer.updateDrawableSkinId.mock.calls.map(call => call[1])).toEqual([
-            1, 1, 2, 2, 3, 3, 4, 4
-        ]);
-        const skinUpdates = manager.runtime.renderer.updateDrawableSkinId.mock.calls.length;
-        manager.restoreCustomSkin(target);
-        expect(manager.runtime.renderer.updateDrawableSkinId).toHaveBeenCalledTimes(skinUpdates + 1);
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(configurations.length * 2);
+        expect(manager.runtime.renderer.updateDrawableSkinId).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.createBitmapSkin).not.toHaveBeenCalled();
+        const draws = manager.runtime.renderer.drawMovieTexture.mock.calls;
+        for (let index = 0; index < draws.length; index += 2) expect(draws[index][1]).toBe(draws[index + 1][1]);
+
     });
 
     test.each([
@@ -3176,6 +3193,7 @@ describe('MovieAssetManager rendering performance', () => {
         manager.runtime._primitives.pen_stamp = jest.fn();
         const target = {
             getCostumeIndexByName: jest.fn(() => 0),
+            getCostumes: () => [{name: 'costume1', skinId: 0}],
             isStage: false,
             setCostume: jest.fn(),
             setSize: jest.fn()
@@ -3187,7 +3205,7 @@ describe('MovieAssetManager rendering performance', () => {
             time: {start: 1, end: 4}
         })).toBeUndefined();
 
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(expectedDraw ? 1 : 0);
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(expectedDraw ? 1 : 0);
         expect(manager.setTargetPosition).toHaveBeenCalledTimes(expectedDraw ? 1 : 0);
     });
 
@@ -3201,6 +3219,7 @@ describe('MovieAssetManager rendering performance', () => {
             scale: [target.size, target.size]
         }));
         target.getCostumeIndexByName = jest.fn(() => 0);
+        target.getCostumes = () => [{name: 'costume1', skinId: 0}];
         target.setCostume = jest.fn();
         target.setSize = jest.fn(size => {
             target.size = size;
@@ -3226,13 +3245,9 @@ describe('MovieAssetManager rendering performance', () => {
 
         manager.drawObject(target, configuration);
 
-        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(
-            target.drawableID,
-            90,
-            [48, 48]
-        );
-        expect(manager.runtime.renderer.updateDrawableDirectionScale.mock.invocationCallOrder.at(-1))
-            .toBeLessThan(manager.runtime._primitives.pen_stamp.mock.invocationCallOrder[0]);
+        const matrix = manager.runtime.renderer.drawMovieTexture.mock.calls[0][2].u_modelMatrix;
+        expect(matrix[0]).toBeCloseTo(-48);
+        expect(matrix[5]).toBeCloseTo(-48);
         expect(manager.getTargetState(target).depthResource).toEqual(expect.objectContaining({
             flatDepth: 1000,
             targetId: target.id,
@@ -3245,11 +3260,9 @@ describe('MovieAssetManager rendering performance', () => {
             position: {x: 0, y: 0, z: 10000}
         });
 
-        expect(manager.runtime.renderer.updateDrawableDirectionScale).toHaveBeenLastCalledWith(
-            target.drawableID,
-            90,
-            [4.8, 4.8]
-        );
+        const distant = manager.runtime.renderer.drawMovieTexture.mock.calls[1][2].u_modelMatrix;
+        expect(distant[0]).toBeCloseTo(-4.8);
+        expect(distant[5]).toBeCloseTo(-4.8);
     });
 
     test('decodes and stamps every layered video draw with its own frame and size', async () => {
@@ -3298,12 +3311,12 @@ describe('MovieAssetManager rendering performance', () => {
         await first;
 
         expect(manager.decodeObjectVideoFrame.mock.calls.map(call => call[2])).toEqual([4, 8]);
-        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenNthCalledWith(1, frames[0], 2);
-        expect(manager.runtime.renderer.updateBitmapSkin).toHaveBeenNthCalledWith(1, 1, frames[1], 2);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenNthCalledWith(1, frames[0], 2);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenNthCalledWith(2, frames[1], 2);
         expect(manager.runtime.graphicEffectsManager.setScale.mock.calls
             .filter(call => call[1] === 'width').map(call => call[2])).toEqual([100, 50]);
         expect(target.setSize.mock.calls.map(call => call[0])).toEqual([100, 50]);
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(2);
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(2);
         expect(manager.getTargetState(target).penOnly).toBe(true);
     });
 
@@ -3539,6 +3552,32 @@ describe('MovieAssetManager rendering performance', () => {
         }]);
     });
 
+    test('draws a loaded model and the following stamp in the same VM tick', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const source = MovieSourceRenderer.forRenderer(manager.runtime.renderer);
+        source.model = {renderWorldScene: jest.fn(() => ({width: 40, height: 30}))};
+        manager.models.set(target.id, [{assetId: 'hero', name: 'Hero'}]);
+        manager.modelObjects.set('hero', {object: {name: 'loaded'}});
+        manager.getModelTransform = jest.fn(() => ({rotation: {}, scale: {x: 1, y: 1, z: 1}}));
+        manager.getStageSize = jest.fn(() => [480, 360]);
+        manager.applyObjectDrawConfiguration = jest.fn();
+        manager.applyProjection = jest.fn();
+        manager.publishModelZBuffer = jest.fn();
+        manager.queueObjectDraw = jest.fn();
+        manager.runtime._primitives.pen_stamp = jest.fn();
+
+        expect(manager.drawObjectImmediately(target, {source: 'model', asset: 'Hero', frame: 4})).toBeUndefined();
+        expect(manager.queueObjectDraw).not.toHaveBeenCalled();
+        expect(source.model.renderWorldScene).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.renderer.updateBitmapSkin).not.toHaveBeenCalled();
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(1);
+        manager.drawTarget(target);
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.renderer.drawMovieDrawable).toHaveBeenCalledTimes(1);
+    });
+
     test('uses the draw frame for an animated model', async () => {
         const manager = makeManager();
         const target = makeTarget();
@@ -3549,7 +3588,11 @@ describe('MovieAssetManager rendering performance', () => {
         manager.applyProjection = jest.fn();
         manager.runtime._primitives.pen_stamp = jest.fn();
         manager.models.set(target.id, [{assetId: 'model', name: 'Hero'}]);
-        manager.replaceModelScene = jest.fn(() => Promise.resolve());
+        manager.getModelObject = jest.fn(async () => ({}));
+        manager.getStageSize = () => [480, 360];
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = {
+            renderWorldScene: jest.fn(() => ({width: 960, height: 720}))
+        };
 
         const draw = manager.drawObject(target, {
             asset: 'Hero',
@@ -3562,8 +3605,9 @@ describe('MovieAssetManager rendering performance', () => {
         await draw;
 
         expect(manager.getTargetState(target).modelFrame).toBe(17);
-        expect(manager.replaceModelScene).toHaveBeenCalledWith(target, 'Hero');
-        expect(manager.runtime._primitives.pen_stamp).toHaveBeenCalledTimes(1);
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).model.renderWorldScene.mock.calls[0][0][0].frame)
+            .toBe(17);
+        expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(1);
     });
 
     test('waits for an exact video frame before a following stamp can run', () => {
@@ -3609,7 +3653,7 @@ describe('MovieAssetManager rendering performance', () => {
     });
 
     test.each(['interpreter', 'compiled'])(
-        'commits an atomic Pen frame after %s erase-all execution',
+        'commits an atomic Movie frame after %s erase-all execution',
         executionPath => {
             const manager = makeTimelineManager();
             const penFX = {
@@ -3617,13 +3661,11 @@ describe('MovieAssetManager rendering performance', () => {
                 cancelFrame: jest.fn(),
                 commitFrame: jest.fn()
             };
-            manager.runtime.ext_pen = {clear: jest.fn()};
-            manager.runtime._primitives.pen_clear = jest.fn();
-            manager.attachPenFrameTransactions(penFX);
+            manager.attachFrameTransactions(penFX);
             manager.timeline.renderedThisStep = true;
 
             const result = executionPath === 'interpreter' ?
-                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.ext_pen.clear();
+                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.movieDrawing.clear();
 
             expect(result).toBeUndefined();
             expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
@@ -3637,34 +3679,30 @@ describe('MovieAssetManager rendering performance', () => {
     );
 
     test.each(['interpreter', 'compiled'])(
-        'automatically resets %s render-frame scripts inside the Pen transaction',
+        'automatically resets %s render-frame scripts inside the Movie transaction',
         executionPath => {
             const manager = makeTimelineManager();
             const thread = {};
             const observedTransaction = jest.fn();
-            const rawCompiledClear = jest.fn();
-            const rawInterpreterClear = jest.fn();
+            const rawClear = manager.runtime.renderer.clearMovieBuffer;
             const penFX = {
                 beginFrame: jest.fn(() => true),
                 cancelFrame: jest.fn(),
                 commitFrame: jest.fn()
             };
-            manager.runtime.ext_pen = {clear: rawCompiledClear};
-            manager.runtime._primitives.pen_clear = rawInterpreterClear;
-            manager.attachPenFrameTransactions(penFX);
+            manager.attachFrameTransactions(penFX);
             manager.timeline.pendingFrame = true;
             manager.runtime.startHats.mockImplementation(() => {
-                if (executionPath === 'compiled') observedTransaction(manager.penFrameTransactionActive);
+                if (executionPath === 'compiled') observedTransaction(manager.frameTransactionActive);
                 return executionPath === 'interpreter' ? [thread] : [];
             });
 
             manager.handleTimelineBeforeExecute();
-            if (executionPath === 'interpreter') observedTransaction(manager.penFrameTransactionActive);
+            if (executionPath === 'interpreter') observedTransaction(manager.frameTransactionActive);
 
             expect(observedTransaction).toHaveBeenCalledWith(true);
             expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
-            expect(rawCompiledClear).not.toHaveBeenCalled();
-            expect(rawInterpreterClear).not.toHaveBeenCalled();
+            expect(rawClear).not.toHaveBeenCalled();
             expect(penFX.commitFrame).not.toHaveBeenCalled();
 
             manager.runtime.threads = [];
@@ -3676,7 +3714,7 @@ describe('MovieAssetManager rendering performance', () => {
     );
 
     test.each(['interpreter', 'compiled'])(
-        'redraws the default backdrop as Pen without yielding after %s erase-all execution',
+        'redraws the default backdrop into the Movie surface without yielding after %s erase-all execution',
         executionPath => {
             const manager = makeTimelineManager();
             manager.runtime.targets = [{
@@ -3688,19 +3726,17 @@ describe('MovieAssetManager rendering performance', () => {
             }];
             manager.runtime.renderer._backgroundColor4f = [1, 1, 1, 1];
             manager.runtime.renderer.setBackgroundColor = jest.fn();
-            manager.runtime.ext_pen = {clear: jest.fn()};
-            manager.runtime._primitives.pen_clear = jest.fn();
             const penFX = {
                 beginFrame: jest.fn(() => true),
                 drawDefaultBackground: jest.fn()
             };
-            manager.attachPenFrameTransactions(penFX);
+            manager.attachFrameTransactions(penFX);
             penFX.drawDefaultBackground.mockClear();
             manager.runtime.renderer.setBackgroundColor.mockClear();
             manager.timeline.renderedThisStep = true;
 
             const result = executionPath === 'interpreter' ?
-                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.ext_pen.clear();
+                manager.runtime._primitives.pen_clear({}, {}) : manager.runtime.movieDrawing.clear();
 
             expect(result).toBeUndefined();
             expect(penFX.beginFrame).toHaveBeenCalledTimes(1);
@@ -3820,7 +3856,7 @@ describe('MovieAssetManager rendering performance', () => {
         global.document = {createElement: jest.fn(() => canvas)};
 
         try {
-            const rendered = manager.createTextCanvas(
+            const rendered = MovieSourceRenderer.forRenderer(manager.runtime.renderer).text.createTextCanvas(
                 {family: 'sans-serif', name: 'sans-serif'},
                 'hello'
             );
@@ -3840,7 +3876,7 @@ describe('MovieAssetManager rendering performance', () => {
     test('uses the high-resolution text bitmap for the regular text skin', () => {
         const manager = makeManager();
         const canvas = {width: 100, height: 100, movieBitmapResolution: TEXT_BITMAP_RESOLUTION};
-        manager.createTextCanvas = jest.fn(() => canvas);
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).text.createTextCanvas = jest.fn(() => canvas);
         manager.applyBitmap = jest.fn();
 
         const target = makeTarget();
@@ -3881,7 +3917,7 @@ describe('Objects draw resource scaling', () => {
         const manager = makeManager();
         const target = makeTarget();
         manager.applyProjection = jest.fn();
-        manager.createTextCanvas = jest.fn(() => ({width: 32, height: 32}));
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).text.createTextCanvas = jest.fn(() => ({width: 32, height: 32}));
         const font = {name: 'sans', family: 'sans-serif'};
         manager.getFont = jest.fn(() => font);
         manager.ensureFontLoaded = jest.fn(() => null);
@@ -3892,18 +3928,18 @@ describe('Objects draw resource scaling', () => {
         for (let index = 0; index < 1000; index++) {
             expect(manager.performObjectDraw(target, {source: 'text', text: String(index % 2)})).toBeUndefined();
         }
-        expect(manager.createTextCanvas).toHaveBeenCalledTimes(2);
-        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledTimes(2);
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).text.createTextCanvas).toHaveBeenCalledTimes(2);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledTimes(2);
+        expect(manager.runtime.renderer.createBitmapSkin).not.toHaveBeenCalled();
         expect(manager.runtime.renderer.updateBitmapSkin).not.toHaveBeenCalled();
         expect(manager.finishObjectDraw).toHaveBeenCalledTimes(1000);
-        manager.restoreCustomSkin(target);
-        expect(manager.runtime.renderer.updateDrawableSkinId).toHaveBeenLastCalledWith(target.drawableID, 2);
+        expect(manager.runtime.renderer.updateDrawableSkinId).not.toHaveBeenCalled();
     });
 
     test('keeps shared text alive when another target changes mode or is destroyed', () => {
         const manager = makeManager();
         manager.applyProjection = jest.fn();
-        manager.createTextCanvas = jest.fn(() => ({width: 32, height: 32}));
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).text.createTextCanvas = jest.fn(() => ({width: 32, height: 32}));
         manager.runtime.renderer.destroySkin = jest.fn();
         let skinId = 0;
         manager.runtime.renderer.createBitmapSkin.mockImplementation(() => ++skinId);
@@ -3920,7 +3956,7 @@ describe('Objects draw resource scaling', () => {
         expect(manager.runtime.renderer.updateDrawableSkinId).toHaveBeenLastCalledWith(2, 1);
         manager.destroyTargetState(second);
         expect(manager.runtime.renderer.destroySkin.mock.calls).toEqual([[2], [1]]);
-        expect(manager.textSkinCache.size).toBe(0);
+        expect(MovieSourceRenderer.forRenderer(manager.runtime.renderer).texts.size).toBe(0);
     });
 
     test('does not reset the active costume in 1000 consecutive draws', () => {
@@ -3928,7 +3964,7 @@ describe('Objects draw resource scaling', () => {
         const target = {...makeTarget(), currentCostume: 0, setCostume: jest.fn()};
         manager.applyObjectDrawConfiguration = jest.fn();
         manager.finishObjectDraw = jest.fn();
-        manager.getCostumeForObjectDraw = jest.fn(() => ({}));
+        manager.getCostumeForObjectDraw = jest.fn(() => ({skinId: 0}));
         manager.getCostumeIndexForObjectDraw = jest.fn(() => 0);
         for (let index = 0; index < 1000; index++) {
             expect(manager.performObjectDraw(target, {source: 'costume'})).toBeUndefined();
@@ -3937,7 +3973,7 @@ describe('Objects draw resource scaling', () => {
         expect(manager.finishObjectDraw).toHaveBeenCalledTimes(1000);
         manager.getTargetState(target).mode = 'text';
         manager.performObjectDraw(target, {source: 'costume'});
-        expect(target.setCostume).toHaveBeenCalledTimes(1);
+        expect(target.setCostume).not.toHaveBeenCalled();
     });
 
     test('decodes and uploads one frame for 1000 queued video draws without dropping stamps', async () => {
@@ -3957,7 +3993,8 @@ describe('Objects draw resource scaling', () => {
         await Promise.all(pending);
         expect(manager.decodeObjectVideoFrame).toHaveBeenCalledTimes(1);
         expect(manager.snapshotVideoFrame).toHaveBeenCalledTimes(1);
-        expect(manager.runtime.renderer.createBitmapSkin).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledTimes(1);
+        expect(manager.runtime.renderer.createBitmapSkin).not.toHaveBeenCalled();
         expect(manager.runtime.renderer.updateBitmapSkin).not.toHaveBeenCalled();
         expect(manager.finishObjectDraw).toHaveBeenCalledTimes(1000);
     });
