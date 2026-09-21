@@ -870,6 +870,47 @@ const createPenFXEngine = (gl, renderer) => {
         }
 
         customShader (name, uniforms, integerUniforms, blendMode) {
+            const group = this.groupStack[this.groupStack.length - 1];
+            const surface = this._drawSurface();
+            if (group && group.skin === surface && group.texture === surface._texture &&
+                this.groupEffectScope !== 'expanded') {
+                const skin = this._prepare();
+                if (!skin) return;
+                this._ensureSecondaryBuffer();
+                if (!this.customGroupMaskProgram) this.customGroupMaskProgram = this._createProgram(`
+                    precision highp float;
+                    varying vec2 v_uv;
+                    uniform sampler2D u_image;
+                    uniform sampler2D u_mask;
+                    void main() {
+                        vec4 pixel = texture2D(u_image, v_uv);
+                        float alpha = min(pixel.a, texture2D(u_mask, v_uv).a);
+                        gl_FragColor = pixel.a > 0.0 ? pixel * (alpha / pixel.a) : vec4(0.0);
+                    }
+                `);
+                if (Object.prototype.hasOwnProperty.call(uniforms, 'u_resolution')) {
+                    uniforms.u_resolution = this.resolution;
+                }
+                // Keep the group's input alpha separate from user GLSL: an opaque shader must not
+                // turn the transparent area of an Objects grouping into a full-screen rectangle.
+                this._render(this._program(name), this.framebuffers[1], [
+                    {name: 'u_image', texture: this.textures[0]}
+                ], uniforms, integerUniforms || []);
+                const target = skin._framebuffer.framebuffer || skin._framebuffer;
+                this._render(this.customGroupMaskProgram, target, [
+                    {name: 'u_image', texture: this.textures[1]},
+                    {name: 'u_mask', texture: this.textures[0]}
+                ], {}, []);
+                if (!this._canRenderDirectly(blendMode)) {
+                    this.withProgramOverrides(null, () => this._render(this._program('copy'), this.framebuffers[1], [
+                        {name: 'u_image', texture: skin._texture}
+                    ], {}, []));
+                    this._finish(skin, this.textures[1], blendMode);
+                } else {
+                    this._markSkinChanged(skin);
+                }
+                return;
+            }
             this._singlePass(this._program(name), uniforms, integerUniforms || [], blendMode);
         }
     }
@@ -880,4 +921,3 @@ const createPenFXEngine = (gl, renderer) => {
 };
 
 export default createPenFXEngine;
-

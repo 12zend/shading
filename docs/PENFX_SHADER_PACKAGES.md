@@ -204,6 +204,10 @@ uniform int u_frame;        // timeline time × frame rate
 
 Pen レイヤーの色は premultiplied alpha です。RGB を処理するときは一度 straight color に戻し、出力時に alpha を掛け直すと透明な輪郭が汚れにくくなります。
 
+Objects の `grouping` 内では、`u_image` はグループ専用の透明な描画バッファです。single-pass のカスタムシェーダーの出力 alpha は入力画像の alpha を上限とするため、`alpha = 1` を出力してもグループ外の背景を塗りつぶしません。半透明の入力をそのまま返した場合も alpha を二重に掛けません。変形などで元の描画範囲外へ出力する場合は、この制限に注意してください。
+
+manifest の block に `"groupEffectScope": "expanded"` を指定した場合は、既存の拡張範囲エフェクトと同じく背景を含む画像を入力とし、この alpha 制限を適用しません。グループ外での実行は従来どおり Pen レイヤー全体が対象です。
+
 ```glsl
 precision highp float;
 

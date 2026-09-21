@@ -67,6 +67,60 @@ describe('renderer-owned PenFX attachment exchange', () => {
 });
 
 describe('stamp bounds and transparent groups', () => {
+    const customGroupFixture = () => {
+        const result = fixture();
+        const {engine, skin} = result;
+        engine._drawSurface = () => skin;
+        engine._program = name => name;
+        engine._createProgram = jest.fn(() => 'group-mask');
+        engine._ensureSecondaryBuffer = jest.fn();
+        engine.textures.push('effect');
+        engine.framebuffers.push('effect-fb');
+        engine.resolution = [480, 270];
+        engine.groupStack.push({skin, texture: 'pen', bounds: [10, 20, 30, 40]});
+        return result;
+    };
+
+    test('masks custom shader output with the isolated group alpha without yielding', () => {
+        const {engine, skin} = customGroupFixture();
+        const uniforms = {u_resolution: [0, 0]};
+        expect(engine.customShader('custom:test', uniforms, [], 'normal')).toBeUndefined();
+        expect(engine._render.mock.calls).toEqual([
+            ['custom:test', 'effect-fb', [{name: 'u_image', texture: 'work'}], uniforms, []],
+            ['group-mask', 'pen-fb', [
+                {name: 'u_image', texture: 'effect'}, {name: 'u_mask', texture: 'work'}
+            ], {}, []]
+        ]);
+        expect(uniforms.u_resolution).toEqual([480, 270]);
+        expect(engine._markSkinChanged).toHaveBeenCalledWith(skin);
+        expect(skin._texture).toBe('pen');
+        engine.customShader('custom:test', {}, [], 'normal');
+        expect(engine._createProgram).toHaveBeenCalledTimes(1);
+    });
+
+    test('blends masked custom output against the original group image', () => {
+        const {engine, skin} = customGroupFixture();
+        engine._finish = jest.fn();
+        engine.blendOpacity = 0.5;
+        expect(engine.customShader('custom:test', {}, [], 'mul')).toBeUndefined();
+        expect(engine._render.mock.calls[2]).toEqual([
+            'copy', 'effect-fb', [{name: 'u_image', texture: skin._texture}], {}, []
+        ]);
+        expect(engine._finish).toHaveBeenCalledWith(skin, 'effect', 'mul');
+    });
+
+    test('keeps expanded custom effects and effects outside groups on the existing path', () => {
+        const {engine} = customGroupFixture();
+        engine._singlePass = jest.fn();
+        engine.groupEffectScope = 'expanded';
+        engine.customShader('custom:test', {}, [], 'normal');
+        engine.groupEffectScope = null;
+        engine.groupStack.length = 0;
+        engine.customShader('custom:test', {}, [], 'normal');
+        expect(engine._singlePass).toHaveBeenCalledTimes(2);
+        expect(engine._render).not.toHaveBeenCalled();
+    });
+
     test('skips a blur only for a known empty isolated group', () => {
         const {engine, skin} = fixture();
         engine.programs = {};
