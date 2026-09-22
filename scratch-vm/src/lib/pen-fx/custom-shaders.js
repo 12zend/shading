@@ -9,6 +9,7 @@ import {boolean, color, number} from './helpers';
 import {BLEND_MODES, FRACTAL_NOISE_TYPES, FRACTAL_OVERFLOW_TYPES, FRACTAL_TYPES} from './constants';
 import {markMovieProject} from '../project-format';
 import defaultShaderManifest from './default-shader-package/shading-shader.json';
+import {programSources as defaultProgramSources} from './default-shader-package';
 import japaneseShaderTranslations from './default-shader-package/locales-ja.json';
 import {inferShaderInputs} from './shader-uniforms';
 import {resolveLocale} from '../movie-block-l10n';
@@ -83,13 +84,6 @@ void main() {
     gl_FragColor = pixel;
 }
 `;
-
-// The binary is intentionally loaded only by webpack. Jest exercises the same file from disk directly,
-// without teaching its module resolver about inline webpack loaders.
-let defaultShaderZip = null;
-if (process.env.NODE_ENV !== 'test') {
-    defaultShaderZip = require('!!arraybuffer-loader!./default-shader-package/penfx-builtins.zip');
-}
 
 const cloneJSON = value => JSON.parse(JSON.stringify(value));
 
@@ -563,7 +557,9 @@ const readBlobAsText = blob => {
 
 const createDefaultPackageShell = () => {
     const shell = cloneJSON(defaultShaderManifest);
-    shell.programs = [];
+    shell.programs = shell.programs.map(program => Object.assign({}, program, {
+        source: defaultProgramSources[program.bind]
+    }));
     const descriptor = normalizePackage(shell);
     descriptor.isDefault = true;
     return descriptor;
@@ -583,41 +579,13 @@ class PenFXCustomShaderManager extends EventEmitter {
         this.defaultPackage = null;
         this.defaultPackagePromise = null;
         this.installSerializationHooks();
-        if (options.loadDefaultPackage) this.installDefaultPackage(options.defaultPackageData);
+        if (options.loadDefaultPackage) this.installDefaultPackage();
     }
 
-    installDefaultPackage (packageData = defaultShaderZip) {
-        if (this.defaultPackage) return this.defaultPackagePromise;
+    installDefaultPackage () {
+        if (this.defaultPackage) return;
         this.defaultPackage = createDefaultPackageShell();
         this._replacePackages([this.defaultPackage]);
-        if (!packageData) return null;
-        const loading = this._loadDefaultPackage(packageData).catch(error => {
-            console.error('[Pen FX] Could not load the built-in shader package:', error);
-            return this.defaultPackage;
-        });
-        this.defaultPackagePromise = loading;
-        const movieAssetManager = this.vm && this.vm.runtime && this.vm.runtime.movieAssetManager;
-        if (movieAssetManager && typeof movieAssetManager.runWithoutWaiting === 'function') {
-            movieAssetManager.runWithoutWaiting(loading);
-        } else {
-            loading.catch(() => undefined);
-        }
-        return loading;
-    }
-
-    async _loadDefaultPackage (data) {
-        const descriptor = await parseShaderZip(data, 'penfx-builtins.zip');
-        if (descriptor.id !== DEFAULT_SHADER_PACKAGE_ID) {
-            throw new Error(`Built-in shader zip must have id ${DEFAULT_SHADER_PACKAGE_ID}.`);
-        }
-        const engine = this.penFX._getEngine();
-        this._validatePackageShaders(engine, descriptor);
-        descriptor.isDefault = true;
-        this.defaultPackage = descriptor;
-        const customPackages = Array.from(this.packages.values()).filter(packageDescriptor => !packageDescriptor.isDefault);
-        this._replacePackages([descriptor].concat(customPackages));
-        await this._refreshBlocks();
-        return descriptor;
     }
 
     installSerializationHooks () {
@@ -841,6 +809,8 @@ class PenFXCustomShaderManager extends EventEmitter {
                         type: argumentTypeForInput(input),
                         defaultValue: input.defaultValue
                     };
+                    if (shaderBlock.implementation && shaderBlock.implementation.opcode === 'applyLUT' &&
+                        input.id === 'LUT') argumentsInfo[input.id].menu = 'lutAssets';
                     if (input.type === 'menu') {
                         argumentsInfo[input.id].menu = menuNameFor(
                             packageDescriptor.id,
@@ -864,7 +834,7 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     getMenus () {
-        const menus = {};
+        const menus = {lutAssets: {acceptReporters: true, items: 'getLUTMenu'}};
         if (this.packages.has(DEFAULT_SHADER_PACKAGE_ID)) {
             for (const name of Object.keys(DEFAULT_LEGACY_MENUS)) {
                 menus[name] = {acceptReporters: true, items: DEFAULT_LEGACY_MENUS[name].slice()};

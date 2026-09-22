@@ -2,10 +2,24 @@
 
 shading.app の `Looks` カテゴリにある `Import shader` から、PenFX 用の shader package（zip）を読み込めます。Custom Shader（PenFX）がメインのシェーダー機能です。
 
-既存の PenFX も例外ではありません。59 個の既定ブロックと、それらが使う 26 個の fragment program は
-[`penfx-builtins.zip`](../scratch-vm/src/lib/pen-fx/default-shader-package/penfx-builtins.zip) に入っています。起動直後は manifest から
-ブロックを同期登録し、同じ ZIP の展開・compile/link 検証・program 登録を `runWithoutWaiting` で開始します。この初期化は
-Scratch VM に Promise を返さず、ブロックの実行を待たせません。
+組み込みPenFXは [`default-shader-package/`](../scratch-vm/src/lib/pen-fx/default-shader-package/) の
+manifest・翻訳と [`scratch-render/src/pen-fx/shaders/`](../scratch-render/src/pen-fx/shaders/) のソースを
+直接読み込みます。zipの生成・展開は不要です。60個の既定ブロックと27個のfragment programを同期登録し、
+必要なプログラムは描画時にコンパイルします。外部のカスタムシェーダーは引き続きzipから読み込めます。
+
+## LUT画像
+
+Shadersの右のLUTタブでPNGを追加・名前変更・削除・書き出しできます。元PNGをプロジェクトに保存し、
+コスチュームの解像度やステージサイズは使用しません。プレビューの「100%」と「全体表示」は表示だけを変えます。
+
+PenFXの `LUT [LUT] 適用量: [MIX] %` で追加した画像を選択します。0%は元の色、100%はLUTの色です。
+RGBの三線形補間を行い、透明度は維持します。ドロップダウンは名前変更に追従するIDを保存します。
+画像の追加・プロジェクト復元時にデコードとGPUへの転送を済ませるので、ブロックはPromiseを返しません。
+
+画像はN×Nのスライスを青軸順に左から右、上から下へ並べたPNGです。各スライスの横軸が赤、縦軸が緑です。
+N²×Nの横長画像（例: Tempestの16384×128）、縦長画像、512×512の64³タイルなどを自動判定します。
+画像に余白は付けず、透明ピクセルは含めないでください。Nは2〜256、PNGは32MB以下、1プロジェクト32個までです。
+GPU用にはスライスを画素単位でタイル配置し直し、縮小しません。PNG書き出しは読み込み時のバイト列を保持します。
 
 ## 最小構成
 
@@ -174,15 +188,11 @@ single-pass だけでは、Gaussian blur の複数 pass、depth texture、displa
 `programs[].bind` は既定 PenFX pipeline が公開している program slot に限られます。block の実行時だけ、その package の program
 が slot に割り当てられます。他の package や既定ブロックの shader をグローバルに上書きしません。
 
-`implementation.opcode` も既定 ZIP が公開する59個の PenFX block opcode に限られます。任意の JavaScript 関数は呼べません。
-既定 ZIP だけは既存 project と同じ `penfx_contrast` などの block id を保つため、予約済み compatibility `opcode` を持ちます。
+`implementation.opcode` も既定フォルダが公開する60個の PenFX block opcode に限られます。任意の JavaScript 関数は呼べません。
+既定パッケージだけは既存 project と同じ `penfx_contrast` などの block id を保つため、予約済み compatibility `opcode` を持ちます。
 外部 package は package 固有の opcode になり、`penfx-builtins` という package id は使用できません。
 
-既定 ZIP を shader source から再生成する場合は次を実行します。
-
-```sh
-node scripts/build-penfx-default-shader-package.js
-```
+組み込みシェーダーを変更するときは上記のソースフォルダを直接編集します。
 
 ## GLSL の契約
 

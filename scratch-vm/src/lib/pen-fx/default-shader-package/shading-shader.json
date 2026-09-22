@@ -133,6 +133,11 @@
       "id": "stack",
       "file": "shaders/stack.glsl",
       "bind": "stack"
+    },
+    {
+      "id": "lut",
+      "file": "lut.glsl",
+      "bind": "lut"
     }
   ],
   "blocks": [
@@ -264,6 +269,30 @@
           "label": "value",
           "type": "number",
           "defaultValue": 100
+        },
+        {
+          "id": "MIX",
+          "label": "mix",
+          "type": "number",
+          "defaultValue": 100
+        }
+      ]
+    },
+    {
+      "id": "lut",
+      "name": "LUT",
+      "text": "LUT [LUT] mix: [MIX] %",
+      "implementation": {
+        "type": "penfx",
+        "opcode": "applyLUT"
+      },
+      "opcode": "applyLUT",
+      "inputs": [
+        {
+          "id": "LUT",
+          "label": "LUT",
+          "type": "string",
+          "defaultValue": ""
         },
         {
           "id": "MIX",

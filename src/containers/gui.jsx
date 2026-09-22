@@ -20,7 +20,8 @@ import {
     VIDEOS_TAB_INDEX,
     FONTS_TAB_INDEX,
     MODELS_TAB_INDEX,
-    SHADERS_TAB_INDEX
+    SHADERS_TAB_INDEX,
+    LUTS_TAB_INDEX
 } from '../reducers/editor-tab';
 
 import {
@@ -174,6 +175,7 @@ const mapStateToProps = state => {
         videosTabVisible: state.scratchGui.editorTab.activeTabIndex === VIDEOS_TAB_INDEX,
         fontsTabVisible: state.scratchGui.editorTab.activeTabIndex === FONTS_TAB_INDEX,
         modelsTabVisible: state.scratchGui.editorTab.activeTabIndex === MODELS_TAB_INDEX,
+        lutsTabVisible: state.scratchGui.editorTab.activeTabIndex === LUTS_TAB_INDEX,
         shadersTabVisible: state.scratchGui.editorTab.activeTabIndex === SHADERS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
@@ -199,6 +201,7 @@ const mapDispatchToProps = dispatch => ({
     onActivateVideosTab: () => dispatch(activateTab(VIDEOS_TAB_INDEX)),
     onActivateFontsTab: () => dispatch(activateTab(FONTS_TAB_INDEX)),
     onActivateModelsTab: () => dispatch(activateTab(MODELS_TAB_INDEX)),
+    onActivateLUTsTab: () => dispatch(activateTab(LUTS_TAB_INDEX)),
     onActivateShadersTab: () => dispatch(activateTab(SHADERS_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),

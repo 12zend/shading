@@ -8,6 +8,7 @@ const VIDEOS_TAB_INDEX = 3;
 const FONTS_TAB_INDEX = 4;
 const MODELS_TAB_INDEX = 5;
 const SHADERS_TAB_INDEX = 6;
+const LUTS_TAB_INDEX = 7;
 
 const initialState = {
     activeTabIndex: BLOCKS_TAB_INDEX
@@ -42,5 +43,6 @@ export {
     VIDEOS_TAB_INDEX,
     FONTS_TAB_INDEX,
     MODELS_TAB_INDEX,
-    SHADERS_TAB_INDEX
+    SHADERS_TAB_INDEX,
+    LUTS_TAB_INDEX
 };

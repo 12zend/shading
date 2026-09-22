@@ -14,6 +14,7 @@ import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
 import ModelTab from '../../containers/model-tab.jsx';
 import ShaderTab from '../../containers/shader-tab.jsx';
+import LUTTab from '../../containers/lut-tab.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
@@ -57,6 +58,7 @@ import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
 import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
 import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
 import shadersIcon from '!../../lib/tw-recolor/build!./icon--shaders.svg';
+import lutIcon from '!../../lib/tw-recolor/build!./icon--lut.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -112,6 +114,7 @@ const GUIComponent = props => {
         framerate,
         modelsTabVisible,
         shadersTabVisible,
+        lutsTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -143,6 +146,7 @@ const GUIComponent = props => {
         onActivateFontsTab,
         onActivateModelsTab,
         onActivateShadersTab,
+        onActivateLUTsTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -460,6 +464,17 @@ const GUIComponent = props => {
                                             id="movie.gui.shadersTab"
                                         />
                                     </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivateLUTsTab}
+                                    >
+                                        <img
+                                            alt=""
+                                            draggable={false}
+                                            src={lutIcon()}
+                                        />
+                                        <span>{'LUT'}</span>
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -511,6 +526,9 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {shadersTabVisible ? <ShaderTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {lutsTabVisible ? <LUTTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -572,6 +590,7 @@ GUIComponent.propTypes = {
     framerate: PropTypes.number.isRequired,
     modelsTabVisible: PropTypes.bool,
     shadersTabVisible: PropTypes.bool,
+    lutsTabVisible: PropTypes.bool,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -594,6 +613,7 @@ GUIComponent.propTypes = {
     onActivateFontsTab: PropTypes.func,
     onActivateModelsTab: PropTypes.func,
     onActivateShadersTab: PropTypes.func,
+    onActivateLUTsTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,

@@ -3,6 +3,7 @@
 import createPenFXEngine from './engine';
 import installEffects from './effects';
 import PenFXCustomShaderManager from './custom-shaders';
+import PenFXLUTManager from './luts';
 import {BLEND_MODES} from './constants';
 import {mixAmount} from './helpers';
 import {localize, resolveLocale} from '../movie-block-l10n';
@@ -22,6 +23,7 @@ const createPenFXClass = vm => {
             this.groupEffectScope = null;
             this.shaderProgramOverrides = null;
             vm.runtime.penFX = this;
+            this.luts = new PenFXLUTManager(vm);
             this.customShaders = new PenFXCustomShaderManager(vm, this, {loadDefaultPackage: true});
             const movieAssetManager = vm.runtime.movieAssetManager;
             if (movieAssetManager && typeof movieAssetManager.attachFrameTransactions === 'function') {
@@ -48,6 +50,11 @@ const createPenFXClass = vm => {
                 this.customShaders.installIntoEngine(this.engine);
             }
             return this.engine;
+        }
+
+        getLUTMenu() {
+            return this.luts.items.length ? this.luts.items.map(item => ({text: item.name, value: item.id})) :
+                [{text: localize(resolveLocale(null, vm), 'Import a LUT in the LUT tab', 'LUTタブで画像を追加'), value: ''}];
         }
 
         importShaderPackage() {

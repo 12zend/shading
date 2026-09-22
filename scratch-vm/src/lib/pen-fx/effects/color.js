@@ -8,6 +8,13 @@ import { color, mixAmount, number, numberOr } from '../helpers';
 // instead of allocating fresh ones per rendered frame.
 
 const install = ({ PenFX }) => {
+  PenFX.prototype.applyLUT = function (args) {
+    const entry = this.luts.find(args.LUT);
+    if (!entry) return;
+    const amount = mixAmount(args.MIX);
+    this._safe(engine => engine.lut(entry, amount, this.blendMode));
+  };
+
 
   const invokeColor = (mode, values) => function (args) {
     const uniforms = values(args);

@@ -1,0 +1,87 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.file-input { display: none; }
+.editor {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    background: $ui-primary;
+    color: $text-primary;
+}
+.toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid $ui-black-transparent;
+}
+.name-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+.name-label input {
+    width: 12rem;
+    min-width: 0;
+    padding: 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    color: $text-primary;
+    background: $input-background;
+    font: inherit;
+}
+.editor button {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    color: $text-primary;
+    background: $ui-white;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.editor button:hover { border-color: $looks-secondary; }
+.editor button:disabled { opacity: 0.5; cursor: default; }
+.editor button:focus-visible,
+.name-label input:focus,
+.preview:focus-visible { outline: 2px solid $looks-secondary; outline-offset: 2px; }
+.metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+.preview {
+    position: relative;
+    flex: 1;
+    min-height: 10rem;
+    margin: 0 0.75rem;
+    padding: 1rem;
+    overflow: auto;
+    background: $ui-tertiary;
+    border: 1px solid $ui-black-transparent;
+}
+.fit {
+    position: absolute;
+    inset: 1rem;
+    display: block;
+    width: calc(100% - 2rem);
+    height: calc(100% - 2rem);
+    object-fit: contain;
+}
+.actual-size { display: block; max-width: none; image-rendering: pixelated; }
+.thumbnail { width: 100%; height: 100%; object-fit: contain; }
+.help { margin: 1rem; max-width: 65ch; font-size: 0.85rem; line-height: 1.5; }
+.empty { margin: auto; padding: 2rem; max-width: 32rem; text-align: center; }
+.empty h2 { font-size: 1.2rem; }
+.empty p { line-height: 1.5; }
+.error { padding: 0.75rem; margin: 0.75rem; border: 1px solid $error-primary; }

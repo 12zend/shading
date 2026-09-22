@@ -1,6 +1,4 @@
 import JSZip from '@turbowarp/jszip';
-import fs from 'fs';
-import path from 'path';
 import VM from 'scratch-vm';
 
 import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
@@ -61,11 +59,6 @@ const makeManifestZip = async () => {
 };
 
 describe('Pen FX custom shader packages', () => {
-    const defaultPackagePath = path.resolve(
-        __dirname,
-        '../../../scratch-vm/src/lib/pen-fx/default-shader-package/penfx-builtins.zip'
-    );
-
     test('loads a manifest and its GLSL from a zip', async () => {
         const descriptor = await parseShaderZip(await makeManifestZip(), 'test-pack.zip');
 
@@ -97,11 +90,11 @@ describe('Pen FX custom shader packages', () => {
             'AMOUNT,TINT_X,TINT_Y,TINT_Z,MODE,MIX')).toBe(true);
     });
 
-    test('ships every built-in PenFX block and fragment program in the default zip', async () => {
-        const descriptor = await parseShaderZip(fs.readFileSync(defaultPackagePath), 'penfx-builtins.zip');
+    test('ships every built-in PenFX block and fragment program directly from source folders', async () => {
+        const descriptor = createDefaultPackageShell();
 
         expect(descriptor.id).toBe(DEFAULT_SHADER_PACKAGE_ID);
-        expect(descriptor.blocks).toHaveLength(59);
+        expect(descriptor.blocks).toHaveLength(60);
         expect(descriptor.programs).toHaveLength(Object.keys(programSources).length);
         expect(descriptor.blocks.find(block => block.id === 'contrast')).toMatchObject({
             name: 'contrast',
@@ -125,7 +118,7 @@ describe('Pen FX custom shader packages', () => {
         }
     });
 
-    test('uses English names from the default zip and localizes them only for Japanese UI', () => {
+    test('uses English names from the default folder and localizes them only for Japanese UI', () => {
         const englishVM = {runtime: {renderer: {}}, getLocale: () => 'en'};
         const englishManager = new PenFXCustomShaderManager(englishVM, new (createPenFXClass(englishVM))());
         englishManager.installDefaultPackage();
@@ -144,27 +137,16 @@ describe('Pen FX custom shader packages', () => {
         expect(japaneseContrast.arguments.VALUE).toMatchObject({defaultValue: 1});
     });
 
-    test('loads the default zip without making extension installation wait', async () => {
+    test('installs the complete built-in folder synchronously without decoding an archive', () => {
         const shell = createDefaultPackageShell();
         const runWithoutWaiting = jest.fn();
-        const engine = {
-            registerCustomShader: jest.fn(),
-            unregisterCustomShader: jest.fn(),
-            validateCustomShader: jest.fn()
-        };
-        const penFX = {_getEngine: () => engine};
+        const penFX = {};
         for (const block of shell.blocks) penFX[block.implementation.opcode] = jest.fn();
         const vm = {runtime: {movieAssetManager: {runWithoutWaiting}}};
-
-        const manager = new PenFXCustomShaderManager(vm, penFX, {
-            loadDefaultPackage: true,
-            defaultPackageData: fs.readFileSync(defaultPackagePath)
-        });
-
-        expect(runWithoutWaiting).toHaveBeenCalledWith(manager.defaultPackagePromise);
-        await manager.defaultPackagePromise;
-        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(26);
-        expect(engine.validateCustomShader).toHaveBeenCalledTimes(26);
+        const manager = new PenFXCustomShaderManager(vm, penFX, {loadDefaultPackage: true});
+        expect(runWithoutWaiting).not.toHaveBeenCalled();
+        expect(manager.defaultPackagePromise).toBeNull();
+        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(27);
     });
 
     test('all default command delegates return undefined in the current VM tick', () => {
@@ -185,7 +167,7 @@ describe('Pen FX custom shader packages', () => {
             expect(result).toBeUndefined();
             expect(result).not.toBeInstanceOf(Promise);
         }
-        expect(commandBlocks).toHaveLength(58);
+        expect(commandBlocks).toHaveLength(59);
     });
 
     test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {
