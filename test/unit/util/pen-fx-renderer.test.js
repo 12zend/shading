@@ -109,6 +109,28 @@ describe('stamp bounds and transparent groups', () => {
         expect(engine._finish).toHaveBeenCalledWith(skin, 'effect', 'mul');
     });
 
+    test('lets a procedural shader populate an empty group before alpha is applied', () => {
+        const {engine, skin} = customGroupFixture();
+        const group = engine.groupStack[0];
+        group.bounds = [];
+        group.buffer = {texture: skin._texture};
+        engine.programs = {};
+        engine._markSkinChanged.mockImplementation(surface => engine.invalidateDrawBounds(surface));
+
+        expect(engine.customShader('custom:sky', {}, [], 'normal')).toBeUndefined();
+        expect(engine._render.mock.calls).toEqual([
+            ['custom:sky', 'work-fb', [{name: 'u_image', texture: 'pen'}], {}, []]
+        ]);
+        expect(group.bounds).toBeNull();
+        expect(group.texture).toBe(skin._texture);
+
+        expect(engine.alpha(1, 1, 'normal')).toBeUndefined();
+        expect(engine._render).toHaveBeenCalledTimes(2);
+        expect(engine._render.mock.calls[1][0]).toBe('acerolaColor');
+        expect(engine._render.mock.calls[1][3]).toMatchObject({u_mode: 0, u_value: 1, u_mix: 1});
+        expect(engine._createProgram).not.toHaveBeenCalled();
+    });
+
     test('keeps expanded custom effects and effects outside groups on the existing path', () => {
         const {engine} = customGroupFixture();
         engine._singlePass = jest.fn();

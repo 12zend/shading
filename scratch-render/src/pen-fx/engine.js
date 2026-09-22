@@ -873,6 +873,9 @@ const createPenFXEngine = (gl, renderer) => {
             const group = this.groupStack[this.groupStack.length - 1];
             const surface = this._drawSurface();
             if (group && group.skin === surface && group.texture === surface._texture &&
+                // An empty group can start with a procedural shader (e.g. a generated sky).
+                // There is no input coverage to preserve until that shader has drawn its output.
+                (!group.bounds || group.bounds.length > 0) &&
                 this.groupEffectScope !== 'expanded') {
                 const skin = this._prepare();
                 if (!skin) return;
