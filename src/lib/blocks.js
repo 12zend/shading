@@ -17,7 +17,7 @@ export default function (vm, locale = 'en') {
     const translate = (english, japanese) => localize(locale, english, japanese);
     installListBlocks(vm, ScratchBlocks);
     installObjectBlockDefinitions(ScratchBlocks, vm, locale);
-    installPenFXBlockDefinitions(ScratchBlocks, locale);
+    installPenFXBlockDefinitions(ScratchBlocks, locale, vm);
     installBlockNumberScrubbing(ScratchBlocks, () => {
         const manager = vm.runtime && vm.runtime.movieAssetManager;
         if (manager && typeof manager.requestTimelinePreviewRefresh === 'function') {

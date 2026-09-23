@@ -13,7 +13,26 @@ import defaultShaderManifest from './default-shader-package/shading-shader.json'
 import {programSources as defaultProgramSources} from './default-shader-package';
 import japaneseShaderTranslations from './default-shader-package/locales-ja.json';
 import {inferShaderInputs} from './shader-uniforms';
-import {resolveLocale} from '../movie-block-l10n';
+import {localize, resolveLocale} from '../movie-block-l10n';
+import {PRESETS as COLOR_GRADING_PRESETS} from 'scratch-render/src/pen-fx/color-grading/presets';
+
+const COLOR_GRADING_MENU = 'colorGradingPresets';
+
+// Easy blocks apply a whole look from one choice. The GUI replaces the preset menu with a thumbnail picker.
+const easyToolboxBlocks = locale => [
+    {blockType: BlockType.LABEL, text: localize(locale, 'Easy', 'かんたん')},
+    {
+        opcode: 'easyColorGrading',
+        func: 'easyColorGrading',
+        blockType: BlockType.COMMAND,
+        text: localize(locale, 'color grading [PRESET] mix: [MIX] %', 'カラーグレーディング [PRESET] 混合: [MIX] %'),
+        arguments: {
+            PRESET: {type: ArgumentType.STRING, menu: COLOR_GRADING_MENU, defaultValue: COLOR_GRADING_PRESETS[0].id},
+            MIX: {type: ArgumentType.NUMBER, defaultValue: 100}
+        }
+    },
+    '---'
+];
 
 const CUSTOM_SHADER_PROJECT_KEY = 'penFXShaders';
 const CUSTOM_SHADER_FORMAT = 'shading.app/penfx-shader';
@@ -794,10 +813,10 @@ class PenFXCustomShaderManager extends EventEmitter {
 
     getToolboxBlocks () {
         const locale = resolveLocale(null, this.vm);
-        const blocks = [
+        const blocks = easyToolboxBlocks(locale).concat([
             {blockType: BlockType.LABEL, text: 'Custom Shaders'},
             {blockType: BlockType.BUTTON, text: 'Import shader', func: 'importShaderPackage'}
-        ];
+        ]);
         for (const packageDescriptor of this.packages.values()) {
             blocks.push('---');
             blocks.push({blockType: BlockType.LABEL, text: packageDescriptor.name});
@@ -845,7 +864,13 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     getMenus () {
-        const menus = {lutAssets: {acceptReporters: true, items: 'getLUTMenu'}};
+        const menus = {
+            lutAssets: {acceptReporters: true, items: 'getLUTMenu'},
+            [COLOR_GRADING_MENU]: {
+                acceptReporters: true,
+                items: COLOR_GRADING_PRESETS.map(preset => ({text: preset.name, value: preset.id}))
+            }
+        };
         if (this.packages.has(DEFAULT_SHADER_PACKAGE_ID)) {
             for (const name of Object.keys(DEFAULT_LEGACY_MENUS)) {
                 menus[name] = {acceptReporters: true, items: DEFAULT_LEGACY_MENUS[name].slice()};

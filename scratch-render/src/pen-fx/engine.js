@@ -729,7 +729,7 @@ const createPenFXEngine = (gl, renderer) => {
             this.matteStack.length = 0;
         }
 
-        _render (program, framebuffer, samplers, uniforms, integerUniforms) {
+        _render (program, framebuffer, samplers, uniforms, integerUniforms, viewport = null) {
             // A work texture can still be bound on an otherwise-unused texture unit
             // from the previous pass. Some ANGLE backends treat that as a feedback
             // loop when the same texture becomes the next render target, so clear the
@@ -739,7 +739,8 @@ const createPenFXEngine = (gl, renderer) => {
                 gl.bindTexture(gl.TEXTURE_2D, null);
             }
             gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-            gl.viewport(0, 0, this.width, this.height);
+            if (viewport) gl.viewport(0, 0, viewport[0], viewport[1]);
+            else gl.viewport(0, 0, this.width, this.height);
             gl.useProgram(program);
             const position = this._position(program);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
