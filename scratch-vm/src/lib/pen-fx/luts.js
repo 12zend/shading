@@ -7,16 +7,62 @@ const MAX_LUTS = 32;
 
 // Horizontal strips: red varies across each square, green downwards, blue by square.
 // Square tile atlases and vertical strips use the same row-major slice order.
-const lutLayout = (width, height) => {
-    const size = Math.round(Math.cbrt(width * height));
-    if (size < 2 || size > 256 || size ** 3 !== width * height ||
-        width % size !== 0 || height % size !== 0) {
-        throw new Error('Use a PNG LUT made of square RGB slices (for example 16384 × 128 or 512 × 512).');
+const lutLayout = (width, height, settings = {}) => {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
+        width * height > 256 ** 3) throw new Error('LUT dimensions exceed the supported pixel limit.');
+    const mode = settings.mode || 'auto';
+    if (!['auto', 'tiles', 'hald'].includes(mode)) throw new Error('Unknown LUT layout.');
+    let size = Number(settings.size);
+    let columns;
+    let rows;
+    let count = 1;
+    if (mode === 'hald') {
+        const level = Math.round(Math.cbrt(width));
+        size = level * level;
+        if (width !== height || level ** 3 !== width || level < 2 || size > 256) {
+            throw new Error('Hald LUTs must be square with a cube-number side (8, 27, 64, 125, 216, 512…).');
+        }
+        columns = 0;
+        rows = 0;
+    } else if (mode === 'tiles') {
+        columns = Number(settings.columns);
+        rows = Math.ceil(size / columns);
+        if (!Number.isInteger(size) || size < 2 || size > 256 ||
+            !Number.isInteger(columns) || columns < 1 || columns > size ||
+            width % (columns * size) !== 0 || height % (rows * size) !== 0) {
+            throw new Error('Set the RGB size and slice columns to match the image dimensions.');
+        }
+        count = (width / (columns * size)) * (height / (rows * size));
+    } else {
+        size = Math.round(Math.cbrt(width * height));
+        if (size >= 2 && size <= 256 && size ** 3 === width * height &&
+            width % size === 0 && height % size === 0) {
+            columns = width / size;
+            rows = height / size;
+        } else {
+            // ReShade MultiLUT/PD80: rows of horizontal N² × N LUT strips.
+            size = Math.sqrt(width);
+            if (!Number.isInteger(size) || size < 2 || size > 256 || height % size !== 0) {
+                throw new Error('Cannot detect this LUT. Choose a layout and specify its RGB size and slice columns.');
+            }
+            columns = size;
+            rows = 1;
+            count = height / size;
+        }
     }
-    return {size, columns: width / size, rows: height / size};
+    const index = typeof settings.index === 'undefined' ? 0 : Number(settings.index);
+    if (!Number.isInteger(index) || index < 0 || index >= count) {
+        throw new Error(`Choose a LUT number between 1 and ${count}.`);
+    }
+    const result = {size, columns, rows};
+    // Keep legacy descriptors unchanged; extended metadata is opt-in.
+    if (mode !== 'auto' || count !== 1 || settings.flipGreen) {
+        Object.assign(result, {mode, count, index, flipGreen: settings.flipGreen === true});
+    }
+    return result;
 };
 
-const pngDimensions = bytes => {
+const pngDimensions = (bytes, settings) => {
     const signature = [137, 80, 78, 71, 13, 10, 26, 10];
     if (bytes.length < 33 || bytes.length > MAX_BYTES || signature.some((value, i) => bytes[i] !== value) ||
         String.fromCharCode(...bytes.subarray(12, 16)) !== 'IHDR') {
@@ -25,7 +71,7 @@ const pngDimensions = bytes => {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const width = view.getUint32(16);
     const height = view.getUint32(20);
-    return {width, height, ...lutLayout(width, height)};
+    return {width, height, ...lutLayout(width, height, settings)};
 };
 
 const readFile = file => new Promise((resolve, reject) => {
@@ -87,10 +133,16 @@ const packLUT = (pixels, layout, maxSize) => {
     const height = rows * layout.size;
     if (Math.max(width, height) > maxSize) throw new Error('This LUT exceeds the GPU texture size limit.');
     const packed = new Uint8Array(width * height * 4);
+    const index = layout.index || 0;
+    const lutColumns = layout.mode === 'hald' ? 1 : layout.width / (layout.columns * layout.size);
+    const originX = (index % lutColumns) * layout.columns * layout.size;
+    const originY = Math.floor(index / lutColumns) * layout.rows * layout.size;
     for (let slice = 0; slice < layout.size; slice++) {
         for (let y = 0; y < layout.size; y++) {
-            const source = ((((Math.floor(slice / layout.columns) * layout.size) + y) * layout.width) +
-                ((slice % layout.columns) * layout.size)) * 4;
+            const green = layout.flipGreen ? layout.size - 1 - y : y;
+            const source = layout.mode === 'hald' ? ((slice * layout.size * layout.size) + (green * layout.size)) * 4 :
+                (((originY + (Math.floor(slice / layout.columns) * layout.size) + green) * layout.width) +
+                    originX + ((slice % layout.columns) * layout.size)) * 4;
             const target = ((((Math.floor(slice / columns) * layout.size) + y) * width) +
                 ((slice % columns) * layout.size)) * 4;
             packed.set(pixels.subarray(source, source + (layout.size * 4)), target);
@@ -152,7 +204,9 @@ class PenFXLUTManager extends EventEmitter {
     }
 
     serialize () {
-        return this.items.map(({id, name, data}) => ({id, name, data}));
+        return this.items.map(({id, name, data, settings}) => (
+            settings ? {id, name, data, settings} : {id, name, data}
+        ));
     }
 
     changed (dirty = true) {
@@ -172,19 +226,19 @@ class PenFXLUTManager extends EventEmitter {
         return result;
     }
 
-    async prepare (bytes, name, id) {
-        const layout = pngDimensions(bytes);
+    async prepare (bytes, name, id, settings) {
+        const layout = pngDimensions(bytes, settings);
         const pixels = await this.decode(bytes, layout);
         const gpu = this.upload(this.gl, pixels, layout);
-        return {id, name, data: toDataURL(bytes), ...layout, gpu};
+        return {id, name, data: toDataURL(bytes), ...layout, gpu, settings: settings && {...settings}, pixels};
     }
 
-    async importFile (file) {
+    async importFile (file, settings) {
         if (file.size > MAX_BYTES) throw new Error('Choose a PNG file smaller than 32 MB.');
         const generation = this.generation;
         const bytes = await readFile(file);
         const item = await this.prepare(bytes, '', `lut-${Date.now()}-${Math.random().toString(36)
-            .slice(2)}`);
+            .slice(2)}`, settings);
         if (generation !== this.generation || this.items.length >= MAX_LUTS) {
             this.release(item);
             throw new Error(generation === this.generation ? 'A project can contain up to 32 LUTs.' :
@@ -194,6 +248,21 @@ class PenFXLUTManager extends EventEmitter {
         this.items.push(item);
         this.changed();
         return item;
+    }
+
+    configure (id, settings) {
+        const item = this.find(id);
+        if (!item) return;
+        const layout = pngDimensions(fromDataURL(item.data), settings);
+        const gpu = this.upload(this.gl, item.pixels, layout);
+        this.release(item);
+        Object.assign(item, layout, {gpu,
+            settings: {...settings},
+            index: layout.index || 0,
+            count: layout.count || 1,
+            mode: layout.mode || 'auto',
+            flipGreen: layout.flipGreen || false});
+        this.changed();
     }
 
     find (name) {
@@ -233,7 +302,9 @@ class PenFXLUTManager extends EventEmitter {
                     next.some(item => item.id === descriptor.id || item.name === descriptor.name)) {
                     throw new Error('Invalid or duplicate saved LUT name.');
                 }
-                next.push(await this.prepare(fromDataURL(descriptor.data), descriptor.name, descriptor.id));
+                next.push(await this.prepare(
+                    fromDataURL(descriptor.data), descriptor.name, descriptor.id, descriptor.settings
+                ));
             }
             if (generation !== this.generation) throw new Error('LUT loading was superseded by another project.');
         } catch (error) {

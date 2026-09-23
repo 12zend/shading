@@ -14,8 +14,11 @@
     border-radius: $form-radius;
     background: $motion-primary;
     color: #ffffff;
-    font-size: 1.25rem;
-    font-weight: bold;
+}
+
+.tile-model svg {
+    width: 1.35rem;
+    height: 1.35rem;
 }
 
 .editor {
@@ -65,13 +68,26 @@
     margin-left: auto;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-end;
-    gap: 0.75rem;
+    gap: 0.6rem;
     font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
     color: $text-primary-transparent;
 }
 
+.format-badge {
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: $motion-primary;
+    color: #ffffff;
+    font-size: 0.625rem;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+}
+
 .preview-area {
+    position: relative;
     min-height: 0;
     flex: 1;
     display: flex;
@@ -79,6 +95,39 @@
     justify-content: center;
     overflow: hidden;
     background: $assets-background;
+}
+
+.stats {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0;
+    pointer-events: none;
+}
+
+.stats div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    font-size: 0.65rem;
+}
+
+.stats dt {
+    color: $text-primary-transparent;
+}
+
+.stats dd {
+    margin: 0;
+    color: $text-primary;
+    font-variant-numeric: tabular-nums;
+    font-weight: bold;
 }
 
 .preview-canvas {
@@ -140,7 +189,7 @@
     white-space: nowrap;
 }
 
-.motion-button:hover {
+.motion-button:hover:not(:disabled) {
     filter: brightness(0.92);
 }
 
@@ -154,19 +203,23 @@
     opacity: 0.55;
 }
 
-.hint,
-.error {
+.hint {
     padding: 0.65rem 0.85rem;
     border-top: 1px solid $ui-black-transparent;
-    font-size: 0.72rem;
-}
-
-.hint {
     color: $text-primary-transparent;
+    font-size: 0.7rem;
+    line-height: 1.45;
 }
 
 .error {
-    color: $error-primary;
+    margin: 0.65rem 0.85rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: $form-radius;
+    border: 1px solid $error-primary;
+    background: $error-transparent;
+    color: $text-primary;
+    font-size: 0.72rem;
+    line-height: 1.4;
 }
 
 .empty-state {
@@ -211,8 +264,19 @@
     font-weight: bold;
 }
 
-.empty-state button:hover {
-    background: $motion-tertiary;
+.empty-state button:hover:not(:disabled) {
+    filter: brightness(0.92);
+}
+
+.empty-state .secondary-action {
+    border: 1px solid $motion-primary;
+    background: $ui-white;
+    color: $motion-primary;
+}
+
+.empty-state .secondary-action:hover:not(:disabled) {
+    background: $ui-tertiary;
+    filter: none;
 }
 
 .empty-state button:focus-visible {
@@ -234,5 +298,21 @@
     border-radius: 50%;
     background: $motion-primary;
     color: #ffffff;
-    font-size: 1.35rem;
+}
+
+.empty-icon svg {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+@media only screen and (max-width: 720px) {
+    .toolbar,
+    .motion-panel {
+        flex-wrap: wrap;
+    }
+
+    .metadata {
+        margin-left: 0;
+        justify-content: flex-start;
+    }
 }

@@ -110,8 +110,66 @@ const ZoomOutIcon = () => (
     </svg>
 );
 
+const CloseIcon = () => (
+    <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <path
+            d="M6 6l12 12M18 6 6 18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+        />
+    </svg>
+);
+
+const KeyframeAddIcon = () => (
+    <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <path
+            d="m10 4.5 5.5 5.5-5.5 5.5L4.5 10 10 4.5Z"
+            fill="currentColor"
+        />
+        <path
+            d="M18 14v6M15 17h6"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+        />
+    </svg>
+);
+
+const KeyframeRemoveIcon = () => (
+    <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <path
+            d="m10 4.5 5.5 5.5-5.5 5.5L4.5 10 10 4.5Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.6"
+        />
+        <path
+            d="M15 17h6"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.8"
+        />
+    </svg>
+);
+
 export {
+    CloseIcon,
     GearIcon,
+    KeyframeAddIcon,
+    KeyframeRemoveIcon,
     PauseIcon,
     PlayIcon,
     ZoomInIcon,

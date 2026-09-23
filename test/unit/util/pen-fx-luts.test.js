@@ -133,3 +133,53 @@ test('shader looks up straight RGB and restores premultiplied alpha', () => {
     expect(source).toContain('pixel.rgb / pixel.a');
     expect(source).toContain('* pixel.a, pixel.a');
 });
+
+test('detects every Genshade MultiLUT size and validates atlas selection', () => {
+    for (const [width, height, size, count] of [[1024, 544, 32, 17], [4096, 1984, 64, 31],
+        [4096, 3200, 64, 50]]) {
+        expect(lutLayout(width, height)).toMatchObject({size, count, index: 0});
+        expect(lutLayout(width, height, {index: count - 1})).toMatchObject({index: count - 1});
+        expect(() => lutLayout(width, height, {index: count})).toThrow('LUT number');
+    }
+});
+
+test('repacking selects the requested LUT without mixing adjacent atlases', () => {
+    const pixels = new Uint8Array(16 * 8 * 4);
+    for (let i = 0; i < pixels.length; i += 4) pixels.set([Math.floor(i / (16 * 4)), 0, 0, 255], i);
+    const layout = {width: 16, height: 8, ...lutLayout(16, 8, {index: 1, flipGreen: true})};
+    const packed = packLUT(pixels, layout, 64);
+    for (let b = 0; b < 4; b++) {
+        for (let g = 0; g < 4; g++) {
+            const offset = ((Math.floor(b / 2) * 4 + g) * packed.width + (b % 2) * 4) * 4;
+            expect(packed.pixels[offset]).toBe(7 - g);
+        }
+    }
+});
+
+test('Hald lookup preserves linear RGB voxel ordering', () => {
+    const layout = {width: 8, height: 8, ...lutLayout(8, 8, {mode: 'hald'})};
+    const pixels = new Uint8Array(8 * 8 * 4);
+    for (let b = 0; b < 4; b++) for (let g = 0; g < 4; g++) for (let r = 0; r < 4; r++) {
+        pixels.set([r, g, b, 255], (b * 16 + g * 4 + r) * 4);
+    }
+    const packed = packLUT(pixels, layout, 16);
+    for (let b = 0; b < 4; b++) for (let g = 0; g < 4; g++) for (let r = 0; r < 4; r++) {
+        const offset = ((Math.floor(b / 2) * 4 + g) * packed.width + (b % 2) * 4 + r) * 4;
+        expect(Array.from(packed.pixels.slice(offset, offset + 4))).toEqual([r, g, b, 255]);
+    }
+    expect(() => lutLayout(512, 256, {mode: 'hald'})).toThrow('Hald');
+});
+
+test('layout changes reuse decoded pixels, survive save/load, and preserve the resource on invalid input', async () => {
+    const {manager, vm, decode, upload} = makeManager();
+    await manager.restore([{id: 'multi', name: 'Multi', data: toDataURL(pngHeader(16, 8))}]);
+    manager.configure('multi', {mode: 'auto', index: 1, flipGreen: true});
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(upload).toHaveBeenCalledTimes(2);
+    const gpu = manager.find('multi').gpu;
+    expect(() => manager.configure('multi', {index: 2})).toThrow();
+    expect(manager.find('multi').gpu).toBe(gpu);
+    const project = JSON.parse(vm.toJSON());
+    await vm.deserializeProject(project);
+    expect(manager.find('multi')).toMatchObject({index: 1, count: 2, flipGreen: true});
+});

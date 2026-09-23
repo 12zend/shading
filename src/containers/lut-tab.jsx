@@ -9,7 +9,28 @@ import styles from '../components/lut-editor/lut-editor.css';
 class LUTTab extends React.Component {
     constructor (props) {
         super(props);
-        this.state = {selected: null, name: '', error: null, busy: false, actualSize: false};
+        this.state = {selected: null,
+            name: '',
+            error: null,
+            busy: false,
+            actualSize: false,
+            mode: 'auto',
+            size: 32,
+            columns: 32,
+            index: 1,
+            flipGreen: false};
+        this.handleLayoutChange = event => {
+            const {name, value, checked, type} = event.target;
+            this.setState({[name]: type === 'checkbox' ? checked : value});
+        };
+        this.handleApplyLayout = () => {
+            try {
+                this.manager.configure(this.state.selected, this.layoutSettings());
+                this.setState({error: null});
+            } catch (error) {
+                this.setState({error: error.message});
+            }
+        };
         this.handleChange = this.handleChange.bind(this);
         this.handleUpload = this.handleUpload.bind(this);
         this.handleOpenPicker = () => this.input && this.input.click();
@@ -46,11 +67,28 @@ class LUTTab extends React.Component {
     handleChange () {
         if (!this.mounted) return;
         const selected = this.manager.find(this.state.selected) || this.manager.items[0];
-        this.setState({selected: selected ? selected.id : null, name: selected ? selected.name : ''});
+        if (selected && selected.id !== this.state.selected) this.select(this.manager.items.indexOf(selected));
+        else this.setState({selected: selected ? selected.id : null, name: selected ? selected.name : ''});
+    }
+    layoutSettings () {
+        return {mode: this.state.mode,
+            size: Number(this.state.size),
+            columns: Number(this.state.columns),
+            index: Number(this.state.index) - 1,
+            flipGreen: this.state.flipGreen};
     }
     select (index) {
         const item = this.manager.items[index];
-        if (item) this.setState({selected: item.id, name: item.name, error: null});
+        if (item) {
+            this.setState({selected: item.id,
+                name: item.name,
+                error: null,
+                mode: item.mode || 'auto',
+                size: item.size,
+                columns: item.columns || item.size,
+                index: (item.index || 0) + 1,
+                flipGreen: item.flipGreen || false});
+        }
     }
     async handleUpload (event) {
         const files = Array.from(event.target.files || []);
@@ -59,8 +97,8 @@ class LUTTab extends React.Component {
         this.setState({busy: true, error: null});
         try {
             for (const file of files) {
-                const item = await this.manager.importFile(file);
-                if (this.mounted) this.setState({selected: item.id, name: item.name});
+                const item = await this.manager.importFile(file, this.layoutSettings());
+                if (this.mounted) this.select(this.manager.items.indexOf(item));
             }
         } catch (error) {
             if (this.mounted) this.setState({error: error.message});
@@ -124,28 +162,27 @@ class LUTTab extends React.Component {
                                         onChange={this.handleNameChange}
                                     />
                                 </label>
-                                <button
-                                    aria-pressed={this.state.actualSize}
-                                    type="button"
-                                    onClick={this.handleToggleSize}
-                                >
-                                    {this.state.actualSize ? this.text('fit', 'Fit preview') :
-                                        this.text('actualSize', 'View at 100%')}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={this.handleExportSelected}
-                                >
-                                    {this.text('export', 'Export PNG')}
-                                </button>
+                                <div className={styles.toolbarActions}>
+                                    <button
+                                        aria-pressed={this.state.actualSize}
+                                        type="button"
+                                        onClick={this.handleToggleSize}
+                                    >
+                                        {this.state.actualSize ? this.text('fit', 'Fit preview') :
+                                            this.text('actualSize', 'View at 100%')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={this.handleExportSelected}
+                                    >
+                                        {this.text('export', 'Export PNG')}
+                                    </button>
+                                </div>
                             </form>
-                            <div className={styles.metadata}>
-                                <strong>{`${selected.width} × ${selected.height} px`}</strong>
-                                <span>{`${selected.size} × ${selected.size} × ${selected.size} RGB`}</span>
-                                <span>{this.text('original', 'Original PNG preserved')}</span>
-                            </div>
                             <div
+                                aria-label={selected.name}
                                 className={styles.preview}
+                                role="region"
                                 tabIndex={0}
                             >
                                 <img
@@ -156,18 +193,21 @@ class LUTTab extends React.Component {
                                     width={selected.width}
                                 />
                             </div>
-                            <p className={styles.help}>
-                                {this.text('help',
-                                    'Choose this LUT in the PenFX LUT block and set its mix from 0 to 100%. ' +
-                                    'Preview scaling does not change the image used by the effect.')}
-                            </p>
+                            <div className={styles.metadata}>
+                                <strong>{`${selected.width} × ${selected.height} px`}</strong>
+                                <span>{`${selected.size} × ${selected.size} × ${selected.size} RGB`}</span>
+                                <span>{`${this.text('count', 'LUTs in image')}: ${selected.count || 1}`}</span>
+                                <span>{this.text('original', 'Original PNG preserved')}</span>
+                            </div>
                         </React.Fragment>
                     ) : (
                         <div className={styles.empty}>
                             <h2>{this.text('title', 'Add a color LUT')}</h2>
                             <p>{this.text('description', 'Import a PNG LUT without resizing it. ' +
-                                'Horizontal strips, vertical strips, and square tile atlases are supported.')}</p>
+                                'Horizontal/vertical strips, tile atlases, ReShade MultiLUT ' +
+                                'and Hald CLUT are supported.')}</p>
                             <button
+                                className={styles.primaryButton}
                                 disabled={this.state.busy}
                                 type="button"
                                 onClick={this.handleOpenPicker}
@@ -176,11 +216,101 @@ class LUTTab extends React.Component {
                             </button>
                         </div>
                     )}
-                    {this.state.busy ? <p role="status">{this.text('loading', 'Loading original PNG…')}</p> : null}
+                    {this.state.busy ? (
+                        <p
+                            className={styles.status}
+                            role="status"
+                        >{this.text('loading', 'Loading original PNG…')}</p>
+                    ) : null}
                     {this.state.error ? <p
                         className={styles.error}
                         role="alert"
                     >{this.state.error}</p> : null}
+                    <fieldset
+                        className={styles.layoutControls}
+                        disabled={this.state.busy}
+                    >
+                        <legend>{this.text('layout', 'LUT image layout')}</legend>
+                        <div className={styles.layoutFields}>
+                            <label>
+                                {this.text('format', 'Format')}
+                                <select
+                                    name="mode"
+                                    value={this.state.mode}
+                                    onChange={this.handleLayoutChange}
+                                >
+                                    <option value="auto">{this.text('auto', 'Auto detect / ReShade MultiLUT')}</option>
+                                    <option value="tiles">{this.text('tiles', 'Custom tile atlas')}</option>
+                                    <option value="hald">{this.text('hald', 'Hald CLUT')}</option>
+                                </select>
+                            </label>
+                            {this.state.mode === 'tiles' ? <React.Fragment>
+                                <label>
+                                    {this.text('cubeSize', 'RGB size')}
+                                    <input
+                                        min={2}
+                                        max={256}
+                                        name="size"
+                                        step={1}
+                                        type="number"
+                                        value={this.state.size}
+                                        onChange={this.handleLayoutChange}
+                                    />
+                                </label>
+                                <label>
+                                    {this.text('columns', 'Slice columns')}
+                                    <input
+                                        min={1}
+                                        max={256}
+                                        name="columns"
+                                        step={1}
+                                        type="number"
+                                        value={this.state.columns}
+                                        onChange={this.handleLayoutChange}
+                                    />
+                                </label>
+                            </React.Fragment> : null}
+                            <label>
+                                {this.text('index', 'LUT number (from 1)')}
+                                <input
+                                    min={1}
+                                    name="index"
+                                    step={1}
+                                    type="number"
+                                    value={this.state.index}
+                                    onChange={this.handleLayoutChange}
+                                />
+                            </label>
+                            <label className={styles.checkboxLabel}>
+                                <input
+                                    checked={this.state.flipGreen}
+                                    name="flipGreen"
+                                    type="checkbox"
+                                    onChange={this.handleLayoutChange}
+                                />
+                                {this.text('flipGreen', 'Reverse green axis')}
+                            </label>
+                            {selected ? (
+                                <button
+                                    className={styles.primaryButton}
+                                    type="button"
+                                    onClick={this.handleApplyLayout}
+                                >
+                                    {this.text('applyLayout', 'Apply to selected LUT')}
+                                </button>
+                            ) : null}
+                        </div>
+                        <p>{this.text('layoutHelp', 'These settings also apply to new imports. ' +
+                            'Multiple LUTs are numbered left to right, then top to bottom. ' +
+                            'Choose Hald explicitly: square images can have different color ordering.')}</p>
+                    </fieldset>
+                    {selected ? (
+                        <p className={styles.help}>
+                            {this.text('help',
+                                'Choose this LUT in the PenFX LUT block and set its mix from 0 to 100%. ' +
+                                'Preview scaling does not change the image used by the effect.')}
+                        </p>
+                    ) : null}
                 </section>
             </AssetPanel>
         );

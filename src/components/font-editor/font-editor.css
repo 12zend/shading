@@ -66,6 +66,11 @@
     accent-color: $looks-secondary;
 }
 
+.size-control input:focus-visible {
+    outline: 3px solid $looks-transparent;
+    outline-offset: 2px;
+}
+
 .size-control output {
     min-width: 2.8rem;
     color: $text-primary-transparent;
@@ -86,6 +91,38 @@
     background: $assets-background;
 }
 
+.waterfall {
+    margin: 0;
+    padding: 0.5rem 0.85rem;
+    list-style: none;
+    border-top: 1px solid $ui-black-transparent;
+    background: $ui-white;
+}
+
+.waterfall li {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+    padding: 0.2rem 0;
+}
+
+.waterfall-size {
+    flex: 0 0 2.25rem;
+    color: $text-primary-transparent;
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.waterfall-sample {
+    min-width: 0;
+    overflow: hidden;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .details {
     min-height: 2.75rem;
     padding: 0.65rem 0.85rem;
@@ -93,17 +130,32 @@
     align-items: center;
     gap: 0.75rem;
     border-top: 1px solid $ui-black-transparent;
+    background: $ui-tertiary;
     font-size: 0.72rem;
+}
+
+.details strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .details span {
     color: $text-primary-transparent;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .error {
-    padding: 0.65rem 0.85rem;
-    color: $error-primary;
-    font-size: 0.75rem;
+    margin: 0.65rem 0.85rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: $form-radius;
+    border: 1px solid $error-primary;
+    background: $error-transparent;
+    color: $text-primary;
+    font-size: 0.72rem;
+    line-height: 1.4;
 }
 
 .empty-state {
@@ -141,8 +193,18 @@
     cursor: pointer;
 }
 
-.empty-state button:hover {
+.empty-state button:hover:not(:disabled) {
     background: $looks-secondary-dark;
+}
+
+.empty-state button:focus-visible {
+    outline: 3px solid $looks-transparent;
+    outline-offset: 2px;
+}
+
+.empty-state button:disabled {
+    cursor: default;
+    opacity: 0.55;
 }
 
 .empty-icon {
@@ -156,4 +218,14 @@
     color: #ffffff;
     font-size: 1rem;
     font-weight: bold;
+}
+
+@media only screen and (max-width: 720px) {
+    .toolbar {
+        flex-wrap: wrap;
+    }
+
+    .preview-input-label {
+        flex-basis: 100%;
+    }
 }

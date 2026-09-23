@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import JSZip from '@turbowarp/jszip';
+import {blocks as genshadeBlocks} from './genshade';
 import EventEmitter from 'events';
 import ArgumentType from '../../extension-support/argument-type';
 import BlockType from '../../extension-support/block-type';
@@ -12,7 +13,28 @@ import defaultShaderManifest from './default-shader-package/shading-shader.json'
 import {programSources as defaultProgramSources} from './default-shader-package';
 import japaneseShaderTranslations from './default-shader-package/locales-ja.json';
 import {inferShaderInputs} from './shader-uniforms';
-import {resolveLocale} from '../movie-block-l10n';
+import {localize, resolveLocale} from '../movie-block-l10n';
+import {PRESETS as COLOR_GRADING_PRESETS} from 'scratch-render/src/pen-fx/color-grading/presets';
+import {easyMenus, easyToolboxBlocks as easyPresetToolboxBlocks} from './easy';
+
+const COLOR_GRADING_MENU = 'colorGradingPresets';
+
+// Easy blocks apply a whole look from one choice. The GUI replaces the preset menu with a thumbnail picker.
+const easyToolboxBlocks = locale => [
+    {blockType: BlockType.LABEL, text: localize(locale, 'Easy', 'かんたん')},
+    {
+        opcode: 'easyColorGrading',
+        func: 'easyColorGrading',
+        blockType: BlockType.COMMAND,
+        text: localize(locale, 'color grading [PRESET] mix: [MIX] %', 'カラーグレーディング [PRESET] 混合: [MIX] %'),
+        arguments: {
+            PRESET: {type: ArgumentType.STRING, menu: COLOR_GRADING_MENU, defaultValue: COLOR_GRADING_PRESETS[0].id},
+            MIX: {type: ArgumentType.NUMBER, defaultValue: 100}
+        }
+    },
+    ...easyPresetToolboxBlocks(locale, ArgumentType, BlockType),
+    '---'
+];
 
 const CUSTOM_SHADER_PROJECT_KEY = 'penFXShaders';
 const CUSTOM_SHADER_FORMAT = 'shading.app/penfx-shader';
@@ -25,6 +47,7 @@ const MAX_SHADER_CHARACTERS = 512 * 1024;
 const MAX_TOTAL_SHADER_CHARACTERS = 4 * 1024 * 1024;
 const MAX_BLOCKS = 64;
 const MAX_INPUTS = 24;
+const GENSHADE_BLOCK_IDS = new Set(genshadeBlocks.map(block => block.id));
 const MAX_PROGRAMS = 64;
 const STANDARD_UNIFORMS = new Set(['u_image', 'u_resolution', 'u_time', 'u_frame']);
 const INPUT_TYPES = new Set(['angle', 'boolean', 'color', 'costume', 'integer', 'menu', 'number', 'string']);
@@ -69,7 +92,7 @@ const localizeDefaultShaderBlock = (packageDescriptor, shaderBlock, locale) => {
         }))
     });
 };
-const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.map(block => block.implementation.opcode));
+const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.concat(genshadeBlocks).map(block => block.implementation.opcode));
 const PENFX_PROGRAM_BINDINGS = new Set(defaultShaderManifest.programs.map(program => program.bind));
 const DEFAULT_SHADER_SOURCE = `precision highp float;
 
@@ -228,7 +251,7 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
     return result;
 };
 
-const normalizeBlock = (rawBlock, source, usedIds) => {
+const normalizeBlock = (rawBlock, source, usedIds, isBuiltInGenshade = false) => {
     if (!rawBlock || typeof rawBlock !== 'object' || Array.isArray(rawBlock)) {
         throw new Error('Each shader block must be an object.');
     }
@@ -258,8 +281,9 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         if (!/\.glsl$/i.test(file)) throw new Error(`Shader block ${id} file must end in .glsl.`);
     }
     const inputs = rawBlock.inputs === undefined ? [] : rawBlock.inputs;
-    if (!Array.isArray(inputs) || inputs.length > MAX_INPUTS) {
-        throw new Error(`Shader block ${id} must define no more than ${MAX_INPUTS} inputs.`);
+    const maxInputs = isBuiltInGenshade ? 128 : MAX_INPUTS;
+    if (!Array.isArray(inputs) || inputs.length > maxInputs) {
+        throw new Error(`Shader block ${id} must define no more than ${maxInputs} inputs.`);
     }
     const normalizedInputs = inputs.map(input => normalizeInput(input, `Shader block ${id}`, !implementation));
     if (new Set(normalizedInputs.map(input => input.id)).size !== normalizedInputs.length) {
@@ -279,7 +303,8 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         }
     }
     const generatedText = [name].concat(normalizedInputs.map(input => `${input.label}: [${input.id}]`)).join(' ');
-    const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`, 1024);
+    const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`,
+        isBuiltInGenshade ? 8192 : 1024);
     const placeholders = [];
     const placeholderPattern = /\[([A-Z][A-Z0-9_]*)\]/g;
     let placeholderMatch = placeholderPattern.exec(text);
@@ -369,11 +394,12 @@ const normalizePackage = rawPackage => {
     }
     const id = normalizeId(rawPackage.id, 'Shader package id');
     const name = assertString(rawPackage.name || humanize(id), 'Shader package name', 64);
-    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > MAX_BLOCKS) {
+    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > (id === DEFAULT_SHADER_PACKAGE_ID ? MAX_BLOCKS + genshadeBlocks.length : MAX_BLOCKS)) {
         throw new Error(`Shader package must define 1 to ${MAX_BLOCKS} blocks.`);
     }
     const usedIds = new Set();
-    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds));
+    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds,
+        id === DEFAULT_SHADER_PACKAGE_ID && GENSHADE_BLOCK_IDS.has(rawBlock.id)));
     const rawPrograms = rawPackage.programs === undefined ? [] : rawPackage.programs;
     if (!Array.isArray(rawPrograms) || rawPrograms.length > MAX_PROGRAMS || (version === 1 && rawPrograms.length)) {
         throw new Error(`Shader package must define no more than ${MAX_PROGRAMS} programs.`);
@@ -557,6 +583,7 @@ const readBlobAsText = blob => {
 
 const createDefaultPackageShell = () => {
     const shell = cloneJSON(defaultShaderManifest);
+    shell.blocks.push(...genshadeBlocks);
     shell.programs = shell.programs.map(program => Object.assign({}, program, {
         source: defaultProgramSources[program.bind]
     }));
@@ -603,6 +630,8 @@ class PenFXCustomShaderManager extends EventEmitter {
         const originalDeserializeProject = this.vm.deserializeProject.bind(this.vm);
         this.vm.deserializeProject = async (projectJSON, zip) => {
             await this.restorePackages(projectJSON && projectJSON[CUSTOM_SHADER_PROJECT_KEY]);
+            if (this.penFX.genshadeReady) await this.penFX.genshadeReady;
+            if (this.penFX.engine && this.penFX.engine.genshadeRenderer) this.penFX.engine.genshadeRenderer.clear();
             return originalDeserializeProject(projectJSON, zip);
         };
     }
@@ -786,10 +815,10 @@ class PenFXCustomShaderManager extends EventEmitter {
 
     getToolboxBlocks () {
         const locale = resolveLocale(null, this.vm);
-        const blocks = [
+        const blocks = easyToolboxBlocks(locale).concat([
             {blockType: BlockType.LABEL, text: 'Custom Shaders'},
             {blockType: BlockType.BUTTON, text: 'Import shader', func: 'importShaderPackage'}
-        ];
+        ]);
         for (const packageDescriptor of this.packages.values()) {
             blocks.push('---');
             blocks.push({blockType: BlockType.LABEL, text: packageDescriptor.name});
@@ -801,6 +830,9 @@ class PenFXCustomShaderManager extends EventEmitter {
                 });
             }
             for (const shaderBlock of packageDescriptor.blocks) {
+                if (shaderBlock.id === genshadeBlocks[0].id) {
+                    blocks.push('---', {blockType: BlockType.LABEL, text: 'Genshade / ReShade'});
+                }
                 const displayBlock = localizeDefaultShaderBlock(packageDescriptor, shaderBlock, locale);
                 if (displayBlock.separatorBefore) blocks.push('---');
                 const argumentsInfo = {};
@@ -834,7 +866,13 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     getMenus () {
-        const menus = {lutAssets: {acceptReporters: true, items: 'getLUTMenu'}};
+        const menus = Object.assign({
+            lutAssets: {acceptReporters: true, items: 'getLUTMenu'},
+            [COLOR_GRADING_MENU]: {
+                acceptReporters: true,
+                items: COLOR_GRADING_PRESETS.map(preset => ({text: preset.name, value: preset.id}))
+            }
+        }, easyMenus(resolveLocale(null, this.vm)));
         if (this.packages.has(DEFAULT_SHADER_PACKAGE_ID)) {
             for (const name of Object.keys(DEFAULT_LEGACY_MENUS)) {
                 menus[name] = {acceptReporters: true, items: DEFAULT_LEGACY_MENUS[name].slice()};

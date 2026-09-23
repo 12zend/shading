@@ -3,6 +3,7 @@ import acerolaSpatial from './acerola-spatial';
 import blob from './blob';
 import bloom from './bloom';
 import color from './color';
+import colorGrading from './color-grading';
 import colorOverlay from './color-overlay';
 import deepGlow from './deep-glow';
 import depthOfField from './depth-of-field';
@@ -25,6 +26,7 @@ import wavy from './wavy';
 
 const effectInstallers = [
     color,
+    colorGrading,
     colorOverlay,
     gradationOverlay,
     stroke,

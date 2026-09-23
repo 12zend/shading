@@ -13,6 +13,26 @@ import {formatBytes} from '../lib/tw-bytes-utils';
 
 import styles from '../components/model-editor/model-editor.css';
 
+const ModelIcon = ({className}) => (
+    <svg
+        aria-hidden="true"
+        className={className}
+        fill="none"
+        viewBox="0 0 24 24"
+    >
+        <path
+            d="M12 2.75 20 7.25v9.5l-8 4.5-8-4.5v-9.5l8-4.5ZM4 7.25l8 4.5 8-4.5M12 11.75v9.5"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.7"
+        />
+    </svg>
+);
+
+ModelIcon.propTypes = {
+    className: PropTypes.string
+};
+
 const messages = defineMessages({
     addModel: {
         defaultMessage: 'Upload Model',
@@ -236,7 +256,7 @@ class ModelTab extends React.Component {
         const items = models.map(model => ({
             details: `${(model.modelFormat || model.sourceFormat).toUpperCase()} · ${model.vertices} vertices`,
             name: model.name,
-            thumbnail: <span className={styles.tileModel}>{'◇'}</span>
+            thumbnail: <span className={styles.tileModel}><ModelIcon /></span>
         }));
 
         return (
@@ -294,13 +314,10 @@ class ModelTab extends React.Component {
                                 />
                             </label>
                             <div className={styles.metadata}>
-                                <span>{
-                                    `${(selectedModel.modelFormat || selectedModel.sourceFormat).toUpperCase()} model`
+                                <span className={styles.formatBadge}>{
+                                    (selectedModel.modelFormat || selectedModel.sourceFormat).toUpperCase()
                                 }</span>
                                 <span>{'Stored as GLB'}</span>
-                                <span>{`${selectedModel.vertices} vertices`}</span>
-                                <span>{`${selectedModel.triangles} triangles`}</span>
-                                <span>{`${selectedModel.animationCount} animations`}</span>
                                 <span>{formatBytes(selectedModel.asset.data.byteLength)}</span>
                             </div>
                         </div>
@@ -310,6 +327,24 @@ class ModelTab extends React.Component {
                                 model={selectedModel}
                                 onError={this.handlePreviewError}
                             />
+                            <dl className={styles.stats}>
+                                <div>
+                                    <dt>{'Vertices'}</dt>
+                                    <dd>{Number(selectedModel.vertices).toLocaleString()}</dd>
+                                </div>
+                                <div>
+                                    <dt>{'Triangles'}</dt>
+                                    <dd>{Number(selectedModel.triangles).toLocaleString()}</dd>
+                                </div>
+                                <div>
+                                    <dt>{'Animations'}</dt>
+                                    <dd>{selectedModel.animationCount}</dd>
+                                </div>
+                                <div>
+                                    <dt>{'Motions'}</dt>
+                                    <dd>{(selectedModel.motions || []).length}</dd>
+                                </div>
+                            </dl>
                         </div>
                         <div className={styles.motionPanel}>
                             <label className={styles.motionLabel}>
@@ -343,11 +378,16 @@ class ModelTab extends React.Component {
                             {'Use “set model frame to”, then “render model”. VMD motions and VPD poses are ' +
                                 'evaluated by frame without exposing bones as blocks.'}
                         </div>
-                        {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
+                        {this.state.error ? (
+                            <div
+                                className={styles.error}
+                                role="alert"
+                            >{this.state.error}</div>
+                        ) : null}
                     </div>
                 ) : (
                     <div className={styles.emptyState}>
-                        <div className={styles.emptyIcon}>{'◇'}</div>
+                        <div className={styles.emptyIcon}><ModelIcon /></div>
                         <h2>{this.props.intl.formatMessage(messages.emptyTitle)}</h2>
                         <p>{this.props.intl.formatMessage(messages.emptyDescription)}</p>
                         <div className={styles.emptyActions}>
@@ -358,6 +398,7 @@ class ModelTab extends React.Component {
                                 {this.props.intl.formatMessage(messages.addModel)}
                             </button>
                             <button
+                                className={styles.secondaryAction}
                                 disabled={this.state.uploading}
                                 onClick={this.handleUploadFolderClick}
                             >

@@ -1,3 +1,5 @@
+import {catalog as genshadeCatalog} from '../../../scratch-vm/src/lib/pen-fx/genshade';
+import {easyBlocks} from '../../../scratch-vm/src/lib/pen-fx/easy';
 import JSZip from '@turbowarp/jszip';
 import VM from 'scratch-vm';
 
@@ -94,7 +96,7 @@ describe('Pen FX custom shader packages', () => {
         const descriptor = createDefaultPackageShell();
 
         expect(descriptor.id).toBe(DEFAULT_SHADER_PACKAGE_ID);
-        expect(descriptor.blocks).toHaveLength(60);
+        expect(descriptor.blocks).toHaveLength(60 + genshadeCatalog.length);
         expect(descriptor.programs).toHaveLength(Object.keys(programSources).length);
         expect(descriptor.blocks.find(block => block.id === 'contrast')).toMatchObject({
             name: 'contrast',
@@ -146,7 +148,7 @@ describe('Pen FX custom shader packages', () => {
         const manager = new PenFXCustomShaderManager(vm, penFX, {loadDefaultPackage: true});
         expect(runWithoutWaiting).not.toHaveBeenCalled();
         expect(manager.defaultPackagePromise).toBeNull();
-        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(27);
+        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(28);
     });
 
     test('all default command delegates return undefined in the current VM tick', () => {
@@ -167,7 +169,8 @@ describe('Pen FX custom shader packages', () => {
             expect(result).toBeUndefined();
             expect(result).not.toBeInstanceOf(Promise);
         }
-        expect(commandBlocks).toHaveLength(59);
+        // Easy color grading and the Easy effect blocks are the commands outside the default package.
+        expect(commandBlocks).toHaveLength(59 + 1 + easyBlocks.length + genshadeCatalog.length);
     });
 
     test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {
@@ -259,8 +262,10 @@ describe('Pen FX custom shader packages', () => {
         await manager.restorePackages([descriptor]);
 
         const toolbox = manager.getToolboxBlocks();
-        expect(toolbox[0]).toMatchObject({blockType: 'label', text: 'Custom Shaders'});
-        expect(toolbox[1]).toMatchObject({blockType: 'button', text: 'Import shader'});
+        expect(toolbox[0]).toMatchObject({blockType: 'label', text: 'Easy'});
+        const customShaders = toolbox.findIndex(block => block && block.text === 'Custom Shaders');
+        expect(customShaders).toBeGreaterThan(0);
+        expect(toolbox[customShaders + 1]).toMatchObject({blockType: 'button', text: 'Import shader'});
         expect(toolbox.find(block => block && block.opcode === 'shader_test_pack_tint_wave')).toBeDefined();
 
         const result = penFX[opcodeFor('test-pack', 'tint-wave')]({

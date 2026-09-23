@@ -583,7 +583,7 @@ class Blocks extends React.Component {
             installObjectBlockDefinitions(this.ScratchBlocks, this.props.vm, this.props.locale);
         }
         if (categoryInfo.id === 'penfx') {
-            installPenFXBlockDefinitions(this.ScratchBlocks, this.props.locale);
+            installPenFXBlockDefinitions(this.ScratchBlocks, this.props.locale, this.props.vm);
         }
 
         // Update the toolbox with new blocks if possible

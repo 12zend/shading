@@ -43,7 +43,9 @@ describe('Video Editor Component', () => {
     test('shows a play control, a source scrubber, and two trim controls', () => {
         const wrapper = shallow(<UnwrappedVideoEditor {...props} intl={intl} />);
 
-        expect(wrapper.find('video[controls]')).toHaveLength(1);
+        // One transport: the editor's own play button replaces the native video controls.
+        expect(wrapper.find('video[controls]')).toHaveLength(0);
+        expect(wrapper.find('button[aria-label="Play selection"]')).toHaveLength(1);
         expect(wrapper.find('input[type="range"]')).toHaveLength(3);
         expect(wrapper.find('button').filterWhere(button => button.text() === 'Set start')).toHaveLength(1);
         expect(wrapper.find('button').filterWhere(button => button.text() === 'Set end')).toHaveLength(1);

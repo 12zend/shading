@@ -2,6 +2,7 @@ import acerolaColor from './acerola-color';
 import acerolaSpatial from './acerola-spatial';
 import bloom from './bloom';
 import color from './color';
+import colorGrading from './color-grading';
 import lut from './lut';
 import colorOverlay from './color-overlay';
 import copy from './copy';
@@ -27,6 +28,7 @@ import {composite, groupOver, matteOver, stack} from './common';
 const programSources = {
     copy,
     color,
+    colorGrading,
     lut,
     colorOverlay,
     stroke,
