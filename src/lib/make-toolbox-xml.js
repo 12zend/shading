@@ -784,6 +784,7 @@ const objects = function (costumeName, locale) {
             <field name="SOURCE">costume</field>
             <field name="ASSET">${costumeName}</field>
             <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
+            ${number('ITALIC', 0)}
             ${number('FRAME', 1)}
             ${number('SPEED', 1)}${number('VOLUME', 100)}
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}

@@ -1,6 +1,7 @@
 import {createLineBitmap, createShapeBitmap, getShapeBitmapCacheKey, normalizeShapeType}
     from 'scratch-render/src/MovieShapeSource';
 import MovieSourceRenderer from 'scratch-render/src/MovieSourceRenderer';
+import MovieTextSource from 'scratch-render/src/MovieTextSource';
 import {createImagePlane, disposeObject, spritePlaneMatrix, DEFAULT_DEPTH} from 'scratch-render/src/model-runtime';
 import {
     BITMAP_RESOLUTION,
@@ -284,7 +285,8 @@ const MovieAssetManagerObjectMethods = {
             if (fontLoad) await fontLoad;
             const text = typeof configuration.text === 'string' ?
                 configuration.text : String(configuration.text);
-            const canvasKey = `${font.name}\0${font.family}\0${text}`;
+            const italic = MovieTextSource.normalizeTextItalic(configuration.italic);
+            const canvasKey = MovieTextSource.getTextCacheKey(font, text, italic);
             planeCacheKey = `text:${canvasKey}`;
             // Reuse the cached plane without allocating a canvas when the same text was drawn before.
             // getCachedObjectImagePlane would create the canvas-backed plane on miss, so check first.
@@ -306,7 +308,7 @@ const MovieAssetManagerObjectMethods = {
                 }
             }
             bitmap = MovieSourceRenderer.forRenderer(this.runtime.renderer).text.createTextCanvas(
-                font, text, canvasKey
+                font, text, canvasKey, italic
             );
             const bitmapResolution = Math.max(
                 0.001,
@@ -772,7 +774,12 @@ const MovieAssetManagerObjectMethods = {
                 scale: [toNumber(configuration.size, 100), toNumber(configuration.size, 100)]});
         } else if (source === 'text') {
             const font = this.getFont(configuration.asset);
-            const prepare = () => finish({kind: 'text', font, text: String(configuration.text)});
+            const prepare = () => finish({
+                kind: 'text',
+                font,
+                text: String(configuration.text),
+                italic: MovieTextSource.normalizeTextItalic(configuration.italic)
+            });
             const pending = this.ensureFontLoaded(font.name);
             if (pending) return pending.then(prepare);
             prepare();

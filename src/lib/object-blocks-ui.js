@@ -1197,6 +1197,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
                 .appendField(new SourceField('costume'), 'SOURCE');
             this.getInput('LEGACY_SOURCE').setVisible(false);
             this.appendValueInput('TEXT').appendField('text:');
+            this.appendValueInput('ITALIC').appendField('italic:');
             this.appendValueInput('FRAME').appendField('frame:');
             this.appendValueInput('SPEED').appendField('speed:');
             this.appendValueInput('VOLUME').appendField('volume:');
@@ -1295,6 +1296,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
                 videoMode
             );
             syncVisibility('TEXT', visibility.text);
+            syncVisibility('ITALIC', visibility.text);
             syncVisibility('VIDEO_MODE_INPUT', visibility.videoMode);
             syncVisibility('FRAME', visibility.frame);
             syncVisibility('SPEED', visibility.speed);

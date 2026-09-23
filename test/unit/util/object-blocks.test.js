@@ -242,6 +242,7 @@ describe('Objects blocks', () => {
             expect(restored.objectDrawSource_).toBe('text');
             expect(restored.objectDrawAsset_).toBe('sans-serif');
             expect(restored.visibility.TEXT).toBe(true);
+            expect(restored.visibility.ITALIC).toBe(true);
         } finally {
             global.document = originalDocument;
         }
@@ -519,7 +520,7 @@ describe('Objects blocks', () => {
             'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
         expect(Object.keys(info.blocks.find(block => block.opcode === 'draw').arguments)).toEqual([
-            'SOURCE', 'ASSET', 'TEXT', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
+            'SOURCE', 'ASSET', 'TEXT', 'ITALIC', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
@@ -1068,6 +1069,7 @@ describe('Objects blocks', () => {
             SOURCE: 'text',
             ASSET: 'Movie Sans',
             TEXT: 'Title',
+            ITALIC: 0.25,
             VIDEO_MODE: 'sequence',
             FRAME: 12,
             SPEED: 1,
@@ -1092,6 +1094,7 @@ describe('Objects blocks', () => {
             asset: 'Movie Sans',
             frame: 12,
             height: 80,
+            italic: 0.25,
             playbackId: 'draw-block',
             position: {x: 10, y: 20, z: 30},
             rotation: {x: 1, y: 2, z: 3},

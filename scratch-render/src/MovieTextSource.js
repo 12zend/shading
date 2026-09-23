@@ -6,16 +6,29 @@ const TEXT_FONT_SIZE = 96;
 const TEXT_PADDING = 16;
 const TEXT_LINE_HEIGHT = Math.round(TEXT_FONT_SIZE * 1.2);
 const TEXT_RENDER_SCALE = TEXT_BITMAP_RESOLUTION / BITMAP_RESOLUTION;
-const getTextCacheKey = (font, text) => `${font.name}\0${font.family}\0${text}`;
+const MAX_TEXT_ITALIC = 4;
+// Italic is a horizontal shear: each pixel moves right by italic * (its height above the text bottom).
+const normalizeTextItalic = italic => {
+    const value = Number(italic);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(-MAX_TEXT_ITALIC, Math.min(MAX_TEXT_ITALIC, value));
+};
+// Upright text keeps its original key so existing caches and callers stay compatible.
+const getTextCacheKey = (font, text, italic = 0) => {
+    const key = `${font.name}\0${font.family}\0${text}`;
+    const normalizedItalic = normalizeTextItalic(italic);
+    return normalizedItalic ? `${key}\0italic:${normalizedItalic}` : key;
+};
 
 class MovieTextSource {
-    createTextCanvas (font, text, cacheKey = null) {
+    createTextCanvas (font, text, cacheKey = null, italic = 0) {
         if (!(this.textCanvasCache instanceof Map)) {
             this.textCanvasCache = new Map();
             this.textCanvasCachePixels = 0;
         }
         const stringText = typeof text === 'string' ? text : String(text);
-        const key = cacheKey || getTextCacheKey(font, stringText);
+        const italicShear = normalizeTextItalic(italic);
+        const key = cacheKey || getTextCacheKey(font, stringText, italicShear);
         const cached = this.textCanvasCache.get(key);
         if (cached) {
             this.textCanvasCache.delete(key);
@@ -45,7 +58,8 @@ class MovieTextSource {
             }
             if (width < 2) width = 2;
         }
-        const requestedWidth = width + (basePadding * 2);
+        const baseSlant = Math.abs(italicShear) * baseLineHeight * lineCount;
+        const requestedWidth = width + baseSlant + (basePadding * 2);
         const requestedHeight = Math.max(2, (baseLineHeight * lineCount) + (basePadding * 2));
         const maxEdge = 4096;
         let scale = 1;
@@ -59,12 +73,18 @@ class MovieTextSource {
         const fontSize = baseFontSize * scale;
         const padding = basePadding * scale;
         const lineHeight = baseLineHeight * scale;
+        const textBottom = padding + (lineHeight * lineCount);
+        const slantOffset = italicShear < 0 ? baseSlant * scale : 0;
         canvas.width = Math.max(2, Math.ceil(requestedWidth * scale));
         canvas.height = Math.max(2, Math.ceil(requestedHeight * scale));
         canvas.movieBitmapResolution = TEXT_BITMAP_RESOLUTION * scale;
         context.font = `${fontSize}px ${font.family}`;
         context.fillStyle = '#000000';
         context.textBaseline = 'top';
+        if (italicShear) {
+            // x' = x + italic * (textBottom - y), so positive values lean the tops of glyphs to the right.
+            context.setTransform(1, 0, -italicShear, 1, slantOffset + (italicShear * textBottom), 0);
+        }
         if (lines) {
             for (let index = 0; index < lines.length; index++) {
                 context.fillText(lines[index], padding, padding + (index * lineHeight));
@@ -86,4 +106,6 @@ class MovieTextSource {
         return canvas;
     }
 }
+MovieTextSource.getTextCacheKey = getTextCacheKey;
+MovieTextSource.normalizeTextItalic = normalizeTextItalic;
 module.exports = MovieTextSource;
