@@ -170,7 +170,8 @@
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #2b2e3a;
     background: #171922;
-    font: 0.75rem sans-serif;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 0.75rem;
 }
 
 .search-bar label {
@@ -380,6 +381,7 @@
 }
 
 .uniform-chip {
+    cursor: help;
     padding: 0.26rem 0.48rem;
     border: 1px solid #414656;
     border-radius: $form-radius;
@@ -425,6 +427,17 @@
     height: 4rem;
 }
 
+.empty-state .error-panel {
+    max-width: 34rem;
+    margin-top: 1rem;
+    border: 0;
+    border-radius: $form-radius;
+    border: 1px solid $error-primary;
+    background: $error-transparent;
+    color: $text-primary;
+    font-family: inherit;
+}
+
 .empty-state h2 {
     margin: 0.9rem 0 0.4rem;
     font-size: 1.1rem;
@@ -458,7 +471,7 @@
     color: $looks-secondary;
 }
 
-.empty-actions button:hover {
+.empty-actions button:hover:not(:disabled) {
     background: $looks-secondary-dark;
     color: #ffffff;
 }

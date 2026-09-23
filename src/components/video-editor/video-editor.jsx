@@ -63,15 +63,15 @@ const messages = defineMessages({
         description: 'Label for the original video duration',
         id: 'movie.video.editor.original'
     },
-    selection: {
-        defaultMessage: 'Selection',
-        description: 'Label for the selected video duration',
-        id: 'movie.video.editor.selection'
+    of: {
+        defaultMessage: 'of',
+        description: 'Joins the selected duration and the original duration, as in "00:03.00 of 00:10.00"',
+        id: 'movie.video.editor.of'
     },
-    selected: {
-        defaultMessage: 'selected',
-        description: 'Text shown after the selected video duration',
-        id: 'movie.video.editor.selected'
+    playhead: {
+        defaultMessage: 'Playhead',
+        description: 'Accessible label for the video position slider',
+        id: 'movie.video.editor.playhead'
     },
     help: {
         defaultMessage: 'Set the start and end points, then keep the selection. The cut is saved without ' +
@@ -141,6 +141,7 @@ class VideoEditor extends React.Component {
         this.handleTrim = this.handleTrim.bind(this);
         this.handleTrimEndChange = this.handleTrimEndChange.bind(this);
         this.handleTrimStartChange = this.handleTrimStartChange.bind(this);
+        this.handleTogglePlay = this.handleTogglePlay.bind(this);
         this.handleResetTrim = this.handleResetTrim.bind(this);
     }
 
@@ -211,6 +212,11 @@ class VideoEditor extends React.Component {
             });
         }
         this.setState({playhead, playing: true});
+    }
+
+    handleTogglePlay () {
+        if (this.state.playing) this.handlePause();
+        else this.handlePlay();
     }
 
     handlePause (event) {
@@ -322,20 +328,20 @@ class VideoEditor extends React.Component {
                         />
                     </label>
                     <div className={styles.toolbarMeta}>
-                        <span>{`${video.width} × ${video.height}`}</span>
-                        <span>{`${formatTime(selectedDuration)} ${intl.formatMessage(messages.selected)}`}</span>
+                        {video.width && video.height ? <span>{`${video.width} × ${video.height}`}</span> : null}
+                        <span>{`${intl.formatMessage(messages.original)} ${formatTime(sourceDuration)}`}</span>
                     </div>
                 </div>
 
                 <div className={styles.previewArea}>
                     <video
                         className={styles.previewVideo}
-                        controls
                         key={video.assetId}
                         playsInline
                         preload="metadata"
                         ref={this.setVideoRef}
                         src={video.url}
+                        onClick={this.handleTogglePlay}
                         onEnded={this.handleEnded}
                         onLoadedMetadata={this.handleLoadedMetadata}
                         onPause={this.handlePause}
@@ -347,30 +353,53 @@ class VideoEditor extends React.Component {
                 <div className={styles.editArea}>
                     <div className={styles.sectionHeader}>
                         <strong>{intl.formatMessage(messages.cutRange)}</strong>
-                        <span>{`${formatTime(playhead)} / ${formatTime(sourceDuration)}`}</span>
+                        <span className={styles.selectionSummary}>
+                            <b>{formatTime(selectedDuration)}</b>
+                            {` ${intl.formatMessage(messages.of)} ${formatTime(sourceDuration)}`}
+                        </span>
                     </div>
-                    <div className={styles.timelineTrack}>
-                        <div className={styles.trackBase} />
-                        <div
-                            className={styles.selectedTrack}
-                            style={{left: `${selectionLeft}%`, width: `${selectionWidth}%`}}
-                        />
-                        <div
-                            aria-hidden="true"
-                            className={styles.playhead}
-                            style={{left: `${playheadPosition}%`}}
-                        />
+                    <div className={styles.transportRow}>
+                        <button
+                            aria-label={intl.formatMessage(playing ? messages.stop : messages.play)}
+                            className={styles.roundButton}
+                            title={intl.formatMessage(playing ? messages.stop : messages.play)}
+                            onClick={playing ? this.handlePause : this.handlePlay}
+                        >
+                            <img
+                                alt=""
+                                draggable={false}
+                                src={playing ? stopIcon : playIcon}
+                            />
+                        </button>
+                        <div className={styles.trackArea}>
+                            <div
+                                aria-hidden="true"
+                                className={styles.timelineTrack}
+                            >
+                                <div className={styles.trackBase} />
+                                <div
+                                    className={styles.selectedTrack}
+                                    style={{left: `${selectionLeft}%`, width: `${selectionWidth}%`}}
+                                />
+                                <div
+                                    className={styles.playhead}
+                                    style={{left: `${playheadPosition}%`}}
+                                />
+                            </div>
+                            <input
+                                aria-label={intl.formatMessage(messages.playhead)}
+                                aria-valuetext={formatTime(playhead)}
+                                className={styles.scrubber}
+                                max={sourceDuration}
+                                min="0"
+                                step={rangeStep}
+                                type="range"
+                                value={playhead}
+                                onChange={this.handlePlayheadChange}
+                            />
+                        </div>
+                        <output className={styles.playheadTime}>{formatTime(playhead)}</output>
                     </div>
-                    <input
-                        aria-label={intl.formatMessage(messages.play)}
-                        className={styles.scrubber}
-                        max={sourceDuration}
-                        min="0"
-                        step={rangeStep}
-                        type="range"
-                        value={playhead}
-                        onChange={this.handlePlayheadChange}
-                    />
                     <div className={styles.rangeControls}>
                         <label className={styles.timeInput}>
                             <span>{intl.formatMessage(messages.start)}</span>
@@ -400,27 +429,26 @@ class VideoEditor extends React.Component {
 
                     <div className={styles.controls}>
                         <button
-                            aria-label={intl.formatMessage(playing ? messages.stop : messages.play)}
-                            className={styles.roundButton}
-                            onClick={playing ? this.handlePause : this.handlePlay}
-                        >
-                            <img
-                                alt=""
-                                draggable={false}
-                                src={playing ? stopIcon : playIcon}
-                            />
-                        </button>
-                        <button
                             className={styles.secondaryButton}
+                            title={formatTime(playhead)}
                             onClick={this.handleSetStart}
                         >
                             {intl.formatMessage(messages.setStart)}
                         </button>
                         <button
                             className={styles.secondaryButton}
+                            title={formatTime(playhead)}
                             onClick={this.handleSetEnd}
                         >
                             {intl.formatMessage(messages.setEnd)}
+                        </button>
+                        <span className={styles.controlsSpacer} />
+                        <button
+                            className={styles.secondaryButton}
+                            disabled={isFullRange}
+                            onClick={this.handleResetTrim}
+                        >
+                            {intl.formatMessage(messages.resetCut)}
                         </button>
                         <button
                             className={styles.primaryButton}
@@ -429,21 +457,15 @@ class VideoEditor extends React.Component {
                         >
                             {intl.formatMessage(messages.keepRange)}
                         </button>
-                        <button
-                            className={styles.secondaryButton}
-                            disabled={isFullRange}
-                            onClick={this.handleResetTrim}
-                        >
-                            {intl.formatMessage(messages.resetCut)}
-                        </button>
                     </div>
 
-                    <div className={styles.infoRow}>
-                        <span>{`${intl.formatMessage(messages.selection)}: ${formatTime(selectedDuration)}`}</span>
-                        <span>{`${intl.formatMessage(messages.original)}: ${formatTime(sourceDuration)}`}</span>
-                    </div>
-                    <div className={styles.hint}>{intl.formatMessage(messages.help)}</div>
-                    {this.props.error ? <div className={styles.error}>{this.props.error}</div> : null}
+                    <p className={styles.hint}>{intl.formatMessage(messages.help)}</p>
+                    {this.props.error ? (
+                        <div
+                            className={styles.error}
+                            role="alert"
+                        >{this.props.error}</div>
+                    ) : null}
                 </div>
             </div>
         );

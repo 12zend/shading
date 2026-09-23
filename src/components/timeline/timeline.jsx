@@ -5,7 +5,16 @@ import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 
-import {GearIcon, PauseIcon, PlayIcon, ZoomInIcon, ZoomOutIcon} from './icons.jsx';
+import {
+    CloseIcon,
+    GearIcon,
+    KeyframeAddIcon,
+    KeyframeRemoveIcon,
+    PauseIcon,
+    PlayIcon,
+    ZoomInIcon,
+    ZoomOutIcon
+} from './icons.jsx';
 import styles from './timeline.css';
 
 const DEFAULT_PIXELS_PER_SECOND = 72;
@@ -71,6 +80,7 @@ class Timeline extends React.Component {
         this.handlePlayPause = this.handlePlayPause.bind(this);
         this.handleStepFrame = this.handleStepFrame.bind(this);
         this.handleStop = this.handleStop.bind(this);
+        this.handleSettingsKeyDown = this.handleSettingsKeyDown.bind(this);
         this.handleToggleSettings = this.handleToggleSettings.bind(this);
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
@@ -362,6 +372,12 @@ class Timeline extends React.Component {
         return ticks;
     }
 
+    handleSettingsKeyDown (event) {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        this.setState({settingsOpen: false});
+    }
+
     handleToggleSettings () {
         this.setState(state => {
             if (state.settingsOpen) return {settingsOpen: false};
@@ -433,7 +449,12 @@ class Timeline extends React.Component {
     renderSettings () {
         if (!this.state.settingsOpen || !this.state.draft) return null;
         return (
-            <div className={styles.settingsPanel}>
+            <div
+                aria-label="Rendering settings"
+                className={styles.settingsPanel}
+                role="dialog"
+                onKeyDown={this.handleSettingsKeyDown}
+            >
                 <div className={styles.settingsHeading}>
                     <div>
                         <strong>{'Rendering settings'}</strong>
@@ -447,8 +468,9 @@ class Timeline extends React.Component {
                         aria-label="Close rendering settings"
                         className={styles.closeButton}
                         type="button"
+                        title="Close (Esc)"
                         onClick={this.handleToggleSettings}
-                    >{'×'}</button>
+                    ><CloseIcon /></button>
                 </div>
                 <div className={styles.settingsGrid}>
                     <label>
@@ -564,6 +586,12 @@ class Timeline extends React.Component {
                 <div className={styles.settingsActions}>
                     <button
                         className={styles.secondaryButton}
+                        disabled={this.state.timeline.recording || this.state.exporting}
+                        type="button"
+                        onClick={this.handleSaveSettings}
+                    >{'Apply'}</button>
+                    <button
+                        className={styles.primaryButton}
                         disabled={
                             this.state.timeline.recording ||
                             this.state.exporting
@@ -574,12 +602,6 @@ class Timeline extends React.Component {
                             (this.state.exporting ? 'Exporting…' :
                                 (this.state.timeline.frameCount && this.state.draft.reuseFrames !== false ?
                                     'Resume / export' : 'Render / export'))}</button>
-                    <button
-                        className={styles.primaryButton}
-                        disabled={this.state.timeline.recording || this.state.exporting}
-                        type="button"
-                        onClick={this.handleSaveSettings}
-                    >{'Apply'}</button>
                 </div>
             </div>
         );
@@ -627,6 +649,7 @@ class Timeline extends React.Component {
                             <button
                                 aria-label="Stop and return to start"
                                 className={styles.stopButton}
+                                title="Stop and return to start"
                                 type="button"
                                 onClick={this.handleStop}
                             ><span /></button>
@@ -646,6 +669,7 @@ class Timeline extends React.Component {
                         </output>
                         <button
                             aria-expanded={this.state.settingsOpen}
+                            aria-label="Rendering settings"
                             className={classNames(styles.iconButton, {
                                 [styles.isActive]: this.state.settingsOpen
                             })}
@@ -750,28 +774,35 @@ class Timeline extends React.Component {
                     </div>
                 </div>
                 <div className={styles.transport}>
-                    <span className={styles.status}>
-                        {timeline.recording ? (timeline.playing ? 'Rendering' : 'Render paused') :
-                            'keyframe'}
-                    </span>
                     <div
                         aria-label="Keyframe controls"
                         className={styles.keyframeControls}
                         role="group"
                     >
                         <button
+                            aria-label={`Add keyframe at ${formatTime(timeline.currentTime)}`}
                             disabled={timeline.recording}
                             title={`Add a keyframe at ${formatTime(timeline.currentTime)}`}
                             type="button"
                             onClick={this.handleAddKeyframe}
-                        >{'+'}</button>
+                        ><KeyframeAddIcon /><span>{'Keyframe'}</span></button>
                         <button
+                            aria-label="Delete selected keyframe"
                             disabled={timeline.recording || this.state.selectedKeyframeTime === null}
                             title="Delete the selected keyframe"
                             type="button"
                             onClick={this.handleDeleteKeyframe}
-                        >{'-'}</button>
+                        ><KeyframeRemoveIcon /></button>
                     </div>
+                    <span
+                        aria-live="polite"
+                        className={classNames(styles.status, {
+                            [styles.isRecording]: timeline.recording
+                        })}
+                    >
+                        {timeline.recording ? (timeline.playing ? 'Rendering…' : 'Render paused') :
+                            `${keyframes.length} ${keyframes.length === 1 ? 'keyframe' : 'keyframes'}`}
+                    </span>
                     <div
                         aria-label="Timeline zoom"
                         className={styles.zoomControls}

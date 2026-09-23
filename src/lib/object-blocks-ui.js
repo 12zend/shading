@@ -211,6 +211,14 @@ const isCostumeItem = item => item && (
     item.source === 'costume' || item.source === COSTUME_GROUP_SOURCE
 );
 
+const matchesFilter = (item, filter) => {
+    if (filter === 'all') return true;
+    return filter === 'costume' ? isCostumeItem(item) : item.source === filter;
+};
+
+const SEARCH_THRESHOLD = 8;
+const DELETE_CONFIRM_MS = 3000;
+
 const deleteAsset = (vm, item) => {
     if (!item || !item.deletable) return false;
     const target = vm.editingTarget;
@@ -488,7 +496,24 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
 
             const filterBar = document.createElement('div');
             filterBar.className = styles.filterBar;
-            filterBar.setAttribute('aria-label', 'Filter media');
+            const filterChips = document.createElement('div');
+            filterChips.className = styles.filterChips;
+            filterChips.setAttribute('aria-label', 'Filter media');
+            filterChips.setAttribute('role', 'group');
+            filterBar.appendChild(filterChips);
+            const searchField = document.createElement('label');
+            searchField.className = styles.searchField;
+            searchField.appendChild(createSvgIcon('m20 20-4.2-4.2M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z',
+                styles.searchIcon));
+            const searchInput = document.createElement('input');
+            searchInput.className = styles.searchInput;
+            searchInput.type = 'search';
+            searchInput.placeholder = 'Search';
+            searchInput.setAttribute('aria-label', 'Search media by name');
+            searchField.appendChild(searchInput);
+            // Searching only earns its space once the grid no longer fits at a glance.
+            searchField.hidden = items.length <= SEARCH_THRESHOLD;
+            filterBar.appendChild(searchField);
             const grid = document.createElement('div');
             grid.className = styles.mediaGrid;
             grid.setAttribute('aria-label', 'Available media');
@@ -557,11 +582,10 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 {label: 'Videos', value: 'video'},
                 {label: 'Fonts', value: 'text'},
                 {label: '3D', value: 'model'}
-            ].filter(filter => filter.value === 'all' || items.some(item => (
-                filter.value === 'costume' ? isCostumeItem(item) : item.source === filter.value
-            )));
+            ].filter(filter => items.some(item => matchesFilter(item, filter.value)));
             let activeFilter = 'all';
             let activeFilterButton;
+            let searchQuery = '';
             let costumeSelectionMode = false;
             const selectedCostumeValues = new Set();
             let renderedButtons = [];
@@ -721,14 +745,26 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 this.disposePreviews_();
                 grid.textContent = '';
                 renderedButtons = [];
-                const visibleItems = costumeSelectionMode ? items.filter(item => item.source === 'costume') :
-                    activeFilter === 'all' ? items : items.filter(item => (
-                        activeFilter === 'costume' ? isCostumeItem(item) : item.source === activeFilter
-                    ));
+                const filteredItems = costumeSelectionMode ? items.filter(item => item.source === 'costume') :
+                    items.filter(item => matchesFilter(item, activeFilter));
+                const visibleItems = searchQuery && !costumeSelectionMode ? filteredItems.filter(item => (
+                    String(item.name).toLowerCase()
+                        .includes(searchQuery)
+                )) : filteredItems;
                 if (!visibleItems.length) {
                     const empty = document.createElement('div');
                     empty.className = styles.emptyState;
-                    empty.textContent = 'No media yet. Import a file to add it here.';
+                    const emptyTitle = document.createElement('strong');
+                    const emptyHint = document.createElement('span');
+                    if (items.length) {
+                        emptyTitle.textContent = `Nothing named “${searchInput.value.trim()}”`;
+                        emptyHint.textContent = 'Try another name or clear the search.';
+                    } else {
+                        emptyTitle.textContent = 'No media yet';
+                        emptyHint.textContent = 'Import, drop, or paste an image, video, font, or 3D model.';
+                    }
+                    empty.appendChild(emptyTitle);
+                    empty.appendChild(emptyHint);
                     grid.appendChild(empty);
                     return;
                 }
@@ -794,15 +830,37 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         const deleteButton = document.createElement('button');
                         deleteButton.className = styles.deleteButton;
                         deleteButton.type = 'button';
-                        deleteButton.title = `Delete ${item.name}`;
-                        deleteButton.setAttribute('aria-label', `Delete ${item.label}: ${item.name}`);
                         deleteButton.appendChild(createSvgIcon(
                             'M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5',
                             styles.deleteIcon
                         ));
+                        const deleteLabel = document.createElement('span');
+                        deleteLabel.className = styles.deleteLabel;
+                        deleteLabel.textContent = 'Delete';
+                        deleteButton.appendChild(deleteLabel);
+                        // Deleting removes the asset from the sprite, so it takes a second, deliberate click.
+                        let deleteArmed = false;
+                        let disarmTimer = null;
+                        const setDeleteArmed = armed => {
+                            deleteArmed = armed;
+                            if (disarmTimer) clearTimeout(disarmTimer);
+                            disarmTimer = armed ? setTimeout(() => setDeleteArmed(false), DELETE_CONFIRM_MS) : null;
+                            card.classList.toggle(styles.mediaItemConfirmDelete, armed);
+                            deleteButton.title = armed ? 'Click again to delete' : `Delete ${item.name}`;
+                            deleteButton.setAttribute('aria-label', armed ?
+                                `Confirm delete ${item.label}: ${item.name}` :
+                                `Delete ${item.label}: ${item.name}`);
+                        };
+                        setDeleteArmed(false);
+                        deleteButton.addEventListener('blur', () => setDeleteArmed(false));
                         deleteButton.addEventListener('click', event => {
                             event.preventDefault();
                             event.stopPropagation();
+                            if (!deleteArmed) {
+                                setDeleteArmed(true);
+                                return;
+                            }
+                            setDeleteArmed(false);
                             selectedCostumeValues.delete(item.value);
                             if (selected) {
                                 const fallback = items.find(candidate => candidate.value !== item.value &&
@@ -832,7 +890,11 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 const button = document.createElement('button');
                 button.className = styles.filterButton;
                 button.type = 'button';
-                button.textContent = filter.label;
+                button.appendChild(document.createTextNode(filter.label));
+                const count = document.createElement('span');
+                count.className = styles.filterCount;
+                count.textContent = String(items.filter(item => matchesFilter(item, filter.value)).length);
+                button.appendChild(count);
                 button.setAttribute('aria-pressed', String(filter.value === activeFilter));
                 if (filter.value === activeFilter) {
                     button.classList.add(styles.filterButtonActive);
@@ -850,7 +912,11 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                     renderGrid();
                     if (renderedButtons[0]) renderedButtons[0].focus();
                 });
-                filterBar.appendChild(button);
+                filterChips.appendChild(button);
+            });
+            searchInput.addEventListener('input', () => {
+                searchQuery = searchInput.value.trim().toLowerCase();
+                renderGrid();
             });
 
             picker.addEventListener('keydown', event => {
@@ -898,6 +964,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
                 openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
             });
+            updateCostumeSelectionControls();
             renderGrid();
 
             ScratchBlocks.DropDownDiv.setColour('var(--ui-modal-background)', 'var(--ui-black-transparent)');

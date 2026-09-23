@@ -33,7 +33,7 @@ const inputsFor = descriptor => {
                     type: 'number', defaultValue: values[component] === undefined ? 0 : values[component]});
                 ids.push(componentId);
             }
-            bindings.push({name: parameter.name, ids, color: true});
+            bindings.push({name: parameter.name, ids, color: true, parameter});
         } else {
             const ids = [];
             for (let component = 0; component < count; component++) {
@@ -43,7 +43,7 @@ const inputsFor = descriptor => {
                 defaultValue: values[component] === undefined ? 0 : values[component]});
                 ids.push(componentId);
             }
-            bindings.push({name: parameter.name, ids, color: false});
+            bindings.push({name: parameter.name, ids, color: false, parameter});
         }
     });
     return {inputs, bindings};
@@ -62,6 +62,24 @@ const blocks = catalog.map((descriptor, index) => {
         separatorBefore: index === 0 || catalog[index - 1].file.split('/')[0] !== descriptor.file.split('/')[0]
     };
 });
+
+// Some ReShade shaders branch only on their slider range (GaussianBlur uses 0–4).
+const sliderValue = (value, parameter, index) => {
+    const annotations = parameter.annotations || {};
+    if (annotations.ui_type !== 'slider') return value;
+    const minimum = Number((annotations.ui_min || [])[index] === undefined ?
+        (annotations.ui_min || [])[0] : annotations.ui_min[index]);
+    const maximum = Number((annotations.ui_max || [])[index] === undefined ?
+        (annotations.ui_max || [])[0] : annotations.ui_max[index]);
+    const defaultValue = Number((parameter.value || [])[index] === undefined ?
+        (parameter.value || [])[0] : parameter.value[index]);
+    const number = Number(value);
+    if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum > maximum ||
+        !Number.isFinite(defaultValue) || defaultValue < minimum || defaultValue > maximum ||
+        !Number.isFinite(number)) return value;
+    const limited = Math.min(maximum, Math.max(minimum, number));
+    return parameter.type === 'int' || parameter.type === 'uint' ? Math.round(limited) : limited;
+};
 
 const settingsFor = (args, bindings) => {
     // Projects saved with the former JSON input can still render until their blocks are edited.
@@ -84,6 +102,13 @@ const settingsFor = (args, bindings) => {
         } else {
             settings[binding.name] = values;
         }
+    }
+    for (const binding of bindings) {
+        if (binding.color || settings[binding.name] === undefined) continue;
+        const value = settings[binding.name];
+        settings[binding.name] = Array.isArray(value) ?
+            value.map((component, index) => sliderValue(component, binding.parameter, index)) :
+            sliderValue(value, binding.parameter, 0);
     }
     return settings;
 };

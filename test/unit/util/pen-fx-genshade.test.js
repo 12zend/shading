@@ -1,4 +1,12 @@
 import {blocks, catalog, installGenshade} from '../../../scratch-vm/src/lib/pen-fx/genshade';
+import {genshadeBaseURL} from '../../../scratch-render/src/pen-fx/genshade/assets';
+
+test('loads Genshade assets from the app root on editor and project routes', () => {
+    expect(genshadeBaseURL('/', 'https://shading.app/editor/')).toBe('https://shading.app/genshade/');
+    expect(genshadeBaseURL('/', 'https://shading.app/project-id/')).toBe('https://shading.app/genshade/');
+    expect(genshadeBaseURL('/app/', 'https://example.com/app/editor/'))
+        .toBe('https://example.com/app/genshade/');
+});
 
 describe('PenFX Genshade block arguments', () => {
     test('exposes every catalog parameter and component as a block input', () => {
@@ -41,5 +49,22 @@ describe('PenFX Genshade block arguments', () => {
         expect(settings[descriptor.parameters[vectorIndex].name][0]).toBe(0.25);
         expect(settings[descriptor.parameters[colorIndex].name].slice(0, 3)).toEqual([0.2, 0.4, 0.6]);
         expect(Object.keys(settings)).toHaveLength(descriptor.parameters.length);
+    });
+
+    test('clamps the saved GaussianBlur radius to its 0–4 slider range', () => {
+        const block = blocks.find(item => item.id === 'genshade-gaussianblur-gaussianblur');
+        const renderer = {render: jest.fn()};
+        class PenFX {
+            _safe(callback) { callback({genshadeRenderer: renderer}, {}); }
+        }
+        installGenshade(PenFX, {runtime: {}});
+        const result = new PenFX()[block.opcode]({P0: 16, P1: 1, P2: 0.3, MIX: 100}, {target: {}});
+        expect(result).toBeUndefined();
+        expect(renderer.render).toHaveBeenCalledTimes(1);
+        expect(renderer.render.mock.calls[0][1]).toMatchObject({
+            GaussianBlurRadius: [4],
+            GaussianBlurOffset: [1],
+            GaussianBlurStrength: [0.3]
+        });
     });
 });

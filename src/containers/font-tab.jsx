@@ -11,6 +11,8 @@ import {formatBytes} from '../lib/tw-bytes-utils';
 
 import styles from '../components/font-editor/font-editor.css';
 
+const WATERFALL_SIZES = [12, 18, 24, 36];
+
 const messages = defineMessages({
     addFont: {
         defaultMessage: 'Upload Font',
@@ -212,12 +214,33 @@ class FontTab extends React.Component {
                         >
                             {this.state.previewText || ' '}
                         </div>
+                        <ul
+                            aria-label="Size samples"
+                            className={styles.waterfall}
+                        >
+                            {WATERFALL_SIZES.map(size => (
+                                <li key={size}>
+                                    <span className={styles.waterfallSize}>{`${size}px`}</span>
+                                    <span
+                                        className={styles.waterfallSample}
+                                        style={{fontFamily: selectedFont.family, fontSize: `${size}px`}}
+                                    >
+                                        {this.state.previewText || ' '}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
                         <div className={styles.details}>
                             <strong>{selectedFont.name}</strong>
                             <span>{selectedFont.system ? 'System font' : selectedFont.format.toUpperCase()}</span>
                             {selectedFont.system ? null : <span>{formatBytes(selectedFont.data.byteLength)}</span>}
                         </div>
-                        {this.state.error ? <div className={styles.error}>{this.state.error}</div> : null}
+                        {this.state.error ? (
+                            <div
+                                className={styles.error}
+                                role="alert"
+                            >{this.state.error}</div>
+                        ) : null}
                     </div>
                 ) : (
                     <div className={styles.emptyState}>

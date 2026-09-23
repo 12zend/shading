@@ -147,80 +147,6 @@ class LUTTab extends React.Component {
                     aria-label="LUT"
                     className={styles.editor}
                 >
-                    <fieldset
-                        className={styles.layoutControls}
-                        disabled={this.state.busy}
-                    >
-                        <legend>{this.text('layout', 'LUT image layout')}</legend>
-                        <label>
-                            {this.text('format', 'Format')}
-                            <select
-                                name="mode"
-                                value={this.state.mode}
-                                onChange={this.handleLayoutChange}
-                            >
-                                <option value="auto">{this.text('auto', 'Auto detect / ReShade MultiLUT')}</option>
-                                <option value="tiles">{this.text('tiles', 'Custom tile atlas')}</option>
-                                <option value="hald">{this.text('hald', 'Hald CLUT')}</option>
-                            </select>
-                        </label>
-                        {this.state.mode === 'tiles' ? <React.Fragment>
-                            <label>
-                                {this.text('cubeSize', 'RGB size')}
-                                <input
-                                    min={2}
-                                    max={256}
-                                    name="size"
-                                    step={1}
-                                    type="number"
-                                    value={this.state.size}
-                                    onChange={this.handleLayoutChange}
-                                />
-                            </label>
-                            <label>
-                                {this.text('columns', 'Slice columns')}
-                                <input
-                                    min={1}
-                                    max={256}
-                                    name="columns"
-                                    step={1}
-                                    type="number"
-                                    value={this.state.columns}
-                                    onChange={this.handleLayoutChange}
-                                />
-                            </label>
-                        </React.Fragment> : null}
-                        <label>
-                            {this.text('index', 'LUT number (from 1)')}
-                            <input
-                                min={1}
-                                name="index"
-                                step={1}
-                                type="number"
-                                value={this.state.index}
-                                onChange={this.handleLayoutChange}
-                            />
-                        </label>
-                        <label>
-                            <input
-                                checked={this.state.flipGreen}
-                                name="flipGreen"
-                                type="checkbox"
-                                onChange={this.handleLayoutChange}
-                            />
-                            {this.text('flipGreen', 'Reverse green axis')}
-                        </label>
-                        <button
-                            disabled={!selected}
-                            type="button"
-                            onClick={this.handleApplyLayout}
-                        >
-                            {this.text('applyLayout', 'Apply to selected LUT')}
-                        </button>
-                        <p>{this.text('layoutHelp', 'These settings also apply to new imports. ' +
-                            'Multiple LUTs are numbered left to right, then top to bottom. ' +
-                            'Choose Hald explicitly: square images can have different color ordering.')}</p>
-                    </fieldset>
                     {selected ? (
                         <React.Fragment>
                             <form
@@ -236,29 +162,27 @@ class LUTTab extends React.Component {
                                         onChange={this.handleNameChange}
                                     />
                                 </label>
-                                <button
-                                    aria-pressed={this.state.actualSize}
-                                    type="button"
-                                    onClick={this.handleToggleSize}
-                                >
-                                    {this.state.actualSize ? this.text('fit', 'Fit preview') :
-                                        this.text('actualSize', 'View at 100%')}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={this.handleExportSelected}
-                                >
-                                    {this.text('export', 'Export PNG')}
-                                </button>
+                                <div className={styles.toolbarActions}>
+                                    <button
+                                        aria-pressed={this.state.actualSize}
+                                        type="button"
+                                        onClick={this.handleToggleSize}
+                                    >
+                                        {this.state.actualSize ? this.text('fit', 'Fit preview') :
+                                            this.text('actualSize', 'View at 100%')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={this.handleExportSelected}
+                                    >
+                                        {this.text('export', 'Export PNG')}
+                                    </button>
+                                </div>
                             </form>
-                            <div className={styles.metadata}>
-                                <strong>{`${selected.width} × ${selected.height} px`}</strong>
-                                <span>{`${selected.size} × ${selected.size} × ${selected.size} RGB`}</span>
-                                <span>{`${this.text('count', 'LUTs in image')}: ${selected.count || 1}`}</span>
-                                <span>{this.text('original', 'Original PNG preserved')}</span>
-                            </div>
                             <div
+                                aria-label={selected.name}
                                 className={styles.preview}
+                                role="region"
                                 tabIndex={0}
                             >
                                 <img
@@ -269,11 +193,12 @@ class LUTTab extends React.Component {
                                     width={selected.width}
                                 />
                             </div>
-                            <p className={styles.help}>
-                                {this.text('help',
-                                    'Choose this LUT in the PenFX LUT block and set its mix from 0 to 100%. ' +
-                                    'Preview scaling does not change the image used by the effect.')}
-                            </p>
+                            <div className={styles.metadata}>
+                                <strong>{`${selected.width} × ${selected.height} px`}</strong>
+                                <span>{`${selected.size} × ${selected.size} × ${selected.size} RGB`}</span>
+                                <span>{`${this.text('count', 'LUTs in image')}: ${selected.count || 1}`}</span>
+                                <span>{this.text('original', 'Original PNG preserved')}</span>
+                            </div>
                         </React.Fragment>
                     ) : (
                         <div className={styles.empty}>
@@ -282,6 +207,7 @@ class LUTTab extends React.Component {
                                 'Horizontal/vertical strips, tile atlases, ReShade MultiLUT ' +
                                 'and Hald CLUT are supported.')}</p>
                             <button
+                                className={styles.primaryButton}
                                 disabled={this.state.busy}
                                 type="button"
                                 onClick={this.handleOpenPicker}
@@ -290,11 +216,101 @@ class LUTTab extends React.Component {
                             </button>
                         </div>
                     )}
-                    {this.state.busy ? <p role="status">{this.text('loading', 'Loading original PNG…')}</p> : null}
+                    {this.state.busy ? (
+                        <p
+                            className={styles.status}
+                            role="status"
+                        >{this.text('loading', 'Loading original PNG…')}</p>
+                    ) : null}
                     {this.state.error ? <p
                         className={styles.error}
                         role="alert"
                     >{this.state.error}</p> : null}
+                    <fieldset
+                        className={styles.layoutControls}
+                        disabled={this.state.busy}
+                    >
+                        <legend>{this.text('layout', 'LUT image layout')}</legend>
+                        <div className={styles.layoutFields}>
+                            <label>
+                                {this.text('format', 'Format')}
+                                <select
+                                    name="mode"
+                                    value={this.state.mode}
+                                    onChange={this.handleLayoutChange}
+                                >
+                                    <option value="auto">{this.text('auto', 'Auto detect / ReShade MultiLUT')}</option>
+                                    <option value="tiles">{this.text('tiles', 'Custom tile atlas')}</option>
+                                    <option value="hald">{this.text('hald', 'Hald CLUT')}</option>
+                                </select>
+                            </label>
+                            {this.state.mode === 'tiles' ? <React.Fragment>
+                                <label>
+                                    {this.text('cubeSize', 'RGB size')}
+                                    <input
+                                        min={2}
+                                        max={256}
+                                        name="size"
+                                        step={1}
+                                        type="number"
+                                        value={this.state.size}
+                                        onChange={this.handleLayoutChange}
+                                    />
+                                </label>
+                                <label>
+                                    {this.text('columns', 'Slice columns')}
+                                    <input
+                                        min={1}
+                                        max={256}
+                                        name="columns"
+                                        step={1}
+                                        type="number"
+                                        value={this.state.columns}
+                                        onChange={this.handleLayoutChange}
+                                    />
+                                </label>
+                            </React.Fragment> : null}
+                            <label>
+                                {this.text('index', 'LUT number (from 1)')}
+                                <input
+                                    min={1}
+                                    name="index"
+                                    step={1}
+                                    type="number"
+                                    value={this.state.index}
+                                    onChange={this.handleLayoutChange}
+                                />
+                            </label>
+                            <label className={styles.checkboxLabel}>
+                                <input
+                                    checked={this.state.flipGreen}
+                                    name="flipGreen"
+                                    type="checkbox"
+                                    onChange={this.handleLayoutChange}
+                                />
+                                {this.text('flipGreen', 'Reverse green axis')}
+                            </label>
+                            {selected ? (
+                                <button
+                                    className={styles.primaryButton}
+                                    type="button"
+                                    onClick={this.handleApplyLayout}
+                                >
+                                    {this.text('applyLayout', 'Apply to selected LUT')}
+                                </button>
+                            ) : null}
+                        </div>
+                        <p>{this.text('layoutHelp', 'These settings also apply to new imports. ' +
+                            'Multiple LUTs are numbered left to right, then top to bottom. ' +
+                            'Choose Hald explicitly: square images can have different color ordering.')}</p>
+                    </fieldset>
+                    {selected ? (
+                        <p className={styles.help}>
+                            {this.text('help',
+                                'Choose this LUT in the PenFX LUT block and set its mix from 0 to 100%. ' +
+                                'Preview scaling does not change the image used by the effect.')}
+                        </p>
+                    ) : null}
                 </section>
             </AssetPanel>
         );

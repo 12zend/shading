@@ -410,6 +410,7 @@ class ShaderTab extends React.Component {
                             <button
                                 className={styles.applyButton}
                                 disabled={!this.state.dirty || this.state.saving}
+                                title="Ctrl+S / ⌘S"
                                 onClick={this.handleApply}
                             >
                                 {this.props.intl.formatMessage(messages.apply)}
