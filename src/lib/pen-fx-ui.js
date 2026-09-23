@@ -5,6 +5,8 @@ import {localize} from './movie-block-l10n';
 import {CATEGORIES as COLOR_GRADING_CATEGORIES, PRESETS as COLOR_GRADING_PRESETS} from
     'scratch-render/src/pen-fx/color-grading/presets';
 import {createSampleSnapshot, getColorGradingPreviewRenderer, isBlankSnapshot} from './color-grading-preview';
+import {getEasyEffectPreviewRenderer} from './easy-effect-preview';
+import {easyBlocks, presetName} from 'scratch-vm/src/lib/pen-fx/easy';
 
 const MAX_STOPS = 8;
 const DEFAULT_GRADIENT = {
@@ -291,12 +293,47 @@ const createGradientField = ScratchBlocks => {
 };
 
 
-const COLOR_GRADING_MENU_BLOCK = 'penfx_menu_colorGradingPresets';
-const COLOR_GRADING_FIELD = 'colorGradingPresets';
+const COLOR_GRADING_MENU = 'colorGradingPresets';
 const PREVIEW_FALLBACK_MS = 450;
-const THUMBNAILS_PER_FRAME = 16;
 
-const colorGradingOptions = () => COLOR_GRADING_PRESETS.map(preset => [preset.name, preset.id]);
+const getPenFX = vm => vm && vm.runtime && vm.runtime.penFX || null;
+
+// Each Easy menu describes its presets and how a thumbnail is drawn; the picker itself is shared.
+const colorGradingPickerSource = locale => ({
+    label: localize(locale, 'Color grading presets', 'カラーグレーディングのプリセット'),
+    categories: COLOR_GRADING_CATEGORIES.map(category => ({id: category.id, name: category.name})),
+    presets: COLOR_GRADING_PRESETS.map(preset => ({id: preset.id, name: preset.name, category: preset.category, preset})),
+    thumbnailsPerFrame: 16,
+    getRenderer: () => getColorGradingPreviewRenderer(),
+    drawThumbnail: (renderer, entry, canvas) => renderer.draw(entry.preset, canvas)
+});
+
+const easyEffectPickerSource = (block, vm, locale) => ({
+    label: localize(locale, 'Effect presets', 'エフェクトのプリセット'),
+    categories: block.categories.map(category => ({id: category.id, name: localize(locale, category.name, category.ja)})),
+    presets: block.presets.map(preset => ({
+        id: preset.id,
+        name: presetName(preset, locale),
+        category: preset.category,
+        keywords: `${preset.name} ${preset.ja}`,
+        preset
+    })),
+    // Effect recipes can run several passes, and a Genshade effect compiles its shaders on first use, so each
+    // animation frame draws thumbnails only until its time budget is spent.
+    thumbnailsPerFrame: 8,
+    frameBudgetMs: 12,
+    getRenderer: () => {
+        const penFX = getPenFX(vm);
+        if (!penFX || typeof penFX.runEasyPreset !== 'function') throw new Error('PenFX is not available.');
+        return getEasyEffectPreviewRenderer(penFX);
+    },
+    // Genshade shaders load in the background; wait for them so the first thumbnails are not ungraded.
+    ready: () => {
+        const penFX = getPenFX(vm);
+        return penFX && penFX.genshadeReady;
+    },
+    drawThumbnail: (renderer, entry, canvas) => renderer.draw(block.opcode, entry.preset, canvas)
+});
 
 // The PenFX block that owns the menu shadow is the one whose input is captured while the picker is open.
 const getColorGradingBlockId = sourceBlock => {
@@ -306,10 +343,16 @@ const getColorGradingBlockId = sourceBlock => {
     return owner && owner.id || null;
 };
 
-const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
+const createEasyPresetField = (ScratchBlocks, vm, locale, pickerSource) => {
     const BaseField = ScratchBlocks.FieldDropdown;
+    let cachedSource = null;
+    const getSource = () => {
+        if (!cachedSource) cachedSource = pickerSource();
+        return cachedSource;
+    };
+    const options = () => getSource().presets.map(entry => [entry.name, entry.id]);
     const PresetField = function (value) {
-        BaseField.call(this, colorGradingOptions);
+        BaseField.call(this, options);
         this.pickerCleanup_ = null;
         if (value !== undefined) this.setValue(value);
     };
@@ -328,6 +371,7 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
     PresetField.prototype.showEditor_ = function () {
         if (typeof document === 'undefined' || !document.body) return;
         const field = this;
+        const source = getSource();
         const sourceBlock = getGradientFieldSourceBlock(this);
         const dropdown = ScratchBlocks.DropDownDiv;
         dropdown.hideWithoutAnimation();
@@ -336,7 +380,7 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
 
         const picker = document.createElement('section');
         picker.className = styles.presetPicker;
-        picker.setAttribute('aria-label', localize(locale, 'Color grading presets', 'カラーグレーディングのプリセット'));
+        picker.setAttribute('aria-label', source.label);
 
         const search = document.createElement('input');
         search.type = 'search';
@@ -355,7 +399,7 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
 
         const cards = [];
         const sections = [];
-        for (const category of COLOR_GRADING_CATEGORIES) {
+        for (const category of source.categories) {
             const section = document.createElement('div');
             section.className = styles.presetSection;
             const heading = document.createElement('h3');
@@ -366,7 +410,7 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
             grid.className = styles.presetGrid;
             section.appendChild(grid);
             const sectionCards = [];
-            for (const preset of COLOR_GRADING_PRESETS) {
+            for (const preset of source.presets) {
                 if (preset.category !== category.id) continue;
                 const card = document.createElement('button');
                 card.type = 'button';
@@ -392,7 +436,12 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
                     }
                 });
                 grid.appendChild(card);
-                const entry = {canvas, card, preset, search: `${preset.name} ${category.name}`.toLowerCase()};
+                const entry = {
+                    canvas,
+                    card,
+                    preset,
+                    search: `${preset.name} ${preset.keywords || ''} ${category.name}`.toLowerCase()
+                };
                 cards.push(entry);
                 sectionCards.push(entry);
             }
@@ -422,6 +471,7 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
         let frame = null;
         let generation = 0;
         let receivedCapture = false;
+        const ready = Promise.resolve(source.ready ? source.ready() : null).catch(() => null);
         const renderSnapshot = (capture, message) => {
             const blank = isBlankSnapshot(capture);
             const snapshot = blank ? createSampleSnapshot() : capture;
@@ -429,31 +479,40 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
             status.textContent = blank ?
                 localize(locale, 'Preview: sample image (the input is empty)', 'プレビュー: サンプル画像（入力が空です）') :
                 message;
-            try {
-                renderer = renderer || getColorGradingPreviewRenderer();
-                renderer.setSnapshot(snapshot);
-            } catch (error) {
-                status.textContent = localize(locale, 'Preview unavailable', 'プレビューを表示できません');
-                return;
-            }
             const current = ++generation;
-            let index = 0;
             if (frame !== null) cancelAnimationFrame(frame);
-            const step = () => {
-                frame = null;
+            frame = null;
+            ready.then(() => {
                 if (current !== generation) return;
-                renderer.setSnapshot(snapshot);
-                const end = Math.min(cards.length, index + THUMBNAILS_PER_FRAME);
-                for (; index < end; index++) renderer.draw(cards[index].preset, cards[index].canvas);
-                if (index < cards.length) frame = requestAnimationFrame(step);
-            };
-            step();
+                try {
+                    renderer = renderer || source.getRenderer();
+                    renderer.setSnapshot(snapshot);
+                } catch (error) {
+                    status.textContent = localize(locale, 'Preview unavailable', 'プレビューを表示できません');
+                    return;
+                }
+                let index = 0;
+                const step = () => {
+                    frame = null;
+                    if (current !== generation) return;
+                    renderer.setSnapshot(snapshot);
+                    const start = Date.now();
+                    const end = Math.min(cards.length, index + source.thumbnailsPerFrame);
+                    while (index < end) {
+                        source.drawThumbnail(renderer, cards[index].preset, cards[index].canvas);
+                        index++;
+                        if (source.frameBudgetMs && Date.now() - start >= source.frameBudgetMs) break;
+                    }
+                    if (index < cards.length) frame = requestAnimationFrame(step);
+                };
+                step();
+            });
         };
 
         const blockId = getColorGradingBlockId(sourceBlock);
-        const penFX = vm && vm.runtime && vm.runtime.penFX;
-        const unsubscribe = blockId && penFX && typeof penFX.requestColorGradingPreview === 'function' ?
-            penFX.requestColorGradingPreview(blockId, snapshot => {
+        const penFX = getPenFX(vm);
+        const unsubscribe = blockId && penFX && typeof penFX.requestEasyPreview === 'function' ?
+            penFX.requestEasyPreview(blockId, snapshot => {
                 receivedCapture = true;
                 renderSnapshot(snapshot, localize(locale, 'Preview: input of this block',
                     'プレビュー: このブロックへの入力'));
@@ -520,20 +579,28 @@ const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') => {
     return PresetField;
 };
 
+const createColorGradingPresetField = (ScratchBlocks, vm, locale = 'en') =>
+    createEasyPresetField(ScratchBlocks, vm, locale, () => colorGradingPickerSource(locale));
+
 const installPenFXBlockDefinitions = (ScratchBlocks, locale = 'en', vm = null) => {
     if (!ScratchBlocks || !ScratchBlocks.Blocks || !ScratchBlocks.FieldTextInput) return;
     const GradientField = createGradientField(ScratchBlocks);
     if (ScratchBlocks.FieldDropdown) {
-        const PresetField = createColorGradingPresetField(ScratchBlocks, vm, locale);
-        ScratchBlocks.Blocks[COLOR_GRADING_MENU_BLOCK] = {
-            init: function () {
-                this.appendDummyInput().appendField(new PresetField(), COLOR_GRADING_FIELD);
-                this.setInputsInline(true);
-                this.setOutput(true, 'String');
-                this.setColour('#6b56d9', '#5945c2', '#46359f');
-                this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_ROUND);
-            }
-        };
+        const menus = [[COLOR_GRADING_MENU, () => colorGradingPickerSource(locale)]].concat(easyBlocks.map(block => (
+            [block.menu, () => easyEffectPickerSource(block, vm, locale)]
+        )));
+        for (const [menu, pickerSource] of menus) {
+            const PresetField = createEasyPresetField(ScratchBlocks, vm, locale, pickerSource);
+            ScratchBlocks.Blocks[`penfx_menu_${menu}`] = {
+                init: function () {
+                    this.appendDummyInput().appendField(new PresetField(), menu);
+                    this.setInputsInline(true);
+                    this.setOutput(true, 'String');
+                    this.setColour('#6b56d9', '#5945c2', '#46359f');
+                    this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_ROUND);
+                }
+            };
+        }
     }
     ScratchBlocks.Blocks.penfx_gradationOverlay = {
         init: function () {
@@ -556,6 +623,7 @@ const installPenFXBlockDefinitions = (ScratchBlocks, locale = 'en', vm = null) =
 export {
     DEFAULT_GRADIENT,
     createColorGradingPresetField,
+    createEasyPresetField,
     createGradientField,
     getColorGradingBlockId,
     gradientToCss,

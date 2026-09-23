@@ -15,6 +15,7 @@ import japaneseShaderTranslations from './default-shader-package/locales-ja.json
 import {inferShaderInputs} from './shader-uniforms';
 import {localize, resolveLocale} from '../movie-block-l10n';
 import {PRESETS as COLOR_GRADING_PRESETS} from 'scratch-render/src/pen-fx/color-grading/presets';
+import {easyMenus, easyToolboxBlocks as easyPresetToolboxBlocks} from './easy';
 
 const COLOR_GRADING_MENU = 'colorGradingPresets';
 
@@ -31,6 +32,7 @@ const easyToolboxBlocks = locale => [
             MIX: {type: ArgumentType.NUMBER, defaultValue: 100}
         }
     },
+    ...easyPresetToolboxBlocks(locale, ArgumentType, BlockType),
     '---'
 ];
 
@@ -864,13 +866,13 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     getMenus () {
-        const menus = {
+        const menus = Object.assign({
             lutAssets: {acceptReporters: true, items: 'getLUTMenu'},
             [COLOR_GRADING_MENU]: {
                 acceptReporters: true,
                 items: COLOR_GRADING_PRESETS.map(preset => ({text: preset.name, value: preset.id}))
             }
-        };
+        }, easyMenus(resolveLocale(null, this.vm)));
         if (this.packages.has(DEFAULT_SHADER_PACKAGE_ID)) {
             for (const name of Object.keys(DEFAULT_LEGACY_MENUS)) {
                 menus[name] = {acceptReporters: true, items: DEFAULT_LEGACY_MENUS[name].slice()};

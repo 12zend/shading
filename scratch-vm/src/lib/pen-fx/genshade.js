@@ -131,4 +131,4 @@ const installGenshade = (PenFX, vm) => {
         };
     });
 };
-export {blocks, catalog, installGenshade, loadGenshade, settingsFor};
+export {blocks, catalog, installGenshade, loadGenshade, opcode as genshadeOpcode, settingsFor};

@@ -75,7 +75,7 @@ describe('Easy color grading', () => {
             expect(penFX.engine.captureEffectInput).not.toHaveBeenCalled();
 
             const listener = jest.fn();
-            const unsubscribe = penFX.requestColorGradingPreview('grade-block', listener);
+            const unsubscribe = penFX.requestEasyPreview('grade-block', listener);
             expect(penFX.easyColorGrading({PRESET: 'vivid', MIX: 100}, util)).toBeUndefined();
             expect(penFX.engine.captureEffectInput).toHaveBeenCalledTimes(1);
             expect(penFX.engine.captureEffectInput.mock.invocationCallOrder[0])
@@ -91,7 +91,7 @@ describe('Easy color grading', () => {
             expect(penFX.engine.captureEffectInput).toHaveBeenCalledTimes(1);
 
             const reopened = jest.fn();
-            penFX.requestColorGradingPreview('grade-block', reopened);
+            penFX.requestEasyPreview('grade-block', reopened);
             jest.runAllTimers();
             expect(reopened).toHaveBeenCalledWith(snapshot);
         } finally {

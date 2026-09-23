@@ -1,4 +1,5 @@
 import {catalog as genshadeCatalog} from '../../../scratch-vm/src/lib/pen-fx/genshade';
+import {easyBlocks} from '../../../scratch-vm/src/lib/pen-fx/easy';
 import JSZip from '@turbowarp/jszip';
 import VM from 'scratch-vm';
 
@@ -168,8 +169,8 @@ describe('Pen FX custom shader packages', () => {
             expect(result).toBeUndefined();
             expect(result).not.toBeInstanceOf(Promise);
         }
-        // Easy color grading is the one command outside the default package.
-        expect(commandBlocks).toHaveLength(60 + genshadeCatalog.length);
+        // Easy color grading and the Easy effect blocks are the commands outside the default package.
+        expect(commandBlocks).toHaveLength(59 + 1 + easyBlocks.length + genshadeCatalog.length);
     });
 
     test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {

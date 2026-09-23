@@ -3,6 +3,7 @@
 import createPenFXEngine from './engine';
 import {installGenshade, loadGenshade} from './genshade';
 import installEffects from './effects';
+import {installEasy} from './easy';
 import PenFXCustomShaderManager from './custom-shaders';
 import PenFXLUTManager from './luts';
 import {BLEND_MODES} from './constants';
@@ -278,6 +279,7 @@ const createPenFXClass = vm => {
 
     installGenshade(PenFX, vm);
     installEffects({Engine: PenFXEngine, PenFX, vm});
+    installEasy(PenFX);
     return PenFX;
 };
 
