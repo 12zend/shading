@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import createPenFXEngine from './engine';
+import {installGenshade, loadGenshade} from './genshade';
 import installEffects from './effects';
 import PenFXCustomShaderManager from './custom-shaders';
 import PenFXLUTManager from './luts';
@@ -24,6 +25,14 @@ const createPenFXClass = vm => {
             this.shaderProgramOverrides = null;
             vm.runtime.penFX = this;
             this.luts = new PenFXLUTManager(vm);
+            this.genshadeReady = loadGenshade().catch(error => {
+                this.genshadeError = error;
+                console.error('[Genshade] Could not load effects:', error);
+                return null;
+            });
+            if (vm.runtime.movieAssetManager && vm.runtime.movieAssetManager.runWithoutWaiting) {
+                vm.runtime.movieAssetManager.runWithoutWaiting(this.genshadeReady);
+            }
             this.customShaders = new PenFXCustomShaderManager(vm, this, {loadDefaultPackage: true});
             const movieAssetManager = vm.runtime.movieAssetManager;
             if (movieAssetManager && typeof movieAssetManager.attachFrameTransactions === 'function') {
@@ -267,6 +276,7 @@ const createPenFXClass = vm => {
         }
     }
 
+    installGenshade(PenFX, vm);
     installEffects({Engine: PenFXEngine, PenFX, vm});
     return PenFX;
 };

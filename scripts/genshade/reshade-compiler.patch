@@ -1,0 +1,30 @@
+diff --git a/source/effect_codegen_glsl.cpp b/source/effect_codegen_glsl.cpp
+index fc28b9f..4f90387 100644
+--- a/source/effect_codegen_glsl.cpp
++++ b/source/effect_codegen_glsl.cpp
+@@ -1541,6 +1541,12 @@ protected:
+ 					expr_code += '[' + std::to_string(op.index) + ']';
+ 				break;
+ 			case expression::operation::op_swizzle:
++                if (op.from.is_scalar()) {
++                    type.clear();
++                    write_type<false, false>(type, op.to);
++                    expr_code = type + '(' + expr_code + ')';
++                    break;
++                }
+ 				expr_code += '.';
+ 				for (int i = 0; i < 4 && op.swizzle[i] >= 0; ++i)
+ 					expr_code += "xyzw"[op.swizzle[i]];
+diff --git a/source/effect_symbol_table.cpp b/source/effect_symbol_table.cpp
+index 2299f1d..5a22486 100644
+--- a/source/effect_symbol_table.cpp
++++ b/source/effect_symbol_table.cpp
+@@ -5,7 +5,7 @@
+ 
+ #include "effect_symbol_table.hpp"
+ #include <cassert>
+-#include <malloc.h> // alloca
++#include <alloca.h> // alloca
+ #include <algorithm> // std::upper_bound, std::sort
+ #include <functional> // std::greater
+ 

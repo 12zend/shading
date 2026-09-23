@@ -1,3 +1,4 @@
+import {catalog as genshadeCatalog} from '../../../scratch-vm/src/lib/pen-fx/genshade';
 import JSZip from '@turbowarp/jszip';
 import VM from 'scratch-vm';
 
@@ -94,7 +95,7 @@ describe('Pen FX custom shader packages', () => {
         const descriptor = createDefaultPackageShell();
 
         expect(descriptor.id).toBe(DEFAULT_SHADER_PACKAGE_ID);
-        expect(descriptor.blocks).toHaveLength(60);
+        expect(descriptor.blocks).toHaveLength(60 + genshadeCatalog.length);
         expect(descriptor.programs).toHaveLength(Object.keys(programSources).length);
         expect(descriptor.blocks.find(block => block.id === 'contrast')).toMatchObject({
             name: 'contrast',
@@ -167,7 +168,7 @@ describe('Pen FX custom shader packages', () => {
             expect(result).toBeUndefined();
             expect(result).not.toBeInstanceOf(Promise);
         }
-        expect(commandBlocks).toHaveLength(59);
+        expect(commandBlocks).toHaveLength(59 + genshadeCatalog.length);
     });
 
     test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {

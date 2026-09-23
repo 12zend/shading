@@ -1,6 +1,7 @@
 /* eslint-disable */
 
 import JSZip from '@turbowarp/jszip';
+import {blocks as genshadeBlocks} from './genshade';
 import EventEmitter from 'events';
 import ArgumentType from '../../extension-support/argument-type';
 import BlockType from '../../extension-support/block-type';
@@ -69,7 +70,7 @@ const localizeDefaultShaderBlock = (packageDescriptor, shaderBlock, locale) => {
         }))
     });
 };
-const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.map(block => block.implementation.opcode));
+const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.concat(genshadeBlocks).map(block => block.implementation.opcode));
 const PENFX_PROGRAM_BINDINGS = new Set(defaultShaderManifest.programs.map(program => program.bind));
 const DEFAULT_SHADER_SOURCE = `precision highp float;
 
@@ -369,7 +370,7 @@ const normalizePackage = rawPackage => {
     }
     const id = normalizeId(rawPackage.id, 'Shader package id');
     const name = assertString(rawPackage.name || humanize(id), 'Shader package name', 64);
-    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > MAX_BLOCKS) {
+    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > (id === DEFAULT_SHADER_PACKAGE_ID ? MAX_BLOCKS + genshadeBlocks.length : MAX_BLOCKS)) {
         throw new Error(`Shader package must define 1 to ${MAX_BLOCKS} blocks.`);
     }
     const usedIds = new Set();
@@ -557,6 +558,7 @@ const readBlobAsText = blob => {
 
 const createDefaultPackageShell = () => {
     const shell = cloneJSON(defaultShaderManifest);
+    shell.blocks.push(...genshadeBlocks);
     shell.programs = shell.programs.map(program => Object.assign({}, program, {
         source: defaultProgramSources[program.bind]
     }));
@@ -603,6 +605,8 @@ class PenFXCustomShaderManager extends EventEmitter {
         const originalDeserializeProject = this.vm.deserializeProject.bind(this.vm);
         this.vm.deserializeProject = async (projectJSON, zip) => {
             await this.restorePackages(projectJSON && projectJSON[CUSTOM_SHADER_PROJECT_KEY]);
+            if (this.penFX.genshadeReady) await this.penFX.genshadeReady;
+            if (this.penFX.engine && this.penFX.engine.genshadeRenderer) this.penFX.engine.genshadeRenderer.clear();
             return originalDeserializeProject(projectJSON, zip);
         };
     }
@@ -801,6 +805,9 @@ class PenFXCustomShaderManager extends EventEmitter {
                 });
             }
             for (const shaderBlock of packageDescriptor.blocks) {
+                if (shaderBlock.id === genshadeBlocks[0].id) {
+                    blocks.push('---', {blockType: BlockType.LABEL, text: 'Genshade / ReShade'});
+                }
                 const displayBlock = localizeDefaultShaderBlock(packageDescriptor, shaderBlock, locale);
                 if (displayBlock.separatorBefore) blocks.push('---');
                 const argumentsInfo = {};

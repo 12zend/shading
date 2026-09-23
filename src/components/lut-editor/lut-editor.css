@@ -85,3 +85,30 @@
 .empty h2 { font-size: 1.2rem; }
 .empty p { line-height: 1.5; }
 .error { padding: 0.75rem; margin: 0.75rem; border: 1px solid $error-primary; }
+
+.layout-controls {
+    margin: 0.75rem;
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    border: 1px solid $ui-black-transparent;
+    font-size: 0.8rem;
+}
+.layout-controls legend { font-weight: bold; }
+.layout-controls label { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.layout-controls input,
+.layout-controls select {
+    max-width: 100%;
+    padding: 0.4rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    color: $text-primary;
+    background: $input-background;
+    font: inherit;
+}
+.layout-controls input[type="number"] { width: 4.5rem; }
+.layout-controls input:focus-visible,
+.layout-controls select:focus-visible { outline: 2px solid $looks-secondary; outline-offset: 2px; }
+.layout-controls p { flex-basis: 100%; margin: 0; line-height: 1.5; max-width: 75ch; }
