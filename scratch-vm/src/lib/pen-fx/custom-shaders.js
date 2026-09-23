@@ -26,6 +26,7 @@ const MAX_SHADER_CHARACTERS = 512 * 1024;
 const MAX_TOTAL_SHADER_CHARACTERS = 4 * 1024 * 1024;
 const MAX_BLOCKS = 64;
 const MAX_INPUTS = 24;
+const GENSHADE_BLOCK_IDS = new Set(genshadeBlocks.map(block => block.id));
 const MAX_PROGRAMS = 64;
 const STANDARD_UNIFORMS = new Set(['u_image', 'u_resolution', 'u_time', 'u_frame']);
 const INPUT_TYPES = new Set(['angle', 'boolean', 'color', 'costume', 'integer', 'menu', 'number', 'string']);
@@ -229,7 +230,7 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
     return result;
 };
 
-const normalizeBlock = (rawBlock, source, usedIds) => {
+const normalizeBlock = (rawBlock, source, usedIds, isBuiltInGenshade = false) => {
     if (!rawBlock || typeof rawBlock !== 'object' || Array.isArray(rawBlock)) {
         throw new Error('Each shader block must be an object.');
     }
@@ -259,8 +260,9 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         if (!/\.glsl$/i.test(file)) throw new Error(`Shader block ${id} file must end in .glsl.`);
     }
     const inputs = rawBlock.inputs === undefined ? [] : rawBlock.inputs;
-    if (!Array.isArray(inputs) || inputs.length > MAX_INPUTS) {
-        throw new Error(`Shader block ${id} must define no more than ${MAX_INPUTS} inputs.`);
+    const maxInputs = isBuiltInGenshade ? 128 : MAX_INPUTS;
+    if (!Array.isArray(inputs) || inputs.length > maxInputs) {
+        throw new Error(`Shader block ${id} must define no more than ${maxInputs} inputs.`);
     }
     const normalizedInputs = inputs.map(input => normalizeInput(input, `Shader block ${id}`, !implementation));
     if (new Set(normalizedInputs.map(input => input.id)).size !== normalizedInputs.length) {
@@ -280,7 +282,8 @@ const normalizeBlock = (rawBlock, source, usedIds) => {
         }
     }
     const generatedText = [name].concat(normalizedInputs.map(input => `${input.label}: [${input.id}]`)).join(' ');
-    const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`, 1024);
+    const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`,
+        isBuiltInGenshade ? 8192 : 1024);
     const placeholders = [];
     const placeholderPattern = /\[([A-Z][A-Z0-9_]*)\]/g;
     let placeholderMatch = placeholderPattern.exec(text);
@@ -374,7 +377,8 @@ const normalizePackage = rawPackage => {
         throw new Error(`Shader package must define 1 to ${MAX_BLOCKS} blocks.`);
     }
     const usedIds = new Set();
-    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds));
+    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds,
+        id === DEFAULT_SHADER_PACKAGE_ID && GENSHADE_BLOCK_IDS.has(rawBlock.id)));
     const rawPrograms = rawPackage.programs === undefined ? [] : rawPackage.programs;
     if (!Array.isArray(rawPrograms) || rawPrograms.length > MAX_PROGRAMS || (version === 1 && rawPrograms.length)) {
         throw new Error(`Shader package must define no more than ${MAX_PROGRAMS} programs.`);
