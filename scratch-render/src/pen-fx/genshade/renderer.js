@@ -5,6 +5,10 @@ import {getGenshade} from './assets';
 
 const glName = name => name.replace(/__/g, '_x').replace(/_$/, '_x');
 const floatFormats = new Set([2, 10, 11, 16, 34, 41, 54, 56]);
+// ReShade's timer and frame counter start when the game launches, so shaders never see 0 in practice.
+// Seeded noise (e.g. SimpleGrain: floor(Timer * Framerate)) collapses to a flat tint at 0, so the
+// timeline clock is offset by a fixed, deterministic amount.
+const CLOCK_OFFSET_SECONDS = 100;
 const wrap = (gl, mode) => mode === 1 ? gl.REPEAT : mode === 2 ? gl.MIRRORED_REPEAT : gl.CLAMP_TO_EDGE;
 
 class GenshadeRenderer {
@@ -56,8 +60,9 @@ class GenshadeRenderer {
     image(name, srgb) {
         const key = `${name}:${srgb}`;
         if (this.images.has(key)) return this.images.get(key);
-        const image = getGenshade().images.get(name);
-        if (!image) throw new Error(`Missing Genshade image: ${name}`);
+        const assets = getGenshade();
+        const image = assets.images.get(name);
+        if (!image) throw (assets.imageErrors && assets.imageErrors.get(name)) || new Error(`Missing Genshade image: ${name}`);
         const gl = this.gl;
         const texture = gl.createTexture();
         const flags = [gl.UNPACK_FLIP_Y_WEBGL, gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, gl.UNPACK_COLORSPACE_CONVERSION_WEBGL];
@@ -131,14 +136,16 @@ class GenshadeRenderer {
     }
     uniforms(effect, settings, context) {
         const data = new DataView(effect.values);
-        const frame = context.frame || 0;
+        const fps = context.fps || 30;
+        const frame = (context.frame || 0) + Math.round(CLOCK_OFFSET_SECONDS * fps);
+        const time = (context.time || 0) + CLOCK_OFFSET_SECONDS;
         for (const uniform of effect.module.uniforms) {
             let value = settings[uniform.name];
             if (value === undefined) value = uniform.value;
             const source = uniform.annotations.source;
-            if (source === 'timer') value = [context.time * 1000];
+            if (source === 'timer') value = [time * 1000];
             else if (source === 'framecount') value = [frame];
-            else if (source === 'frametime') value = [1000 / context.fps];
+            else if (source === 'frametime') value = [1000 / fps];
             else if (source === 'pingpong') {
                 const min = (uniform.annotations.min || [0])[0], max = (uniform.annotations.max || [1])[0];
                 const speed = (uniform.annotations.step || [1])[0];
@@ -199,6 +206,8 @@ class GenshadeRenderer {
             engine._render(this.straightProgram, front.framebuffer, [{name:'u_image',texture:engine.textures[0]}], {}, []);
             const depth = effect.targets.get('$depth');
             this.prepareDepth(depth, context.depth);
+            // Like ReShade, the first pass of a technique that uses the stencil clears it.
+            const clearedStencils = new Set();
             for (const pass of technique.passes) {
                 if (pass.compute) {
                     if (!this.compute) this.compute=new GenshadeCompute(this);
@@ -256,6 +265,10 @@ class GenshadeRenderer {
                         effect.stencils.set(key,stencil);
                     }
                     gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_STENCIL_ATTACHMENT,gl.RENDERBUFFER,stencil);
+                    if (!clearedStencils.has(key)) {
+                        gl.stencilMask(0xff); gl.clearStencil(0); gl.clear(gl.STENCIL_BUFFER_BIT);
+                        clearedStencils.add(key);
+                    }
                     gl.enable(gl.STENCIL_TEST);
                     const funcs=[gl.NEVER,gl.LESS,gl.EQUAL,gl.LEQUAL,gl.GREATER,gl.NOTEQUAL,gl.GEQUAL,gl.ALWAYS];
                     const ops=[gl.ZERO,gl.KEEP,gl.REPLACE,gl.INCR,gl.DECR,gl.INVERT,gl.INCR_WRAP,gl.DECR_WRAP];

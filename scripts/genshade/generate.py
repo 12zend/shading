@@ -27,6 +27,8 @@ for p in sorted(source.rglob('*.fx')):
             'parameters':[{k:u[k] for k in ['name','type','rows','cols','value','annotations']} for u in m['uniforms'] if not u['annotations'].get('source')]})
 (ROOT/'static/genshade/modules.json').write_text(json.dumps(modules,separators=(',',':')))
 (ROOT/'static/genshade/sources.json').write_text(json.dumps({p.relative_to(source).as_posix():p.read_text() for p in sorted(source.rglob('*')) if p.suffix.lower() in ['.fx','.fxh']},separators=(',',':')))
+# Shader `source` annotations disagree on letter case (Cursor.png / cursor.png); the case-sensitive host needs the real names.
+(ROOT/'static/genshade/textures.json').write_text(json.dumps(sorted(p.relative_to(ROOT/'static/genshade/Textures').as_posix() for p in (ROOT/'static/genshade/Textures').rglob('*') if p.is_file() and not p.name.startswith('.')),separators=(',',':')))
 (ROOT/'scratch-render/src/pen-fx/genshade/catalog.json').write_text(json.dumps(catalog,indent=2)+'\n')
 pathlib.Path('/tmp/genshade-compile-results.json').write_text(json.dumps(results,indent=2))
 print(f'{len(modules)} FX files, {len(catalog)} techniques. No compilation failures.')

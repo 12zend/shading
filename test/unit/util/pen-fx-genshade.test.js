@@ -1,11 +1,31 @@
 import {blocks, catalog, installGenshade} from '../../../scratch-vm/src/lib/pen-fx/genshade';
-import {genshadeBaseURL} from '../../../scratch-render/src/pen-fx/genshade/assets';
+import fs from 'fs';
+import path from 'path';
+import {genshadeBaseURL, resolveGenshadeTexture} from '../../../scratch-render/src/pen-fx/genshade/assets';
+import GenshadeRenderer from '../../../scratch-render/src/pen-fx/genshade/renderer';
+
+const genshadeRoot = path.join(__dirname, '../../../static/genshade');
 
 test('loads Genshade assets from the app root on editor and project routes', () => {
     expect(genshadeBaseURL('/', 'https://shading.app/editor/')).toBe('https://shading.app/genshade/');
     expect(genshadeBaseURL('/', 'https://shading.app/project-id/')).toBe('https://shading.app/genshade/');
     expect(genshadeBaseURL('/app/', 'https://example.com/app/editor/'))
         .toBe('https://example.com/app/genshade/');
+});
+
+test('resolves every referenced texture to a shipped file on a case-sensitive host', () => {
+    // macOS dev servers match names case-insensitively; the production host does not.
+    const modules = JSON.parse(fs.readFileSync(path.join(genshadeRoot, 'modules.json'), 'utf8'));
+    const files = JSON.parse(fs.readFileSync(path.join(genshadeRoot, 'textures.json'), 'utf8'));
+    const shipped = fs.readdirSync(path.join(genshadeRoot, 'Textures')).filter(name => !name.startsWith('.'));
+    expect(files.slice().sort()).toEqual(shipped.sort());
+    const names = new Set(Object.values(modules).flatMap(module => module.textures
+        .map(texture => texture.annotations.source).filter(Boolean)));
+    expect(names).toContain('Cursor.png');
+    expect(names).toContain('cursor.png');
+    const missing = Array.from(names).filter(name => !files.includes(resolveGenshadeTexture(files, name)));
+    expect(missing).toEqual([]);
+    expect(resolveGenshadeTexture(files, 'Cursor.png')).toBe(resolveGenshadeTexture(files, 'cursor.png'));
 });
 
 describe('PenFX Genshade block arguments', () => {
@@ -67,4 +87,23 @@ describe('PenFX Genshade block arguments', () => {
             GaussianBlurStrength: [0.3]
         });
     });
+});
+
+test('never feeds ReShade timer or frame-count uniforms a zero seed on the first frame', () => {
+    const gl = {UNIFORM_BUFFER: 1, DYNAMIC_DRAW: 2, bindBuffer: jest.fn(), bufferData: jest.fn(),
+        bindBufferBase: jest.fn(), getExtension: jest.fn()};
+    const renderer = new GenshadeRenderer({gl});
+    const effect = {values: new ArrayBuffer(16), ubo: {}, module: {uniforms: [
+        {name: 'Timer', type: 'float', rows: 1, cols: 1, offset: 0, annotations: {source: 'timer'}},
+        {name: 'FrameCount', type: 'int', rows: 1, cols: 1, offset: 4, annotations: {source: 'framecount'}}
+    ]}};
+    renderer.uniforms(effect, {}, {time: 0, fps: 30, frame: 0});
+    const first = new DataView(effect.values.slice(0));
+    renderer.uniforms(effect, {}, {time: 1, fps: 30, frame: 30});
+    const second = new DataView(effect.values);
+    expect(first.getFloat32(0, true)).toBeGreaterThan(0);
+    expect(first.getInt32(4, true)).toBeGreaterThan(0);
+    // The offset is fixed, so exported frames stay deterministic and advance with the timeline.
+    expect(second.getFloat32(0, true) - first.getFloat32(0, true)).toBeCloseTo(1000, 1);
+    expect(second.getInt32(4, true) - first.getInt32(4, true)).toBe(30);
 });
