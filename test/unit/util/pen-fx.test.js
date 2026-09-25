@@ -1,6 +1,6 @@
 import VM from 'scratch-vm';
 
-import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
+import {createPenFXClass, installPenFX} from '../../helpers/official-plugins';
 
 describe('built-in Pen FX category', () => {
     test('uses doubled Gaussian sample density on every blur path', () => {

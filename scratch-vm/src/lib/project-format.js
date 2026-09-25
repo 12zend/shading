@@ -220,6 +220,7 @@ const getMovieProjectFeatures = projectJSON => {
     if (Array.isArray(projectJSON.penFXShaders) && projectJSON.penFXShaders.length > 0) {
         features.add('pen-fx-shaders');
     }
+    if (Array.isArray(projectJSON.shadingPlugins) && projectJSON.shadingPlugins.length > 0) features.add('plugins');
 
     const targets = Array.isArray(projectJSON.targets) ? projectJSON.targets : [projectJSON];
     for (const target of targets) {
@@ -277,9 +278,9 @@ const getRuntimeMovieProjectFeatures = runtime => {
         }
     }
     const penFX = runtime.penFX;
-    if (penFX && penFX.luts && penFX.luts.items.length) features.add('pen-fx-luts');
-    if (penFX && penFX.customShaders && penFX.customShaders.packages instanceof Map &&
-        penFX.customShaders.packages.size > 0) {
+    // Plugin packages and the core blend block are always bound; only project-owned packages count.
+    if (penFX && penFX.customShaders && typeof penFX.customShaders.serializePackages === 'function' &&
+        penFX.customShaders.serializePackages().length > 0) {
         features.add('pen-fx-shaders');
     }
 

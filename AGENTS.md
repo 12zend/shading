@@ -17,3 +17,9 @@ Guidelines for coding agents working on this repository.
 - Do not use a global `renderer.draw` suppression guard as a workaround for render-frame timing. Preserve the existing renderer scheduling and fix the block boundary that exposes the intermediate state.
 
 Existing blocks with deliberately documented atomic behavior are compatibility exceptions. Do not introduce new exceptions without explicit user approval.
+
+## Plugins
+
+- Effects and other specialised features are plugins in the separate `shading-plugins` repository (one zippable folder per plugin), loaded through `src/lib/plugins/`. Do not add effect-specific code, shaders or assets back into the core; extend the plugin API instead. See `docs/PLUGINS.md`.
+- The block rules above apply to plugin blocks. Plugin tests load the official plugins from `../shading-plugins` (or `SHADING_PLUGINS_DIR`).
+- Keep the legacy Looks opcodes and `penfx_menu_shader_penfx_builtins_*` menu names stable; saved projects reference them.

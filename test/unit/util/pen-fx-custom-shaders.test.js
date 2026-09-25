@@ -1,21 +1,21 @@
-import {catalog as genshadeCatalog} from '../../../scratch-vm/src/lib/pen-fx/genshade';
-import {easyBlocks} from '../../../scratch-vm/src/lib/pen-fx/easy';
 import JSZip from '@turbowarp/jszip';
 import VM from 'scratch-vm';
 
-import installPenFX, {createPenFXClass} from '../../../src/lib/pen-fx';
+import {createPenFXClass, installPenFX, requirePluginModule} from '../../helpers/official-plugins';
 import {
     CUSTOM_SHADER_FORMAT,
     CUSTOM_SHADER_PROJECT_KEY,
     CUSTOM_SHADER_VERSION,
-    DEFAULT_SHADER_PACKAGE_ID,
     PenFXCustomShaderManager,
-    createDefaultPackageShell,
     normalizePackage,
     opcodeFor,
     parseShaderZip
 } from '../../../src/lib/pen-fx/custom-shaders';
-import {programSources} from '../../../src/lib/pen-fx/shaders';
+import {registerEngineProgram} from '../../../scratch-render/src/pen-fx/engine';
+import legacyOpcodes from '../../../src/lib/plugins/legacy-plugin-opcodes.json';
+
+const {catalog: genshadeCatalog} = requirePluginModule('genshade', 'lib/blocks.js');
+const {easyBlocks} = requirePluginModule('easy', 'lib/presets.js');
 
 const fragmentSource = `
 precision highp float;
@@ -92,45 +92,45 @@ describe('Pen FX custom shader packages', () => {
             'AMOUNT,TINT_X,TINT_Y,TINT_Z,MODE,MIX')).toBe(true);
     });
 
-    test('ships every built-in PenFX block and fragment program directly from source folders', async () => {
-        const descriptor = createDefaultPackageShell();
-
-        expect(descriptor.id).toBe(DEFAULT_SHADER_PACKAGE_ID);
-        expect(descriptor.blocks).toHaveLength(60 + genshadeCatalog.length);
-        expect(descriptor.programs).toHaveLength(Object.keys(programSources).length);
-        expect(descriptor.blocks.find(block => block.id === 'contrast')).toMatchObject({
-            name: 'contrast',
-            text: 'contrast value: [VALUE] pivot: [PIVOT] mix: [MIX] %',
-            inputs: expect.arrayContaining([
-                expect.objectContaining({id: 'VALUE', label: 'value'}),
-                expect.objectContaining({id: 'PIVOT', label: 'pivot'}),
-                expect.objectContaining({id: 'MIX', label: 'mix'})
-            ])
-        });
-        expect(descriptor.blocks.map(block => block.opcode)).toEqual(expect.arrayContaining([
-            'contrast',
-            'depthOfField',
-            'pixelSort',
-            'displacementMap',
-            'bufferStackSize'
-        ]));
-        expect(descriptor.blocks.find(block => block.id === 'glitch').groupEffectScope).toBe('expanded');
-        for (const program of descriptor.programs) {
-            expect(program.source).toBe(programSources[program.bind].trim());
+    test('the official plugins provide every Looks block that used to be built in, under the same opcodes', () => {
+        const vm = {runtime: {renderer: {}}, getLocale: () => 'en'};
+        const penFX = new (createPenFXClass(vm))();
+        const provided = new Set();
+        for (const opcodes of penFX.customShaders.getPluginOpcodes().values()) {
+            for (const opcode of opcodes) provided.add(opcode);
         }
+        for (const pluginId of Object.keys(legacyOpcodes.plugins)) {
+            for (const opcode of legacyOpcodes.plugins[pluginId]) {
+                if (!provided.has(opcode) && typeof penFX[opcode] !== 'function') {
+                    throw new Error(`${pluginId} does not provide ${opcode}`);
+                }
+            }
+        }
+        for (const descriptor of genshadeCatalog) {
+            expect(new RegExp(legacyOpcodes.genshadePattern).test(`gs${descriptor.id.slice(9).replace(/[^a-zA-Z0-9]/g, '')}`))
+                .toBe(true);
+        }
+        const toolbox = penFX.customShaders.getToolboxBlocks();
+        expect(toolbox.find(block => block && block.opcode === 'contrast')).toMatchObject({
+            text: 'contrast value: [VALUE] pivot: [PIVOT] mix: [MIX] %'
+        });
+        // Menus keep the names they had in the built-in package, so saved menu shadows still resolve.
+        expect(penFX.getInfo().menus.shader_penfx_builtins_gaussian_blur_type.items)
+            .toEqual(['normal', 'horizontal', 'vertical']);
+        expect(penFX.customShaders.packages.get('distort').blocks.find(block => block.id === 'wavy')).toBeDefined();
+        expect(penFX.customShaders.packages.get('film').blocks.find(block => block.id === 'glitch').groupEffectScope)
+            .toBe('expanded');
     });
 
-    test('uses English names from the default folder and localizes them only for Japanese UI', () => {
+    test('uses English block names and localizes them only for Japanese UI', () => {
         const englishVM = {runtime: {renderer: {}}, getLocale: () => 'en'};
-        const englishManager = new PenFXCustomShaderManager(englishVM, new (createPenFXClass(englishVM))());
-        englishManager.installDefaultPackage();
-        const englishContrast = englishManager.getToolboxBlocks()
+        const englishContrast = new (createPenFXClass(englishVM, ['color-adjust']))().customShaders
+            .getToolboxBlocks()
             .find(block => block && block.opcode === 'contrast');
 
         const japaneseVM = {runtime: {renderer: {}}, getLocale: () => 'ja'};
-        const japaneseManager = new PenFXCustomShaderManager(japaneseVM, new (createPenFXClass(japaneseVM))());
-        japaneseManager.installDefaultPackage();
-        const japaneseContrast = japaneseManager.getToolboxBlocks()
+        const japaneseContrast = new (createPenFXClass(japaneseVM, ['color-adjust']))().customShaders
+            .getToolboxBlocks()
             .find(block => block && block.opcode === 'contrast');
 
         expect(englishContrast.text).toBe('contrast value: [VALUE] pivot: [PIVOT] mix: [MIX] %');
@@ -139,23 +139,22 @@ describe('Pen FX custom shader packages', () => {
         expect(japaneseContrast.arguments.VALUE).toMatchObject({defaultValue: 1});
     });
 
-    test('installs the complete built-in folder synchronously without decoding an archive', () => {
-        const shell = createDefaultPackageShell();
-        const runWithoutWaiting = jest.fn();
-        const penFX = {};
-        for (const block of shell.blocks) penFX[block.implementation.opcode] = jest.fn();
-        const vm = {runtime: {movieAssetManager: {runWithoutWaiting}}};
-        const manager = new PenFXCustomShaderManager(vm, penFX, {loadDefaultPackage: true});
-        expect(runWithoutWaiting).not.toHaveBeenCalled();
-        expect(manager.defaultPackagePromise).toBeNull();
-        expect(manager.packages.get(DEFAULT_SHADER_PACKAGE_ID).programs).toHaveLength(28);
+    test('without plugins the Looks category keeps only custom shaders and blending', () => {
+        const vm = {runtime: {renderer: {}}};
+        const PenFX = createPenFXClass(vm, []);
+        const info = new PenFX().getInfo();
+        const opcodes = info.blocks.filter(block => block && block.opcode).map(block => block.opcode);
+        expect(opcodes).toEqual(['setBlendMode']);
+        expect(info.blocks.find(block => block && block.func === 'importShaderPackage')).toBeDefined();
+        expect(info.menus.shader_penfx_builtins_set_blend_mode_type.items[0]).toBe('normal');
     });
 
-    test('all default command delegates return undefined in the current VM tick', () => {
+    test('every plugin command delegate returns undefined in the current VM tick', async () => {
         const vm = new VM();
         vm.runtime.renderer = {};
         installPenFX(vm);
         const penFX = vm.runtime.penFX;
+        await penFX.customShaders._scheduleRefresh();
         const engineMethod = jest.fn();
         penFX.engine = new Proxy({blendOpacity: 1, _restoreGLState: jest.fn()}, {
             get: (target, property) => property in target ? target[property] : engineMethod
@@ -169,11 +168,13 @@ describe('Pen FX custom shader packages', () => {
             expect(result).toBeUndefined();
             expect(result).not.toBeInstanceOf(Promise);
         }
-        // Easy color grading and the Easy effect blocks are the commands outside the default package.
+        // 58 effect commands and the core blend block, easy color grading, the Easy looks and Genshade.
         expect(commandBlocks).toHaveLength(59 + 1 + easyBlocks.length + genshadeCatalog.length);
     });
 
     test('scopes v2 program overrides to its adapter block and survives descriptor normalization', async () => {
+        // A plugin provides the `color` slot that the package overrides.
+        const disposeProgram = registerEngineProgram('color', 'void main() {}');
         const withShaderProgramOverrides = jest.fn((overrides, callback) => callback());
         const contrast = jest.fn();
         const penFX = {contrast, withShaderProgramOverrides, engine: null};
@@ -204,6 +205,7 @@ describe('Pen FX custom shader packages', () => {
         expect(withShaderProgramOverrides).toHaveBeenCalledWith({
             color: 'custom:contrast-variant:program:color'
         }, expect.any(Function));
+        disposeProgram();
     });
 
     test('propagates expanded scope through implementation blocks', async () => {
@@ -262,7 +264,7 @@ describe('Pen FX custom shader packages', () => {
         await manager.restorePackages([descriptor]);
 
         const toolbox = manager.getToolboxBlocks();
-        expect(toolbox[0]).toMatchObject({blockType: 'label', text: 'Easy'});
+        // No plugin sections here: the custom shader section follows directly.
         const customShaders = toolbox.findIndex(block => block && block.text === 'Custom Shaders');
         expect(customShaders).toBeGreaterThan(0);
         expect(toolbox[customShaders + 1]).toMatchObject({blockType: 'button', text: 'Import shader'});

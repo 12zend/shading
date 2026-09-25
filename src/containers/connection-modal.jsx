@@ -4,7 +4,6 @@ import bindAll from 'lodash.bindall';
 import ConnectionModalComponent, {PHASES} from '../components/connection-modal/connection-modal.jsx';
 import VM from 'scratch-vm';
 import analytics from '../lib/analytics';
-import extensionData from '../lib/libraries/extensions/index.jsx';
 import {connect} from 'react-redux';
 
 import {closeConnectionModal} from '../reducers/modals';
@@ -25,7 +24,8 @@ class ConnectionModal extends React.Component {
             'handleUpdatePeripheral'
         ]);
         this.state = {
-            extension: extensionData.find(ext => ext.extensionId === props.extensionId),
+            // Peripheral metadata came from the removed extension library; the modal falls back to the id.
+            extension: null,
             phase: props.vm.getPeripheralIsConnected(props.extensionId) ?
                 PHASES.connected : PHASES.scanning
         };
@@ -101,7 +101,7 @@ class ConnectionModal extends React.Component {
         });
     }
     handleHelp () {
-        window.open(this.state.extension.helpLink, '_blank');
+        if (this.state.extension && this.state.extension.helpLink) window.open(this.state.extension.helpLink, '_blank');
         analytics.event({
             category: 'extensions',
             action: 'help',

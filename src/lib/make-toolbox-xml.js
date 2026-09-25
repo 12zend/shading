@@ -819,24 +819,6 @@ const objects = function (costumeName, locale) {
     `;
 };
 
-const withPenFXGradientField = xml => {
-    if (!xml) return xml;
-    const gradient = xmlEscape(JSON.stringify({
-        stops: [
-            {color: '#000000', position: 0},
-            {color: '#ffffff', position: 1}
-        ]
-    }));
-    return xml.replace(
-        /<block type="penfx_gradationOverlay"(?:\/>|>[\s\S]*?<\/block>)/,
-        `<block type="penfx_gradationOverlay">
-            <field name="GRADIENT">${gradient}</field>
-            <value name="DIR"><shadow type="math_angle"><field name="NUM">90</field></shadow></value>
-            <value name="MIX"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
-        </block>`
-    );
-};
-
 // eslint-disable-next-line max-len
 const extraTurboWarpBlocks = `
 <block type="argument_reporter_boolean"><field name="VALUE">is compiled?</field></block>
@@ -891,7 +873,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     moveCategory('looks');
     const objectsCategory = moveCategory('objects');
     const objectsXML = objectsCategory ? objects(costumeName, locale) : null;
-    const penFXXML = withPenFXGradientField(moveCategory('penfx'));
+    const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);

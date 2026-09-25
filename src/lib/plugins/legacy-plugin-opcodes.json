@@ -1,0 +1,118 @@
+{
+  "description": "Looks opcodes (without the penfx_ prefix) that shading.app used to build in, mapped to the official plugin that now provides them. Generated from shading-plugins.",
+  "genshadePattern": "^gs[a-z0-9]+$",
+  "names": {
+    "blob-tracking": "Blob Tracking",
+    "blur": "Blur",
+    "buffer-stack": "Buffer Stack",
+    "color-adjust": "Color Adjust",
+    "color-grading": "Color Grading",
+    "distort": "Distort",
+    "easy": "Easy Looks",
+    "film": "Film & Retro",
+    "fractal-noise": "Fractal Noise",
+    "genshade": "Genshade / ReShade",
+    "glow": "Glow",
+    "lens": "Lens & Frame",
+    "lut": "LUT",
+    "pixel-sort": "Pixel Sort",
+    "stylize": "Stylize"
+  },
+  "plugins": {
+    "blob-tracking": [
+      "blob"
+    ],
+    "blur": [
+      "depthOfField",
+      "directionalBlur",
+      "gaussianBlur",
+      "lensBlur",
+      "radialBlur"
+    ],
+    "buffer-stack": [
+      "bufferStackSize",
+      "clearBufferStack",
+      "renderBufferStack",
+      "stackCurrentDrawing"
+    ],
+    "color-adjust": [
+      "alpha",
+      "autoExposure",
+      "brightness",
+      "chromaKey",
+      "colorAdjustment",
+      "colorBlindness",
+      "colorOverlay",
+      "colorSpaceAdjust",
+      "contrast",
+      "gamma",
+      "gradationOverlay",
+      "paletteSwap",
+      "saturation",
+      "toneMap"
+    ],
+    "color-grading": [
+      "colorGrade",
+      "easyColorGrading"
+    ],
+    "distort": [
+      "displacementMap",
+      "duplicate",
+      "mirror",
+      "pixelStretch",
+      "pixelate",
+      "pulse",
+      "transform",
+      "wavy"
+    ],
+    "easy": [
+      "easyBlur",
+      "easyDetail",
+      "easyDistort",
+      "easyGlow",
+      "easyLens",
+      "easyRetro",
+      "easyStylize"
+    ],
+    "film": [
+      "ascii",
+      "crt",
+      "dither",
+      "filmGrain",
+      "glitch",
+      "halftone",
+      "rgbShift",
+      "vhs"
+    ],
+    "fractal-noise": [
+      "fractalnoise"
+    ],
+    "glow": [
+      "bloom",
+      "deepGlow"
+    ],
+    "lens": [
+      "chromaticAberration",
+      "composition",
+      "fog",
+      "framing",
+      "lensDistortion",
+      "vignette",
+      "zoom"
+    ],
+    "lut": [
+      "applyLUT"
+    ],
+    "pixel-sort": [
+      "pixelSort"
+    ],
+    "stylize": [
+      "differenceOfGaussians",
+      "edgeDetection",
+      "fxaa",
+      "kuwahara",
+      "sharpen",
+      "stroke"
+    ]
+  }
+}

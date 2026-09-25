@@ -1,4 +1,7 @@
-import detectMovieBlobs, {drawMovieBlobOverlay} from '../../../src/lib/movie-blob-detection';
+import {requirePluginModule} from '../../helpers/official-plugins';
+
+// Blob detection is part of the Blob Tracking plugin.
+const {detectMovieBlobs, drawMovieBlobOverlay} = requirePluginModule('blob-tracking', 'lib/blob-detection.js');
 
 const frame = rows => {
     const width = rows[0].length;

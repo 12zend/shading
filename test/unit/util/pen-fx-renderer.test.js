@@ -1,4 +1,14 @@
 import createEngine from '../../../scratch-render/src/pen-fx/engine';
+import {requirePluginModule} from '../../helpers/official-plugins';
+
+// Effect methods come from plugins; install the ones a test needs directly on its engine.
+const installPluginEngineMethods = (engine, pluginId, modules) => {
+    for (const modulePath of modules) {
+        const methods = {};
+        requirePluginModule(pluginId, modulePath)({Engine: {prototype: methods}});
+        Object.assign(engine, methods);
+    }
+};
 
 const fixture = () => {
     const gl = {};
@@ -116,6 +126,7 @@ describe('stamp bounds and transparent groups', () => {
         group.buffer = {texture: skin._texture};
         engine.programs = {};
         engine._markSkinChanged.mockImplementation(surface => engine.invalidateDrawBounds(surface));
+        installPluginEngineMethods(engine, 'color-adjust', ['lib/acerola.js', 'lib/engine.js']);
 
         expect(engine.customShader('custom:sky', {}, [], 'normal')).toBeUndefined();
         expect(engine._render.mock.calls).toEqual([
@@ -146,7 +157,8 @@ describe('stamp bounds and transparent groups', () => {
     test('skips a blur only for a known empty isolated group', () => {
         const {engine, skin} = fixture();
         engine.programs = {};
-        engine.lensKernelProgram = 'lens-kernel';
+        // The Blur plugin marks its lens kernel as neighbourhood-local in the same way.
+        engine.setProgramBoundsPadding('lens-kernel', uniforms => Math.ceil(Math.abs(uniforms.u_radius)) + 2);
         const group = {skin, texture: 'pen', buffer: {texture: 'pen'}, bounds: []};
         engine.groupStack.push(group);
         expect(engine._singlePass('lens-kernel', {u_radius: 20}, [], 'normal')).toBeUndefined();

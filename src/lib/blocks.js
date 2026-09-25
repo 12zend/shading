@@ -2,7 +2,6 @@ import installLegacyDrawingBlocks from './legacy-drawing-blocks';
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import installBlockNumberScrubbing from './block-number-scrubbing';
 import installObjectBlockDefinitions from './object-blocks-ui';
-import installPenFXBlockDefinitions from './pen-fx-ui';
 import installListBlocks from './list-blocks';
 import {localize} from './movie-block-l10n';
 
@@ -17,7 +16,6 @@ export default function (vm, locale = 'en') {
     const translate = (english, japanese) => localize(locale, english, japanese);
     installListBlocks(vm, ScratchBlocks);
     installObjectBlockDefinitions(ScratchBlocks, vm, locale);
-    installPenFXBlockDefinitions(ScratchBlocks, locale, vm);
     installBlockNumberScrubbing(ScratchBlocks, () => {
         const manager = vm.runtime && vm.runtime.movieAssetManager;
         if (manager && typeof manager.requestTimelinePreviewRefresh === 'function') {

@@ -1,0 +1,119 @@
+@import "../../../css/colors.css";
+@import "../../../css/units.css";
+
+/* Thumbnail preset picker shared by plugins (see shading.ui.createPresetPickerField). */
+.preset-picker {
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100vh - 6rem));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: calc($form-radius * 2);
+    background: $ui-modal-background;
+    color: $text-primary;
+    font-family: inherit;
+}
+
+.preset-search {
+    flex: 0 0 auto;
+    margin: 0.75rem 0.75rem 0.35rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-primary;
+    color: $text-primary;
+    font: inherit;
+    font-size: 0.8rem;
+}
+
+.preset-search:focus {
+    outline: none;
+    border-color: $looks-secondary;
+    box-shadow: 0 0 0 2px $looks-transparent;
+}
+
+.preset-status {
+    flex: 0 0 auto;
+    min-height: 1rem;
+    margin: 0 0.8rem 0.35rem;
+    color: $text-primary-transparent;
+    font-size: 0.68rem;
+}
+
+.preset-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 0.75rem 0.75rem;
+    overscroll-behavior: contain;
+}
+
+.preset-section[hidden],
+.preset-card[hidden] {
+    display: none;
+}
+
+.preset-heading {
+    margin: 0.7rem 0.1rem 0.45rem;
+    color: $text-primary-transparent;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+.preset-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid transparent;
+    border-radius: $form-radius;
+    background: $ui-tertiary;
+    color: $text-primary;
+    cursor: pointer;
+    font: inherit;
+    text-align: center;
+}
+
+.preset-card:hover {
+    border-color: $ui-black-transparent;
+}
+
+.preset-card:focus-visible {
+    outline: none;
+    border-color: $looks-secondary;
+}
+
+.preset-card[aria-pressed="true"] {
+    border-color: $looks-secondary;
+    color: $looks-secondary;
+}
+
+.preset-thumbnail {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background-color: #2a2a2e;
+    background-image:
+        linear-gradient(45deg, #3a3a40 25%, transparent 25%, transparent 75%, #3a3a40 75%),
+        linear-gradient(45deg, #3a3a40 25%, transparent 25%, transparent 75%, #3a3a40 75%);
+    background-position: 0 0, 6px 6px;
+    background-size: 12px 12px;
+}
+
+.preset-name {
+    overflow: hidden;
+    padding: 0.35rem 0.4rem 0.4rem;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

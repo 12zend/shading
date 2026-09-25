@@ -1,20 +1,24 @@
-import {createPenFXClass} from '../../../src/lib/pen-fx';
-import {CATEGORIES, PRESETS, findPreset} from '../../../scratch-render/src/pen-fx/color-grading/presets';
-import {colorGradingUniforms} from '../../../scratch-render/src/pen-fx/color-grading/uniforms';
-import {getColorGradingBlockId} from '../../../src/lib/pen-fx-ui';
+import {createPenFXClass, requirePluginModule} from '../../helpers/official-plugins';
+import {getOwnerBlockId} from '../../../src/lib/plugins/ui/preset-picker';
+
+// Color grading is provided by the official plugin shading-plugins/color-grading.
+const {CATEGORIES, PRESETS, findPreset} = requirePluginModule('color-grading', 'lib/presets.js');
+const {colorGradingUniforms} = requirePluginModule('color-grading', 'lib/uniforms.js');
 
 const createPenFX = (runtime = {}) => {
-    const PenFX = createPenFXClass({runtime: Object.assign({renderer: {}}, runtime)});
+    const PenFX = createPenFXClass({runtime: Object.assign({renderer: {}}, runtime)}, ['color-grading']);
     return new PenFX();
 };
 
 describe('Easy color grading', () => {
-    test('lists the Easy section first with one preset menu entry per look', () => {
+    test('lists the one-click looks first in the plugin section with one preset menu entry per look', () => {
         const info = createPenFX().getInfo();
+        const label = info.blocks.findIndex(block => block.text === 'Color Grading');
 
-        expect(info.blocks[0]).toMatchObject({text: 'Easy'});
-        expect(info.blocks[1]).toMatchObject({opcode: 'easyColorGrading'});
-        expect(info.blocks[1].arguments.PRESET.menu).toBe('colorGradingPresets');
+        expect(label).toBeGreaterThanOrEqual(0);
+        expect(info.blocks[label + 1]).toMatchObject({opcode: 'easyColorGrading'});
+        expect(info.blocks[label + 2]).toMatchObject({opcode: 'colorGrade'});
+        expect(info.blocks[label + 1].arguments.PRESET.menu).toBe('colorGradingPresets');
         expect(info.menus.colorGradingPresets.items).toHaveLength(PRESETS.length);
         expect(info.menus.colorGradingPresets.items[0]).toEqual({text: 'Teal&Orange', value: 'teal-and-orange'});
     });
@@ -75,7 +79,7 @@ describe('Easy color grading', () => {
             expect(penFX.engine.captureEffectInput).not.toHaveBeenCalled();
 
             const listener = jest.fn();
-            const unsubscribe = penFX.requestEasyPreview('grade-block', listener);
+            const unsubscribe = penFX.requestInputPreview('grade-block', listener);
             expect(penFX.easyColorGrading({PRESET: 'vivid', MIX: 100}, util)).toBeUndefined();
             expect(penFX.engine.captureEffectInput).toHaveBeenCalledTimes(1);
             expect(penFX.engine.captureEffectInput.mock.invocationCallOrder[0])
@@ -91,7 +95,7 @@ describe('Easy color grading', () => {
             expect(penFX.engine.captureEffectInput).toHaveBeenCalledTimes(1);
 
             const reopened = jest.fn();
-            penFX.requestEasyPreview('grade-block', reopened);
+            penFX.requestInputPreview('grade-block', reopened);
             jest.runAllTimers();
             expect(reopened).toHaveBeenCalledWith(snapshot);
         } finally {
@@ -103,7 +107,7 @@ describe('Easy color grading', () => {
         const workspace = {isFlyout: false};
         const parent = {id: 'command'};
         const shadow = {workspace, isShadow: () => true, getParent: () => parent, id: 'shadow'};
-        expect(getColorGradingBlockId(shadow)).toBe('command');
-        expect(getColorGradingBlockId({...shadow, workspace: {isFlyout: true}})).toBeNull();
+        expect(getOwnerBlockId(shadow)).toBe('command');
+        expect(getOwnerBlockId({...shadow, workspace: {isFlyout: true}})).toBeNull();
     });
 });

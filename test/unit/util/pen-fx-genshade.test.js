@@ -1,16 +1,19 @@
-import {blocks, catalog, installGenshade} from '../../../scratch-vm/src/lib/pen-fx/genshade';
 import fs from 'fs';
 import path from 'path';
-import {genshadeBaseURL, resolveGenshadeTexture} from '../../../scratch-render/src/pen-fx/genshade/assets';
-import GenshadeRenderer from '../../../scratch-render/src/pen-fx/genshade/renderer';
+import {PLUGINS_DIR, requirePluginModule} from '../../helpers/official-plugins';
 
-const genshadeRoot = path.join(__dirname, '../../../static/genshade');
+// Genshade is the official plugin shading-plugins/genshade; its assets travel inside the plugin zip.
+const {blocks, catalog, install} = requirePluginModule('genshade', 'lib/blocks.js');
+const {resolveGenshadeTexture} = requirePluginModule('genshade', 'lib/assets.js');
+const GenshadeRenderer = requirePluginModule('genshade', 'lib/renderer.js');
+const installGenshade = PenFX => install({PenFX, vm: {runtime: {}}});
 
-test('loads Genshade assets from the app root on editor and project routes', () => {
-    expect(genshadeBaseURL('/', 'https://shading.app/editor/')).toBe('https://shading.app/genshade/');
-    expect(genshadeBaseURL('/', 'https://shading.app/project-id/')).toBe('https://shading.app/genshade/');
-    expect(genshadeBaseURL('/app/', 'https://example.com/app/editor/'))
-        .toBe('https://example.com/app/genshade/');
+const genshadeRoot = path.join(PLUGINS_DIR, 'genshade', 'assets');
+
+test('ships the compiler, shader sources and texture list inside the plugin', () => {
+    for (const file of ['compiler.js', 'compiler.wasm', 'modules.json', 'sources.json', 'textures.json']) {
+        expect(fs.existsSync(path.join(genshadeRoot, file))).toBe(true);
+    }
 });
 
 test('resolves every referenced texture to a shipped file on a case-sensitive host', () => {
@@ -55,7 +58,7 @@ describe('PenFX Genshade block arguments', () => {
         class PenFX {
             _safe(callback) { callback(engine, {}); }
         }
-        installGenshade(PenFX, {runtime: {}});
+        installGenshade(PenFX);
         const args = Object.fromEntries(block.inputs.map(input => [input.id, input.defaultValue]));
         const vectorIndex = descriptor.parameters.findIndex(parameter =>
             parameter.rows > 1 && parameter.annotations.ui_type !== 'color');
@@ -77,7 +80,7 @@ describe('PenFX Genshade block arguments', () => {
         class PenFX {
             _safe(callback) { callback({genshadeRenderer: renderer}, {}); }
         }
-        installGenshade(PenFX, {runtime: {}});
+        installGenshade(PenFX);
         const result = new PenFX()[block.opcode]({P0: 16, P1: 1, P2: 0.3, MIX: 100}, {target: {}});
         expect(result).toBeUndefined();
         expect(renderer.render).toHaveBeenCalledTimes(1);

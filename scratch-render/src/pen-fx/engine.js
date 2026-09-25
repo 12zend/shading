@@ -1,29 +1,132 @@
 import frameMethods from '../MovieFrameRenderer';
 /* eslint-disable */
 
-import installEffects from './effects';
-
 import {BLEND_MODES} from './constants';
 import {programSources, vertex} from './shaders';
 
-// Shared default uniforms for acerola passes. The nested arrays are treated as
-// read-only by _render, so every pass can reference the same instances instead
-// of allocating fresh ones per block invocation.
-const ACEROLA_DEFAULT_UNIFORMS = {
-    u_color: [0, 0, 0],
-    u_color2: [0, 0, 0],
-    u_color3: [0, 0, 0],
-    u_color4: [1, 1, 1],
-    u_mix: 1,
-    u_time: 0,
-    u_type: 0,
-    u_type2: 0,
-    u_value: 0,
-    u_value2: 0,
-    u_value3: 0,
-    u_vec: [0, 0],
-    u_vec2: [0, 0]
+// Effects are not part of the core engine. Plugins extend every engine class with methods and add named
+// fragment programs through the registries below. Registrations stack, so disposing one plugin restores whatever
+// an earlier plugin had installed under the same name.
+const engineExtensions = [];
+const engineClasses = new Set();
+const liveEngines = new Set();
+const programRegistry = new Map();
+
+const applyExtension = (Engine, extension) => {
+    for (const name of Object.keys(extension.methods)) {
+        if (!Object.prototype.hasOwnProperty.call(extension.saved, name)) extension.saved[name] = new Map();
+        const saved = extension.saved[name];
+        if (!saved.has(Engine)) {
+            saved.set(Engine, Object.prototype.hasOwnProperty.call(Engine.prototype, name) ?
+                {value: Engine.prototype[name]} : null);
+        }
+        Engine.prototype[name] = extension.methods[name];
+    }
 };
+
+const removeExtension = (Engine, extension) => {
+    for (const name of Object.keys(extension.methods).reverse()) {
+        if (Engine.prototype[name] !== extension.methods[name]) continue;
+        // A later extension that replaced this method keeps it; otherwise fall back to the next
+        // registration still active or to the original prototype member.
+        const replacement = engineExtensions.slice().reverse()
+            .find(other => other !== extension && Object.prototype.hasOwnProperty.call(other.methods, name));
+        if (replacement) {
+            Engine.prototype[name] = replacement.methods[name];
+            continue;
+        }
+        const saved = extension.saved[name] && extension.saved[name].get(Engine);
+        if (saved) Engine.prototype[name] = saved.value;
+        else delete Engine.prototype[name];
+    }
+};
+
+/**
+ * Add methods to every PenFX engine class, including classes created later.
+ * @param {object} options Extension options.
+ * @param {object} [options.methods] Prototype methods keyed by name.
+ * @param {Function} [options.onResize] Called with the engine when its work buffers are recreated.
+ * @returns {Function} Disposer that removes the extension.
+ */
+const registerEngineExtension = (options = {}) => {
+    const extension = {
+        methods: Object.assign({}, options.methods || {}),
+        onResize: typeof options.onResize === 'function' ? options.onResize : null,
+        saved: {}
+    };
+    engineExtensions.push(extension);
+    for (const Engine of engineClasses) applyExtension(Engine, extension);
+    let disposed = false;
+    return () => {
+        if (disposed) return;
+        disposed = true;
+        const index = engineExtensions.indexOf(extension);
+        if (index >= 0) engineExtensions.splice(index, 1);
+        for (const Engine of engineClasses) removeExtension(Engine, extension);
+    };
+};
+
+const activeProgram = name => {
+    const stack = programRegistry.get(name);
+    return stack && stack.length ? stack[stack.length - 1] : null;
+};
+
+const syncProgram = name => {
+    const entry = activeProgram(name);
+    for (const engine of liveEngines) engine._setBaseProgram(name, entry ? entry.source : null);
+};
+
+/**
+ * Register a named fragment program for PenFX effects.
+ * @param {string} name Program slot used with engine._program(name).
+ * @param {string} source GLSL ES 1.00 fragment shader.
+ * @param {object} [options] Program options.
+ * @param {Function} [options.boundsPadding] (uniforms) => pixels of padding when the program only reads the
+ * neighbourhood of each pixel, or null when it must process the whole surface. Grouped effects then render only
+ * inside the group's drawn bounds.
+ * @returns {Function} Disposer.
+ */
+const registerEngineProgram = (name, source, options = {}) => {
+    const key = String(name);
+    if (Object.prototype.hasOwnProperty.call(programSources, key)) {
+        throw new Error(`PenFX program ${key} is reserved by the core engine.`);
+    }
+    const entry = {
+        source: String(source),
+        boundsPadding: typeof options.boundsPadding === 'function' ? options.boundsPadding : null
+    };
+    if (!programRegistry.has(key)) programRegistry.set(key, []);
+    programRegistry.get(key).push(entry);
+    syncProgram(key);
+    let disposed = false;
+    return () => {
+        if (disposed) return;
+        disposed = true;
+        const stack = programRegistry.get(key) || [];
+        const index = stack.indexOf(entry);
+        if (index >= 0) stack.splice(index, 1);
+        if (!stack.length) programRegistry.delete(key);
+        syncProgram(key);
+    };
+};
+
+const getRegisteredProgramNames = () => Array.from(programRegistry.keys());
+
+const CAPTURE_SHADER = `
+  precision highp float;
+  varying vec2 v_uv;
+  uniform sampler2D u_image;
+  uniform vec2 u_step;
+  void main() {
+    vec4 sum = vec4(0.0);
+    for (int y = 0; y < 4; y++) {
+      for (int x = 0; x < 4; x++) {
+        sum += texture2D(u_image, v_uv + (vec2(float(x), float(y)) - 1.5) * 0.25 * u_step);
+      }
+    }
+    gl_FragColor = sum / 16.0;
+  }
+`;
 
 const createPenFXEngine = (gl, renderer) => {
     class PenFXEngine {
@@ -33,7 +136,9 @@ const createPenFXEngine = (gl, renderer) => {
             // Keep imported program sources scoped to this VM/renderer. The built-in
             // source table is shared by the module and must remain immutable.
             this.baseProgramSources = Object.assign({}, programSources);
+            for (const name of programRegistry.keys()) this.baseProgramSources[name] = activeProgram(name).source;
             this.programSources = Object.assign({}, this.baseProgramSources);
+            this.programBoundsPadding = new Map();
             this.programs = Object.create(null);
             this.vertexShader = this._compileShader(gl.VERTEX_SHADER, vertex);
             this.quad = gl.createBuffer();
@@ -46,7 +151,6 @@ const createPenFXEngine = (gl, renderer) => {
             this.resolution = new Float32Array(2);
             this.textures = [];
             this.framebuffers = [];
-            this.bufferStack = [];
             this.groupStack = [];
             this.renderPasses = new Map();
             this.matteStack = [];
@@ -56,18 +160,56 @@ const createPenFXEngine = (gl, renderer) => {
             this.uniformCache = new WeakMap();
             this.positionCache = new WeakMap();
             this.programOverrides = null;
-            this.pixelSortSource = null;
-            this.pixelSortOutput = null;
-            this.pixelSortKeys = null;
-            this.pixelSortSelected = null;
-            this.pixelSortIndices = [];
-            this.pixelSortLine = [];
-            this.blobSource = null;
-            this.previousBlobFrame = null;
-            this.blobOutput = null;
             this.depthTexture = null;
             this.depthSource = null;
             this.depthVersion = -1;
+            liveEngines.add(this);
+        }
+
+        // Called by the program registry. A custom shader registered over a base slot keeps priority.
+        _setBaseProgram (name, source) {
+            const previous = this.baseProgramSources[name];
+            const customized = Object.prototype.hasOwnProperty.call(this.programSources, name) &&
+                this.programSources[name] !== previous;
+            if (source === null) delete this.baseProgramSources[name];
+            else this.baseProgramSources[name] = source;
+            if (customized) return;
+            const existingProgram = this.programs[name];
+            if (existingProgram) {
+                gl.deleteProgram(existingProgram);
+                delete this.programs[name];
+            }
+            if (source === null) delete this.programSources[name];
+            else this.programSources[name] = source;
+        }
+
+        getProgramSource (name) {
+            return this.programSources[name];
+        }
+
+        // Plugins that compile a program outside the registry (for example a specialised kernel) can mark it as
+        // neighbourhood-local so grouped effects process only the group's drawn bounds.
+        setProgramBoundsPadding (program, boundsPadding) {
+            if (!program || typeof boundsPadding !== 'function') return;
+            if (!this.programBoundsPadding) this.programBoundsPadding = new Map();
+            this.programBoundsPadding.set(program, boundsPadding);
+        }
+
+        _boundsPaddingFor (program, uniforms) {
+            const direct = this.programBoundsPadding && this.programBoundsPadding.get(program);
+            if (direct) return direct(uniforms);
+            const name = Object.keys(this.programs).find(key => this.programs[key] === program);
+            if (!name) return null;
+            const entry = activeProgram(name);
+            const sourceCode = this.programSources[name];
+            // An imported package that overrides the slot runs its own GLSL, which may sample anywhere.
+            if (!entry || !entry.boundsPadding || !sourceCode || sourceCode.trim() !== entry.source.trim()) return null;
+            const padding = entry.boundsPadding(uniforms);
+            return Number.isFinite(padding) ? padding : null;
+        }
+
+        dispose () {
+            liveEngines.delete(this);
         }
 
         _compileShader (type, source) {
@@ -174,7 +316,6 @@ const createPenFXEngine = (gl, renderer) => {
         _resize (width, height) {
             if (this.width === width && this.height === height) return;
             this.clearFrameBuffer();
-            this.clearBufferStack();
             this.clearGroupStack();
             this.clearMatteStack();
             this.clearRenderPasses();
@@ -186,10 +327,9 @@ const createPenFXEngine = (gl, renderer) => {
             this.resolution[1] = height;
             this.textures = [];
             this.framebuffers = [];
-            this.pixelSortSource = null;
-            this.pixelSortOutput = null;
-            this.pixelSortKeys = null;
-            this.pixelSortSelected = null;
+            for (const extension of engineExtensions) {
+                if (extension.onResize) extension.onResize(this);
+            }
             const primary = this._createBufferTexture();
             this.textures.push(primary.texture);
             this.framebuffers.push(primary.framebuffer);
@@ -790,13 +930,7 @@ const createPenFXEngine = (gl, renderer) => {
             const filter = group || matte ? gl.LINEAR : gl.NEAREST;
             let bounds = null;
             if (group && group.bounds) {
-                const name = Object.keys(this.programs).find(key => this.programs[key] === program);
-                const sourceCode = name && this.programSources[name];
-                const matches = key => sourceCode && sourceCode.trim() === this.baseProgramSources[key].trim();
-                let padding = null;
-                if (program === this.lensKernelProgram) padding = Math.ceil(Math.abs(uniforms.u_radius)) + 2;
-                else if (matches('color') || matches('colorOverlay') ||
-                    (matches('acerolaColor') && uniforms.u_mode !== 10)) padding = 1;
+                const padding = this._boundsPaddingFor(program, uniforms);
                 if (padding !== null && !group.bounds.length) return true;
                 if (padding !== null) bounds = [Math.max(0, group.bounds[0] - padding),
                     Math.max(0, group.bounds[1] - padding), Math.min(this.width, group.bounds[2] + padding),
@@ -863,11 +997,44 @@ const createPenFXEngine = (gl, renderer) => {
             this._renderEffect(skin, program, [{name: 'u_image', texture: this.textures[0]}], uniforms, integerUniforms, blendMode);
         }
 
-        _acerolaPass (program, mode, uniforms, integerUniforms, blendMode) {
-            this._singlePass(program, Object.assign({
-                u_mode: mode,
-                u_resolution: this.resolution
-            }, ACEROLA_DEFAULT_UNIFORMS, uniforms), ['u_mode', 'u_type', 'u_type2'].concat(integerUniforms || []), blendMode);
+        // Reads a small premultiplied copy of the current effect input (the active group buffer, or the whole pen
+        // layer outside a group). Pickers request this only while they are open, so playback never pays for the
+        // GPU readback.
+        captureEffectInput (maxWidth = 320, maxHeight = 320) {
+            const skin = this._prepare(false, false);
+            if (!skin) return null;
+            const source = this._getGroupEffectSource(skin);
+            const scale = Math.min(1, maxWidth / this.width, maxHeight / this.height);
+            const width = Math.max(1, Math.round(this.width * scale));
+            const height = Math.max(1, Math.round(this.height * scale));
+            let target = this.captureTarget;
+            if (!target || target.width !== width || target.height !== height) {
+                if (target) {
+                    gl.deleteFramebuffer(target.framebuffer);
+                    gl.deleteTexture(target.texture);
+                }
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                const framebuffer = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+                target = this.captureTarget = {framebuffer, height, texture, width};
+            }
+            if (!this.captureProgram) this.captureProgram = this._createProgram(CAPTURE_SHADER);
+            const pixels = new Uint8Array(width * height * 4);
+            try {
+                this._render(this.captureProgram, target.framebuffer, [{name: 'u_image', texture: source}],
+                    {u_step: [1 / width, 1 / height]}, [], [width, height]);
+                gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            } finally {
+                this._restoreGLState();
+            }
+            return {width, height, pixels};
         }
 
         customShader (name, uniforms, integerUniforms, blendMode) {
@@ -920,8 +1087,10 @@ const createPenFXEngine = (gl, renderer) => {
     }
 
     Object.assign(PenFXEngine.prototype, frameMethods);
-    installEffects({Engine: PenFXEngine});
+    engineClasses.add(PenFXEngine);
+    for (const extension of engineExtensions) applyExtension(PenFXEngine, extension);
     return PenFXEngine;
 };
 
+export {getRegisteredProgramNames, registerEngineExtension, registerEngineProgram};
 export default createPenFXEngine;

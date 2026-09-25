@@ -219,6 +219,7 @@ class MenuBar extends React.Component {
             'handleClickPackager',
             'handleClickDesktopSettings',
             'handleClickRestorePoints',
+            'handleClickPlugins',
             'handleClickShare',
             'handleSetMode',
             'handleKeyPress',
@@ -279,6 +280,11 @@ class MenuBar extends React.Component {
     handleClickDesktopSettings () {
         this.props.onClickDesktopSettings();
         this.props.onRequestCloseSettings();
+    }
+    handleClickPlugins () {
+        const plugins = this.props.vm.shadingPlugins;
+        if (plugins) plugins.openManager();
+        this.props.onRequestCloseEdit();
     }
     handleClickRestorePoints () {
         this.props.onClickRestorePoints();
@@ -833,6 +839,15 @@ class MenuBar extends React.Component {
                                             defaultMessage="Advanced Settings"
                                             description="Menu bar item for advanced settings"
                                             id="tw.menuBar.moreSettings"
+                                        />
+                                    </MenuItem>
+                                </MenuSection>
+                                <MenuSection>
+                                    <MenuItem onClick={this.handleClickPlugins}>
+                                        <FormattedMessage
+                                            defaultMessage="Plugins…"
+                                            description="Menu bar item that lists installed plugins"
+                                            id="movie.menuBar.plugins"
                                         />
                                     </MenuItem>
                                 </MenuSection>

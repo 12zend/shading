@@ -1,45 +1,25 @@
 /* eslint-disable */
 
 import JSZip from '@turbowarp/jszip';
-import {blocks as genshadeBlocks} from './genshade';
 import EventEmitter from 'events';
 import ArgumentType from '../../extension-support/argument-type';
 import BlockType from '../../extension-support/block-type';
 
 import {boolean, color, number} from './helpers';
-import {BLEND_MODES, FRACTAL_NOISE_TYPES, FRACTAL_OVERFLOW_TYPES, FRACTAL_TYPES} from './constants';
+import {BLEND_MODES} from './constants';
 import {markMovieProject} from '../project-format';
-import defaultShaderManifest from './default-shader-package/shading-shader.json';
-import {programSources as defaultProgramSources} from './default-shader-package';
-import japaneseShaderTranslations from './default-shader-package/locales-ja.json';
 import {inferShaderInputs} from './shader-uniforms';
 import {localize, resolveLocale} from '../movie-block-l10n';
-import {PRESETS as COLOR_GRADING_PRESETS} from 'scratch-render/src/pen-fx/color-grading/presets';
-import {easyMenus, easyToolboxBlocks as easyPresetToolboxBlocks} from './easy';
-
-const COLOR_GRADING_MENU = 'colorGradingPresets';
-
-// Easy blocks apply a whole look from one choice. The GUI replaces the preset menu with a thumbnail picker.
-const easyToolboxBlocks = locale => [
-    {blockType: BlockType.LABEL, text: localize(locale, 'Easy', 'かんたん')},
-    {
-        opcode: 'easyColorGrading',
-        func: 'easyColorGrading',
-        blockType: BlockType.COMMAND,
-        text: localize(locale, 'color grading [PRESET] mix: [MIX] %', 'カラーグレーディング [PRESET] 混合: [MIX] %'),
-        arguments: {
-            PRESET: {type: ArgumentType.STRING, menu: COLOR_GRADING_MENU, defaultValue: COLOR_GRADING_PRESETS[0].id},
-            MIX: {type: ArgumentType.NUMBER, defaultValue: 100}
-        }
-    },
-    ...easyPresetToolboxBlocks(locale, ArgumentType, BlockType),
-    '---'
-];
+import {programSources as coreProgramSources} from 'scratch-render/src/pen-fx/shaders';
+import {getRegisteredProgramNames} from 'scratch-render/src/pen-fx/engine';
 
 const CUSTOM_SHADER_PROJECT_KEY = 'penFXShaders';
 const CUSTOM_SHADER_FORMAT = 'shading.app/penfx-shader';
 const CUSTOM_SHADER_VERSION = 2;
+// Effects that used to ship with the app kept their menus under this package id. Plugin packages that restore
+// those blocks register with it as their menu namespace so saved projects keep their menu opcodes.
 const DEFAULT_SHADER_PACKAGE_ID = 'penfx-builtins';
+const CORE_PACKAGE_ID = 'penfx-core';
 const MAX_ARCHIVE_BYTES = 10 * 1024 * 1024;
 const MAX_ARCHIVE_FILES = 128;
 const MAX_MANIFEST_CHARACTERS = 256 * 1024;
@@ -47,53 +27,62 @@ const MAX_SHADER_CHARACTERS = 512 * 1024;
 const MAX_TOTAL_SHADER_CHARACTERS = 4 * 1024 * 1024;
 const MAX_BLOCKS = 64;
 const MAX_INPUTS = 24;
-const GENSHADE_BLOCK_IDS = new Set(genshadeBlocks.map(block => block.id));
+// Plugin packages come from code the user already chose to run, so they may be larger than an imported zip.
+const MAX_PLUGIN_BLOCKS = 4096;
+const MAX_PLUGIN_INPUTS = 128;
 const MAX_PROGRAMS = 64;
 const STANDARD_UNIFORMS = new Set(['u_image', 'u_resolution', 'u_time', 'u_frame']);
 const INPUT_TYPES = new Set(['angle', 'boolean', 'color', 'costume', 'integer', 'menu', 'number', 'string']);
 const BLOCK_TYPES = new Set(['command', 'reporter']);
-const DEFAULT_LEGACY_MENUS = {
-    rgbPair: ['RG', 'GB', 'BR'],
-    colorBlindType: ['deuteranopia', 'protanopia', 'tritanopia'],
-    toneMapType: ['clamp', 'aces hill', 'aces', 'reinhard'],
-    chromaBehavior: ['solid', 'gradient', 'transparent'],
-    gaussianType: ['normal', 'horizontal', 'vertical'],
-    lensShape: ['circle', 'hexagon', 'octagon'],
-    fogType: ['linear', 'smooth', 'exponential', 'exponential squared'],
-    polarType: ['dir', 'size'],
-    axisType: ['x', 'y', 'size', 'dir'],
-    sortAxis: ['x', 'y', 'size', 'dir'],
-    sortBy: ['luminance', 'saturation', 'hue'],
-    frameShape: ['rectangle', 'circle'],
-    sampleMode: ['clamp', 'mirror', 'wrap', 'border'],
-    stretchType: ['x', 'y', 'size', 'dir'],
-    turbulenceType: ['both', 'x', 'y', 'size', 'dir'],
-    fractalType: FRACTAL_TYPES,
-    fractalNoiseType: FRACTAL_NOISE_TYPES,
-    fractalOverflowType: FRACTAL_OVERFLOW_TYPES,
-    mapChannel: ['luminance', 'r', 'g', 'b', 'a'],
-    blobMode: ['bright', 'dark', 'color', 'motion', 'alpha'],
-    blobShape: ['rectangle', 'ellipse'],
-    bufferMode: ['average', 'add', 'lighten', 'darken'],
-    mirrorType: ['x', 'y', 'xy'],
+// Menus that projects saved by old versions reference directly. Effect plugins register their own legacy menus.
+const CORE_LEGACY_MENUS = {
     boolean: ['false', 'true'],
     blendMode: BLEND_MODES
 };
 
-const localizeDefaultShaderBlock = (packageDescriptor, shaderBlock, locale) => {
-    if (!packageDescriptor.isDefault || locale !== 'ja') return shaderBlock;
-    const translation = japaneseShaderTranslations[shaderBlock.id];
+// The blend mode block is part of the core Looks category; every effect honours it.
+const CORE_PACKAGE = {
+    format: 'shading.app/penfx-shader',
+    version: 2,
+    id: CORE_PACKAGE_ID,
+    name: 'Blending',
+    blocks: [{
+        id: 'set-blend-mode',
+        name: 'setBlendMode',
+        text: 'use [TYPE] blending mode opacity: [OPACITY] %',
+        opcode: 'setBlendMode',
+        blockType: 'command',
+        implementation: {type: 'penfx', opcode: 'setBlendMode'},
+        inputs: [
+            {id: 'TYPE', label: 'type', type: 'menu', items: BLEND_MODES.slice(), defaultValue: 'normal'},
+            {id: 'OPACITY', label: 'opacity', type: 'number', defaultValue: 100}
+        ]
+    }]
+};
+const CORE_TRANSLATIONS = {
+    ja: {
+        'set-blend-mode': {
+            name: 'ブレンド',
+            text: 'ブレンド [TYPE] 不透明度: [OPACITY] %',
+            labels: {TYPE: '種類', OPACITY: '不透明度'}
+        }
+    }
+};
+
+const localizeShaderBlock = (packageDescriptor, shaderBlock, locale) => {
+    const translations = packageDescriptor.translations && packageDescriptor.translations[locale];
+    const translation = translations && translations[shaderBlock.id];
     if (!translation) return shaderBlock;
     return Object.assign({}, shaderBlock, {
-        name: translation.name,
-        text: translation.text,
+        name: translation.name || shaderBlock.name,
+        text: translation.text || shaderBlock.text,
         inputs: shaderBlock.inputs.map(input => Object.assign({}, input, {
-            label: translation.labels[input.id] || input.label
+            label: translation.labels && translation.labels[input.id] || input.label
         }))
     });
 };
-const PENFX_IMPLEMENTATIONS = new Set(defaultShaderManifest.blocks.concat(genshadeBlocks).map(block => block.implementation.opcode));
-const PENFX_PROGRAM_BINDINGS = new Set(defaultShaderManifest.programs.map(program => program.bind));
+
+const bindableProgramNames = () => new Set(Object.keys(coreProgramSources).concat(getRegisteredProgramNames()));
 const DEFAULT_SHADER_SOURCE = `precision highp float;
 
 varying vec2 v_uv;
@@ -169,7 +158,7 @@ const normalizeNumber = (value, fallback, label) => {
     return result;
 };
 
-const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
+const normalizeInput = (rawInput, blockLabel, shaderInput = true, trusted = false) => {
     if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) {
         throw new Error(`${blockLabel} has an invalid input.`);
     }
@@ -241,6 +230,12 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
         result.defaultValue = rawInput.defaultValue === undefined ? false : boolean(rawInput.defaultValue);
     } else if (type === 'string' || type === 'costume') {
         result.defaultValue = rawInput.defaultValue === undefined ? '' : String(rawInput.defaultValue);
+        // A plugin can attach one of its own dynamic menus (for example a list of project assets).
+        if (trusted && type === 'string' && rawInput.menu !== undefined) {
+            const menu = assertString(rawInput.menu, `${blockLabel} input ${id} menu`, 64);
+            if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(menu)) throw new Error(`${blockLabel} input ${id} menu is invalid.`);
+            result.menu = menu;
+        }
     } else {
         result.defaultValue = normalizeNumber(rawInput.defaultValue, 0, `${blockLabel} input ${id} defaultValue`);
         if (shaderInput) {
@@ -251,7 +246,7 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true) => {
     return result;
 };
 
-const normalizeBlock = (rawBlock, source, usedIds, isBuiltInGenshade = false) => {
+const normalizeBlock = (rawBlock, source, usedIds, trusted = false) => {
     if (!rawBlock || typeof rawBlock !== 'object' || Array.isArray(rawBlock)) {
         throw new Error('Each shader block must be an object.');
     }
@@ -281,11 +276,11 @@ const normalizeBlock = (rawBlock, source, usedIds, isBuiltInGenshade = false) =>
         if (!/\.glsl$/i.test(file)) throw new Error(`Shader block ${id} file must end in .glsl.`);
     }
     const inputs = rawBlock.inputs === undefined ? [] : rawBlock.inputs;
-    const maxInputs = isBuiltInGenshade ? 128 : MAX_INPUTS;
+    const maxInputs = trusted ? MAX_PLUGIN_INPUTS : MAX_INPUTS;
     if (!Array.isArray(inputs) || inputs.length > maxInputs) {
         throw new Error(`Shader block ${id} must define no more than ${maxInputs} inputs.`);
     }
-    const normalizedInputs = inputs.map(input => normalizeInput(input, `Shader block ${id}`, !implementation));
+    const normalizedInputs = inputs.map(input => normalizeInput(input, `Shader block ${id}`, !implementation, trusted));
     if (new Set(normalizedInputs.map(input => input.id)).size !== normalizedInputs.length) {
         throw new Error(`Shader block ${id} input ids must be unique.`);
     }
@@ -304,7 +299,7 @@ const normalizeBlock = (rawBlock, source, usedIds, isBuiltInGenshade = false) =>
     }
     const generatedText = [name].concat(normalizedInputs.map(input => `${input.label}: [${input.id}]`)).join(' ');
     const text = assertString(rawBlock.text || generatedText, `Shader block ${id} text`,
-        isBuiltInGenshade ? 8192 : 1024);
+        trusted ? 8192 : 1024);
     const placeholders = [];
     const placeholderPattern = /\[([A-Z][A-Z0-9_]*)\]/g;
     let placeholderMatch = placeholderPattern.exec(text);
@@ -374,14 +369,23 @@ const normalizeProgram = (rawProgram, source, usedIds) => {
     let bind = null;
     if (rawProgram.bind != null) {
         bind = assertString(rawProgram.bind, `Shader program ${id} bind`, 64);
-        if (!/^[A-Za-z][A-Za-z0-9]*$/.test(bind) || !PENFX_PROGRAM_BINDINGS.has(bind)) {
+        if (!/^[A-Za-z][A-Za-z0-9]*$/.test(bind) || !bindableProgramNames().has(bind)) {
             throw new Error(`Shader program ${id} cannot bind to ${bind}.`);
         }
     }
     return {id, file, source: fragmentSource.replace(/\r\n?/g, '\n'), bind};
 };
 
-const normalizePackage = rawPackage => {
+/**
+ * Validate a PenFX shader package.
+ * @param {object} rawPackage Package descriptor (manifest with inline sources).
+ * @param {object} [options] Options.
+ * @param {boolean} [options.trusted] Package registered by an installed plugin: larger limits and compatibility
+ * opcodes are allowed. Imported zips and project data are never trusted.
+ * @returns {object} Normalized descriptor.
+ */
+const normalizePackage = (rawPackage, options = {}) => {
+    const trusted = options.trusted === true;
     if (!rawPackage || typeof rawPackage !== 'object' || Array.isArray(rawPackage)) {
         throw new Error('Shader package descriptor must be an object.');
     }
@@ -394,12 +398,12 @@ const normalizePackage = rawPackage => {
     }
     const id = normalizeId(rawPackage.id, 'Shader package id');
     const name = assertString(rawPackage.name || humanize(id), 'Shader package name', 64);
-    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > (id === DEFAULT_SHADER_PACKAGE_ID ? MAX_BLOCKS + genshadeBlocks.length : MAX_BLOCKS)) {
-        throw new Error(`Shader package must define 1 to ${MAX_BLOCKS} blocks.`);
+    const maxBlocks = trusted ? MAX_PLUGIN_BLOCKS : MAX_BLOCKS;
+    if (!Array.isArray(rawPackage.blocks) || rawPackage.blocks.length < 1 || rawPackage.blocks.length > maxBlocks) {
+        throw new Error(`Shader package must define 1 to ${maxBlocks} blocks.`);
     }
     const usedIds = new Set();
-    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds,
-        id === DEFAULT_SHADER_PACKAGE_ID && GENSHADE_BLOCK_IDS.has(rawBlock.id)));
+    const blocks = rawPackage.blocks.map(rawBlock => normalizeBlock(rawBlock, rawBlock.source, usedIds, trusted));
     const rawPrograms = rawPackage.programs === undefined ? [] : rawPackage.programs;
     if (!Array.isArray(rawPrograms) || rawPrograms.length > MAX_PROGRAMS || (version === 1 && rawPrograms.length)) {
         throw new Error(`Shader package must define no more than ${MAX_PROGRAMS} programs.`);
@@ -413,11 +417,12 @@ const normalizePackage = rawPackage => {
     if (version === 1 && blocks.some(block => block.implementation)) {
         throw new Error('Shader package version 1 does not support implementations.');
     }
-    if (blocks.some(block => block.implementation && !PENFX_IMPLEMENTATIONS.has(block.implementation.opcode))) {
-        throw new Error('Shader package references an unsupported PenFX implementation.');
+    // Implementations are provided by plugins; availability is checked when the package is bound.
+    if (!trusted && blocks.some(block => block.opcode)) {
+        throw new Error('Compatibility opcodes are reserved for packages registered by plugins.');
     }
-    if (id !== DEFAULT_SHADER_PACKAGE_ID && blocks.some(block => block.opcode)) {
-        throw new Error('Compatibility opcodes are reserved for the built-in PenFX package.');
+    if (!trusted && (id === DEFAULT_SHADER_PACKAGE_ID || id === CORE_PACKAGE_ID)) {
+        throw new Error(`${id} is reserved for shading.app.`);
     }
     const totalCharacters = blocks.reduce((total, block) => total + (block.source || '').length, 0) +
         programs.reduce((total, program) => total + program.source.length, 0);
@@ -581,38 +586,53 @@ const readBlobAsText = blob => {
     });
 };
 
-const createDefaultPackageShell = () => {
-    const shell = cloneJSON(defaultShaderManifest);
-    shell.blocks.push(...genshadeBlocks);
-    shell.programs = shell.programs.map(program => Object.assign({}, program, {
-        source: defaultProgramSources[program.bind]
-    }));
-    const descriptor = normalizePackage(shell);
-    descriptor.isDefault = true;
-    return descriptor;
+const resolveLabel = (label, locale, fallback) => {
+    if (typeof label === 'function') return String(label(locale) || fallback);
+    if (label && typeof label === 'object') return String(label[locale] || label.en || fallback);
+    return String(label || fallback);
 };
 
+const callWithLocale = (value, locale, fallback) => {
+    if (typeof value === 'function') return value(locale) || fallback;
+    return value || fallback;
+};
+
+const compareSections = (a, b) => (a.order - b.order) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
 class PenFXCustomShaderManager extends EventEmitter {
-    constructor (vm, penFX, options = {}) {
+    constructor (vm, penFX) {
         super();
         this.vm = vm;
         this.penFX = penFX;
+        // Every bound package: plugin packages first (in toolbox order), then the project's custom packages.
         this.packages = new Map();
+        this.pluginPackages = new Map();
+        this.contributions = new Map();
+        // Project packages whose PenFX implementation comes from a plugin that is not installed. They are kept
+        // verbatim so saving the project does not drop them, and bind as soon as the plugin is installed.
+        this.unavailablePackages = [];
         this.knownOpcodes = new Set();
         this.deleteFunctionNames = new Set();
-        this.implementationMethods = new Map();
+        this.opcodeWrappers = new WeakSet();
         this.programOverrideStates = new Map();
         this.serializationInstalled = false;
-        this.defaultPackage = null;
-        this.defaultPackagePromise = null;
+        this.refreshPromise = null;
         this.installSerializationHooks();
-        if (options.loadDefaultPackage) this.installDefaultPackage();
+        this._registerCorePackage();
     }
 
-    installDefaultPackage () {
-        if (this.defaultPackage) return;
-        this.defaultPackage = createDefaultPackageShell();
-        this._replacePackages([this.defaultPackage]);
+    _registerCorePackage () {
+        const descriptor = normalizePackage(CORE_PACKAGE, {trusted: true});
+        Object.assign(descriptor, {
+            isPlugin: true,
+            isCore: true,
+            order: Number.MAX_SAFE_INTEGER,
+            menuNamespace: DEFAULT_SHADER_PACKAGE_ID,
+            translations: CORE_TRANSLATIONS,
+            legacyMenus: {}
+        });
+        this.pluginPackages.set(descriptor.id, descriptor);
+        this._rebind();
     }
 
     installSerializationHooks () {
@@ -630,22 +650,195 @@ class PenFXCustomShaderManager extends EventEmitter {
         const originalDeserializeProject = this.vm.deserializeProject.bind(this.vm);
         this.vm.deserializeProject = async (projectJSON, zip) => {
             await this.restorePackages(projectJSON && projectJSON[CUSTOM_SHADER_PROJECT_KEY]);
-            if (this.penFX.genshadeReady) await this.penFX.genshadeReady;
-            if (this.penFX.engine && this.penFX.engine.genshadeRenderer) this.penFX.engine.genshadeRenderer.clear();
+            this.emit('projectLoading');
             return originalDeserializeProject(projectJSON, zip);
         };
     }
 
     serializePackages () {
-        return Array.from(this.packages.values())
-            .filter(packageDescriptor => !packageDescriptor.isDefault)
-            .map(packageDescriptor => cloneJSON(packageDescriptor));
+        return this._customPackages()
+            .map(packageDescriptor => cloneJSON(packageDescriptor))
+            .concat(this.unavailablePackages.map(cloneJSON));
+    }
+
+    _customPackages () {
+        return Array.from(this.packages.values()).filter(packageDescriptor => !packageDescriptor.isPlugin);
+    }
+
+    _sortedPluginPackages () {
+        return Array.from(this.pluginPackages.values()).sort(compareSections);
+    }
+
+    _implementationFor (implementationOpcode) {
+        // Plugins install implementations on the PenFX prototype; opcode wrappers live on the instance and may
+        // share the implementation's name (compatibility opcodes), so they are never treated as implementations.
+        const prototype = Object.getPrototypeOf(this.penFX);
+        const inherited = prototype && prototype[implementationOpcode];
+        if (typeof inherited === 'function' && !this.opcodeWrappers.has(inherited)) return inherited;
+        const own = this.penFX[implementationOpcode];
+        if (typeof own === 'function' && !this.opcodeWrappers.has(own)) return own;
+        return null;
+    }
+
+    _missingImplementations (packageDescriptor) {
+        return packageDescriptor.blocks
+            .filter(block => block.implementation && !this._implementationFor(block.implementation.opcode))
+            .map(block => block.implementation.opcode);
+    }
+
+    _assertImplementations (packageDescriptor) {
+        const missing = this._missingImplementations(packageDescriptor);
+        if (missing.length) {
+            throw new Error(`PenFX implementation not found: ${missing.join(', ')}. ` +
+                'Install the plugin that provides it.');
+        }
+    }
+
+    // Bind plugin packages and every custom package whose implementations exist.
+    _rebind (customPackages = this._customPackages()) {
+        const available = [];
+        const unavailable = [];
+        for (const packageDescriptor of customPackages) {
+            if (this._missingImplementations(packageDescriptor).length) unavailable.push(cloneJSON(packageDescriptor));
+            else available.push(packageDescriptor);
+        }
+        for (const rawPackage of this.unavailablePackages) {
+            try {
+                const packageDescriptor = normalizePackage(rawPackage);
+                if (this._missingImplementations(packageDescriptor).length) unavailable.push(rawPackage);
+                else available.push(packageDescriptor);
+            } catch (error) {
+                unavailable.push(rawPackage);
+            }
+        }
+        this.unavailablePackages = unavailable;
+        this._replacePackages(this._sortedPluginPackages().concat(available));
+    }
+
+    /**
+     * Add a PenFX block package provided by a plugin. Its blocks join the Looks category and are not saved into
+     * projects; projects only reference the blocks by opcode.
+     * @param {object} rawPackage shading.app/penfx-shader package (implementation blocks may use compatibility
+     * opcodes, and string inputs may name a plugin menu).
+     * @param {object} [options] Registration options.
+     * @param {string} [options.pluginId] Owning plugin.
+     * @param {number} [options.order] Toolbox position; lower comes first.
+     * @param {string|object|Function} [options.label] Toolbox label; defaults to the package name.
+     * @param {string} [options.menuNamespace] Package id used for menu names (keeps legacy menu opcodes).
+     * @param {object} [options.translations] {locale: {blockId: {name, text, labels}}}.
+     * @param {object} [options.legacyMenus] Extra static menus {name: items}.
+     * @param {object|Function} [options.menus] Extra menus {name: menuInfo} or (locale) => menus.
+     * @param {Array|Function} [options.before] Raw toolbox entries shown before the package blocks.
+     * @param {Array|Function} [options.after] Raw toolbox entries shown after the package blocks.
+     * @returns {Function} Disposer.
+     */
+    registerPluginPackage (rawPackage, options = {}) {
+        const packageDescriptor = normalizePackage(rawPackage, {trusted: true});
+        const id = packageDescriptor.id;
+        if (this.pluginPackages.has(id) || this.contributions.has(id)) {
+            throw new Error(`PenFX package ${id} is already registered.`);
+        }
+        if (this._customPackages().some(existing => existing.id === id)) {
+            throw new Error(`PenFX package ${id} conflicts with a custom shader package in this project.`);
+        }
+        const namespace = options.menuNamespace ? normalizeId(options.menuNamespace, 'Menu namespace') : id;
+        const opcodes = new Set(this._pluginOpcodes());
+        for (const shaderBlock of packageDescriptor.blocks) {
+            const opcode = opcodeFor(id, shaderBlock.id, shaderBlock.opcode);
+            if (opcodes.has(opcode)) throw new Error(`PenFX opcode ${opcode} is already registered.`);
+            opcodes.add(opcode);
+        }
+        Object.assign(packageDescriptor, {
+            isPlugin: true,
+            pluginId: options.pluginId || null,
+            order: Number.isFinite(Number(options.order)) ? Number(options.order) : 1000,
+            label: options.label || null,
+            menuNamespace: namespace,
+            translations: options.translations || {},
+            legacyMenus: options.legacyMenus || {},
+            menus: options.menus || null,
+            before: options.before || null,
+            after: options.after || null
+        });
+        this._assertImplementations(packageDescriptor);
+        this.pluginPackages.set(id, packageDescriptor);
+        this._rebind();
+        this._scheduleRefresh();
+        let disposed = false;
+        return () => {
+            if (disposed) return;
+            disposed = true;
+            if (this.pluginPackages.get(id) !== packageDescriptor) return;
+            this.pluginPackages.delete(id);
+            this._rebind();
+            this._scheduleRefresh();
+        };
+    }
+
+    /**
+     * Add raw extension blocks to the Looks category. Their functions must exist on the PenFX instance.
+     * @param {object} contribution Contribution.
+     * @param {string} contribution.id Unique id.
+     * @param {number} [contribution.order] Toolbox position.
+     * @param {string|object|Function} [contribution.label] Section label.
+     * @param {Array|Function} contribution.blocks Toolbox entries or (locale) => entries.
+     * @param {object|Function} [contribution.menus] Menus or (locale) => menus.
+     * @returns {Function} Disposer.
+     */
+    addToolboxContribution (contribution) {
+        const id = normalizeId(contribution && contribution.id, 'Toolbox contribution id');
+        if (this.contributions.has(id) || this.pluginPackages.has(id)) {
+            throw new Error(`PenFX toolbox section ${id} is already registered.`);
+        }
+        const entry = {
+            id,
+            order: Number.isFinite(Number(contribution.order)) ? Number(contribution.order) : 1000,
+            label: contribution.label || null,
+            blocks: contribution.blocks || [],
+            menus: contribution.menus || null
+        };
+        this.contributions.set(id, entry);
+        this._scheduleRefresh();
+        let disposed = false;
+        return () => {
+            if (disposed) return;
+            disposed = true;
+            if (this.contributions.get(id) !== entry) return;
+            this.contributions.delete(id);
+            this._scheduleRefresh();
+        };
+    }
+
+    _pluginOpcodes () {
+        const opcodes = [];
+        for (const packageDescriptor of this.pluginPackages.values()) {
+            for (const shaderBlock of packageDescriptor.blocks) {
+                opcodes.push(opcodeFor(packageDescriptor.id, shaderBlock.id, shaderBlock.opcode));
+            }
+        }
+        return opcodes;
+    }
+
+    /**
+     * Opcodes (without the `penfx_` prefix) currently provided by each plugin.
+     * @returns {Map<string, Set<string>>} pluginId -> opcodes.
+     */
+    getPluginOpcodes () {
+        const result = new Map();
+        for (const packageDescriptor of this.pluginPackages.values()) {
+            if (!packageDescriptor.pluginId) continue;
+            if (!result.has(packageDescriptor.pluginId)) result.set(packageDescriptor.pluginId, new Set());
+            const opcodes = result.get(packageDescriptor.pluginId);
+            for (const shaderBlock of packageDescriptor.blocks) {
+                opcodes.add(opcodeFor(packageDescriptor.id, shaderBlock.id, shaderBlock.opcode));
+            }
+        }
+        return result;
     }
 
     getShaders () {
         const shaders = [];
-        for (const packageDescriptor of this.packages.values()) {
-            if (packageDescriptor.isDefault) continue;
+        for (const packageDescriptor of this._customPackages()) {
             for (const shaderBlock of packageDescriptor.blocks) {
                 if (!shaderBlock.source || shaderBlock.implementation) continue;
                 shaders.push({
@@ -685,7 +878,8 @@ class PenFXCustomShaderManager extends EventEmitter {
         const base = slug(name);
         let id = base;
         let suffix = 2;
-        while (this.packages.has(id) || id === DEFAULT_SHADER_PACKAGE_ID) {
+        while (this.packages.has(id) || this.pluginPackages.has(id) || id === DEFAULT_SHADER_PACKAGE_ID ||
+            id === CORE_PACKAGE_ID) {
             const suffixText = `-${suffix++}`;
             id = `${base.slice(0, 48 - suffixText.length)}${suffixText}`;
         }
@@ -706,8 +900,7 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     async _commitCustomPackages (customPackages) {
-        const allPackages = this.defaultPackage ? [this.defaultPackage].concat(customPackages) : customPackages;
-        this._replacePackages(allPackages);
+        this._rebind(customPackages);
         await this._refreshBlocks();
         if (this.vm && this.vm.runtime && typeof this.vm.runtime.emitProjectChanged === 'function') {
             this.vm.runtime.emitProjectChanged();
@@ -737,14 +930,14 @@ class PenFXCustomShaderManager extends EventEmitter {
         });
         const engine = this.penFX._getEngine();
         this._validatePackageShaders(engine, packageDescriptor);
-        const packages = this.serializePackages();
+        const packages = this._customPackages().map(cloneJSON);
         packages.push(packageDescriptor);
-        await this._commitCustomPackages(packages);
+        await this._commitCustomPackages(packages.map(descriptor => normalizePackage(descriptor)));
         return this.getShader(`${packageId}:${blockId}`);
     }
 
     async updateShader (key, changes = {}) {
-        const packages = this.serializePackages();
+        const packages = this._customPackages().map(cloneJSON);
         const location = this._findShaderBlock(packages, key);
         if (!location) throw new Error('Shader not found.');
         const packageDescriptor = packages[location.packageIndex];
@@ -771,7 +964,7 @@ class PenFXCustomShaderManager extends EventEmitter {
         const engine = this.penFX._getEngine();
         this._validatePackageShaders(engine, normalizedPackage);
         packages[location.packageIndex] = normalizedPackage;
-        await this._commitCustomPackages(packages);
+        await this._commitCustomPackages(packages.map(descriptor => normalizePackage(descriptor)));
         return this.getShader(key);
     }
 
@@ -782,7 +975,7 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     async deleteShader (key) {
-        const packages = this.serializePackages();
+        const packages = this._customPackages().map(cloneJSON);
         const location = this._findShaderBlock(packages, key);
         if (!location) return false;
         const packageDescriptor = packages[location.packageIndex];
@@ -790,9 +983,8 @@ class PenFXCustomShaderManager extends EventEmitter {
             packages.splice(location.packageIndex, 1);
         } else {
             packageDescriptor.blocks.splice(location.blockIndex, 1);
-            packages[location.packageIndex] = normalizePackage(packageDescriptor);
         }
-        await this._commitCustomPackages(packages);
+        await this._commitCustomPackages(packages.map(descriptor => normalizePackage(descriptor)));
         return true;
     }
 
@@ -813,76 +1005,113 @@ class PenFXCustomShaderManager extends EventEmitter {
         });
     }
 
+    _packageToolboxBlocks (packageDescriptor, locale) {
+        const blocks = [];
+        const namespace = packageDescriptor.menuNamespace || packageDescriptor.id;
+        for (const shaderBlock of packageDescriptor.blocks) {
+            const displayBlock = localizeShaderBlock(packageDescriptor, shaderBlock, locale);
+            if (displayBlock.separatorBefore) blocks.push('---');
+            const argumentsInfo = {};
+            for (const input of displayBlock.inputs) {
+                argumentsInfo[input.id] = {
+                    type: argumentTypeForInput(input),
+                    defaultValue: input.defaultValue
+                };
+                if (input.menu) argumentsInfo[input.id].menu = input.menu;
+                if (input.type === 'menu') {
+                    argumentsInfo[input.id].menu = menuNameFor(namespace, displayBlock.id, input.id);
+                }
+            }
+            const opcode = opcodeFor(packageDescriptor.id, displayBlock.id, displayBlock.opcode);
+            blocks.push({
+                opcode,
+                func: opcode,
+                blockType: displayBlock.blockType === 'reporter' ? BlockType.REPORTER : BlockType.COMMAND,
+                text: displayBlock.text,
+                arguments: argumentsInfo
+            });
+        }
+        return blocks;
+    }
+
     getToolboxBlocks () {
         const locale = resolveLocale(null, this.vm);
-        const blocks = easyToolboxBlocks(locale).concat([
-            {blockType: BlockType.LABEL, text: 'Custom Shaders'},
-            {blockType: BlockType.BUTTON, text: 'Import shader', func: 'importShaderPackage'}
-        ]);
-        for (const packageDescriptor of this.packages.values()) {
+        const blocks = [];
+        const sections = [];
+        for (const packageDescriptor of this.pluginPackages.values()) {
+            if (!packageDescriptor.isCore) sections.push({id: packageDescriptor.id, order: packageDescriptor.order, packageDescriptor});
+        }
+        for (const contribution of this.contributions.values()) {
+            sections.push({id: contribution.id, order: contribution.order, contribution});
+        }
+        sections.sort(compareSections);
+        for (const section of sections) {
+            const source = section.packageDescriptor || section.contribution;
+            blocks.push('---');
+            blocks.push({blockType: BlockType.LABEL, text: resolveLabel(source.label, locale, source.name || source.id)});
+            try {
+                if (section.packageDescriptor) {
+                    blocks.push(...callWithLocale(source.before, locale, []));
+                    blocks.push(...this._packageToolboxBlocks(source, locale));
+                    blocks.push(...callWithLocale(source.after, locale, []));
+                } else {
+                    blocks.push(...callWithLocale(source.blocks, locale, []));
+                }
+            } catch (error) {
+                console.error(`[Pen FX] Could not build toolbox section ${section.id}:`, error);
+            }
+        }
+        blocks.push('---');
+        blocks.push({blockType: BlockType.LABEL, text: 'Custom Shaders'});
+        blocks.push({blockType: BlockType.BUTTON, text: 'Import shader', func: 'importShaderPackage'});
+        for (const packageDescriptor of this._customPackages()) {
             blocks.push('---');
             blocks.push({blockType: BlockType.LABEL, text: packageDescriptor.name});
-            if (!packageDescriptor.isDefault) {
-                blocks.push({
-                    blockType: BlockType.BUTTON,
-                    text: 'Delete shader package',
-                    func: deleteFunctionFor(packageDescriptor.id)
-                });
-            }
-            for (const shaderBlock of packageDescriptor.blocks) {
-                if (shaderBlock.id === genshadeBlocks[0].id) {
-                    blocks.push('---', {blockType: BlockType.LABEL, text: 'Genshade / ReShade'});
-                }
-                const displayBlock = localizeDefaultShaderBlock(packageDescriptor, shaderBlock, locale);
-                if (displayBlock.separatorBefore) blocks.push('---');
-                const argumentsInfo = {};
-                for (const input of displayBlock.inputs) {
-                    argumentsInfo[input.id] = {
-                        type: argumentTypeForInput(input),
-                        defaultValue: input.defaultValue
-                    };
-                    if (shaderBlock.implementation && shaderBlock.implementation.opcode === 'applyLUT' &&
-                        input.id === 'LUT') argumentsInfo[input.id].menu = 'lutAssets';
-                    if (input.type === 'menu') {
-                        argumentsInfo[input.id].menu = menuNameFor(
-                            packageDescriptor.id,
-                            displayBlock.id,
-                            input.id
-                        );
-                    }
-                }
-                const opcode = opcodeFor(packageDescriptor.id, displayBlock.id, displayBlock.opcode);
-                blocks.push({
-                    opcode,
-                    func: opcode,
-                    blockType: displayBlock.blockType === 'reporter' ? BlockType.REPORTER : BlockType.COMMAND,
-                    text: displayBlock.text,
-                    arguments: argumentsInfo
-                });
-            }
+            blocks.push({
+                blockType: BlockType.BUTTON,
+                text: 'Delete shader package',
+                func: deleteFunctionFor(packageDescriptor.id)
+            });
+            blocks.push(...this._packageToolboxBlocks(packageDescriptor, locale));
+        }
+        const corePackage = this.pluginPackages.get(CORE_PACKAGE_ID);
+        if (corePackage) {
+            blocks.push('---');
+            blocks.push(...this._packageToolboxBlocks(corePackage, locale));
         }
         blocks.push('---');
         return blocks;
     }
 
     getMenus () {
-        const menus = Object.assign({
-            lutAssets: {acceptReporters: true, items: 'getLUTMenu'},
-            [COLOR_GRADING_MENU]: {
-                acceptReporters: true,
-                items: COLOR_GRADING_PRESETS.map(preset => ({text: preset.name, value: preset.id}))
+        const locale = resolveLocale(null, this.vm);
+        const menus = {};
+        const addStatic = (name, items) => {
+            menus[name] = {acceptReporters: true, items: items.slice()};
+        };
+        for (const name of Object.keys(CORE_LEGACY_MENUS)) addStatic(name, CORE_LEGACY_MENUS[name]);
+        const addMenus = (source, label) => {
+            try {
+                Object.assign(menus, callWithLocale(source, locale, {}));
+            } catch (error) {
+                console.error(`[Pen FX] Could not build menus for ${label}:`, error);
             }
-        }, easyMenus(resolveLocale(null, this.vm)));
-        if (this.packages.has(DEFAULT_SHADER_PACKAGE_ID)) {
-            for (const name of Object.keys(DEFAULT_LEGACY_MENUS)) {
-                menus[name] = {acceptReporters: true, items: DEFAULT_LEGACY_MENUS[name].slice()};
+        };
+        for (const packageDescriptor of this.pluginPackages.values()) {
+            for (const name of Object.keys(packageDescriptor.legacyMenus || {})) {
+                addStatic(name, packageDescriptor.legacyMenus[name]);
             }
+            if (packageDescriptor.menus) addMenus(packageDescriptor.menus, packageDescriptor.id);
+        }
+        for (const contribution of this.contributions.values()) {
+            if (contribution.menus) addMenus(contribution.menus, contribution.id);
         }
         for (const packageDescriptor of this.packages.values()) {
+            const namespace = packageDescriptor.menuNamespace || packageDescriptor.id;
             for (const shaderBlock of packageDescriptor.blocks) {
                 for (const input of shaderBlock.inputs) {
                     if (input.type !== 'menu') continue;
-                    menus[menuNameFor(packageDescriptor.id, shaderBlock.id, input.id)] = {
+                    menus[menuNameFor(namespace, shaderBlock.id, input.id)] = {
                         acceptReporters: true,
                         items: input.items.slice()
                     };
@@ -908,7 +1137,7 @@ class PenFXCustomShaderManager extends EventEmitter {
     }
 
     _bindPackage (packageDescriptor) {
-        if (!packageDescriptor.isDefault) {
+        if (!packageDescriptor.isPlugin) {
             const deleteFunction = deleteFunctionFor(packageDescriptor.id);
             this.deleteFunctionNames.add(deleteFunction);
             // Extension buttons do not receive arguments, so expose a package-specific
@@ -934,17 +1163,12 @@ class PenFXCustomShaderManager extends EventEmitter {
             const opcode = opcodeFor(packageDescriptor.id, shaderBlock.id, shaderBlock.opcode);
             const programName = programNameFor(packageDescriptor.id, shaderBlock.id);
             this.knownOpcodes.add(opcode);
+            let wrapper;
             if (shaderBlock.implementation) {
                 const implementationOpcode = shaderBlock.implementation.opcode;
-                let implementation = this.implementationMethods.get(implementationOpcode);
-                if (!implementation) {
-                    implementation = this.penFX[implementationOpcode];
-                    if (typeof implementation !== 'function') {
-                        throw new Error(`PenFX implementation not found: ${implementationOpcode}.`);
-                    }
-                    this.implementationMethods.set(implementationOpcode, implementation);
-                }
-                this.penFX[opcode] = (args, util) => {
+                const implementation = this._implementationFor(implementationOpcode);
+                if (!implementation) throw new Error(`PenFX implementation not found: ${implementationOpcode}.`);
+                wrapper = (args, util) => {
                     const runImplementation = () => implementation.call(this.penFX, args || {}, util);
                     const invoke = () => {
                         if (shaderBlock.groupEffectScope === 'expanded' &&
@@ -960,7 +1184,7 @@ class PenFXCustomShaderManager extends EventEmitter {
                     return invoke();
                 };
             } else {
-                this.penFX[opcode] = args => {
+                wrapper = args => {
                     const uniforms = {
                         u_resolution: [0, 0],
                         u_time: this._timelineTime(),
@@ -1000,6 +1224,8 @@ class PenFXCustomShaderManager extends EventEmitter {
                     ), {groupEffectScope: shaderBlock.groupEffectScope});
                 };
             }
+            this.opcodeWrappers.add(wrapper);
+            this.penFX[opcode] = wrapper;
             if (this.penFX.engine && shaderBlock.source) {
                 this.penFX.engine.registerCustomShader(programName, shaderBlock.source);
             }
@@ -1023,7 +1249,12 @@ class PenFXCustomShaderManager extends EventEmitter {
                 }
             }
         }
-        for (const opcode of this.knownOpcodes) this.penFX[opcode] = () => undefined;
+        // Opcodes of removed packages stay callable as no-ops: scripts that still contain them keep running.
+        for (const opcode of this.knownOpcodes) {
+            const noop = () => undefined;
+            this.opcodeWrappers.add(noop);
+            this.penFX[opcode] = noop;
+        }
         for (const deleteFunction of this.deleteFunctionNames) this.penFX[deleteFunction] = () => undefined;
         this.deleteFunctionNames.clear();
         this.packages.clear();
@@ -1032,8 +1263,12 @@ class PenFXCustomShaderManager extends EventEmitter {
             if (!packageIds.has(packageId)) this.programOverrideStates.delete(packageId);
         }
         packages.forEach(packageDescriptor => {
-            this.packages.set(packageDescriptor.id, packageDescriptor);
-            this._bindPackage(packageDescriptor);
+            try {
+                this._bindPackage(packageDescriptor);
+                this.packages.set(packageDescriptor.id, packageDescriptor);
+            } catch (error) {
+                console.error(`[Pen FX] Could not bind package ${packageDescriptor.id}:`, error);
+            }
         });
         this.emit('shadersChanged');
     }
@@ -1079,36 +1314,56 @@ class PenFXCustomShaderManager extends EventEmitter {
         await extensionManager.refreshBlocks('penfx');
     }
 
+    // Plugins register several packages while they activate; rebuild the toolbox once afterwards.
+    _scheduleRefresh () {
+        if (this.refreshPromise) return this.refreshPromise;
+        this.refreshPromise = Promise.resolve()
+            .then(() => {
+                this.refreshPromise = null;
+                return this._refreshBlocks();
+            })
+            .catch(error => {
+                this.refreshPromise = null;
+                console.error('[Pen FX] Could not refresh blocks:', error);
+            });
+        return this.refreshPromise;
+    }
+
     async restorePackages (serializedPackages) {
-        if (this.defaultPackagePromise) await this.defaultPackagePromise;
         const packages = [];
+        this.unavailablePackages = [];
         if (Array.isArray(serializedPackages)) {
             for (const descriptor of serializedPackages) {
                 try {
                     const normalized = normalizePackage(descriptor);
-                    if (normalized.id !== DEFAULT_SHADER_PACKAGE_ID) packages.push(normalized);
+                    if (this.pluginPackages.has(normalized.id)) {
+                        throw new Error(`Package id ${normalized.id} is used by an installed plugin.`);
+                    }
+                    packages.push(normalized);
                 } catch (error) {
                     console.error('[Pen FX] Could not restore custom shader package:', error);
                 }
             }
         }
-        const allPackages = this.defaultPackage ? [this.defaultPackage].concat(packages) : packages;
-        this._replacePackages(allPackages);
+        this._rebind(packages);
+        if (this.unavailablePackages.length) {
+            console.warn('[Pen FX] Some custom shader packages need a plugin that is not installed:',
+                this.unavailablePackages.map(descriptor => descriptor.id).join(', '));
+        }
         await this._refreshBlocks();
     }
 
     async importZip (data, archiveName) {
         const packageDescriptor = await parseShaderZip(data, archiveName);
-        if (packageDescriptor.id === DEFAULT_SHADER_PACKAGE_ID) {
-            throw new Error(`${DEFAULT_SHADER_PACKAGE_ID} is reserved for the built-in shader package.`);
+        if (this.pluginPackages.has(packageDescriptor.id)) {
+            throw new Error(`${packageDescriptor.id} is used by an installed plugin.`);
         }
+        this._assertImplementations(packageDescriptor);
         const engine = this.penFX._getEngine();
         this._validatePackageShaders(engine, packageDescriptor);
-        const packages = Array.from(this.packages.values()).filter(existing =>
-            existing.id !== packageDescriptor.id && !existing.isDefault
-        );
+        const packages = this._customPackages().filter(existing => existing.id !== packageDescriptor.id);
         packages.push(packageDescriptor);
-        this._replacePackages(this.defaultPackage ? [this.defaultPackage].concat(packages) : packages);
+        this._rebind(packages);
         await this._refreshBlocks();
         if (this.vm && this.vm.runtime && typeof this.vm.runtime.emitProjectChanged === 'function') {
             this.vm.runtime.emitProjectChanged();
@@ -1118,15 +1373,13 @@ class PenFXCustomShaderManager extends EventEmitter {
 
     deleteShaderPackage (packageId) {
         const packageDescriptor = this.packages.get(packageId);
-        if (!packageDescriptor || packageDescriptor.isDefault) return Promise.resolve(false);
+        if (!packageDescriptor || packageDescriptor.isPlugin) return Promise.resolve(false);
         if (typeof window !== 'undefined' && typeof window.confirm === 'function' &&
             !window.confirm(`Delete custom shader package "${packageDescriptor.name}"?`)) {
             return Promise.resolve(false);
         }
 
-        this._replacePackages(Array.from(this.packages.values()).filter(existing =>
-            existing.id !== packageDescriptor.id
-        ));
+        this._rebind(this._customPackages().filter(existing => existing.id !== packageDescriptor.id));
         const pendingRefresh = this._refreshBlocks()
             .then(() => {
                 if (this.vm && this.vm.runtime && typeof this.vm.runtime.emitProjectChanged === 'function') {
@@ -1180,9 +1433,10 @@ export {
     CUSTOM_SHADER_PROJECT_KEY,
     CUSTOM_SHADER_VERSION,
     DEFAULT_SHADER_SOURCE,
+    CORE_PACKAGE_ID,
     DEFAULT_SHADER_PACKAGE_ID,
     PenFXCustomShaderManager,
-    createDefaultPackageShell,
+    menuNameFor,
     normalizePackage,
     opcodeFor,
     parseShaderZip,
