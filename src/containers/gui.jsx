@@ -8,6 +8,11 @@ import {injectIntl, intlShape} from 'react-intl';
 
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import installShadingFeatures from '../lib/shading-features';
+import installPluginManager from '../lib/plugins/manager';
+import ReactDOM from 'react-dom';
+import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
+import downloadBlob from '../lib/download-blob';
 import {
     getIsError,
     getIsShowingProject
@@ -21,14 +26,14 @@ import {
     FONTS_TAB_INDEX,
     MODELS_TAB_INDEX,
     SHADERS_TAB_INDEX,
-    LUTS_TAB_INDEX
+    PLUGINS_TAB_INDEX,
+    PLUGIN_TABS_START_INDEX
 } from '../reducers/editor-tab';
 
 import {
     closeCostumeLibrary,
     closeBackdropLibrary,
-    closeTelemetryModal,
-    openExtensionLibrary
+    closeTelemetryModal
 } from '../reducers/modals';
 
 import FontLoaderHOC from '../lib/font-loader-hoc.jsx';
@@ -60,10 +65,40 @@ const setProjectIdMetadata = projectId => {
 };
 
 class GUI extends React.Component {
+    constructor (props) {
+        super(props);
+        this.state = {pluginTabs: []};
+        this.handlePluginTabsChanged = pluginTabs => {
+            this.setState({pluginTabs});
+            // A disabled plugin's tab disappears; fall back to the code tab instead of an empty selection.
+            if (this.props.activeTabIndex >= PLUGIN_TABS_START_INDEX + pluginTabs.length) {
+                this.props.onActivateTab(BLOCKS_TAB_INDEX);
+            }
+        };
+        // The code area's add button imports a plugin zip directly (there is no extension library).
+        this.handleImportPlugin = () => {
+            const plugins = this.props.vm.shadingPlugins;
+            if (plugins) plugins.openImportPicker();
+        };
+    }
     componentDidMount () {
         setIsScratchDesktop(this.props.isScratchDesktop);
         this.props.onStorageInit(storage);
         installShadingFeatures(this.props.vm);
+        // Installed plugins load before any project; vm.deserializeProject waits for them.
+        this.pluginManager = installPluginManager(this.props.vm, {
+            guiContext: {
+                React,
+                ReactDOM,
+                components: Object.freeze({AssetPanel}),
+                icons: Object.freeze({fileUpload: fileUploadIcon}),
+                downloadBlob
+            }
+        });
+        if (this.pluginManager) {
+            this.pluginManager.on('tabsChanged', this.handlePluginTabsChanged);
+            this.handlePluginTabsChanged(this.pluginManager.getTabs());
+        }
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }
@@ -79,6 +114,9 @@ class GUI extends React.Component {
             // At this time the project view in www doesn't need to know when a project is unloaded
             this.props.onProjectLoaded();
         }
+    }
+    componentWillUnmount () {
+        if (this.pluginManager) this.pluginManager.removeListener('tabsChanged', this.handlePluginTabsChanged);
     }
     render () {
         if (this.props.isError) {
@@ -108,6 +146,8 @@ class GUI extends React.Component {
         return (
             <GUIComponent
                 loading={fetchingProject || isLoading || loadingStateVisible}
+                pluginTabs={this.state.pluginTabs}
+                onExtensionButtonClick={this.handleImportPlugin}
                 {...componentProps}
             >
                 {children}
@@ -117,6 +157,7 @@ class GUI extends React.Component {
 }
 
 GUI.propTypes = {
+    activeTabIndex: PropTypes.number,
     assetHost: PropTypes.string,
     children: PropTypes.node,
     cloudHost: PropTypes.string,
@@ -135,6 +176,7 @@ GUI.propTypes = {
     onSeeCommunity: PropTypes.func,
     onStorageInit: PropTypes.func,
     onUpdateProjectId: PropTypes.func,
+    onActivateTab: PropTypes.func,
     onVmInit: PropTypes.func,
     projectHost: PropTypes.string,
     projectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -175,8 +217,8 @@ const mapStateToProps = state => {
         videosTabVisible: state.scratchGui.editorTab.activeTabIndex === VIDEOS_TAB_INDEX,
         fontsTabVisible: state.scratchGui.editorTab.activeTabIndex === FONTS_TAB_INDEX,
         modelsTabVisible: state.scratchGui.editorTab.activeTabIndex === MODELS_TAB_INDEX,
-        lutsTabVisible: state.scratchGui.editorTab.activeTabIndex === LUTS_TAB_INDEX,
         shadersTabVisible: state.scratchGui.editorTab.activeTabIndex === SHADERS_TAB_INDEX,
+        pluginsTabVisible: state.scratchGui.editorTab.activeTabIndex === PLUGINS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
             state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget
@@ -185,7 +227,6 @@ const mapStateToProps = state => {
         tipsLibraryVisible: state.scratchGui.modals.tipsLibrary,
         usernameModalVisible: state.scratchGui.modals.usernameModal,
         settingsModalVisible: state.scratchGui.modals.settingsModal,
-        customExtensionModalVisible: state.scratchGui.modals.customExtensionModal,
         fontsModalVisible: state.scratchGui.modals.fontsModal,
         unknownPlatformModalVisible: state.scratchGui.modals.unknownPlatformModal,
         invalidProjectModalVisible: state.scratchGui.modals.invalidProjectModal,
@@ -194,15 +235,14 @@ const mapStateToProps = state => {
 };
 
 const mapDispatchToProps = dispatch => ({
-    onExtensionButtonClick: () => dispatch(openExtensionLibrary()),
     onActivateTab: tab => dispatch(activateTab(tab)),
     onActivateCostumesTab: () => dispatch(activateTab(COSTUMES_TAB_INDEX)),
     onActivateSoundsTab: () => dispatch(activateTab(SOUNDS_TAB_INDEX)),
     onActivateVideosTab: () => dispatch(activateTab(VIDEOS_TAB_INDEX)),
     onActivateFontsTab: () => dispatch(activateTab(FONTS_TAB_INDEX)),
     onActivateModelsTab: () => dispatch(activateTab(MODELS_TAB_INDEX)),
-    onActivateLUTsTab: () => dispatch(activateTab(LUTS_TAB_INDEX)),
     onActivateShadersTab: () => dispatch(activateTab(SHADERS_TAB_INDEX)),
+    onActivatePluginsTab: () => dispatch(activateTab(PLUGINS_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())

@@ -1,25 +1,18 @@
 # PenFX shader package 仕様
 
-shading.app の `Looks` カテゴリにある `Import shader` から、PenFX 用の shader package（zip）を読み込めます。Custom Shader（PenFX）がメインのシェーダー機能です。
+shading.app の `Looks` カテゴリにある `Import shader` から、PenFX 用の shader package（zip）を読み込めます。
+shader package は GLSL と manifest だけで構成され、JavaScript は含みません。プロジェクトに保存されます。
 
-組み込みPenFXは [`default-shader-package/`](../scratch-vm/src/lib/pen-fx/default-shader-package/) の
-manifest・翻訳と [`scratch-render/src/pen-fx/shaders/`](../scratch-render/src/pen-fx/shaders/) のソースを
-直接読み込みます。zipの生成・展開は不要です。60個の既定ブロックと27個のfragment programを同期登録し、
-必要なプログラムは描画時にコンパイルします。外部のカスタムシェーダーは引き続きzipから読み込めます。
+ぼかし・グロー・色調補正・LUT・Genshade などのエフェクトは本体に内蔵されていません。
+[shading-plugins](https://github.com/12zend/shading-plugins) の公式プラグインとして配布され、
+コードエリア左下のボタンからプラグイン（zip）として読み込みます。プラグインの仕様は
+[PLUGINS.md](PLUGINS.md) を参照してください。本体の Looks カテゴリに常にあるのは、
+Custom Shaders とブレンド（`use [TYPE] blending mode`）だけです。
 
-## LUT画像
-
-Shadersの右のLUTタブでPNGを追加・名前変更・削除・書き出しできます。元PNGをプロジェクトに保存し、
-コスチュームの解像度やステージサイズは使用しません。プレビューの「100%」と「全体表示」は表示だけを変えます。
-
-PenFXの `LUT [LUT] 適用量: [MIX] %` で追加した画像を選択します。0%は元の色、100%はLUTの色です。
-RGBの三線形補間を行い、透明度は維持します。ドロップダウンは名前変更に追従するIDを保存します。
-画像の追加・プロジェクト復元時にデコードとGPUへの転送を済ませるので、ブロックはPromiseを返しません。
-
-画像はN×Nのスライスを青軸順に左から右、上から下へ並べたPNGです。各スライスの横軸が赤、縦軸が緑です。
-N²×Nの横長画像（例: Tempestの16384×128）、縦長画像、512×512の64³タイルなどを自動判定します。
-画像に余白は付けず、透明ピクセルは含めないでください。Nは2〜256、PNGは32MB以下、1プロジェクト32個までです。
-GPU用にはスライスを画素単位でタイル配置し直し、縮小しません。PNG書き出しは読み込み時のバイト列を保持します。
+エフェクトプラグインのブロックは、以前の内蔵ブロックと同じ opcode（`penfx_contrast` など）と
+メニュー名（`penfx_menu_shader_penfx_builtins_...`）を使います。そのため既存プロジェクトは、
+該当プラグインをインストールすればそのまま動きます。未インストールの場合もブロックは保持され、
+不足しているプラグイン名が表示されます。
 
 ## 最小構成
 
@@ -185,14 +178,18 @@ single-pass だけでは、Gaussian blur の複数 pass、depth texture、displa
 }
 ```
 
-`programs[].bind` は既定 PenFX pipeline が公開している program slot に限られます。block の実行時だけ、その package の program
-が slot に割り当てられます。他の package や既定ブロックの shader をグローバルに上書きしません。
+`programs[].bind` に指定できるのは、本体の合成用 program（`copy`、`composite`、`groupOver`、`matteOver`）と、
+インストール済みプラグインが `registerProgram` で公開している program slot（例: Blur プラグインの `gaussian`）です。
+block の実行時だけ、その package の program が slot に割り当てられます。他の package や既定ブロックの shader を
+グローバルに上書きしません。
 
-`implementation.opcode` も既定フォルダが公開する60個の PenFX block opcode に限られます。任意の JavaScript 関数は呼べません。
-既定パッケージだけは既存 project と同じ `penfx_contrast` などの block id を保つため、予約済み compatibility `opcode` を持ちます。
-外部 package は package 固有の opcode になり、`penfx-builtins` という package id は使用できません。
+`implementation.opcode` に指定できるのは、インストール済みプラグインが PenFX に追加したメソッド
+（例: `contrast`、`gaussianBlur`）です。shader package から任意の JavaScript は呼べません。
+必要なプラグインがない状態で読み込んだ project の package は、そのまま保持・保存され、
+プラグインをインストールすると有効になります。
 
-組み込みシェーダーを変更するときは上記のソースフォルダを直接編集します。
+互換 `opcode`（`penfx_contrast` などの block id）はプラグインが登録する package だけが使えます。
+zip の package は package 固有の opcode になり、`penfx-builtins` と `penfx-core` という package id は使用できません。
 
 ## GLSL の契約
 
@@ -258,7 +255,7 @@ zip -r tint-wave.zip shading-shader.json tint-wave.glsl
 
 shading.app で `Looks` → `Custom Shaders` → `Import shader` を押し、作成した zip を選択します。GLSL は読込時に WebGL で compile/link 検証され、成功した block がその場でツールボックスに追加されます。block の実行は既定 PenFX と同様に同一 VM tick 内で完了し、Promise や待ち時間を Scratch VM に返しません。
 
-読み込んだ manifest と GLSL 本文は `.shade` 内の `penFXShaders` に保存されます。そのため、元の zip がなくてもプロジェクトを開き直せます。常に存在する既定 ZIP は project へ重複保存しません。custom shader を含むプロジェクトは Movie 専用機能として扱われます。
+読み込んだ manifest と GLSL 本文は `.shade` 内の `penFXShaders` に保存されます。そのため、元の zip がなくてもプロジェクトを開き直せます。プラグインが登録した package は project へ保存しません（project には使用したプラグインの参照だけが残ります）。custom shader を含むプロジェクトは Movie 専用機能として扱われます。
 
 ## 制限と安全性
 
@@ -266,7 +263,7 @@ shading.app で `Looks` → `Custom Shaders` → `Import shader` を押し、作
 - 1 shader は 512 KB 以下、shader 全体は 4 MB 以下、1 package は最大64 blocks／64 programs、1 block は最大24 inputs です。
 - zip 内の JavaScript、HTML、画像などは実行も読込もしません。
 - GLSL は GPU 上で実行されます。複雑すぎる loop や極端に重い sampling は描画停止や GPU reset の原因になります。信頼できない zip は読み込まないでください。
-- schema version 1 は single-pass effect です。version 2 の adapter は許可された PenFX pipeline だけを利用でき、package 由来の JavaScript は実行しません。
+- schema version 1 は single-pass effect です。version 2 の adapter はインストール済みプラグインが公開した PenFX pipeline だけを利用でき、package 由来の JavaScript は実行しません。
 
 ## よくあるエラー
 

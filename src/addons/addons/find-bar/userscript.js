@@ -55,6 +55,12 @@ export default async function ({ addon, msg, console }) {
       if (!tabList) this.findBarOuter.classList.add("sa-find-bar-menu");
       addon.tab.displayNoneWhileDisabled(this.findBarOuter, { display: "flex" });
       root.appendChild(this.findBarOuter);
+      if (tabList) {
+        // Plugins can add editor tabs later; keep the find bar after them.
+        new MutationObserver(() => {
+          if (tabList.lastElementChild !== this.findBarOuter) tabList.appendChild(this.findBarOuter);
+        }).observe(tabList, { childList: true });
+      }
 
       this.findWrapper = this.findBarOuter.appendChild(document.createElement("span"));
       this.findWrapper.className = "sa-find-wrapper";

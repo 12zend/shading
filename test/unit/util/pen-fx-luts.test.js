@@ -1,9 +1,12 @@
 import fs from 'fs';
-import PenFXLUTManager, {
+import path from 'path';
+import {PLUGINS_DIR, createPenFXClass, requirePluginModule} from '../../helpers/official-plugins';
+
+// LUTs are provided by the official LUT plugin (shading-plugins/lut).
+const {
     lutLayout, packLUT, pngDimensions, fromDataURL, toDataURL
-} from '../../../scratch-vm/src/lib/pen-fx/luts';
-import {createPenFXClass} from '../../../src/lib/pen-fx';
-import installColor from '../../../scratch-render/src/pen-fx/effects/color';
+} = requirePluginModule('lut', 'lib/luts.js');
+const installLUTEngine = requirePluginModule('lut', 'lib/engine.js');
 
 const pngHeader = (width, height) => {
     const bytes = new Uint8Array(33);
@@ -15,16 +18,21 @@ const pngHeader = (width, height) => {
     return bytes;
 };
 
+// A VM whose project save/load goes through the plugin manager, with the LUT plugin active.
 const makeManager = () => {
     const vm = {
         runtime: {renderer: {_gl: {deleteTexture: jest.fn()}}, emitProjectChanged: jest.fn()},
         toJSON: () => JSON.stringify({targets: []}),
         deserializeProject: jest.fn(async () => 'loaded')
     };
+    const PenFX = createPenFXClass(vm, ['lut']);
+    const penFX = new PenFX();
+    const manager = vm.shadingPlugins.getExports('lut').lutManager;
     const decode = jest.fn(async () => new Uint8Array(32));
     const upload = jest.fn(() => ({texture: {}, width: 4, height: 2, columns: 2}));
-    const manager = new PenFXLUTManager(vm, {decode, upload});
-    return {manager, vm, decode, upload};
+    manager.decode = decode;
+    manager.upload = upload;
+    return {manager, vm, decode, upload, penFX};
 };
 
 test('recognizes original Tempest dimensions and common tiled LUTs without resizing', () => {
@@ -93,11 +101,9 @@ test('invalid restore preserves existing resources and releases partially loaded
 });
 
 test('LUT block uses preloaded resources and returns undefined in the same tick', () => {
-    const vm = {runtime: {renderer: {}}};
-    const PenFX = createPenFXClass(vm);
-    const penFX = new PenFX();
+    const {manager, penFX} = makeManager();
     const entry = {id: 'test', name: 'Test', gpu: {texture: {}}};
-    penFX.luts.items.push(entry);
+    manager.items.push(entry);
     const engine = {lut: jest.fn()};
     penFX._safe = callback => callback(engine);
     expect(penFX.applyLUT({LUT: 'test', MIX: 25})).toBeUndefined();
@@ -109,7 +115,7 @@ test('LUT block uses preloaded resources and returns undefined in the same tick'
 
 test('renderer uses the LUT texture and dimensions independently of stage resolution', () => {
     class Engine {}
-    installColor({Engine});
+    installLUTEngine({Engine});
     const engine = new Engine();
     Object.assign(engine, {
         _isNoOp: amount => amount === 0,
@@ -129,7 +135,7 @@ test('renderer uses the LUT texture and dimensions independently of stage resolu
 
 // Keeps the lookup's alpha contract visible even on headless test runners without WebGL.
 test('shader looks up straight RGB and restores premultiplied alpha', () => {
-    const source = fs.readFileSync('scratch-render/src/pen-fx/shaders/lut.js', 'utf8');
+    const source = fs.readFileSync(path.join(PLUGINS_DIR, 'lut', 'shaders', 'lut.glsl'), 'utf8');
     expect(source).toContain('pixel.rgb / pixel.a');
     expect(source).toContain('* pixel.a, pixel.a');
 });

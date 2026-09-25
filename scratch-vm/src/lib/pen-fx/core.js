@@ -1,14 +1,14 @@
 /* eslint-disable */
 
 import createPenFXEngine from './engine';
-import {installGenshade, loadGenshade} from './genshade';
-import installEffects from './effects';
-import {installEasy} from './easy';
 import PenFXCustomShaderManager from './custom-shaders';
-import PenFXLUTManager from './luts';
 import {BLEND_MODES} from './constants';
 import {mixAmount} from './helpers';
 import {localize, resolveLocale} from '../movie-block-l10n';
+
+// Block input previews (used by plugin pickers such as look thumbnails) are captured at most this often per block.
+const PREVIEW_INTERVAL_MS = 250;
+const MAX_CACHED_PREVIEWS = 24;
 
 const createPenFXClass = vm => {
     const renderer = vm.runtime.renderer;
@@ -24,17 +24,11 @@ const createPenFXClass = vm => {
             this.effectCaptureStack = [];
             this.groupEffectScope = null;
             this.shaderProgramOverrides = null;
+            this.inputPreviewListeners = new Map();
+            this.inputPreviews = new Map();
+            this.inputPreviewTimes = new Map();
             vm.runtime.penFX = this;
-            this.luts = new PenFXLUTManager(vm);
-            this.genshadeReady = loadGenshade().catch(error => {
-                this.genshadeError = error;
-                console.error('[Genshade] Could not load effects:', error);
-                return null;
-            });
-            if (vm.runtime.movieAssetManager && vm.runtime.movieAssetManager.runWithoutWaiting) {
-                vm.runtime.movieAssetManager.runWithoutWaiting(this.genshadeReady);
-            }
-            this.customShaders = new PenFXCustomShaderManager(vm, this, {loadDefaultPackage: true});
+            this.customShaders = new PenFXCustomShaderManager(vm, this);
             const movieAssetManager = vm.runtime.movieAssetManager;
             if (movieAssetManager && typeof movieAssetManager.attachFrameTransactions === 'function') {
                 movieAssetManager.attachFrameTransactions(this);
@@ -62,13 +56,64 @@ const createPenFXClass = vm => {
             return this.engine;
         }
 
-        getLUTMenu() {
-            return this.luts.items.length ? this.luts.items.map(item => ({text: item.name, value: item.id})) :
-                [{text: localize(resolveLocale(null, vm), 'Import a LUT in the LUT tab', 'LUTタブで画像を追加'), value: ''}];
-        }
-
         importShaderPackage() {
             this.customShaders.openImportPicker();
+        }
+
+        // A picker subscribes while it is open. Captures run inside the render transaction, when the block's
+        // input is current, and listeners are notified afterwards so UI code never runs inside the frame.
+        requestInputPreview(blockId, listener) {
+            const key = String(blockId || '');
+            if (!this.inputPreviewListeners.has(key)) this.inputPreviewListeners.set(key, new Set());
+            const listeners = this.inputPreviewListeners.get(key);
+            listeners.add(listener);
+            const cached = this.inputPreviews.get(key);
+            if (cached) setTimeout(() => listeners.has(listener) && listener(cached), 0);
+            return () => {
+                listeners.delete(listener);
+                if (!listeners.size) this.inputPreviewListeners.delete(key);
+            };
+        }
+
+        hasInputPreviewListener(blockId) {
+            const listeners = blockId && this.inputPreviewListeners.get(blockId);
+            return Boolean(listeners && listeners.size);
+        }
+
+        // Call from an effect callback (inside _safe) before the effect draws, to record the block's input.
+        captureInputPreview(engine, blockId) {
+            const listeners = blockId && this.inputPreviewListeners.get(blockId);
+            if (!listeners || !listeners.size || typeof engine.captureEffectInput !== 'function') return;
+            const now = Date.now();
+            if (now - (this.inputPreviewTimes.get(blockId) || 0) < PREVIEW_INTERVAL_MS) return;
+            this.inputPreviewTimes.set(blockId, now);
+            let snapshot = null;
+            try {
+                snapshot = engine.captureEffectInput();
+            } catch (error) {
+                console.error('[Pen FX]', error);
+            }
+            if (!snapshot) return;
+            this.inputPreviews.delete(blockId);
+            this.inputPreviews.set(blockId, snapshot);
+            if (this.inputPreviews.size > MAX_CACHED_PREVIEWS) {
+                this.inputPreviews.delete(this.inputPreviews.keys().next().value);
+            }
+            setTimeout(() => {
+                for (const listener of Array.from(listeners)) listener(snapshot);
+            }, 0);
+        }
+
+        captureCurrentPenLayer() {
+            try {
+                if (vm.runtime.renderer && typeof vm.runtime.renderer.getMovieBufferId === 'function') {
+                    vm.runtime.renderer.getMovieBufferId();
+                }
+                return this._getEngine().captureEffectInput();
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return null;
+            }
         }
 
         _executeSafe(callback, blendMode, blendOpacity, renderContext = null, effect = null) {
@@ -277,9 +322,6 @@ const createPenFXClass = vm => {
         }
     }
 
-    installGenshade(PenFX, vm);
-    installEffects({Engine: PenFXEngine, PenFX, vm});
-    installEasy(PenFX);
     return PenFX;
 };
 

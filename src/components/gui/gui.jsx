@@ -14,7 +14,10 @@ import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
 import ModelTab from '../../containers/model-tab.jsx';
 import ShaderTab from '../../containers/shader-tab.jsx';
-import LUTTab from '../../containers/lut-tab.jsx';
+import PluginsTab from '../../containers/plugins-tab.jsx';
+import PluginTabPanel from '../plugin-tab-panel/plugin-tab-panel.jsx';
+import {PLUGIN_TABS_START_INDEX} from '../../reducers/editor-tab';
+import PluginHost from '../../containers/plugin-host.jsx';
 import SoundTab from '../../containers/sound-tab.jsx';
 import VideoTab from '../../containers/video-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
@@ -37,7 +40,6 @@ import TelemetryModal from '../telemetry-modal/telemetry-modal.jsx';
 import TWUsernameModal from '../../containers/tw-username-modal.jsx';
 import TWSettingsModal from '../../containers/tw-settings-modal.jsx';
 import TWSecurityManager from '../../containers/tw-security-manager.jsx';
-import TWCustomExtensionModal from '../../containers/tw-custom-extension-modal.jsx';
 import TWRestorePointManager from '../../containers/tw-restore-point-manager.jsx';
 import TWFontsModal from '../../containers/tw-fonts-modal.jsx';
 import TWUnknownPlatformModal from '../../containers/tw-unknown-platform-modal.jsx';
@@ -58,15 +60,21 @@ import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
 import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
 import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
 import shadersIcon from '!../../lib/tw-recolor/build!./icon--shaders.svg';
-import lutIcon from '!../../lib/tw-recolor/build!./icon--lut.svg';
+import pluginsIcon from '!../../lib/tw-recolor/build!./icon--plugins.svg';
 
 const messages = defineMessages({
     addExtension: {
-        id: 'gui.gui.addExtension',
-        description: 'Button to add an extension in the target pane',
-        defaultMessage: 'Add Extension'
+        id: 'movie.gui.importPlugin',
+        description: 'Button at the bottom-left of the code area that opens a plugin .zip file',
+        defaultMessage: 'Import plugin (.zip)'
     }
 });
+
+const resolvePluginLabel = (label, locale) => {
+    if (typeof label === 'function') return String(label(locale));
+    if (label && typeof label === 'object') return String(label[locale] || label.en || '');
+    return String(label || '');
+};
 
 const getFullscreenBackgroundColor = () => {
     const params = new URLSearchParams(location.search);
@@ -114,7 +122,7 @@ const GUIComponent = props => {
         framerate,
         modelsTabVisible,
         shadersTabVisible,
-        lutsTabVisible,
+        pluginsTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -146,12 +154,12 @@ const GUIComponent = props => {
         onActivateFontsTab,
         onActivateModelsTab,
         onActivateShadersTab,
-        onActivateLUTsTab,
+        onActivatePluginsTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
-        onOpenCustomExtensionModal,
         onProjectTelemetryEvent,
+        pluginTabs,
         onRequestCloseBackdropLibrary,
         onRequestCloseCostumeLibrary,
         onRequestCloseTelemetryModal,
@@ -175,7 +183,6 @@ const GUIComponent = props => {
         tipsLibraryVisible,
         usernameModalVisible,
         settingsModalVisible,
-        customExtensionModalVisible,
         fontsModalVisible,
         unknownPlatformModalVisible,
         invalidProjectModalVisible,
@@ -206,10 +213,10 @@ const GUIComponent = props => {
         const alwaysEnabledModals = (
             <React.Fragment>
                 <TWSecurityManager securityManager={securityManager} />
+                <PluginHost />
                 <TWRestorePointManager />
                 {usernameModalVisible && <TWUsernameModal />}
                 {settingsModalVisible && <TWSettingsModal />}
-                {customExtensionModalVisible && <TWCustomExtensionModal />}
                 {fontsModalVisible && <TWFontsModal />}
                 {unknownPlatformModalVisible && <TWUnknownPlatformModal />}
                 {invalidProjectModalVisible && <TWInvalidProjectModal />}
@@ -466,15 +473,33 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
-                                        onClick={onActivateLUTsTab}
+                                        onClick={onActivatePluginsTab}
                                     >
                                         <img
-                                            alt=""
                                             draggable={false}
-                                            src={lutIcon()}
+                                            src={pluginsIcon()}
                                         />
-                                        <span>{'LUT'}</span>
+                                        <FormattedMessage
+                                            defaultMessage="Plugins"
+                                            description="Button to get to the installed plugins panel"
+                                            id="movie.gui.pluginsTab"
+                                        />
                                     </Tab>
+                                    {pluginTabs.map(tab => (
+                                        <Tab
+                                            className={tabClassNames.tab}
+                                            key={tab.key}
+                                        >
+                                            {tab.icon ? (
+                                                <img
+                                                    alt=""
+                                                    draggable={false}
+                                                    src={tab.icon}
+                                                />
+                                            ) : null}
+                                            <span>{resolvePluginLabel(tab.label, intl.locale)}</span>
+                                        </Tab>
+                                    ))}
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -487,7 +512,6 @@ const GUIComponent = props => {
                                                 media: `${basePath}static/${theme.getBlocksMediaFolder()}/`
                                             }}
                                             stageSize={stageSize}
-                                            onOpenCustomExtensionModal={onOpenCustomExtensionModal}
                                             theme={theme}
                                             vm={vm}
                                         />
@@ -528,8 +552,22 @@ const GUIComponent = props => {
                                     {shadersTabVisible ? <ShaderTab vm={vm} /> : null}
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
-                                    {lutsTabVisible ? <LUTTab vm={vm} /> : null}
+                                    {pluginsTabVisible ? <PluginsTab vm={vm} /> : null}
                                 </TabPanel>
+                                {pluginTabs.map((tab, index) => (
+                                    <TabPanel
+                                        className={tabClassNames.tabPanel}
+                                        key={tab.key}
+                                    >
+                                        {activeTabIndex === PLUGIN_TABS_START_INDEX + index ? (
+                                            <PluginTabPanel
+                                                locale={intl.locale}
+                                                tab={tab}
+                                                vm={vm}
+                                            />
+                                        ) : null}
+                                    </TabPanel>
+                                ))}
                             </Tabs>
                             {backpackVisible ? (
                                 <Backpack host={backpackHost} />
@@ -590,7 +628,8 @@ GUIComponent.propTypes = {
     framerate: PropTypes.number.isRequired,
     modelsTabVisible: PropTypes.bool,
     shadersTabVisible: PropTypes.bool,
-    lutsTabVisible: PropTypes.bool,
+    pluginsTabVisible: PropTypes.bool,
+    pluginTabs: PropTypes.arrayOf(PropTypes.object),
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -613,7 +652,7 @@ GUIComponent.propTypes = {
     onActivateFontsTab: PropTypes.func,
     onActivateModelsTab: PropTypes.func,
     onActivateShadersTab: PropTypes.func,
-    onActivateLUTsTab: PropTypes.func,
+    onActivatePluginsTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
@@ -623,7 +662,6 @@ GUIComponent.propTypes = {
     onClickLogo: PropTypes.func,
     onCloseAccountNav: PropTypes.func,
     onExtensionButtonClick: PropTypes.func,
-    onOpenCustomExtensionModal: PropTypes.func,
     onLogOut: PropTypes.func,
     onOpenRegistration: PropTypes.func,
     onRequestCloseBackdropLibrary: PropTypes.func,
@@ -652,7 +690,6 @@ GUIComponent.propTypes = {
     tipsLibraryVisible: PropTypes.bool,
     usernameModalVisible: PropTypes.bool,
     settingsModalVisible: PropTypes.bool,
-    customExtensionModalVisible: PropTypes.bool,
     fontsModalVisible: PropTypes.bool,
     unknownPlatformModalVisible: PropTypes.bool,
     invalidProjectModalVisible: PropTypes.bool,
@@ -678,6 +715,7 @@ GUIComponent.defaultProps = {
     isShared: false,
     isTotallyNormal: false,
     loading: false,
+    pluginTabs: [],
     showComingSoon: false,
     stageSizeMode: STAGE_SIZE_MODES.large
 };

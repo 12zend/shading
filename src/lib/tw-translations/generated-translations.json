@@ -2084,7 +2084,10 @@
         "tw.usesCloudVariables2": "{APP_NAME}のクラウド変数はScratchとは接続されていません。\n誰でも{changeTheirUsername}して何でも入力することができるので、気をつけてください。",
         "tw.usesCloudVariables2.change": "ユーザー名を変更",
         "tw.viewFeaturedProjects": "クリックしてプロジェクトの特集を見る。",
-        "tw.viewOnScratch": "Scratchでプロジェクトを見る"
+        "tw.viewOnScratch": "Scratchでプロジェクトを見る",
+        "movie.menuBar.plugins": "プラグイン…",
+        "movie.gui.importPlugin": "プラグインを読み込む（.zip）",
+        "movie.gui.pluginsTab": "プラグイン"
     },
     "ja-hira": {
         "tw.alerts.creatingRestorePoint": "ふくげんしています…",

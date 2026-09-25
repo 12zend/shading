@@ -1,9 +1,16 @@
+import fs from 'fs';
+import path from 'path';
 import VM from 'scratch-vm';
 
-import installPenFX from '../../../src/lib/pen-fx';
-import defaultShaderManifest from '../../../scratch-vm/src/lib/pen-fx/default-shader-package/shading-shader.json';
-import {catalog as genshadeCatalog, genshadeOpcode} from '../../../scratch-vm/src/lib/pen-fx/genshade';
-import {easyBlocks, findEasyPreset} from '../../../scratch-vm/src/lib/pen-fx/easy';
+import {PLUGINS_DIR, installPenFX, listPluginIds, requirePluginModule} from '../../helpers/official-plugins';
+
+// Easy looks are the official plugin shading-plugins/easy; their steps call blocks from the other effect plugins.
+const {catalog: genshadeCatalog, genshadeOpcode} = requirePluginModule('genshade', 'lib/blocks.js');
+const {easyBlocks, findEasyPreset} = requirePluginModule('easy', 'lib/presets.js');
+const effectBlocks = listPluginIds()
+    .map(id => path.join(PLUGINS_DIR, id, 'penfx-blocks.json'))
+    .filter(file => fs.existsSync(file))
+    .flatMap(file => JSON.parse(fs.readFileSync(file, 'utf8')).blocks);
 
 const createPenFX = () => {
     const vm = new VM();
@@ -24,7 +31,7 @@ const createPenFX = () => {
     return {vm, penFX, calls};
 };
 
-const builtinInputs = new Map(defaultShaderManifest.blocks.map(block => [
+const builtinInputs = new Map(effectBlocks.map(block => [
     block.opcode,
     new Set((block.inputs || []).map(input => input.id))
 ]));
@@ -34,13 +41,13 @@ const genshadeParameters = new Map(genshadeCatalog.map(descriptor => [
 ]));
 
 describe('Easy effect presets', () => {
-    test('lists every Easy block after color grading with a localized preset menu', () => {
+    test('lists every Easy block first with a localized preset menu', () => {
         const {penFX} = createPenFX();
         const info = penFX.getInfo();
         const opcodes = info.blocks.filter(block => block && block.opcode).map(block => block.opcode);
 
-        expect(opcodes.slice(0, easyBlocks.length + 1))
-            .toEqual(['easyColorGrading'].concat(easyBlocks.map(block => block.opcode)));
+        expect(opcodes.slice(0, easyBlocks.length)).toEqual(easyBlocks.map(block => block.opcode));
+        expect(opcodes).toContain('easyColorGrading');
         for (const block of easyBlocks) {
             const toolboxBlock = info.blocks.find(entry => entry && entry.opcode === block.opcode);
             expect(toolboxBlock.arguments.PRESET).toMatchObject({menu: block.menu, defaultValue: block.presets[0].id});
@@ -87,8 +94,10 @@ describe('Easy effect presets', () => {
         expect(findEasyPreset('missingBlock', 'vhs')).toBeNull();
     });
 
-    test('queues every preset in the same tick and returns undefined', () => {
+    test('queues every preset in the same tick and returns undefined', async () => {
         const {vm, penFX} = createPenFX();
+        // Plugin blocks reach the VM's primitive table when the category refreshes after activation.
+        await penFX.customShaders._scheduleRefresh();
         const queue = jest.spyOn(penFX, '_safe');
         for (const block of easyBlocks) {
             for (const preset of block.presets) {
@@ -142,7 +151,7 @@ describe('Easy effect presets', () => {
             expect(penFX.engine.captureEffectInput).not.toHaveBeenCalled();
 
             const listener = jest.fn();
-            const unsubscribe = penFX.requestEasyPreview('glow-block', listener);
+            const unsubscribe = penFX.requestInputPreview('glow-block', listener);
             expect(penFX.easyGlow({PRESET: 'neon', MIX: 0}, util)).toBeUndefined();
             expect(penFX.engine.captureEffectInput).toHaveBeenCalledTimes(1);
             expect(listener).not.toHaveBeenCalled();
@@ -157,7 +166,7 @@ describe('Easy effect presets', () => {
     test('runs a preset for the picker without capturing the block input', () => {
         const {penFX, calls} = createPenFX();
         penFX.engine.captureEffectInput = jest.fn();
-        penFX.requestEasyPreview('glow-block', jest.fn());
+        penFX.requestInputPreview('glow-block', jest.fn());
 
         penFX.beginEffectCapture();
         penFX.runEasyPreset('easyGlow', 'neon-outline', 1, null);

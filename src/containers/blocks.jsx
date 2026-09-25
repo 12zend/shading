@@ -11,8 +11,6 @@ import VM from 'scratch-vm';
 import log from '../lib/log.js';
 import Prompt from './prompt.jsx';
 import BlocksComponent from '../components/blocks/blocks.jsx';
-import ExtensionLibrary from './extension-library.jsx';
-import extensionData from '../lib/libraries/extensions/index.jsx';
 import CustomProcedures from './custom-procedures.jsx';
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import {BLOCKS_DEFAULT_SCALE, STAGE_DISPLAY_SIZES} from '../lib/layout-constants';
@@ -27,11 +25,7 @@ import {connect} from 'react-redux';
 import {updateToolbox} from '../reducers/toolbox';
 import {activateColorPicker} from '../reducers/color-picker';
 import {showStandardAlert, closeAlertWithId} from '../reducers/alerts';
-import {
-    closeExtensionLibrary,
-    openConnectionModal,
-    openCustomExtensionModal
-} from '../reducers/modals';
+import {openConnectionModal} from '../reducers/modals';
 import {activateCustomProcedures, deactivateCustomProcedures} from '../reducers/custom-procedures';
 import {setConnectionModalExtensionId} from '../reducers/connection-modal';
 import {updateMetrics} from '../reducers/workspace-metrics';
@@ -44,7 +38,7 @@ import {handleFileUpload, soundUpload} from '../lib/file-uploader.js';
 import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
 import {SOUND_FILE_ACCEPT} from '../lib/sound-upload-formats.js';
 import installObjectBlockDefinitions from '../lib/object-blocks-ui';
-import installPenFXBlockDefinitions from '../lib/pen-fx-ui';
+import {defineMissingBlockPlaceholders} from '../lib/plugins/missing-blocks';
 
 // TW: Strings we add to scratch-blocks are localized here
 const messages = defineMessages({
@@ -126,7 +120,7 @@ class Blocks extends React.Component {
             'setBlocks',
             'setSoundFileInput',
             'setLocale',
-            'handleEnableProcedureReturns'
+            'requestToolboxUpdate'
         ]);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
@@ -240,7 +234,6 @@ class Blocks extends React.Component {
             this.state.prompt !== nextState.prompt ||
             this.props.isVisible !== nextProps.isVisible ||
             this._renderedToolboxXML !== nextProps.toolboxXML ||
-            this.props.extensionLibraryVisible !== nextProps.extensionLibraryVisible ||
             this.props.customProceduresVisible !== nextProps.customProceduresVisible ||
             this.props.locale !== nextProps.locale ||
             this.props.anyModalVisible !== nextProps.anyModalVisible ||
@@ -382,6 +375,7 @@ class Blocks extends React.Component {
         this.props.vm.addListener('BLOCKSINFO_UPDATE', this.handleBlocksInfoUpdate);
         this.props.vm.addListener('PERIPHERAL_CONNECTED', this.handleStatusButtonUpdate);
         this.props.vm.addListener('PERIPHERAL_DISCONNECTED', this.handleStatusButtonUpdate);
+        this.props.vm.addListener('SHADING_PLUGINS_TOOLBOX_CHANGED', this.requestToolboxUpdate);
     }
     detachVM () {
         this.props.vm.removeListener('SCRIPT_GLOW_ON', this.onScriptGlowOn);
@@ -396,6 +390,7 @@ class Blocks extends React.Component {
         this.props.vm.removeListener('BLOCKSINFO_UPDATE', this.handleBlocksInfoUpdate);
         this.props.vm.removeListener('PERIPHERAL_CONNECTED', this.handleStatusButtonUpdate);
         this.props.vm.removeListener('PERIPHERAL_DISCONNECTED', this.handleStatusButtonUpdate);
+        this.props.vm.removeListener('SHADING_PLUGINS_TOOLBOX_CHANGED', this.requestToolboxUpdate);
     }
 
     updateToolboxBlockValue (id, value) {
@@ -461,10 +456,13 @@ class Blocks extends React.Component {
             const stageCostumes = stage.getCostumes();
             const targetCostumes = target.getCostumes();
             const targetSounds = target.getSounds();
+            const plugins = this.props.vm.shadingPlugins;
             const dynamicBlocksXML = injectExtensionCategoryTheme(
                 this.props.vm.runtime.getBlocksXML(target),
                 this.props.theme
-            );
+            ).map(category => (plugins ? Object.assign({}, category, {
+                xml: plugins.filterToolboxXML(category.id, category.xml)
+            }) : category));
             return makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
                 targetCostumes[targetCostumes.length - 1].name,
                 stageCostumes[stageCostumes.length - 1].name,
@@ -490,6 +488,8 @@ class Blocks extends React.Component {
         // Remove and reattach the workspace listener (but allow flyout events)
         this.workspace.removeChangeListener(this.props.vm.blockListener);
         const dom = this.ScratchBlocks.Xml.textToDom(data.xml);
+        // Blocks from plugins that are not installed would otherwise abort loading the rest of the workspace.
+        defineMissingBlockPlaceholders(this.ScratchBlocks, dom);
         try {
             this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
         } catch (error) {
@@ -582,8 +582,10 @@ class Blocks extends React.Component {
         if (categoryInfo.id === 'objects') {
             installObjectBlockDefinitions(this.ScratchBlocks, this.props.vm, this.props.locale);
         }
-        if (categoryInfo.id === 'penfx') {
-            installPenFXBlockDefinitions(this.ScratchBlocks, this.props.locale, this.props.vm);
+        // Plugins can replace generated definitions with custom fields (e.g. thumbnail pickers).
+        const plugins = this.props.vm.shadingPlugins;
+        if (plugins) {
+            plugins.defineBlocks(categoryInfo.id, this.ScratchBlocks, {locale: this.props.locale, vm: this.props.vm});
         }
 
         // Update the toolbox with new blocks if possible
@@ -594,15 +596,13 @@ class Blocks extends React.Component {
     }
     handleBlocksInfoUpdate (categoryInfo) {
         // @todo Later we should replace this to avoid all the warnings from redefining blocks.
-        if (categoryInfo.id === 'penfx') this.forceToolboxRebuild = true;
+        const plugins = this.props.vm.shadingPlugins;
+        if (categoryInfo.id === 'penfx' || (plugins && plugins.extensionProxies.has(categoryInfo.id))) {
+            this.forceToolboxRebuild = true;
+        }
         this.handleExtensionAdded(categoryInfo);
     }
     handleCategorySelected (categoryId) {
-        const extension = extensionData.find(ext => ext.extensionId === categoryId);
-        if (extension && extension.launchPeripheralConnectionFlow) {
-            this.handleConnectionModalStart(categoryId);
-        }
-
         this.withToolboxUpdates(() => {
             this.workspace.toolbox_.setSelectedCategoryById(categoryId);
         });
@@ -700,10 +700,6 @@ class Blocks extends React.Component {
                 this.updateToolbox(); // To show new variables/custom blocks
             });
     }
-    handleEnableProcedureReturns () {
-        this.workspace.enableProcedureReturns();
-        this.requestToolboxUpdate();
-    }
     render () {
         /* eslint-disable no-unused-vars */
         const {
@@ -711,7 +707,6 @@ class Blocks extends React.Component {
             canUseCloud,
             customStageSize,
             customProceduresVisible,
-            extensionLibraryVisible,
             options,
             stageSize,
             vm,
@@ -719,11 +714,8 @@ class Blocks extends React.Component {
             isVisible,
             onActivateColorPicker,
             onOpenConnectionModal,
-            onOpenCustomExtensionModal,
-            reduxOnOpenCustomExtensionModal,
             updateToolboxState,
             onActivateCustomProcedures,
-            onRequestCloseExtensionLibrary,
             onRequestCloseCustomProcedures,
             toolboxXML,
             updateMetrics: updateMetricsProp,
@@ -760,15 +752,6 @@ class Blocks extends React.Component {
                         onOk={this.handlePromptCallback}
                     />
                 ) : null}
-                {extensionLibraryVisible ? (
-                    <ExtensionLibrary
-                        vm={vm}
-                        onCategorySelected={this.handleCategorySelected}
-                        onEnableProcedureReturns={this.handleEnableProcedureReturns}
-                        onRequestClose={onRequestCloseExtensionLibrary}
-                        onOpenCustomExtensionModal={onOpenCustomExtensionModal || reduxOnOpenCustomExtensionModal}
-                    />
-                ) : null}
                 {customProceduresVisible ? (
                     <CustomProcedures
                         options={{
@@ -791,7 +774,6 @@ Blocks.propTypes = {
         height: PropTypes.number
     }),
     customProceduresVisible: PropTypes.bool,
-    extensionLibraryVisible: PropTypes.bool,
     isRtl: PropTypes.bool,
     isVisible: PropTypes.bool,
     locale: PropTypes.string.isRequired,
@@ -799,12 +781,9 @@ Blocks.propTypes = {
     onActivateColorPicker: PropTypes.func,
     onActivateCustomProcedures: PropTypes.func,
     onOpenConnectionModal: PropTypes.func,
-    onOpenCustomExtensionModal: PropTypes.func,
     onCloseImporting: PropTypes.func,
     onShowImporting: PropTypes.func,
-    reduxOnOpenCustomExtensionModal: PropTypes.func,
     onRequestCloseCustomProcedures: PropTypes.func,
-    onRequestCloseExtensionLibrary: PropTypes.func,
     options: PropTypes.shape({
         media: PropTypes.string,
         zoom: PropTypes.shape({
@@ -855,7 +834,6 @@ const mapStateToProps = state => ({
         state.scratchGui.mode.isFullScreen
     ),
     customStageSize: state.scratchGui.customStageSize,
-    extensionLibraryVisible: state.scratchGui.modals.extensionLibrary,
     isRtl: state.locales.isRtl,
     locale: state.locales.locale,
     messages: state.locales.messages,
@@ -875,10 +853,6 @@ const mapDispatchToProps = dispatch => ({
     },
     onCloseImporting: () => dispatch(closeAlertWithId('importingAsset')),
     onShowImporting: () => dispatch(showStandardAlert('importingAsset')),
-    reduxOnOpenCustomExtensionModal: () => dispatch(openCustomExtensionModal()),
-    onRequestCloseExtensionLibrary: () => {
-        dispatch(closeExtensionLibrary());
-    },
     onRequestCloseCustomProcedures: data => {
         dispatch(deactivateCustomProcedures(data));
     },

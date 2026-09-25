@@ -41,6 +41,7 @@ const base = {
         // allows ROUTING_STYLE=wildcard to work properly
         historyApiFallback: {
             rewrites: [
+                {from: /^\/install\/?$/, to: '/install.html'},
                 {from: /^\/editor\/?$/, to: '/index.html'},
                 {from: /^\/player\/?$/, to: '/player.html'},
                 {from: /^\/addons\/?$/, to: '/addons.html'},
@@ -159,6 +160,7 @@ module.exports = [
     defaultsDeep({}, base, {
         entry: {
             'editor': './src/playground/editor.jsx',
+            'install': './src/playground/install.jsx',
             'player': './src/playground/player.jsx',
             'fullscreen': './src/playground/fullscreen.jsx',
             'embed': './src/playground/embed.jsx',
@@ -190,6 +192,13 @@ module.exports = [
             }
         },
         plugins: base.plugins.concat([
+            new HtmlWebpackPlugin({
+                chunks: ['install'],
+                template: 'src/playground/simple.ejs',
+                filename: 'install.html',
+                title: `${APP_NAME} Plugins`,
+                ...htmlWebpackPluginCommon
+            }),
             new webpack.DefinePlugin({
                 'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
