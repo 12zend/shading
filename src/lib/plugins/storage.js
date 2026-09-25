@@ -57,6 +57,11 @@ class IndexedDBPluginStorage {
         return this._transaction('readwrite', store => promisify(store.put(record)));
     }
 
+    putAll (records) {
+        return this._transaction('readwrite', store =>
+            Promise.all(records.map(record => promisify(store.put(record)))));
+    }
+
     remove (id) {
         return this._transaction('readwrite', store => promisify(store.delete(id)));
     }

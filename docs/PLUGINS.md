@@ -221,3 +221,22 @@ exports.activate = shading => {
 
 テスト（`test/unit/plugins`、`test/unit/util/pen-fx*.test.js`）は、隣に置いた shading-plugins の
 チェックアウト（または環境変数 `SHADING_PLUGINS_DIR`）から公式プラグインを読み込んで実行します。
+
+## 公式プラグインの一括インストール
+
+`https://shading.app/install` で公式プラグインをまとめて検査・保存できます。
+一覧の検査内容を確認し、作者を信頼するチェックを入れて「すべてを保存」を押してください。
+保存は一つのIndexedDBトランザクションで行います。同じIDは更新・有効化し、それ以外のプラグインは維持します。
+保存後にエディターを開くと、既存の読み込み処理が依存関係を解決して有効化します。
+
+`npm run build` / `npm start` はNode.jsの `scripts/build-official-plugins.cjs` を実行し、
+GitHubの `12zend/shading-plugins` のデフォルトブランチを一時フォルダーに浅くcloneします（Gitが必要です）。
+直下の `shading-plugin.json` を持つ全フォルダーをZIP化し、SHA-256付きの一覧とともに
+`build/official-plugins/` に20MiB以下の分割ファイルとして出力します（ブラウザで結合後に検証）。ZIP・プラグインソースは本体リポジトリにはコミットしません。
+配信は同一オリジンの静的ファイルなので、実行時のGitHub APIやCORS設定は不要です。
+新しい公式プラグインや更新の反映にはサイトの再ビルド・再デプロイが必要です。
+
+ローカルのチェックアウトや固定コミットを使う場合は、
+`SHADING_PLUGINS_DIR=/path/to/shading-plugins npm run build` を指定してください。
+生成だけ行う場合は `npm run build:plugins` を使います。
+Cloudflareの静的アセットは `/install` を生成済みの `install.html` に解決します。

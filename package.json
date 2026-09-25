@@ -12,7 +12,9 @@
   "main": "./dist/scratch-gui.js",
   "scripts": {
     "benchmark:shade": "node scripts/benchmark-shade.cjs",
-    "build": "npm run clean && webpack --colors --bail",
+    "build": "npm run clean && npm run build:plugins && webpack --colors --bail",
+    "build:plugins": "node scripts/build-official-plugins.cjs",
+    "prestart": "npm run build:plugins",
     "build:cloudflare": "NODE_ENV=production npm run build",
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
