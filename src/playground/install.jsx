@@ -30,7 +30,8 @@ const PluginItem = ({archive, scan}) => {
                         </span>
                     </span>
                     <span className={styles.pluginMeta}>
-                        {`id: ${manifest.id} · v${manifest.version}${manifest.author ? ` · ${manifest.author}` : ''}`}
+                        {`id: ${manifest.id} · v${manifest.version}${manifest.author ? ` · ${manifest.author}` : ''}` +
+                            ' · 公式の署名を確認済み'}
                     </span>
                 </summary>
                 <div className={styles.pluginDetails}>

@@ -18,6 +18,12 @@ const LEVEL_TEXT = {
     high: ['High risk', '高リスク']
 };
 
+const SIGNATURE_TEXT = {
+    official: ['Official · signed', '公式・署名済み'],
+    unsigned: ['Unofficial', '非公式'],
+    invalid: ['Signature invalid', '署名が無効']
+};
+
 const levelClass = level => styles[`level${level.charAt(0).toUpperCase()}${level.slice(1)}`];
 
 // Installed plugins and which of them load when the editor starts. Switches only change the start-up choice;
@@ -150,6 +156,15 @@ const PluginsTab = ({
                                                     className={classNames(styles.level, levelClass(plugin.scanLevel))}
                                                 >
                                                     {t(...LEVEL_TEXT[plugin.scanLevel])}
+                                                </span>
+                                            ) : null}
+                                            {SIGNATURE_TEXT[plugin.signature] ? (
+                                                <span
+                                                    className={classNames(styles.signature, styles[`signature${
+                                                        plugin.signature.charAt(0).toUpperCase()}${
+                                                        plugin.signature.slice(1)}`])}
+                                                >
+                                                    {t(...SIGNATURE_TEXT[plugin.signature])}
                                                 </span>
                                             ) : null}
                                             {plugin.pendingReload ? (

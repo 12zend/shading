@@ -17,6 +17,12 @@ const LEVEL_TEXT = {
     high: ['High risk', '高リスク']
 };
 
+const SIGNATURE_TEXT = {
+    official: ['Official · signed', '公式・署名済み'],
+    unsigned: ['Unofficial', '非公式'],
+    invalid: ['Signature invalid', '署名が無効']
+};
+
 const PERMISSION_TEXT = {
     'network': ['Network', 'ネットワーク通信'],
     'storage': ['Browser storage', 'ブラウザ保存領域'],
@@ -40,8 +46,12 @@ const MAX_FINDINGS_SHOWN = 60;
 
 const levelClass = level => styles[`level${level.charAt(0).toUpperCase()}${level.slice(1)}`];
 
+const signatureStatus = review => (review.signature ? review.signature.status : 'unsigned');
+
+// A broken signature means files of a signed plugin were changed, so it counts as high risk.
 const highestLevel = reviews => ['high', 'medium', 'low', 'none']
-    .find(level => reviews.some(review => review.scan.level === level)) || 'none';
+    .find(level => reviews.some(review => review.scan.level === level ||
+        (level === 'high' && signatureStatus(review) === 'invalid'))) || 'none';
 
 class PluginReviewModal extends React.Component {
     constructor (props) {
@@ -116,6 +126,7 @@ class PluginReviewModal extends React.Component {
         const {locale} = this.props;
         const {manifest, scan, archive, existing} = review;
         const localized = (manifest.locales && manifest.locales[locale]) || {};
+        const signature = signatureStatus(review);
         return (
             <React.Fragment>
                 <span className={styles.identityName}>
@@ -124,7 +135,22 @@ class PluginReviewModal extends React.Component {
                     <span className={classNames(styles.level, levelClass(scan.level))}>
                         {this.t(...LEVEL_TEXT[scan.level])}
                     </span>
+                    {' '}
+                    <span
+                        className={classNames(styles.signature,
+                            styles[`signature${signature.charAt(0).toUpperCase()}${signature.slice(1)}`])}
+                    >
+                        {this.t(...SIGNATURE_TEXT[signature])}
+                    </span>
                 </span>
+                {signature === 'invalid' ? (
+                    <span className={styles.undeclared}>
+                        {this.t('This plugin carries an official signature, but its files do not match it. ' +
+                            'It may have been modified by someone else.',
+                        'このプラグインには公式の署名が付いていますが、ファイルが署名と一致しません。' +
+                            '第三者に改変されている可能性があります。')}
+                    </span>
+                ) : null}
                 {localized.description || manifest.description ? (
                     <span>{localized.description || manifest.description}</span>
                 ) : null}
@@ -339,7 +365,11 @@ PluginReviewModal.propTypes = {
         archive: PropTypes.object,
         existing: PropTypes.object,
         manifest: PropTypes.object,
-        scan: PropTypes.object
+        scan: PropTypes.object,
+        signature: PropTypes.shape({
+            status: PropTypes.oneOf(['official', 'unsigned', 'invalid']),
+            reason: PropTypes.string
+        })
     })).isRequired
 };
 
