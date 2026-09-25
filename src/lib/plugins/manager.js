@@ -110,7 +110,7 @@ class ShadingPluginManager extends EventEmitter {
         this.orphanData = new Map();
         this.projectReferences = [];
         this.missingPlugins = [];
-        this.pendingReview = null;
+        this.pendingReviews = null;
         this.hooksInstalled = false;
         this.installProjectHooks();
         this.ready = Promise.resolve();
@@ -322,6 +322,10 @@ class ShadingPluginManager extends EventEmitter {
                 permissions: record.manifest.permissions || [],
                 enabled: record.enabled,
                 state: record.state,
+                // The start-up choice differs from what is running now; it applies after the editor reloads.
+                pendingReload: record.enabled !== (record.state === 'active' || record.state === 'loading') &&
+                    !(record.enabled && record.state === 'error'),
+                dependencies: record.manifest.dependencies || [],
                 error: record.error,
                 size: record.size,
                 hash: record.hash,
@@ -403,6 +407,36 @@ class ShadingPluginManager extends EventEmitter {
     }
 
     /**
+     * Install several reviewed archives, dependencies first. A plugin that fails does not stop the others.
+     * @param {Array<object>} reviews Results of inspect().
+     * @returns {Promise<{installed: Array<object>, failed: Array<object>}>} Installed summaries and failures.
+     */
+    async installAll (reviews) {
+        const byId = new Map(reviews.map(review => [review.archive.manifest.id, review]));
+        const ordered = [];
+        const visit = (review, visiting = new Set()) => {
+            const id = review.archive.manifest.id;
+            if (ordered.includes(review) || visiting.has(id)) return;
+            visiting.add(id);
+            for (const dependency of review.archive.manifest.dependencies || []) {
+                if (byId.has(dependency)) visit(byId.get(dependency), visiting);
+            }
+            ordered.push(review);
+        };
+        for (const review of byId.values()) visit(review);
+        const installed = [];
+        const failed = [];
+        for (const review of ordered) {
+            try {
+                installed.push(await this.install(review));
+            } catch (error) {
+                failed.push({id: review.archive.manifest.id, message: (error && error.message) || String(error)});
+            }
+        }
+        return {installed, failed};
+    }
+
+    /**
      * Activate an already-read archive for this session only, without review or storage. Used by tests and by
      * embedders that bundle trusted plugins.
      * @param {object} archive Result of readPluginArchive (or an equivalent {manifest, files}).
@@ -419,18 +453,39 @@ class ShadingPluginManager extends EventEmitter {
         return record;
     }
 
+    async _saveEnabled (record, enabled) {
+        record.enabled = Boolean(enabled);
+        if (!record.stored) return;
+        record.stored.enabled = record.enabled;
+        try {
+            await this.storage.put(record.stored);
+        } catch (error) {
+            console.error('[plugins] Could not save the plugin state:', error);
+        }
+    }
+
+    /**
+     * Choose whether an installed plugin loads when the editor starts. Nothing is activated or deactivated now:
+     * the choice applies after the next reload, so running projects never lose blocks mid-session.
+     * @param {string|Array<string>} ids Plugin id or ids.
+     * @param {boolean} enabled Load on the next start.
+     * @returns {Promise} Resolves when the choice is saved.
+     */
+    async setLoadOnStartup (ids, enabled) {
+        const records = [].concat(ids).map(id => this.records.get(id))
+            .filter(Boolean);
+        await Promise.all(records.map(record => this._saveEnabled(record, enabled)));
+        this.emit('changed');
+    }
+
+    hasPendingReload () {
+        return this.getPlugins().some(plugin => plugin.pendingReload);
+    }
+
     async setEnabled (id, enabled) {
         const record = this.records.get(id);
         if (!record) return;
-        record.enabled = Boolean(enabled);
-        if (record.stored) {
-            record.stored.enabled = record.enabled;
-            try {
-                await this.storage.put(record.stored);
-            } catch (error) {
-                console.error('[plugins] Could not save the plugin state:', error);
-            }
-        }
+        await this._saveEnabled(record, enabled);
         if (record.enabled) {
             if (record.state === 'error') record.state = 'inactive';
             this._activate(record);
@@ -453,46 +508,71 @@ class ShadingPluginManager extends EventEmitter {
         this.emit('changed');
     }
 
-    // The code area's add button opens a file picker; the chosen zip is scanned and shown for review.
+    // The code area's add button opens a file picker; the chosen zips are scanned and shown for review together.
     openImportPicker () {
         if (typeof document === 'undefined' || !document.body) return;
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.zip,application/zip,application/x-zip-compressed';
+        input.multiple = true;
         input.hidden = true;
         const cleanup = () => {
             if (input.parentNode) input.parentNode.removeChild(input);
         };
         input.addEventListener('change', () => {
-            const file = input.files && input.files[0];
+            const files = Array.from(input.files || []);
             cleanup();
-            if (file) this.requestReview(file);
+            if (files.length) this.requestReview(files);
         }, {once: true});
         document.body.appendChild(input);
         input.click();
         if (typeof window !== 'undefined') window.addEventListener('focus', () => setTimeout(cleanup, 0), {once: true});
     }
 
-    async requestReview (file) {
-        this.emit('reviewLoading', {fileName: file && file.name});
-        try {
-            this.pendingReview = await this.inspect(file);
-            this.emit('review', this.pendingReview);
-        } catch (error) {
-            this.pendingReview = null;
-            this.emit('reviewError', {fileName: file && file.name, message: error.message});
+    /**
+     * Read and scan one or more zips, then emit 'review' with the ones that can be installed. Files that cannot be
+     * read are reported with the review (or with 'reviewError' when none could be read).
+     * @param {Blob|Array<Blob>} files Plugin archives.
+     * @returns {Promise} Resolves when the review is ready.
+     */
+    async requestReview (files) {
+        const list = [].concat(files).filter(Boolean);
+        this.emit('reviewLoading', {fileNames: list.map(file => file.name)});
+        const reviews = new Map();
+        const errors = [];
+        for (const file of list) {
+            try {
+                const review = await this.inspect(file);
+                // Choosing two versions of the same plugin installs the one picked last.
+                reviews.delete(review.manifest.id);
+                reviews.set(review.manifest.id, review);
+            } catch (error) {
+                errors.push({fileName: file.name, message: error.message});
+            }
         }
+        if (!reviews.size) {
+            this.pendingReviews = null;
+            for (const error of errors) this.emit('reviewError', error);
+            return;
+        }
+        this.pendingReviews = Array.from(reviews.values());
+        this.emit('review', {reviews: this.pendingReviews, errors});
     }
 
-    confirmReview () {
-        const review = this.pendingReview;
-        this.pendingReview = null;
-        if (!review) return Promise.resolve(null);
-        return this.install(review);
+    /**
+     * Install the pending reviews the user accepted.
+     * @param {Array<string>} [ids] Plugin ids to install (all pending reviews by default).
+     * @returns {Promise<{installed: Array<object>, failed: Array<object>}>} Result of installAll().
+     */
+    confirmReview (ids) {
+        const reviews = (this.pendingReviews || [])
+            .filter(review => !ids || ids.includes(review.manifest.id));
+        this.pendingReviews = null;
+        return this.installAll(reviews);
     }
 
     cancelReview () {
-        this.pendingReview = null;
+        this.pendingReviews = null;
         this.emit('reviewClosed');
     }
 

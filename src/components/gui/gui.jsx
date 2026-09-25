@@ -14,6 +14,7 @@ import CostumeTab from '../../containers/costume-tab.jsx';
 import FontTab from '../../containers/font-tab.jsx';
 import ModelTab from '../../containers/model-tab.jsx';
 import ShaderTab from '../../containers/shader-tab.jsx';
+import PluginsTab from '../../containers/plugins-tab.jsx';
 import PluginTabPanel from '../plugin-tab-panel/plugin-tab-panel.jsx';
 import {PLUGIN_TABS_START_INDEX} from '../../reducers/editor-tab';
 import PluginHost from '../../containers/plugin-host.jsx';
@@ -59,6 +60,7 @@ import videosIcon from '!../../lib/tw-recolor/build!./icon--videos.svg';
 import fontsIcon from '!../../lib/tw-recolor/build!./icon--fonts.svg';
 import modelsIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
 import shadersIcon from '!../../lib/tw-recolor/build!./icon--shaders.svg';
+import pluginsIcon from '!../../lib/tw-recolor/build!./icon--plugins.svg';
 
 const messages = defineMessages({
     addExtension: {
@@ -120,6 +122,7 @@ const GUIComponent = props => {
         framerate,
         modelsTabVisible,
         shadersTabVisible,
+        pluginsTabVisible,
         customStageSize,
         enableCommunity,
         intl,
@@ -151,6 +154,7 @@ const GUIComponent = props => {
         onActivateFontsTab,
         onActivateModelsTab,
         onActivateShadersTab,
+        onActivatePluginsTab,
         onActivateTab,
         onClickLogo,
         onExtensionButtonClick,
@@ -467,6 +471,20 @@ const GUIComponent = props => {
                                             id="movie.gui.shadersTab"
                                         />
                                     </Tab>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        onClick={onActivatePluginsTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={pluginsIcon()}
+                                        />
+                                        <FormattedMessage
+                                            defaultMessage="Plugins"
+                                            description="Button to get to the installed plugins panel"
+                                            id="movie.gui.pluginsTab"
+                                        />
+                                    </Tab>
                                     {pluginTabs.map(tab => (
                                         <Tab
                                             className={tabClassNames.tab}
@@ -532,6 +550,9 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {shadersTabVisible ? <ShaderTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {pluginsTabVisible ? <PluginsTab vm={vm} /> : null}
                                 </TabPanel>
                                 {pluginTabs.map((tab, index) => (
                                     <TabPanel
@@ -607,6 +628,7 @@ GUIComponent.propTypes = {
     framerate: PropTypes.number.isRequired,
     modelsTabVisible: PropTypes.bool,
     shadersTabVisible: PropTypes.bool,
+    pluginsTabVisible: PropTypes.bool,
     pluginTabs: PropTypes.arrayOf(PropTypes.object),
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
@@ -630,6 +652,7 @@ GUIComponent.propTypes = {
     onActivateFontsTab: PropTypes.func,
     onActivateModelsTab: PropTypes.func,
     onActivateShadersTab: PropTypes.func,
+    onActivatePluginsTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,

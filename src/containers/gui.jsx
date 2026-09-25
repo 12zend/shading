@@ -26,6 +26,7 @@ import {
     FONTS_TAB_INDEX,
     MODELS_TAB_INDEX,
     SHADERS_TAB_INDEX,
+    PLUGINS_TAB_INDEX,
     PLUGIN_TABS_START_INDEX
 } from '../reducers/editor-tab';
 
@@ -217,6 +218,7 @@ const mapStateToProps = state => {
         fontsTabVisible: state.scratchGui.editorTab.activeTabIndex === FONTS_TAB_INDEX,
         modelsTabVisible: state.scratchGui.editorTab.activeTabIndex === MODELS_TAB_INDEX,
         shadersTabVisible: state.scratchGui.editorTab.activeTabIndex === SHADERS_TAB_INDEX,
+        pluginsTabVisible: state.scratchGui.editorTab.activeTabIndex === PLUGINS_TAB_INDEX,
         targetIsStage: (
             state.scratchGui.targets.stage &&
             state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget
@@ -240,6 +242,7 @@ const mapDispatchToProps = dispatch => ({
     onActivateFontsTab: () => dispatch(activateTab(FONTS_TAB_INDEX)),
     onActivateModelsTab: () => dispatch(activateTab(MODELS_TAB_INDEX)),
     onActivateShadersTab: () => dispatch(activateTab(SHADERS_TAB_INDEX)),
+    onActivatePluginsTab: () => dispatch(activateTab(PLUGINS_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())

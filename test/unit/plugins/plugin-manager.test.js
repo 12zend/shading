@@ -218,6 +218,71 @@ describe('plugin manager', () => {
         expect(manager.getPlugins()).toEqual([]);
     });
 
+    test('the load-on-start switch keeps running plugins until reload and decides what loads next time', async () => {
+        const storage = new MemoryPluginStorage();
+        const manager = new ShadingPluginManager(createVM(), {storage});
+        await manager.init();
+        await install(manager, await pluginZip());
+        expect(manager.getPlugins()[0]).toMatchObject({enabled: true, state: 'active', pendingReload: false});
+
+        await manager.setLoadOnStartup('text-tools', false);
+        expect(manager.isActive('text-tools')).toBe(true);
+        expect(manager.getTabs().map(tab => tab.label)).toEqual(['Notes']);
+        expect(manager.getPlugins()[0]).toMatchObject({enabled: false, state: 'active', pendingReload: true});
+        expect(manager.hasPendingReload()).toBe(true);
+
+        const reloaded = new ShadingPluginManager(createVM(), {storage});
+        await reloaded.init();
+        expect(reloaded.isActive('text-tools')).toBe(false);
+        expect(reloaded.getPlugins()[0]).toMatchObject({enabled: false, state: 'inactive', pendingReload: false});
+
+        await reloaded.setLoadOnStartup(['text-tools'], true);
+        expect(reloaded.isActive('text-tools')).toBe(false);
+        expect(reloaded.getPlugins()[0]).toMatchObject({enabled: true, pendingReload: true});
+        const again = new ShadingPluginManager(createVM(), {storage});
+        await again.init();
+        expect(again.isActive('text-tools')).toBe(true);
+    });
+
+    test('reviews several zips together and installs the chosen ones with dependencies first', async () => {
+        const manager = new ShadingPluginManager(createVM(), {storage: new MemoryPluginStorage()});
+        await manager.init();
+        const dependent = await pluginZip({
+            manifest: {id: 'uses-tools', name: 'Uses Tools', dependencies: ['text-tools']},
+            main: `exports.activate = shading => {
+                if (!shading.plugins.isActive('text-tools')) throw new Error('text-tools is not active');
+            };`
+        });
+        const other = await pluginZip({manifest: {id: 'other', name: 'Other'}, main: 'exports.activate = () => {};'});
+        const broken = Object.assign(new Uint8Array([1, 2, 3]), {name: 'broken.zip'});
+        const reviews = [];
+        manager.on('review', review => reviews.push(review));
+        await manager.requestReview([dependent, await pluginZip(), other, broken]);
+        expect(reviews).toHaveLength(1);
+        expect(reviews[0].reviews.map(review => review.manifest.id)).toEqual(['uses-tools', 'text-tools', 'other']);
+        expect(reviews[0].errors.map(error => error.fileName)).toEqual(['broken.zip']);
+
+        const result = await manager.confirmReview(['uses-tools', 'text-tools']);
+        expect(result.failed).toEqual([]);
+        expect(result.installed.map(plugin => plugin.id)).toEqual(['text-tools', 'uses-tools']);
+        expect(manager.isActive('uses-tools')).toBe(true);
+        expect(manager.getPlugins().map(plugin => plugin.id).sort()).toEqual(['text-tools', 'uses-tools']);
+        expect(manager.pendingReviews).toBeNull();
+    });
+
+    test('reports every unreadable zip when none of the chosen files can be installed', async () => {
+        const manager = new ShadingPluginManager(createVM(), {storage: new MemoryPluginStorage()});
+        await manager.init();
+        const errors = [];
+        manager.on('reviewError', error => errors.push(error.fileName));
+        manager.on('review', () => errors.push('unexpected review'));
+        await manager.requestReview([
+            Object.assign(new Uint8Array([1]), {name: 'a.zip'}),
+            Object.assign(new Uint8Array([2]), {name: 'b.zip'})
+        ]);
+        expect(errors).toEqual(['a.zip', 'b.zip']);
+    });
+
     test('keeps a failing plugin from breaking the editor and undoes its partial registrations', async () => {
         const vm = createVM();
         const manager = new ShadingPluginManager(vm, {storage: new MemoryPluginStorage()});

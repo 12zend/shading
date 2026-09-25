@@ -2086,7 +2086,8 @@
         "tw.viewFeaturedProjects": "クリックしてプロジェクトの特集を見る。",
         "tw.viewOnScratch": "Scratchでプロジェクトを見る",
         "movie.menuBar.plugins": "プラグイン…",
-        "movie.gui.importPlugin": "プラグインを読み込む（.zip）"
+        "movie.gui.importPlugin": "プラグインを読み込む（.zip）",
+        "movie.gui.pluginsTab": "プラグイン"
     },
     "ja-hira": {
         "tw.alerts.creatingRestorePoint": "ふくげんしています…",
