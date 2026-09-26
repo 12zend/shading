@@ -163,6 +163,21 @@
 .level-medium { background: #d97706; }
 .level-high { background: #d93036; }
 
+/* Signature badges: outlined so they do not read as a risk level. */
+.signature {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border: 1px solid currentColor;
+    border-radius: 1rem;
+    font-size: 0.7rem;
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.signature-official { color: #1d6fd8; }
+.signature-unsigned { color: #6d7a8c; }
+.signature-invalid { color: #d93036; }
+
 /* On/off switch: a visually hidden checkbox keeps keyboard and screen reader support. */
 .switch {
     position: relative;

@@ -1,5 +1,6 @@
 import {readPluginArchive} from './archive';
 import {scanPlugin} from './security-scan';
+import {verifyPluginSignature} from './signature';
 
 const prepareOfficialPlugins = async (fetcher, onProgress = () => {}) => {
     const response = await fetcher('/official-plugins/catalog.json', {cache: 'no-store'});
@@ -38,7 +39,12 @@ const prepareOfficialPlugins = async (fetcher, onProgress = () => {}) => {
         if (archive.manifest.id !== entry.id || archive.hash !== entry.hash) {
             throw new Error(`${entry.id} の検証に失敗しました。ページを再読み込みしてください。`);
         }
-        reviews.push({archive, scan: scanPlugin(archive)});
+        // The catalog comes from the same server as the zips, so only the signature shows they are official.
+        const signature = await verifyPluginSignature(archive);
+        if (signature.status !== 'official') {
+            throw new Error(`${entry.id} は公式の署名が確認できないため、インストールしません。`);
+        }
+        reviews.push({archive, scan: scanPlugin(archive), signature});
     }
     return reviews;
 };

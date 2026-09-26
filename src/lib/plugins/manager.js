@@ -2,6 +2,7 @@ import EventEmitter from 'events';
 import {markMovieProject} from '../../../scratch-vm/src/lib/project-format';
 import {readPluginArchive} from './archive';
 import {scanPlugin} from './security-scan';
+import {verifyPluginSignature} from './signature';
 import {createModuleSystem} from './module-loader';
 import {createPluginAPI} from './api';
 import {createDefaultStorage} from './storage';
@@ -135,7 +136,9 @@ class ShadingPluginManager extends EventEmitter {
                     if (entry.hash && archive.hash !== entry.hash) {
                         throw new Error('The stored plugin does not match the reviewed archive.');
                     }
-                    this.records.set(archive.manifest.id, this._createRecord(archive, entry));
+                    // Checked again on every start: the stored record itself is not trusted to say it is official.
+                    const signature = await verifyPluginSignature(archive);
+                    this.records.set(archive.manifest.id, this._createRecord(archive, entry, signature));
                 } catch (error) {
                     console.error(`[plugins] Could not load installed plugin ${entry.id}:`, error);
                     this.records.set(entry.id, {
@@ -162,7 +165,7 @@ class ShadingPluginManager extends EventEmitter {
         return this.ready;
     }
 
-    _createRecord (archive, stored) {
+    _createRecord (archive, stored, signature = null) {
         return {
             id: archive.manifest.id,
             manifest: archive.manifest,
@@ -170,6 +173,7 @@ class ShadingPluginManager extends EventEmitter {
             hash: archive.hash,
             size: archive.size,
             scan: stored.scan || null,
+            signature,
             enabled: stored.enabled !== false,
             installedAt: stored.installedAt || Date.now(),
             fileName: stored.fileName || archive.fileName,
@@ -331,6 +335,7 @@ class ShadingPluginManager extends EventEmitter {
                 hash: record.hash,
                 installedAt: record.installedAt,
                 scanLevel: record.scan ? record.scan.level : null,
+                signature: record.signature ? record.signature.status : null,
                 missingRecommendations: (record.manifest.recommends || []).filter(id => !this.records.has(id))
             };
         });
@@ -342,17 +347,19 @@ class ShadingPluginManager extends EventEmitter {
      * Read and scan a zip without running anything.
      * @param {Blob|ArrayBuffer|Uint8Array} file Plugin archive.
      * @param {string} [fileName] File name.
-     * @returns {Promise<object>} Review data: {archive, scan, existing}.
+     * @returns {Promise<object>} Review data: {archive, scan, signature, manifest, existing}.
      */
     async inspect (file, fileName = (file && file.name) || 'plugin.zip') {
         const data = file && typeof file.arrayBuffer !== 'function' && typeof Blob !== 'undefined' &&
             file instanceof Blob ? await readFileAsArrayBuffer(file) : file;
         const archive = await readPluginArchive(data, fileName);
         const scan = scanPlugin(archive);
+        const signature = await verifyPluginSignature(archive);
         const existing = this.records.get(archive.manifest.id) || null;
         return {
             archive,
             scan,
+            signature,
             manifest: archive.manifest,
             existing: existing ? {
                 version: existing.manifest.version,
@@ -389,7 +396,7 @@ class ShadingPluginManager extends EventEmitter {
         } catch (error) {
             console.error('[plugins] Could not save the plugin; it will be removed when the editor closes:', error);
         }
-        const record = this._createRecord(archive, stored);
+        const record = this._createRecord(archive, stored, review.signature || null);
         this.records.set(id, record);
         const ready = this._activate(record);
         // Plugins that were waiting for this dependency can start now.

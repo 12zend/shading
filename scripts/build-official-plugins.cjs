@@ -21,6 +21,12 @@ async function build (source, output) {
         }
         if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(manifest.id) ||
             catalog.some(entry => entry.id === manifest.id)) throw new Error(`Invalid or duplicate id: ${manifest.id}`);
+        // The /install page only accepts signed plugins, so fail the build instead of shipping a page that cannot.
+        try {
+            await fs.access(path.join(directory, 'shading-plugin.sig'));
+        } catch (error) {
+            throw new Error(`${manifest.id} is not signed. Run \`node scripts/sign.mjs\` in shading-plugins.`);
+        }
         const zip = new JSZip();
         async function add (relative = '') {
             for (const entry of await fs.readdir(path.join(directory, relative), {withFileTypes: true})) {

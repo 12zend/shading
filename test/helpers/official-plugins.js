@@ -18,7 +18,7 @@ const listPluginIds = () => fs.readdirSync(PLUGINS_DIR)
     .filter(name => fs.existsSync(path.join(PLUGINS_DIR, name, 'shading-plugin.json')))
     .sort();
 
-const readPluginDirectory = id => {
+const readPluginDirectory = (id, {allFiles = false} = {}) => {
     const root = path.join(PLUGINS_DIR, id);
     const files = new Map();
     const walk = directory => {
@@ -26,7 +26,7 @@ const readPluginDirectory = id => {
             const absolute = path.join(directory, entry.name);
             const relative = path.relative(root, absolute).split(path.sep).join('/');
             if (entry.isDirectory()) walk(absolute);
-            else if (!SKIPPED_FILES.test(relative) && entry.name !== '.DS_Store') {
+            else if ((allFiles || !SKIPPED_FILES.test(relative)) && entry.name !== '.DS_Store') {
                 files.set(relative, new Uint8Array(fs.readFileSync(absolute)));
             }
         }

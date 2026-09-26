@@ -4,6 +4,7 @@ import VM from 'scratch-vm';
 import {installPenFX, listPluginIds, readPluginDirectory} from '../../helpers/official-plugins';
 import {readPluginArchive} from '../../../src/lib/plugins/archive';
 import {scanPlugin} from '../../../src/lib/plugins/security-scan';
+import {verifyPluginSignature} from '../../../src/lib/plugins/signature';
 
 // Every folder of shading-plugins must zip into a valid plugin that passes review without high-risk findings
 // (Genshade declares its WebAssembly compiler), and every block it adds must finish in the VM tick.
@@ -27,6 +28,12 @@ describe('official plugins', () => {
         const scan = scanPlugin(archive);
         expect(scan.findings.filter(finding => finding.severity === 'high')).toEqual([]);
         expect(scan.undeclaredPermissions).toEqual([]);
+    });
+
+    // Fails when a plugin changes without being signed again (`node scripts/sign.mjs` in shading-plugins).
+    test.each(ids)('%s carries a valid official signature', async id => {
+        const signature = await verifyPluginSignature(readPluginDirectory(id, {allFiles: true}));
+        expect(signature).toMatchObject({status: 'official'});
     });
 
     test('every Looks block added by the official plugins returns undefined in the same tick', async () => {

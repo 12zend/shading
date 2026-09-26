@@ -115,6 +115,7 @@ describe('plugin manager', () => {
         await manager.init();
         const review = await manager.inspect(await pluginZip(), 'text-tools.zip');
         expect(review.scan.level).toBe('none');
+        expect(review.signature).toMatchObject({status: 'unsigned'});
         expect(review.manifest.id).toBe('text-tools');
         const plugin = await manager.install(review);
         expect(plugin).toMatchObject({id: 'text-tools', state: 'active', enabled: true});
@@ -131,6 +132,8 @@ describe('plugin manager', () => {
         const restarted = new ShadingPluginManager(createVM(), {storage});
         await restarted.init();
         expect(restarted.isActive('text-tools')).toBe(true);
+        // The signature is checked again on start, not read back from storage.
+        expect(restarted.getPlugins()[0]).toMatchObject({signature: 'unsigned'});
     });
 
     test('rejects a stored archive that no longer matches the reviewed hash', async () => {
