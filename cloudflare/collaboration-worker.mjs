@@ -134,12 +134,30 @@ const allowedOrigin = (request, env) => {
     return configured.indexOf(origin) !== -1;
 };
 
+// Script paths are content-hashed and cached as immutable, so the single-page-application
+// fallback (index.html) must never be served for them: a cache would keep that HTML for a year
+// and the chunk (e.g. addons) would never load again.
+const fetchAsset = async (request, env, url) => {
+    const response = await env.ASSETS.fetch(request);
+    const contentType = response.headers.get('content-type') || '';
+    if (url.pathname.startsWith('/js/') && contentType.startsWith('text/html')) {
+        return new Response('Not found', {
+            status: 404,
+            headers: {
+                'Cache-Control': 'no-store',
+                'Content-Type': 'text/plain; charset=utf-8'
+            }
+        });
+    }
+    return response;
+};
+
 export default {
     fetch (request, env) {
         const url = new URL(request.url);
         const match = url.pathname.match(/^\/api\/teams\/([a-z0-9][a-z0-9-]{4,46}[a-z0-9])\/websocket$/);
         if (!match) {
-            if (env.ASSETS) return env.ASSETS.fetch(request);
+            if (env.ASSETS) return fetchAsset(request, env, url);
             return jsonResponse({ok: true, service: 'shading-collaboration'});
         }
         if (request.method !== 'GET' || request.headers.get('upgrade') !== 'websocket') {
