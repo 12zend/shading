@@ -230,6 +230,8 @@ const mapStateToProps = state => {
         fontsModalVisible: state.scratchGui.modals.fontsModal,
         unknownPlatformModalVisible: state.scratchGui.modals.unknownPlatformModal,
         invalidProjectModalVisible: state.scratchGui.modals.invalidProjectModal,
+        openShareLinkModalVisible: state.scratchGui.modals.openShareLinkModal,
+        shareLinkModalVisible: state.scratchGui.modals.shareLinkModal,
         vm: state.scratchGui.vm
     };
 };

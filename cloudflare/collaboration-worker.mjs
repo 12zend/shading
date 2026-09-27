@@ -10,6 +10,7 @@ import {
     requiresFreshSnapshot
 } from './collaboration-auth.js';
 import {findProjectResyncDonor, runSerializedRoomMutation} from './collaboration-protocol.js';
+import {resolveSharePath} from './share-route.js';
 import {deriveTeamIdFromClaim} from './team-claim.js';
 
 const ROOM_STATE_KEY = 'room-state';
@@ -157,8 +158,14 @@ export default {
         const url = new URL(request.url);
         const match = url.pathname.match(/^\/api\/teams\/([a-z0-9][a-z0-9-]{4,46}[a-z0-9])\/websocket$/);
         if (!match) {
-            if (env.ASSETS) return fetchAsset(request, env, url);
-            return jsonResponse({ok: true, service: 'shading-collaboration'});
+            if (!env.ASSETS) return jsonResponse({ok: true, service: 'shading-collaboration'});
+            const sharePath = resolveSharePath(url.pathname);
+            if (sharePath) {
+                const assetURL = new URL(url);
+                assetURL.pathname = sharePath;
+                return fetchAsset(new Request(assetURL, request), env, assetURL);
+            }
+            return fetchAsset(request, env, url);
         }
         if (request.method !== 'GET' || request.headers.get('upgrade') !== 'websocket') {
             return jsonResponse({error: 'WebSocket upgrade required'}, 426);

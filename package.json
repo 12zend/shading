@@ -56,6 +56,7 @@
     "balance-text": "3.3.1",
     "base64-loader": "1.0.0",
     "bowser": "1.9.4",
+    "brotli-wasm": "^3.0.1",
     "classnames": "2.2.6",
     "computed-style-to-inline-style": "3.0.0",
     "cookie": "0.5.0",
@@ -207,7 +208,7 @@
     ],
     "moduleNameMapper": {
       "^scratch-render/src/(.*)$": "<rootDir>/scratch-render/src/$1",
-      "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>/test/__mocks__/fileMock.js",
+      "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|wasm)$": "<rootDir>/test/__mocks__/fileMock.js",
       "\\.(vert|frag)$": "<rootDir>/test/__mocks__/fileMock.js",
       "\\.(css|less)$": "<rootDir>/test/__mocks__/styleMock.js",
       "editor-msgs(\\.js)?$": "<rootDir>/test/__mocks__/editor-msgs-mock.js"
