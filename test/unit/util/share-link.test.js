@@ -10,6 +10,7 @@ import {
     parseSharePayload
 } from '../../../src/lib/share-link/share-link-url';
 import {resolveSharePath} from '../../../cloudflare/share-route';
+import {buildTestFont} from '../../helpers/truetype-font';
 
 // Browsers load brotli-wasm; Node's zlib speaks the same format.
 jest.mock('../../../src/lib/share-link/share-link-brotli', () => () => Promise.resolve({
@@ -166,6 +167,47 @@ describe('share link project round trip', () => {
         expect(created.availablePlugins.map(plugin => plugin.id)).toEqual(['blur']);
         const decoded = await shareLink.decodeShareLink(created.payload);
         expect(decoded.plugins).toEqual([]);
+    });
+
+    test('optimizes custom fonts unless asked not to', async () => {
+        const font = buildTestFont();
+        const fontName = '0123456789abcdef0123456789abcdef.ttf';
+        const project = {
+            targets: [],
+            customFonts: [{system: false, family: 'Test', fallback: 'sans-serif', md5ext: fontName}]
+        };
+        const vm = {
+            saveProjectSb3DontZip: () => ({
+                'project.json': text(JSON.stringify(project)),
+                [fontName]: font
+            })
+        };
+        const readFiles = async payload => {
+            const decoded = await shareLink.decodeShareLink(payload);
+            const zip = await JSZip.loadAsync(decoded.projectData);
+            const files = {};
+            for (const name of Object.keys(zip.files)) files[name] = await zip.file(name).async('uint8array');
+            return files;
+        };
+
+        const optimized = await shareLink.createShareLink(vm, '');
+        expect(optimized.customFontCount).toBe(1);
+        expect(optimized.optimizedFonts).toEqual([
+            {name: fontName, originalBytes: font.length, optimizedBytes: expect.any(Number)}
+        ]);
+        const optimizedFiles = await readFiles(optimized.payload);
+        const fontFile = Object.keys(optimizedFiles).find(name => name.endsWith('.ttf'));
+        expect(fontFile).not.toBe(fontName);
+        expect(optimizedFiles[fontFile].length).toBe(optimized.optimizedFonts[0].optimizedBytes);
+        expect(JSON.parse(new TextDecoder().decode(optimizedFiles['project.json'])).customFonts[0].md5ext)
+            .toBe(fontFile);
+
+        const full = await shareLink.createShareLink(vm, '', {optimizeFonts: false});
+        expect(full.customFontCount).toBe(1);
+        expect(full.optimizedFonts).toEqual([]);
+        expect(full.payload.length).toBeGreaterThan(optimized.payload.length);
+        const fullFiles = await readFiles(full.payload);
+        expect(Array.from(fullFiles[fontName])).toEqual(Array.from(font));
     });
 
     test('reports progress while encoding', async () => {

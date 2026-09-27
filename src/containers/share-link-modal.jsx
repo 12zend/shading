@@ -40,32 +40,35 @@ class ShareLinkModal extends React.Component {
             'handleOpen',
             'handleRetry',
             'handleSave',
-            'handleToggleIncludePlugins'
+            'handleToggleIncludePlugins',
+            'handleToggleOptimizeFonts'
         ]);
         this.generation = 0;
         this.state = {
             copied: false,
             error: null,
             includePlugins: true,
+            optimizeFonts: true,
             progress: null,
             result: null,
             status: 'working'
         };
     }
     componentDidMount () {
-        this.generate(true);
+        this.generate({includePlugins: true, optimizeFonts: true});
     }
     componentWillUnmount () {
         this.unmounted = true;
         clearTimeout(this.copiedTimeout);
     }
-    generate (includePlugins) {
+    generate ({includePlugins, optimizeFonts}) {
         const generation = ++this.generation;
         const current = () => !this.unmounted && generation === this.generation;
-        this.setState({copied: false, error: null, includePlugins, progress: null, status: 'working'});
+        this.setState({copied: false, error: null, includePlugins, optimizeFonts, progress: null, status: 'working'});
         import(/* webpackChunkName: "share-link" */ '../lib/share-link/share-link')
             .then(shareLink => shareLink.createShareLink(this.props.vm, this.props.projectTitle, {
                 includePlugins,
+                optimizeFonts,
                 onProgress: progress => {
                     if (current()) this.setState({progress});
                 }
@@ -99,10 +102,13 @@ class ShareLinkModal extends React.Component {
             new Blob([this.state.result.url], {type: 'text/plain'}));
     }
     handleRetry () {
-        this.generate(this.state.includePlugins);
+        this.generate(this.state);
     }
     handleToggleIncludePlugins (event) {
-        this.generate(event.target.checked);
+        this.generate({includePlugins: event.target.checked, optimizeFonts: this.state.optimizeFonts});
+    }
+    handleToggleOptimizeFonts (event) {
+        this.generate({includePlugins: this.state.includePlugins, optimizeFonts: event.target.checked});
     }
     render () {
         return (
@@ -111,6 +117,7 @@ class ShareLinkModal extends React.Component {
                 error={this.state.error}
                 includePlugins={this.state.includePlugins}
                 locale={this.props.locale}
+                optimizeFonts={this.state.optimizeFonts}
                 progress={this.state.progress}
                 result={this.state.result}
                 status={this.state.status}
@@ -120,6 +127,7 @@ class ShareLinkModal extends React.Component {
                 onRetry={this.handleRetry}
                 onSave={this.handleSave}
                 onToggleIncludePlugins={this.handleToggleIncludePlugins}
+                onToggleOptimizeFonts={this.handleToggleOptimizeFonts}
             />
         );
     }

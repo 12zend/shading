@@ -1,6 +1,7 @@
 import JSZip from '@turbowarp/jszip';
 import brotliWasmPath from 'brotli-wasm/pkg.web/brotli_wasm_bg.wasm';
 import log from '../log';
+import {getCustomFontFiles} from './share-link-fonts';
 import {buildShareURL} from './share-link-url';
 
 let worker = null;
@@ -135,9 +136,13 @@ const pluginSummary = (id, files) => {
  * @param {string} title Project title.
  * @param {object} [options] Options.
  * @param {boolean} [options.includePlugins] Embed the plugins the project uses (default true).
+ * @param {boolean} [options.optimizeFonts] Keep only the glyphs the project's text uses in its custom fonts
+ *   (default true).
  * @param {function({stage: string, done: number, total: number})} [options.onProgress] Progress callback.
  * @returns {Promise<{url: string, payload: string, originalBytes: number, encodedBytes: number,
- *   fileCount: number, plugins: Array<object>, availablePlugins: Array<object>}>} The link and its statistics.
+ *   fileCount: number, plugins: Array<object>, availablePlugins: Array<object>, customFontCount: number,
+ *   optimizedFonts: Array<{name: string, originalBytes: number, optimizedBytes: number}>}>} The link and its
+ *   statistics.
  */
 const createShareLink = async (vm, title, options = {}) => {
     const projectFiles = vm.saveProjectSb3DontZip();
@@ -151,7 +156,9 @@ const createShareLink = async (vm, title, options = {}) => {
     const originalBytes = files.reduce((sum, file) => sum + file.data.byteLength, 0);
     const describe = plugin => ({id: plugin.id, name: plugin.name, version: plugin.version});
     const onProgress = options.onProgress;
-    const {payload, encodedBytes} = await runTask('encode', {files, title}, onProgress);
+    const customFontCount = getCustomFontFiles(files).length;
+    const optimizeFonts = options.optimizeFonts !== false && customFontCount > 0;
+    const {payload, encodedBytes, optimizedFonts} = await runTask('encode', {files, title, optimizeFonts}, onProgress);
     return {
         url: buildShareURL(payload),
         payload,
@@ -159,7 +166,9 @@ const createShareLink = async (vm, title, options = {}) => {
         encodedBytes,
         fileCount: files.length,
         plugins: plugins.map(describe),
-        availablePlugins: availablePlugins.map(describe)
+        availablePlugins: availablePlugins.map(describe),
+        customFontCount,
+        optimizedFonts
     };
 };
 

@@ -21,6 +21,13 @@ const formatBytes = bytes => {
 
 const formatCount = count => count.toLocaleString();
 
+const fontSavings = fonts => {
+    if (!fonts || !fonts.length) return '';
+    const original = fonts.reduce((sum, font) => sum + font.originalBytes, 0);
+    const optimized = fonts.reduce((sum, font) => sum + font.optimizedBytes, 0);
+    return ` (${formatBytes(original)} → ${formatBytes(optimized)})`;
+};
+
 const selectAll = event => event.target.select();
 
 const ShareLinkModal = props => {
@@ -124,6 +131,27 @@ const ShareLinkModal = props => {
                                     '「ファイル」→「共有リンクから開く…」に貼り付けて開いてください。')}
                             </div>
                         ) : null)}
+                        {result.customFontCount ? (
+                            <label className={styles.option}>
+                                <input
+                                    type="checkbox"
+                                    checked={props.optimizeFonts}
+                                    onChange={props.onToggleOptimizeFonts}
+                                />
+                                <span>
+                                    {t('Keep only the characters this project uses in its fonts',
+                                        'フォントをこのプロジェクトで使っている文字だけに絞る')}
+                                    {fontSavings(result.optimizedFonts)}
+                                    <br />
+                                    <span className={styles.note}>
+                                        {t('Makes the link much shorter. Characters that are not in the project, ' +
+                                            'such as text typed while it runs, are shown in the fallback font.',
+                                        'リンクが大幅に短くなります。プロジェクトに含まれていない文字（実行中に入力された' +
+                                            '文字など）は代わりのフォントで表示されます。')}
+                                    </span>
+                                </span>
+                            </label>
+                        ) : null}
                         {result.availablePlugins.length ? (
                             <label className={styles.option}>
                                 <input
@@ -194,6 +222,8 @@ ShareLinkModal.propTypes = {
     onRetry: PropTypes.func.isRequired,
     onSave: PropTypes.func.isRequired,
     onToggleIncludePlugins: PropTypes.func.isRequired,
+    onToggleOptimizeFonts: PropTypes.func.isRequired,
+    optimizeFonts: PropTypes.bool,
     progress: PropTypes.shape({
         stage: PropTypes.string,
         done: PropTypes.number,
@@ -205,7 +235,12 @@ ShareLinkModal.propTypes = {
         originalBytes: PropTypes.number,
         encodedBytes: PropTypes.number,
         fileCount: PropTypes.number,
-        availablePlugins: PropTypes.arrayOf(PropTypes.object)
+        availablePlugins: PropTypes.arrayOf(PropTypes.object),
+        customFontCount: PropTypes.number,
+        optimizedFonts: PropTypes.arrayOf(PropTypes.shape({
+            originalBytes: PropTypes.number,
+            optimizedBytes: PropTypes.number
+        }))
     }),
     status: PropTypes.oneOf(['working', 'done', 'error']).isRequired
 };
