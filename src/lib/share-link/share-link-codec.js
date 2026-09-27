@@ -12,7 +12,7 @@
  *   varint  file count
  *   per file: string name, u8 transform (TRANSFORM_*), varint segment (0 = inline), varint stored length
  *   u32     CRC-32 of the original bytes of every file, in manifest order
- * Every other segment holds exactly one large, already-compressed media file.
+ * Every other segment holds one large, already-compressed media payload; identical files may share it.
  *
  * The codec never changes a file: transforms are lossless and verified before they are used, so
  * a decoded project is byte-identical to the saved one.
@@ -524,13 +524,28 @@ const encodeShareData = (project, brotli, onProgress) => {
     let crc = 0xFFFFFFFF;
     const entries = [];
     const separate = [];
+    const mediaByChecksum = new Map();
     for (const file of files) {
         crc = crc32Update(crc, file.data);
         const {transform, stored} = applyTransform(file.name, file.data);
         const isLargeMedia = COMPRESSED_MEDIA_EXTENSIONS.has(getExtension(file.name)) &&
             stored.length >= LARGE_MEDIA_BYTES;
-        const segment = isLargeMedia ? separate.length + 1 : 0;
-        if (isLargeMedia) separate.push({stored, original: file.data.length});
+        let segment = 0;
+        if (isLargeMedia) {
+            const key = `${stored.length}:${crc32(stored)}`;
+            const candidates = mediaByChecksum.get(key) || [];
+            // A checksum is only an index: compare bytes to handle collisions without data loss.
+            const duplicate = candidates.find(index => bytesEqual(separate[index - 1].stored, stored));
+            if (duplicate) {
+                segment = duplicate;
+                separate[segment - 1].original += file.data.length;
+            } else {
+                segment = separate.length + 1;
+                separate.push({stored, original: file.data.length});
+                candidates.push(segment);
+                mediaByChecksum.set(key, candidates);
+            }
+        }
         entries.push({name: file.name, transform, segment, stored});
     }
 

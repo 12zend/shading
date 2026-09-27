@@ -169,6 +169,43 @@ describe('share link codec', () => {
         expect(Buffer.compare(Buffer.from(decoded.files[1].data), Buffer.from(big))).toBe(0);
     });
 
+    test('identical large media under different plugin paths shares one payload', () => {
+        const big = randomBytes((1024 * 1024) + 5, 9);
+        const files = {
+            'project.json': text('{}'),
+            'plugins/first/video.mp4': big,
+            'plugins/second/video.mp4': big.slice()
+        };
+        const progress = [];
+        const encoded = encodeShareData({files}, nodeBrotli, event => progress.push(event));
+        expect(encoded[0]).toBe(1); // Existing decoders already support shared segment references.
+        expect(encoded[1]).toBe(2);
+        expect(encoded.length).toBeLessThan(big.length + 300);
+        const decoded = decodeShareData(encoded, nodeBrotli);
+        for (const file of decoded.files) {
+            expect(Buffer.compare(Buffer.from(file.data), Buffer.from(files[file.name]))).toBe(0);
+        }
+        const last = progress[progress.length - 1];
+        expect(last.done).toBe(last.total);
+        expect(last.total).toBe((big.length * 2) + 2);
+        for (let i = 1; i < progress.length; i++) expect(progress[i].done).toBeGreaterThanOrEqual(progress[i - 1].done);
+    });
+
+    test('different large media with matching lengths and CRCs keeps separate payloads', () => {
+        const first = randomBytes(1024 * 1024, 9);
+        const second = first.slice();
+        // These distinct prefixes have the same CRC; appending identical bytes preserves the collision.
+        first.set(Buffer.from('3a27a542ae4a035e', 'hex'));
+        second.set(Buffer.from('66fb9ba8fb26515a', 'hex'));
+        expect(crc32(first)).toBe(crc32(second));
+        const files = {'project.json': text('{}'), 'a.mp4': first, 'b.mp4': second};
+        const encoded = encodeShareData({files}, nodeBrotli);
+        expect(encoded[1]).toBe(3);
+        for (const file of decodeShareData(encoded, nodeBrotli).files) {
+            expect(Buffer.compare(Buffer.from(file.data), Buffer.from(files[file.name]))).toBe(0);
+        }
+    });
+
     test('compresses repetitive project JSON far below its original size', () => {
         const blocks = {};
         for (let i = 0; i < 400; i++) {
