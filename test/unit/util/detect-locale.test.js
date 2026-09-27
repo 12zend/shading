@@ -1,11 +1,14 @@
+/**
+ * @jest-environment jsdom
+ */
 import {detectLocale} from '../../../src/lib/detect-locale.js';
 
 const supportedLocales = ['en', 'es', 'pt-br', 'de', 'it'];
 
-Object.defineProperty(window.location,
-    'search',
-    {value: '?name=val', configurable: true}
-);
+// jsdom's location cannot be redefined; change the URL instead.
+const setSearch = search => window.history.replaceState(null, '', `/${search}`);
+
+setSearch('?name=val');
 Object.defineProperty(window.navigator,
     'language',
     {value: 'en-US', configurable: true}
@@ -13,42 +16,27 @@ Object.defineProperty(window.navigator,
 
 describe('detectLocale', () => {
     test('uses locale from the URL when present', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?locale=pt-br'}
-        );
+        setSearch('?locale=pt-br');
         expect(detectLocale(supportedLocales)).toEqual('pt-br');
     });
 
     test('is case insensitive', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?locale=pt-BR'}
-        );
+        setSearch('?locale=pt-BR');
         expect(detectLocale(supportedLocales)).toEqual('pt-br');
     });
 
     test('also accepts lang from the URL when present', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?lang=it'}
-        );
+        setSearch('?lang=it');
         expect(detectLocale(supportedLocales)).toEqual('it');
     });
 
     test('ignores unsupported locales', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?lang=sv'}
-        );
+        setSearch('?lang=sv');
         expect(detectLocale(supportedLocales)).toEqual('en');
     });
 
     test('ignores other parameters', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?enable=language'}
-        );
+        setSearch('?enable=language');
         expect(detectLocale(supportedLocales)).toEqual('en');
     });
 
@@ -69,18 +57,12 @@ describe('detectLocale', () => {
     });
 
     test('works with an empty locale', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?locale='}
-        );
+        setSearch('?locale=');
         expect(detectLocale(supportedLocales)).toEqual('en');
     });
 
     test('if multiple, uses the first locale', () => {
-        Object.defineProperty(window.location,
-            'search',
-            {value: '?locale=de&locale=en'}
-        );
+        setSearch('?locale=de&locale=en');
         expect(detectLocale(supportedLocales)).toEqual('de');
     });
 });

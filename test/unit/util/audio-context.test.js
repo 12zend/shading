@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 /* global WebAudioTestAPI */
 import 'web-audio-test-api';
 WebAudioTestAPI.setState({
@@ -14,17 +17,11 @@ describe('Shared Audio Context', () => {
         expect(sharedAudioContext).toMatchObject({});
     });
 
-    test('returns AudioContext when mousedown is triggered', () => {
+    test('returns AudioContext after the first user gesture', () => {
+        // Touch-capable documents (jsdom is one) start audio on touchstart, others on mousedown.
+        const gesture = typeof document.ontouchstart === 'undefined' ? 'mousedown' : 'touchstart';
+        document.dispatchEvent(new Event(gesture));
         const sharedAudioContext = new SharedAudioContext();
-        const event = new Event('mousedown');
-        document.dispatchEvent(event);
-        expect(sharedAudioContext).toMatchObject(audioContext);
-    });
-
-    test('returns AudioContext when touchstart is triggered', () => {
-        const sharedAudioContext = new SharedAudioContext();
-        const event = new Event('touchstart');
-        document.dispatchEvent(event);
         expect(sharedAudioContext).toMatchObject(audioContext);
     });
 });

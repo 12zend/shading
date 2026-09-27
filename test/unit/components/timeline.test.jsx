@@ -285,12 +285,16 @@ describe('Timeline keyboard controls', () => {
         expect(component.find('button[aria-label="Zoom out timeline"]').prop('disabled')).toBe(true);
     });
 
-    test('Export MP4 applies settings and renders fresh frames before exporting', async () => {
+    test('Render / export applies settings and renders fresh frames before exporting', async () => {
         component.setState({
             draft: {
                 duration: '12',
+                exportFormat: 'mp4',
                 framerate: '24',
                 height: '1080',
+                rangeEnd: '12',
+                rangeStart: '0',
+                reuseFrames: false,
                 width: '1920'
             },
             settingsOpen: true
@@ -300,22 +304,31 @@ describe('Timeline keyboard controls', () => {
 
         expect(manager.updateTimelineSettings).toHaveBeenCalledWith({
             duration: 12,
+            exportFormat: 'mp4',
             framerate: 24,
             height: 1080,
+            rangeEnd: 12,
+            rangeStart: 0,
+            reuseFrames: false,
             width: 1920
         });
-        expect(manager.renderAndExportTimeline).toHaveBeenCalledTimes(1);
+        expect(manager.renderAndExportTimeline).toHaveBeenCalledWith({
+            end: 12,
+            format: 'mp4',
+            reuseFrames: false,
+            start: 0
+        });
         expect(instance.state.exporting).toBe(false);
     });
 
-    test('Export MP4 is available without pre-rendered frames', () => {
+    test('Render / export is available without pre-rendered frames', () => {
         component.setState({
             draft: Object.assign({}, instance.state.timeline),
             settingsOpen: true
         });
 
         const exportButton = component.find('button').filterWhere(button =>
-            button.text() === 'Export MP4'
+            button.text() === 'Render / export'
         );
 
         expect(exportButton).toHaveLength(1);
@@ -338,8 +351,8 @@ describe('Timeline keyboard controls', () => {
             settingsOpen: true
         });
 
-        expect(component.text()).not.toContain('Audio');
-        expect(component.find('select')).toHaveLength(0);
+        expect(component.find('select[name="sound"]')).toHaveLength(0);
+        expect(component.find('label span').filterWhere(label => label.text() === 'Audio')).toHaveLength(0);
     });
 
     test('rendering settings preserve output resolution independently from the stage size', () => {

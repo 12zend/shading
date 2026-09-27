@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import CloudProvider from '../../../src/lib/cloud-provider';
 
 let websocketConstructorCount = 0;
