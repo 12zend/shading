@@ -21,11 +21,20 @@ const formatBytes = bytes => {
 
 const formatCount = count => count.toLocaleString();
 
-const fontSavings = fonts => {
-    if (!fonts || !fonts.length) return '';
-    const original = fonts.reduce((sum, font) => sum + font.originalBytes, 0);
-    const optimized = fonts.reduce((sum, font) => sum + font.optimizedBytes, 0);
+const savings = files => {
+    if (!files || !files.length) return '';
+    const original = files.reduce((sum, file) => sum + file.originalBytes, 0);
+    const optimized = files.reduce((sum, file) => sum + file.optimizedBytes, 0);
     return ` (${formatBytes(original)} → ${formatBytes(optimized)})`;
+};
+
+const progressMessage = (progress, percent, t) => {
+    const stage = progress && progress.stage;
+    if (stage === 'media') {
+        return t(`Compressing images, sounds and videos… ${percent}%`, `画像・音・動画を圧縮しています… ${percent}%`);
+    }
+    if (stage === 'compress') return t(`Compressing… ${percent}%`, `圧縮しています… ${percent}%`);
+    return t('Preparing…', '準備しています…');
 };
 
 const selectAll = event => event.target.select();
@@ -53,9 +62,7 @@ const ShareLinkModal = props => {
                 {status === 'working' ? (
                     <React.Fragment>
                         <p>
-                            {progress && progress.stage === 'compress' ?
-                                t(`Compressing… ${percent}%`, `圧縮しています… ${percent}%`) :
-                                t('Preparing…', '準備しています…')}
+                            {progressMessage(progress, percent, t)}
                         </p>
                         <div
                             className={styles.progress}
@@ -131,6 +138,32 @@ const ShareLinkModal = props => {
                                     '「ファイル」→「共有リンクから開く…」に貼り付けて開いてください。')}
                             </div>
                         ) : null)}
+                        {result.mediaCount ? (
+                            <label className={styles.option}>
+                                <span>
+                                    {t('Image, sound and video quality', '画像・音・動画の品質')}
+                                    {' '}
+                                    <select
+                                        value={props.mediaQuality}
+                                        onChange={props.onChangeMediaQuality}
+                                    >
+                                        <option value="original">{t('Original', '元のまま')}</option>
+                                        <option value="standard">{t('Standard', '標準')}</option>
+                                        <option value="small">{t('Smaller', '小さめ')}</option>
+                                    </select>
+                                    {savings(result.recompressedMedia)}
+                                    <br />
+                                    <span className={styles.note}>
+                                        {t('Standard and Smaller re-encode images, sounds and videos lossily, which ' +
+                                            'lowers their quality a little. Smaller also reduces embedded images to ' +
+                                            'what the stage shows, so movies rendered larger look softer.',
+                                        '「標準」「小さめ」では画像・音・動画を非可逆で再エンコードするため、画質・音質が少し' +
+                                            '下がります。「小さめ」では埋め込み画像をステージ表示に必要な解像度まで縮小するため、' +
+                                            '大きなサイズで書き出したムービーでは少しぼやけます。')}
+                                    </span>
+                                </span>
+                            </label>
+                        ) : null}
                         {result.customFontCount ? (
                             <label className={styles.option}>
                                 <input
@@ -141,7 +174,7 @@ const ShareLinkModal = props => {
                                 <span>
                                     {t('Keep only the characters this project uses in its fonts',
                                         'フォントをこのプロジェクトで使っている文字だけに絞る')}
-                                    {fontSavings(result.optimizedFonts)}
+                                    {savings(result.optimizedFonts)}
                                     <br />
                                     <span className={styles.note}>
                                         {t('Makes the link much shorter. Characters that are not in the project, ' +
@@ -216,6 +249,8 @@ ShareLinkModal.propTypes = {
     error: PropTypes.string,
     includePlugins: PropTypes.bool,
     locale: PropTypes.string.isRequired,
+    mediaQuality: PropTypes.oneOf(['original', 'standard', 'small']),
+    onChangeMediaQuality: PropTypes.func.isRequired,
     onClose: PropTypes.func.isRequired,
     onCopy: PropTypes.func.isRequired,
     onOpen: PropTypes.func.isRequired,
@@ -237,7 +272,12 @@ ShareLinkModal.propTypes = {
         fileCount: PropTypes.number,
         availablePlugins: PropTypes.arrayOf(PropTypes.object),
         customFontCount: PropTypes.number,
+        mediaCount: PropTypes.number,
         optimizedFonts: PropTypes.arrayOf(PropTypes.shape({
+            originalBytes: PropTypes.number,
+            optimizedBytes: PropTypes.number
+        })),
+        recompressedMedia: PropTypes.arrayOf(PropTypes.shape({
             originalBytes: PropTypes.number,
             optimizedBytes: PropTypes.number
         }))

@@ -2,6 +2,7 @@ import JSZip from '@turbowarp/jszip';
 import brotliWasmPath from 'brotli-wasm/pkg.web/brotli_wasm_bg.wasm';
 import log from '../log';
 import {getCustomFontFiles} from './share-link-fonts';
+import {DEFAULT_MEDIA_QUALITY, getRecompressibleMedia, recompressProjectMedia} from './share-link-media';
 import {buildShareURL} from './share-link-url';
 
 let worker = null;
@@ -138,24 +139,34 @@ const pluginSummary = (id, files) => {
  * @param {boolean} [options.includePlugins] Embed the plugins the project uses (default true).
  * @param {boolean} [options.optimizeFonts] Keep only the glyphs the project's text uses in its custom fonts
  *   (default true).
+ * @param {string} [options.mediaQuality] 'original', 'standard' (default) or 'small': re-encodes sounds and videos
+ *   at a lower bitrate unless 'original'.
  * @param {function({stage: string, done: number, total: number})} [options.onProgress] Progress callback.
  * @returns {Promise<{url: string, payload: string, originalBytes: number, encodedBytes: number,
  *   fileCount: number, plugins: Array<object>, availablePlugins: Array<object>, customFontCount: number,
- *   optimizedFonts: Array<{name: string, originalBytes: number, optimizedBytes: number}>}>} The link and its
+ *   optimizedFonts: Array<{name: string, originalBytes: number, optimizedBytes: number}>, mediaCount: number,
+ *   recompressedMedia: Array<{name: string, originalBytes: number, optimizedBytes: number}>}>} The link and its
  *   statistics.
  */
 const createShareLink = async (vm, title, options = {}) => {
     const projectFiles = vm.saveProjectSb3DontZip();
     // The VM hands out its own asset buffers; posting copies them, so the project is never detached.
-    const files = Object.keys(projectFiles).map(name => ({name, data: projectFiles[name]}));
+    let files = Object.keys(projectFiles).map(name => ({name, data: projectFiles[name]}));
+    let originalBytes = files.reduce((sum, file) => sum + file.data.byteLength, 0);
+    const onProgress = options.onProgress;
+    const mediaCount = getRecompressibleMedia(files).length;
+    const recompressed = await recompressProjectMedia(files, options.mediaQuality || DEFAULT_MEDIA_QUALITY,
+        onProgress);
+    files = recompressed.files;
     const availablePlugins = getSharablePlugins(vm, projectFiles['project.json']);
     const plugins = options.includePlugins === false ? [] : availablePlugins;
     for (const plugin of plugins) {
-        for (const [path, data] of plugin.files) files.push({name: `${PLUGIN_PREFIX}${plugin.id}/${path}`, data});
+        for (const [path, data] of plugin.files) {
+            files.push({name: `${PLUGIN_PREFIX}${plugin.id}/${path}`, data});
+            originalBytes += data.byteLength;
+        }
     }
-    const originalBytes = files.reduce((sum, file) => sum + file.data.byteLength, 0);
     const describe = plugin => ({id: plugin.id, name: plugin.name, version: plugin.version});
-    const onProgress = options.onProgress;
     const customFontCount = getCustomFontFiles(files).length;
     const optimizeFonts = options.optimizeFonts !== false && customFontCount > 0;
     const {payload, encodedBytes, optimizedFonts} = await runTask('encode', {files, title, optimizeFonts}, onProgress);
@@ -168,7 +179,9 @@ const createShareLink = async (vm, title, options = {}) => {
         plugins: plugins.map(describe),
         availablePlugins: availablePlugins.map(describe),
         customFontCount,
-        optimizedFonts
+        optimizedFonts,
+        mediaCount,
+        recompressedMedia: recompressed.media
     };
 };
 
