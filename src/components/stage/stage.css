@@ -35,28 +35,6 @@
     border: $stage-full-screen-border-width solid $ui-black-transparent;
 }
 
-/* Monitor frame guides: four corner marks drawn over the picture, as on a camera's OSD. */
-.stage.frame-guides::after {
-    content: "";
-    position: absolute;
-    inset: 6px;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0.4;
-    --guide: 10px;
-    --guide-color: #ffffff;
-    background:
-        linear-gradient(var(--guide-color), var(--guide-color)) top left / var(--guide) 1px,
-        linear-gradient(var(--guide-color), var(--guide-color)) top left / 1px var(--guide),
-        linear-gradient(var(--guide-color), var(--guide-color)) top right / var(--guide) 1px,
-        linear-gradient(var(--guide-color), var(--guide-color)) top right / 1px var(--guide),
-        linear-gradient(var(--guide-color), var(--guide-color)) bottom left / var(--guide) 1px,
-        linear-gradient(var(--guide-color), var(--guide-color)) bottom left / 1px var(--guide),
-        linear-gradient(var(--guide-color), var(--guide-color)) bottom right / var(--guide) 1px,
-        linear-gradient(var(--guide-color), var(--guide-color)) bottom right / 1px var(--guide);
-    background-repeat: no-repeat;
-    mix-blend-mode: difference;
-}
 
 .with-color-picker {
     cursor: none;

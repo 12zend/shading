@@ -475,7 +475,6 @@
       "fieldHeight": "30px",
       "actionKey": "44px",
       "modalHeaderHeight": "50px",
-      "stageFrameGuides": "white 1px, 10px arms, inset 6px, 40% opacity, mix-blend-mode: difference",
       "selectionBrackets": "amber 2px stroke, 7-8px arms, top-left and bottom-right corners"
     }
   },
@@ -553,7 +552,7 @@
       "Amber marks selection, the active page, focus, and play/run; REC red marks rendering only.",
       "Hairline 1px rules at low alpha; 2–4px corners; tonal layering over shadow.",
       "Platform tabular mono for every number (timecode, fps, resolution, counts, zoom); the platform UI face for labels.",
-      "Corner brackets mark selection and frame the stage, the way a monitor marks a focus area.",
+      "Corner brackets mark selection, the way a monitor marks a focus area.",
       "A 40px OSD strip on top, a 76px vertical page rail on the left, and a transport with one lit key."
     ],
     "rules": [
@@ -601,7 +600,7 @@
       "Don't use REC red for anything but rendering; errors use Fault Orange.",
       "Don't re-tint block category colours; they stay the Scratch palette.",
       "Don't use tracked uppercase for labels, headings or section names; it is reserved for OSD status words and units.",
-      "Don't draw corner brackets as decoration; they appear only on selection and as the stage frame guides.",
+      "Don't draw corner brackets as decoration; they appear only on selection. Never draw guides or marks over the stage picture.",
       "Don't give resting layout surfaces a shadow, or lift a selected item; selection is amber ring and brackets.",
       "Don't round beyond 4px on rectangular UI or use pill buttons; circles are reserved for status lamps.",
       "Don't colour rail or paint-toolbar glyphs; they are monochrome instrumentation."

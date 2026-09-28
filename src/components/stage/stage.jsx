@@ -56,10 +56,7 @@ const StageComponent = props => {
                 <Box
                     className={classNames(
                         styles.stage,
-                        {
-                            [styles.fullScreen]: isFullScreen,
-                            [styles.frameGuides]: !isFullScreen && !isPlayerOnly
-                        }
+                        {[styles.fullScreen]: isFullScreen}
                     )}
                     style={{
                         height: stageDimensions.height,

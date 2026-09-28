@@ -275,7 +275,7 @@ Block category colours (Motion, Looks, Sound, Events, Control, Sensing, Operator
 
 ## Layout
 
-A fixed monitor layout, not a card grid. A 40px OSD strip spans the top: menus and project title left; block search, save state, then the OSD readout anchored immediately beside Share so it never shifts as tab-specific tools come and go (the fps and resolution fields drop below 1180px wide; tally and timecode stay). A 76px vertical page rail sits at the left edge (icon over 10px caption; horizontal hairline on its inner edge, mirrored in RTL). The block workspace takes the centre. The right column holds the stage with frame guides, then the transport and the timeline filling the remaining height; run/stop live on the timeline transport, not the top bar.
+A fixed monitor layout, not a card grid. A 40px OSD strip spans the top: menus and project title left; block search, save state, then the OSD readout anchored immediately beside Share so it never shifts as tab-specific tools come and go (the fps and resolution fields drop below 1180px wide; tally and timecode stay). A 76px vertical page rail sits at the left edge (icon over 10px caption; horizontal hairline on its inner edge, mirrored in RTL). The block workspace takes the centre. The right column holds the stage (a plain hairline-framed picture, nothing drawn over it), then the transport and the timeline filling the remaining height; run/stop live on the timeline transport, not the top bar.
 
 Spacing rides a 4px step with 8px (`$space`, 0.5rem) as the base unit: 4px inside tight groups, 8px panel padding, 12px menu-row and readout padding, 14px between OSD readout fields, 16px modal header padding, 32px empty-state padding. Control heights are uniform: 28px for keys, menu rows and bar items, 30px for fields and text buttons, 44px for the floating add action.
 
@@ -300,7 +300,7 @@ Depth is tonal first: surfaces step up the zone ramp (glass → page → panel �
 
 Near-square. `--radius-s` (2px) for the smallest marks, 3px for tally chips and menu rows inset in a menu, `--radius-m` (4px) for every control, field, tile, panel, menu and modal. The stage itself has square corners (0) with a 1px Rule Strong border. Borders are 1px hairlines. Circles appear only as status lamps (6px tally lamp, 7px recording dot). The scrollbar thumb is the one pill (10px radius, thin, inset 3px), a browser-surface concession.
 
-The signature form is the **corner bracket**: an L-shaped mark on two diagonal corners (top-left and bottom-right), 2px amber stroke, 7–8px arms, drawn on the selected rail page and the selected asset tile. On the stage, all four corners carry white 1px frame guides with 10px arms, inset 6px, at 40% opacity with `mix-blend-mode: difference` so they stay visible over any picture.
+The signature form is the **corner bracket**: an L-shaped mark on two diagonal corners (top-left and bottom-right), 2px amber stroke, 7–8px arms, drawn on the selected rail page and the selected asset tile.
 
 ## Components
 
@@ -353,7 +353,7 @@ Panel body, 1px Rule Strong edge, 4px corners, Modal drop shadow over a 72% blac
 - **Don't** use REC red for anything but rendering; errors use Fault Orange.
 - **Don't** re-tint block category colours; they stay the Scratch palette.
 - **Don't** use tracked uppercase for labels, headings or section names; it is reserved for OSD status words and units.
-- **Don't** draw corner brackets as decoration; they appear only on selection and as the stage frame guides.
+- **Don't** draw corner brackets as decoration; they appear only on selection. Never draw guides or marks over the stage picture.
 - **Don't** give resting layout surfaces a shadow, or lift a selected item; selection is amber ring and brackets.
 - **Don't** round beyond 4px on rectangular UI or use pill buttons; circles are reserved for status lamps.
 - **Don't** colour rail or paint-toolbar glyphs; they are monochrome instrumentation.
