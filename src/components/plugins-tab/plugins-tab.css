@@ -65,7 +65,7 @@
     margin-bottom: 0.75rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid $looks-secondary;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: $looks-transparent;
     font-weight: bold;
 }
@@ -73,8 +73,8 @@
 .warning {
     margin-bottom: 0.75rem;
     padding: 0.75rem;
-    border-left: 4px solid #e5484d;
-    border-radius: 0.25rem;
+    border: 1px solid #e5484d66;
+    border-radius: var(--radius-m);
     background: rgba(229, 72, 77, 0.12);
 }
 
@@ -99,7 +99,7 @@
     gap: 0.75rem;
     padding: 0.75rem;
     border: 1px solid $ui-black-transparent;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: $ui-white;
 }
 
@@ -145,7 +145,7 @@
 .pending {
     padding: 0.1rem 0.5rem;
     border: 1px solid $looks-secondary;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     color: $looks-secondary;
     font-size: 0.7rem;
 }
@@ -153,7 +153,7 @@
 .level {
     display: inline-block;
     padding: 0.1rem 0.5rem;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     color: #ffffff;
     font-size: 0.7rem;
 }
@@ -168,7 +168,7 @@
     display: inline-block;
     padding: 0.05rem 0.45rem;
     border: 1px solid currentColor;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     font-size: 0.7rem;
     font-weight: bold;
     vertical-align: middle;
@@ -201,7 +201,7 @@
 .slider {
     position: absolute;
     inset: 0;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     background: $ui-black-transparent;
     pointer-events: none;
     transition: background 0.15s;
@@ -253,7 +253,7 @@
 .primary {
     border-color: $looks-secondary;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }
 
 .section-title {

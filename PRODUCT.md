@@ -2,7 +2,7 @@
 
 ## Product
 
-Movie is an independent, block-based engine for producing animation and video. It is forked from TurboWarp so creators can use a familiar Scratch-style editor while working with filmmaking features that Scratch projects do not support, including deterministic timelines, video assets, 3D scenes, cameras, model animation, rendering frames, and offline export.
+Movie is an independent, block-based engine for producing animation and video. It is forked from TurboWarp so creators can use familiar Scratch-style block programming while working with filmmaking features that Scratch projects do not support, including deterministic timelines, video assets, 3D scenes, cameras, model animation, rendering frames, and offline export.
 
 Movie is not a Scratch mod whose primary goal is to run every project on scratch.mit.edu. Its project format may contain Movie-only assets and blocks. The editor must make that distinction clear and save such work as a Movie project.
 
@@ -39,7 +39,9 @@ Web. The editor targets modern desktop browsers and uses TurboWarp's GUI, VM, re
 
 ## Interface Register
 
-Product UI. Preserve the established TurboWarp/Scratch component language, density, keyboard behavior, focus treatment, and category colors. New media controls should feel native to the existing asset editors rather than like a separate application.
+Product UI. The editor's look is Shading's own: a dark, dense, professional video-tool interface modelled on an on-set camera monitor, documented in DESIGN.md. The TurboWarp/Scratch visual appearance does not need to be preserved and may be redesigned freely.
+
+What must stay stable is behavior, not appearance: Scratch-compatible block programming, keyboard behavior, visible focus, and the block category colors that creators use to find blocks. New media controls should use DESIGN.md's system so they feel native to the rest of the editor rather than like a separate application.
 
 ## Current Scope
 

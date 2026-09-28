@@ -56,3 +56,62 @@
 :global(.Popover-body) [class*="color-picker_swatch"] {
     border-color: var(--paint-form-border, #e9eef2);
 }
+
+/* Monitor language for the paint editor's own fields: square 4px corners, hairline edges. */
+.paint-theme input[class*="input_input-form"],
+.paint-theme [class*="buffered-input"] input,
+.paint-theme [class*="button-group_button-group"],
+.paint-theme [class*="dropdown_dropdown"],
+.paint-theme [class*="labeled-icon-button_mod-edit-field"] {
+    border-radius: var(--radius-m) !important;
+}
+
+.paint-theme input[class*="input_input-form"] {
+    font-weight: 500;
+}
+
+/* Toolbar labels never break mid-word; the fields beside them give way instead. */
+.paint-theme [class*="label_input-label"] {
+    white-space: nowrap;
+    word-break: keep-all;
+}
+
+/* The artboard surround sits on the zone ramp, not a stray #222. */
+.paint-theme canvas[class*="paper-canvas_paper-canvas"] {
+    background-color: var(--zone-2) !important;
+}
+
+.paint-theme [class*="paint-editor_canvas-container"] {
+    border-color: var(--rule-strong) !important;
+    border-radius: var(--radius-m) !important;
+}
+
+/* The page rail narrows the editor; let the top toolbar rows wrap instead of spilling into the stage column. */
+.paint-theme [class*="paint-editor_editor-container-top"],
+.paint-theme [class*="paint-editor_editor-container-top"] > [class*="paint-editor_row"] {
+    min-width: 0;
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+}
+
+.paint-theme [class*="paint-editor_editor-container-top"] {
+    height: auto !important;
+    flex-shrink: 0;
+}
+
+/* Every toolbar glyph is monochrome, including the layer and delete buttons. */
+.paint-theme [class*="paint-editor_editor-container-top"] img:not([class*="dropdown_dropdown-icon"]) {
+    filter: var(--paint-accent-icon-filter, none) var(--paint-filter-icon-gray, none) !important;
+}
+
+/* Wrap between button groups, never inside one (the four layer-order keys stay together). */
+.paint-theme [class*="paint-editor_editor-container-top"] [class*="fixed-tools_row"]:not([class*="input-group_input-group"]) {
+    min-width: 0;
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+}
+
+/* The "More" caret is a tiny accent mark: map its red source onto amber. */
+.paint-theme [class*="paint-editor_editor-container-top"] [class*="dropdown_dropdown-icon"] {
+    filter: hue-rotate(58deg) saturate(1.4) brightness(1.5) !important;
+}

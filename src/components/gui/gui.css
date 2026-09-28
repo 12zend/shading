@@ -9,10 +9,16 @@
     flex-direction: column;
 }
 
+.page-wrapper {
+    background-color: $zone-1;
+    color: $text-primary;
+    font-family: var(--font-ui);
+}
+
 .body-wrapper {
     flex-grow: 1;
     min-height: 0;
-    background-color: $ui-primary;
+    background-color: $zone-1;
 }
 
 .body-wrapper * {
@@ -39,16 +45,7 @@
 }
 
 .editor-wrapper {
-    /*
-        This is carefully balanced--  the minimum width at which the GUI will be displayed is 1024px.
-        At that size, the stage pane is 408px wide, with $space of padding to each side.
-        However, we must also add the border width to the stage pane. All-in-all, the stage pane's final width is
-        408px + ($space + $stage-standard-border-width * 2) (one border & padding per left/right side).
-
-        @todo This is in place to prevent "doubling up" of horizontal scrollbars in narrow windows, but there are likely
-        much better ways to solve that (e.g. undo #2124, remove this flex-basis entirely). However, they run their own
-        risks of breaking things, so let's just leave this as-is for the time being.
-    */
+    /* Keeps the stage column from being squeezed below the 1024px minimum GUI width. */
     flex-basis: calc(1024px - 408px - (($space + $stage-standard-border-width) * 2));
     flex-grow: 1;
     flex-shrink: 0;
@@ -58,147 +55,167 @@
 
     display: flex;
     flex-direction: column;
+    border-right: 1px solid $rule;
 }
 
-.tab-list {
-    height: $stage-menu-height;
-    width: 510px;
-    display: flex;
-    align-items: flex-end;
-    flex-shrink: 0;
-
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 500;
-    font-size: 0.80rem;
-
-    /* Overrides for react-tabs styling */
-    margin: 0 !important;
-    border-bottom: 0 !important;
-
-    color: $text-primary;
+[dir="rtl"] .editor-wrapper {
+    border-right: 0;
+    border-left: 1px solid $rule;
 }
 
-.tab {
-    flex-grow: 1;
-    height: 80%;
-    margin-bottom: 0;
-
-    border-radius: 1rem 1rem 0 0;
-    border: 1px solid $ui-black-transparent;
-
-    padding: 0.125rem 0.8rem 0;
-    font-size: 0.75rem;
-
-    background-color: $ui-tertiary;
-    color: $text-primary-transparent;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    user-select: none;
-    white-space: nowrap;
-}
-
-[dir="ltr"] .tab {
-    margin-left: -0.5rem;
-}
-
-[dir="rtl"] .tab {
-    margin-right: -0.5rem;
-}
-
-[dir="ltr"] .tab:nth-of-type(1) {
-    margin-left: 0;
-}
-
-[dir="rtl"] .tab:nth-of-type(1) {
-    margin-right: 0;
-}
-
-/* Use z-indices to force left-on-top for tabs */
-.tab:nth-of-type(1) {
-    z-index: 7;
-}
-.tab:nth-of-type(2) {
-    z-index: 6;
-}
-.tab:nth-of-type(3) {
-    z-index: 5;
-}
-.tab:nth-of-type(4) {
-    z-index: 4;
-}
-.tab:nth-of-type(5) {
-    z-index: 3;
-}
-.tab:nth-of-type(6) {
-    z-index: 2;
-}
-.tab:nth-of-type(7) {
-    z-index: 1;
-}
-
-.tab:hover {
-    background-color: $ui-primary;
-}
-
-.tab.is-selected {
-    height: 90%;
-    color: $looks-secondary;
-    background-color: $ui-white;
-    z-index: 8; /* Make sure selected is always above */
-}
-
-.tab img {
-    width: 1.375rem;
-    filter: grayscale(100%);
-}
-
-[dir="ltr"] .tab img {
-    margin-right: 0.125rem;
-}
-
-[dir="rtl"] .tab img {
-    margin-left: 0.125rem;
-}
-
-/* mirror blocks and sound tab icons */
-[dir="rtl"] .tab:nth-of-type(1) img {
-    transform: scaleX(-1);
-}
-
-[dir="rtl"] .tab:nth-of-type(3) img {
-    transform: scaleX(-1);
-}
-
-.tab.is-selected img {
-    filter: none;
-}
-
-/* Tab style overrides from react-tabs */
-.tab.is-selected:after {
-    display: none;
-}
-
-.tab.is-selected:focus {
-    outline: none;
-    box-shadow: none;
-    border-color: $ui-black-transparent;
-}
-
-.tab.is-selected:focus:after {
-    display: none;
-}
-
-/* Body of the tabs */
+/* Body of the tabs: a vertical page rail beside the active editor. */
 .tabs {
     position: relative;
     flex-grow: 1;
     min-width: 0;
     min-height: 0;
     display: flex;
+    flex-direction: row;
+}
+
+.tab-list {
+    width: 4.75rem;
+    flex-shrink: 0;
+    display: flex;
     flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 0.375rem 0.3125rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+
+    /* Overrides for react-tabs styling */
+    margin: 0 !important;
+    border-bottom: 0 !important;
+
+    background-color: $rail-background;
+    border-right: 1px solid $rule;
+    color: $rail-ink;
+    font-family: var(--font-ui);
+}
+
+[dir="rtl"] .tab-list {
+    border-right: 0;
+    border-left: 1px solid $rule;
+}
+
+.tab-list::-webkit-scrollbar {
+    display: none;
+}
+
+.tab {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 3.25rem;
+    padding: 0.4375rem 0.125rem 0.375rem;
+
+    /* Overrides for react-tabs styling */
+    border: 0 !important;
+    border-radius: var(--radius-m) !important;
+    bottom: 0 !important;
+
+    background-color: transparent;
+    color: $rail-ink;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.2;
+    word-break: keep-all;
+    text-align: center;
+    user-select: none;
+    cursor: pointer;
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.tab > span,
+.tab > :not(img) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    max-width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.tab:hover {
+    background-color: $rail-hover;
+    color: $rail-ink-strong;
+}
+
+.tab img {
+    width: 1.25rem;
+    height: 1.25rem;
+    /* Monochrome glyphs: the rail is instrumentation, not a palette. */
+    filter: var(--rail-icon-filter);
+    opacity: 0.72;
+    transition: opacity 120ms ease-out;
+}
+
+.tab:hover img {
+    opacity: 1;
+}
+
+/* Selection is marked the way a monitor marks a focus area: amber corner brackets. */
+.tab.is-selected {
+    background-color: $rail-hover;
+    color: $rail-ink-strong;
+}
+
+.tab.is-selected img {
+    filter: var(--rail-icon-filter-selected);
+    opacity: 1;
+}
+
+.tab.is-selected::before,
+.tab.is-selected::after {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    width: 7px !important;
+    height: 7px !important;
+    border: 0 solid $looks-secondary !important;
+    background: none !important;
+    pointer-events: none;
+}
+
+.tab.is-selected::before {
+    top: 0 !important;
+    left: 0 !important;
+    border-top-width: 2px !important;
+    border-left-width: 2px !important;
+    border-top-left-radius: var(--radius-m);
+}
+
+.tab.is-selected::after {
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    top: auto !important;
+    border-right-width: 2px !important;
+    border-bottom-width: 2px !important;
+    border-bottom-right-radius: var(--radius-m);
+}
+
+.tab:focus,
+.tab.is-selected:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.tab:focus-visible {
+    box-shadow: inset 0 0 0 1px $looks-secondary;
+}
+
+/* mirror blocks and sound tab icons */
+[dir="rtl"] .tab:nth-of-type(1) img,
+[dir="rtl"] .tab:nth-of-type(3) img {
+    transform: scaleX(-1);
 }
 
 .tab-panel {
@@ -207,6 +224,7 @@
     min-width: 0;
     min-height: 0;
     display: none;
+    background-color: $zone-2;
 }
 
 .tab-panel.is-selected {
@@ -219,19 +237,12 @@
 }
 
 .stage-and-target-wrapper {
-    /*
-        Makes rows for children:
-          1) stage menu
-          2) stage
-          3) sprite/stage selectors
-        Only reason we need this, is so .targetWrapper, which holds the selectors,
-        goes to full vertical height of the window
-    */
+    /* Monitor column: stage header, framed stage, then the timeline filling the rest. */
     display: flex;
     flex-direction: column;
-    /* pad entire wrapper to the left and right; allow children to fill width */
     padding-left: $space;
     padding-right: $space;
+    background-color: $zone-1;
 
     /* this will only ever be as wide as the stage */
     flex-basis: 0;
@@ -247,38 +258,29 @@
     contain: inline-size;
 
     padding-top: $space;
+    padding-bottom: $space;
     min-height: 0; /* this makes it work in Firefox */
-
 }
 
 .extension-button-container {
     width: 3.75rem;
-    height: 3.25rem;
+    height: 2.75rem;
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
     z-index: $z-index-extension-button;
-    background: $looks-secondary;
+    background: $zone-1;
 
-    border: 1px solid $looks-secondary;
+    border-top: 1px solid $rule;
+    border-right: 1px solid $rule;
     box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
 }
 
-$fade-out-distance: 15px;
-
-.extension-button-container:before {
-    content: "";
-    position: absolute;
-    top: calc(calc(-1 * $fade-out-distance) - 1px);
-    left: -1px;
-    background: linear-gradient(rgba(0, 0, 0, 0),rgba(0, 0, 0, 0.15));
-    height: $fade-out-distance;
-    width: calc(100% + 0.5px);
-}
-
-
 .extension-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     outline: none;
@@ -288,9 +290,29 @@ $fade-out-distance: 15px;
     user-select: none;
 }
 
+.extension-button::before {
+    content: "";
+    position: absolute;
+    inset: 0.5rem 0.625rem;
+    border-radius: var(--radius-m);
+    background: $looks-secondary;
+    transition: background-color 120ms ease-out;
+}
+
+.extension-button:hover::before {
+    background: $drop-highlight;
+}
+
+.extension-button:focus-visible::before {
+    box-shadow: var(--focus-ring);
+}
+
 .extension-button-icon {
-    width: 1.75rem;
-    height: 1.75rem;
+    position: relative;
+    width: 1.375rem;
+    height: 1.375rem;
+    /* The stock icon is white; set it in amber ink. */
+    filter: brightness(0) opacity(0.85);
 }
 
 [dir="rtl"] .extension-button-icon {
@@ -330,7 +352,7 @@ $fade-out-distance: 15px;
     width: 100%;
     z-index: $z-index-alerts;
     position: absolute;
-    margin-top: 53px;
+    margin-top: 2.75rem;
     pointer-events: none;
 }
 
@@ -350,5 +372,5 @@ $fade-out-distance: 15px;
     width: 100%;
     height: 100%;
     /* overridden by JS; this will be used if the browser can't understand that color */
-    background-color: white;
+    background-color: $zone-0;
 }

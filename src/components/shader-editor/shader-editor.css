@@ -114,7 +114,7 @@
     border: 0;
     border-radius: $form-radius;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     cursor: pointer;
     font: inherit;
     font-size: 0.72rem;
@@ -144,7 +144,7 @@
     overflow: hidden;
     background: #090a0e;
     color: #e6e7ec;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.84rem;
     line-height: 1.55;
     font-variant-ligatures: none;
@@ -170,7 +170,7 @@
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #2b2e3a;
     background: #171922;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     font-size: 0.75rem;
 }
 
@@ -318,7 +318,7 @@
 
 .code-body::-webkit-scrollbar-thumb {
     border: 3px solid #0d0e13;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: #454a5b;
 }
 
@@ -387,7 +387,7 @@
     border-radius: $form-radius;
     background: #222530;
     color: #d8dae3;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.64rem;
     white-space: nowrap;
 }
@@ -404,7 +404,7 @@
     border-top: 1px solid #542f39;
     background: #2b171d;
     color: #ffcdcd;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.68rem;
     line-height: 1.45;
     white-space: pre-wrap;
@@ -460,7 +460,7 @@
     border: 1px solid $looks-secondary;
     border-radius: $form-radius;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     cursor: pointer;
     font: inherit;
     font-weight: bold;
@@ -473,7 +473,7 @@
 
 .empty-actions button:hover:not(:disabled) {
     background: $looks-secondary-dark;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }
 
 .empty-actions button:focus-visible {

@@ -8,13 +8,15 @@
     justify-content: flex-start;
     position: relative;
 
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 0.8rem;
-    color: $text-primary;
-    border-width: 2px;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: $zone-9;
+    background: $zone-2;
+    border-width: 1px;
     border-style: solid;
-    border-color: $ui-black-transparent;
-    border-radius: $space;
+    border-color: $rule-strong;
+    border-radius: var(--radius-m);
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
 
     text-align: center;
     cursor: pointer;
@@ -22,15 +24,41 @@
     user-select: none;
 }
 
-.sprite-selector-item.is-selected {
-    box-shadow: 0px 0px 0px 4px $looks-transparent;
-    border: 2px solid $looks-secondary;
-    background: $ui-white;
+.sprite-selector-item:hover {
+    border-color: $zone-6;
+    background: $zone-3;
 }
 
-.sprite-selector-item:hover {
-    border: 2px solid $looks-secondary;
-    background: $ui-white;
+/* Selected asset: amber outline plus the monitor's focus brackets. */
+.sprite-selector-item.is-selected {
+    border-color: $looks-secondary;
+    background: $zone-3;
+    box-shadow: 0 0 0 1px $looks-secondary;
+}
+
+.sprite-selector-item.is-selected::before,
+.sprite-selector-item.is-selected::after {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border: 0 solid $looks-secondary;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.sprite-selector-item.is-selected::before {
+    top: -5px;
+    left: -5px;
+    border-top-width: 2px;
+    border-left-width: 2px;
+}
+
+.sprite-selector-item.is-selected::after {
+    right: -5px;
+    bottom: -5px;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
 }
 
 .sprite-selector-item:hover .sprite-image, .is-selected .sprite-image {
@@ -78,11 +106,12 @@
 
 .sprite-info {
     padding: 0.25rem;
-    border-bottom-left-radius: 0.25rem;
-    border-bottom-right-radius: 0.25rem;
+    border-top: 1px solid $rule;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
 
     font-size: 0.625rem;
-    color: $text-primary;
+    color: $zone-9;
     user-select: none;
 }
 
@@ -99,12 +128,13 @@
 
 .sprite-details {
     margin-top: 0.125rem;
-    font-size: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.5625rem;
+    color: $zone-8;
 }
 
 .is-selected .sprite-info {
-    background: $looks-secondary;
-    color: #ffffff;
+    color: $zone-10;
 }
 
 .delete-button {
@@ -123,9 +153,11 @@
 
 .number {
     position: absolute;
-    top: 0.15rem;
-    font-size: 0.625rem;
-    font-weight: bold;
+    top: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.5625rem;
+    font-weight: 600;
+    color: $zone-8;
     z-index: 2;
 }
 

@@ -53,7 +53,7 @@
 .button-row button.ok-button {
     background: $looks-secondary;
     border: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }
 .button-row button.cancel-button {
     color: black;

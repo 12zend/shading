@@ -78,3 +78,32 @@ $project-title-inactive: var(--project-title-inactive);
 $project-title-hover: var(--project-title-hover);
 
 $link-color: var(--link-color);
+
+/* Shading monitor tokens (see src/lib/themes/gui/dark.js) */
+$zone-0: var(--zone-0);
+$zone-1: var(--zone-1);
+$zone-2: var(--zone-2);
+$zone-3: var(--zone-3);
+$zone-4: var(--zone-4);
+$zone-5: var(--zone-5);
+$zone-6: var(--zone-6);
+$zone-7: var(--zone-7);
+$zone-8: var(--zone-8);
+$zone-9: var(--zone-9);
+$zone-10: var(--zone-10);
+$rec: var(--rec);
+$rec-transparent: var(--rec-transparent);
+$rule: var(--rule);
+$rule-strong: var(--rule-strong);
+$accent-foreground: var(--accent-foreground);
+$osd-glass: var(--osd-glass);
+$osd-field: var(--osd-field);
+$osd-hover: var(--osd-hover);
+$osd-rule: var(--osd-rule);
+$osd-ink: var(--osd-ink);
+$osd-ink-dim: var(--osd-ink-dim);
+$osd-ink-quiet: var(--osd-ink-quiet);
+$rail-background: var(--rail-background);
+$rail-hover: var(--rail-hover);
+$rail-ink: var(--rail-ink);
+$rail-ink-strong: var(--rail-ink-strong);

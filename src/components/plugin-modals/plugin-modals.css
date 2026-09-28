@@ -26,7 +26,7 @@
     gap: 0.25rem;
     padding: 0.75rem;
     border: 1px solid $ui-black-transparent;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: $ui-tertiary;
 }
 
@@ -44,20 +44,20 @@
 .warning {
     margin: 0.75rem 0;
     padding: 0.75rem;
-    border-left: 4px solid #ff8c1a;
-    border-radius: 0.25rem;
+    border: 1px solid #ff8c1a66;
+    border-radius: var(--radius-m);
     background: rgba(255, 140, 26, 0.12);
 }
 
 .warning-high {
-    border-left-color: #e5484d;
+    border-color: #e5484d66;
     background: rgba(229, 72, 77, 0.12);
 }
 
 .level {
     display: inline-block;
     padding: 0.1rem 0.5rem;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     color: #ffffff;
     font-size: 0.7rem;
     font-weight: bold;
@@ -74,7 +74,7 @@
     display: inline-block;
     padding: 0.05rem 0.45rem;
     border: 1px solid currentColor;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     font-size: 0.7rem;
     font-weight: bold;
     vertical-align: middle;
@@ -128,7 +128,7 @@
     overflow-x: auto;
     border-radius: 0.25rem;
     background: $ui-tertiary;
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.7rem;
     white-space: pre;
 }
@@ -167,7 +167,7 @@
 .primary {
     border-color: $looks-secondary;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }
 
 .danger {
@@ -191,7 +191,7 @@
     gap: 0.25rem 0.75rem;
     padding: 0.75rem;
     border: 1px solid $ui-black-transparent;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
 }
 
 .plugin-actions {
@@ -217,7 +217,7 @@
     z-index: 600;
     max-width: 24rem;
     padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: $ui-modal-background;
     color: $text-primary;
     box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.25);

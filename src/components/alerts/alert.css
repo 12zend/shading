@@ -8,7 +8,7 @@
     flex-direction: row;
     overflow: hidden;
     justify-content: flex-start;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     padding-top: .875rem;
     padding-bottom: .875rem;
     padding-left: 1rem;

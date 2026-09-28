@@ -2089,7 +2089,9 @@
         "movie.menuBar.createShareLink": "共有リンクを作成…",
         "movie.menuBar.openShareLink": "共有リンクから開く…",
         "movie.gui.importPlugin": "プラグインを読み込む（.zip）",
-        "movie.gui.pluginsTab": "プラグイン"
+        "movie.gui.pluginsTab": "プラグイン",
+        "movie.soundTab.emptyTitle": "このスプライトに音を追加",
+        "movie.soundTab.emptyDescription": "ライブラリから選ぶか、録音するか、左下のボタンからファイルをアップロードします。"
     },
     "ja-hira": {
         "tw.alerts.creatingRestorePoint": "ふくげんしています…",

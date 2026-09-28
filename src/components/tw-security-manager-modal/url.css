@@ -1,5 +1,5 @@
 .url {
-    font-family: monospace;
+    font-family: var(--font-mono);
     user-select: text;
     word-wrap: break-word;
 }

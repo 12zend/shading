@@ -3,7 +3,7 @@
 .sa-mcp-root {
   display: flex;
   white-space: nowrap;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
 
   position: absolute;
   min-width: 100px;

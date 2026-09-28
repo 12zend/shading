@@ -4,6 +4,7 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
+import formatTimecode from '../../lib/timecode';
 
 import {
     CloseIcon,
@@ -665,7 +666,8 @@ class Timeline extends React.Component {
                             aria-live="off"
                             className={styles.timecode}
                         >
-                            {formatTime(timeline.currentTime)} <span>{'/ '}{formatTime(timeline.duration)}</span>
+                            {formatTimecode(timeline.currentTime, timeline.framerate)}{' '}
+                            <span>{'/ '}{formatTimecode(timeline.duration, timeline.framerate)}</span>
                         </output>
                         <button
                             aria-expanded={this.state.settingsOpen}

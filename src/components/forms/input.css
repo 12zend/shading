@@ -2,23 +2,23 @@
 @import "../../css/colors.css";
 
 .input-form {
-    height: 2rem;
-    padding: 0 0.75rem;
+    height: 1.875rem;
+    padding: 0 0.625rem;
 
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 0.625rem;
-    font-weight: bold;
-    color: $text-primary;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: $zone-10;
     background-color: $input-background;
 
     border-width: 1px;
     border-style: solid;
-    border-color: $ui-black-transparent;
-    border-radius: 2rem;
+    border-color: $rule-strong;
+    border-radius: var(--radius-m);
 
     outline: none;
     cursor: text;
-    transition: 0.25s ease-out; /* @todo: standardize with var */
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
     box-shadow: none;
 
     /*
@@ -33,17 +33,18 @@
 }
 
 .input-form:hover {
-    border-color: $looks-secondary;
+    border-color: $zone-6;
 }
 
 .input-form:focus {
     border-color: $looks-secondary;
-    box-shadow: 0 0 0 0.25rem $looks-transparent;
+    box-shadow: 0 0 0 1px $looks-secondary;
 }
 
 .input-small {
-    width: 3rem;
+    width: 3.5rem;
     padding: 0 0.5rem;
+    font-family: var(--font-mono);
     text-overflow: clip;
     text-align: center;
 }

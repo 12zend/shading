@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import {
+    ACCENT_AMBER,
     BLOCKS_CUSTOM,
     BLOCKS_DARK,
     BLOCKS_HIGH_CONTRAST,
@@ -28,7 +29,8 @@ describe('themes', () => {
 
         test('replaces unknown settings with the defaults', () => {
             const theme = new Theme('nope', 'nope', 'nope');
-            expect(theme.gui).toBe(GUI_LIGHT);
+            expect(theme.accent).toBe(ACCENT_AMBER);
+            expect(theme.gui).toBe(GUI_DARK);
             expect(theme.blocks).toBe(BLOCKS_THREE);
         });
 
@@ -124,19 +126,19 @@ describe('themes', () => {
             expect(detectTheme()).toBe(Theme.dark);
         });
 
-        test('returns the system theme when nothing is stored', () => {
-            expect(detectTheme()).toBe(Theme.light);
+        test('defaults to the dark monitor theme when nothing is stored', () => {
+            expect(detectTheme()).toBe(Theme.dark);
         });
 
-        test('stores only settings that differ from the system theme', () => {
-            persistTheme(Theme.light.set('gui', GUI_DARK).set('blocks', BLOCKS_CUSTOM));
-            expect(JSON.parse(localStorage.getItem('tw:theme'))).toEqual({gui: GUI_DARK});
+        test('stores only settings that differ from the default theme', () => {
+            persistTheme(Theme.dark.set('gui', GUI_LIGHT).set('blocks', BLOCKS_CUSTOM));
+            expect(JSON.parse(localStorage.getItem('tw:theme'))).toEqual({gui: GUI_LIGHT});
         });
 
-        test('clears the stored theme when it matches system preferences', () => {
-            localStorage.setItem('tw:theme', JSON.stringify({gui: GUI_DARK}));
+        test('clears the stored theme when it matches the default theme', () => {
+            localStorage.setItem('tw:theme', JSON.stringify({gui: GUI_LIGHT}));
 
-            persistTheme(Theme.light);
+            persistTheme(Theme.dark);
 
             expect(localStorage.getItem('tw:theme')).toBeNull();
         });

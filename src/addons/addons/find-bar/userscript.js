@@ -46,15 +46,20 @@ export default async function ({ addon, msg, console }) {
     }
 
     createDom(editorRoot) {
-      const tabList = editorRoot.querySelector('[class*="gui_tab-list_"]');
-      const root = tabList || document.querySelector('[class*="menu-bar_main-menu_"]');
+      // Shading: editor tabs are a narrow vertical rail, so the find bar lives in the
+      // top bar, just before the monitor readout.
+      const menu = document.querySelector('[class*="menu-bar_main-menu_"]');
+      const tabList = menu ? null : editorRoot.querySelector('[class*="gui_tab-list_"]');
+      const root = menu || tabList;
       if (!root) return;
 
       this.findBarOuter = document.createElement("div");
       this.findBarOuter.className = "sa-find-bar";
       if (!tabList) this.findBarOuter.classList.add("sa-find-bar-menu");
       addon.tab.displayNoneWhileDisabled(this.findBarOuter, { display: "flex" });
-      root.appendChild(this.findBarOuter);
+      const osdSlot = menu && menu.querySelector('[class*="menu-bar_osd-slot_"]');
+      if (osdSlot) root.insertBefore(this.findBarOuter, osdSlot);
+      else root.appendChild(this.findBarOuter);
       if (tabList) {
         // Plugins can add editor tabs later; keep the find bar after them.
         new MutationObserver(() => {

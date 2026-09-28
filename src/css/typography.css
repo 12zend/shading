@@ -1,5 +1,7 @@
 body {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
 }
 
 h2 {

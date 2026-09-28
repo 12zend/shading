@@ -1,13 +1,27 @@
 @import "../../css/colors.css";
 
+/* Unsaved changes: an amber flag in the OSD, like a monitor's "media not saved" warning. */
 .save-now {
     cursor: pointer;
-    padding: 0 0.5rem;
-    height: 100%;
     display: flex;
     align-items: center;
+    gap: 0.4375rem;
+    height: 1.75rem;
+    padding: 0 0.625rem;
+    border-radius: var(--radius-m);
+    color: $osd-ink;
+    font-weight: 600;
+    transition: background-color 120ms ease-out;
+}
+
+.save-now::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: $looks-secondary;
 }
 
 .save-now:hover {
-    background-color: $ui-black-transparent;
+    background-color: $osd-hover;
 }

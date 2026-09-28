@@ -166,7 +166,7 @@
   align-items: center;
   border-bottom: 1px solid var(--ui-black-transparent);
   padding-left: 4px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 .sa-debugger-log[data-type="warn"] {
   border-color: hsla(56deg, 100%, 69%, 0.5);

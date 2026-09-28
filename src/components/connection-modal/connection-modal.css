@@ -83,7 +83,7 @@
     font-size: 0.85rem;
     background: $looks-secondary;
     border: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
     cursor: pointer;
 }
 
@@ -301,9 +301,9 @@
 
 .connection-button {
     padding: 0.6rem 0.75rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     background: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
     font-weight: 600;
     font-size: 0.85rem;
     margin: 0.25rem;
@@ -394,7 +394,7 @@
 .dots-holder {
     display: flex;
     padding: 0.25rem 0.1rem;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     background: $looks-light-transparent;
 }
 

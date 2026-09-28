@@ -9,15 +9,15 @@
 
 .button {
     margin: 0;
-    padding: 0.25rem;
-    border: 1px solid $ui-black-transparent;
-    background: none;
+    padding: 0.3125rem;
+    border: 1px solid $rule-strong;
+    background: $zone-2;
     outline: none;
     cursor: pointer;
     user-select: none;
     position: relative;
-    width: 34px;
-    height: 34px;
+    width: 1.75rem;
+    height: 1.75rem;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -35,7 +35,7 @@
 
 [dir="rtl"] .button:not(:last-child) {
     border-left: none;
-    border-right: 1px solid $ui-black-transparent;
+    border-right: 1px solid $rule-strong;
 }
 
 .button:focus::before {
@@ -54,30 +54,35 @@
 [dir="rtl"] .button:last-child,
 .button:first-child:focus::before,
 [dir="rtl"] .button:last-child:focus::before {
-    border-radius: $form-radius 0 0 $form-radius;
+    border-radius: var(--radius-m) 0 0 var(--radius-m);
 }
 
 .button:last-child,
 [dir="rtl"] .button:first-child,
 .button:last-child:focus::before,
 [dir="rtl"] .button:first-child:focus::before {
-    border-radius: 0 $form-radius $form-radius 0;
+    border-radius: 0 var(--radius-m) var(--radius-m) 0;
 }
 
 /* selected button styling */
 
+.button:hover {
+    background-color: $zone-4;
+}
+
 .button[aria-pressed='true'] {
-    background-color: $looks-light-transparent;
+    background-color: $zone-5;
+    box-shadow: inset 0 -2px 0 $looks-secondary;
 }
 
 .button[aria-pressed='true'] > img {
-    filter: none;
+    filter: brightness(0) invert(92%);
 }
 
 /* pressed button styling */
 
 .button:active {
-    background-color: $looks-transparent;
+    background-color: $zone-5;
 }
 
 /* disabled styling */

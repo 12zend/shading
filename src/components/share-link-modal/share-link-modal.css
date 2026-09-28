@@ -32,7 +32,7 @@
     border-radius: 0.25rem;
     background: $input-background;
     color: inherit;
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     word-break: break-all;
     resize: vertical;
@@ -85,15 +85,15 @@
 
 .warning {
     padding: 0.75rem;
-    border-left: 4px solid #ff8c1a;
-    border-radius: 0.25rem;
+    border: 1px solid #ff8c1a66;
+    border-radius: var(--radius-m);
     background: rgba(255, 140, 26, 0.12);
 }
 
 .error {
     padding: 0.75rem;
-    border-left: 4px solid #e5484d;
-    border-radius: 0.25rem;
+    border: 1px solid #e5484d66;
+    border-radius: var(--radius-m);
     background: rgba(229, 72, 77, 0.12);
     white-space: pre-wrap;
     word-break: break-word;
@@ -125,5 +125,5 @@
 .primary {
     border-color: $looks-secondary;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }

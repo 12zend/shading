@@ -31,7 +31,7 @@
     padding: 0.25rem;
     border: 2px solid $looks-secondary;
     background: $ui-white;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
 
     /* Use the same drop shadow as stage dragging */
     box-shadow: 5px 5px 5px $shadow;

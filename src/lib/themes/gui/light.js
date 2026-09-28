@@ -1,15 +1,49 @@
 const guiColors = {
     'color-scheme': 'light',
 
-    'ui-primary': 'hsla(215, 100%, 95%, 1)', /* #E5F0FF */
-    'ui-secondary': 'hsla(215, 75%, 95%, 1)', /* #E9F1FC */
-    'ui-tertiary': 'hsla(215, 50%, 90%, 1)', /* #D9E3F2 */
+    'zone-0': '#ffffff',
+    'zone-1': '#f5f4f1',
+    'zone-2': '#efeeea',
+    'zone-3': '#e6e5e1',
+    'zone-4': '#dcdad5',
+    'zone-5': '#c9c7c1',
+    'zone-6': '#a3a19b',
+    'zone-7': '#6b7079',
+    'zone-8': '#4f545c',
+    'zone-9': '#24272c',
+    'zone-10': '#0e0f11',
 
-    'ui-modal-overlay': 'var(--motion-primary-transparent)',
+    'rec': '#e0281e',
+    'rec-transparent': '#e0281e26',
+    'rule': '#0e0f1114',
+    'rule-strong': '#0e0f1126',
+
+    'accent-foreground': '#ffffff',
+
+    // The OSD strip and page rail stay black glass in every theme.
+    'osd-glass': '#08090a',
+    'osd-field': '#0e0f11',
+    'osd-hover': '#24272c',
+    'osd-rule': '#eceae51f',
+    'osd-ink': '#eceae5',
+    'osd-ink-dim': '#9a9ea5',
+    'osd-ink-quiet': '#6b7079',
+    'rail-background': '#e6e5e1',
+    'rail-hover': '#dcdad5',
+    'rail-ink': '#4f545c',
+    'rail-ink-strong': '#0e0f11',
+    'rail-icon-filter': 'grayscale(100%) brightness(0.45)',
+    'rail-icon-filter-selected': 'grayscale(100%) brightness(0)',
+
+    'ui-primary': '#e6e5e1',
+    'ui-secondary': '#efeeea',
+    'ui-tertiary': '#dcdad5',
+
+    'ui-modal-overlay': '#14161999',
     'ui-modal-background': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
-    'ui-modal-foreground': 'hsla(225, 15%, 40%, 1)', /* #575E75 */
-    'ui-modal-header-background': 'var(--looks-secondary)',
-    'ui-modal-header-foreground': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
+    'ui-modal-foreground': '#24272c',
+    'ui-modal-header-background': '#e6e5e1',
+    'ui-modal-header-foreground': '#0e0f11',
 
     'ui-white': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
     'ui-white-dim': 'hsla(0, 100%, 100%, 0.75)', /* 25% transparent version of ui-white */
@@ -18,8 +52,8 @@ const guiColors = {
 
     'ui-black-transparent': 'hsla(0, 0%, 0%, 0.15)', /* 15% transparent version of black */
 
-    'text-primary': 'hsla(225, 15%, 40%, 1)', /* #575E75 */
-    'text-primary-transparent': 'hsla(225, 15%, 40%, 0.75)',
+    'text-primary': '#24272c',
+    'text-primary-transparent': '#4f545c',
 
     'motion-primary': 'hsla(215, 100%, 65%, 1)', /* #4C97FF */
     'motion-primary-transparent': 'hsla(215, 100%, 65%, 0.9)', /* 90% transparent version of motion-primary */
@@ -55,9 +89,9 @@ const guiColors = {
 
     'drop-highlight': 'hsla(215, 100%, 77%, 1)', /* lighter than motion-primary */
 
-    'menu-bar-background': 'var(--looks-secondary)',
+    'menu-bar-background': '#08090a',
     'menu-bar-background-image': 'none',
-    'menu-bar-foreground': '#ffffff',
+    'menu-bar-foreground': '#c9cbcf',
 
     'assets-background': '#ffffff',
 
@@ -76,8 +110,8 @@ const guiColors = {
     'page-background': '#ffffff',
     'page-foreground': '#000000',
 
-    'project-title-inactive': 'var(--ui-white-transparent)',
-    'project-title-hover': '#ffffff7f',
+    'project-title-inactive': 'transparent',
+    'project-title-hover': '#24272c',
 
     'link-color': '#2255dd',
 

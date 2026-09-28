@@ -5,6 +5,47 @@
 
 :root {
     color-scheme: var(--color-scheme);
+
+    /* Labels: the platform UI face (with Japanese fallbacks). Numbers: tabular mono. */
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
+    --radius-s: 2px;
+    --radius-m: 4px;
+    --focus-ring: 0 0 0 1px var(--zone-0), 0 0 0 2px var(--looks-secondary);
+}
+
+/* Browser surfaces carry the design too. */
+:global(::selection) {
+    background: $looks-transparent;
+    color: inherit;
+}
+:global(input), :global(textarea) {
+    caret-color: $looks-secondary;
+}
+:global(*) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--zone-6) transparent;
+}
+:global(::-webkit-scrollbar) {
+    width: 10px;
+    height: 10px;
+}
+:global(::-webkit-scrollbar-track) {
+    background: transparent;
+}
+:global(::-webkit-scrollbar-thumb) {
+    background: var(--zone-5);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 10px;
+}
+:global(::-webkit-scrollbar-thumb:hover) {
+    background: var(--zone-6);
+    background-clip: padding-box;
+}
+:global(:focus-visible) {
+    outline: 1px solid $looks-secondary;
+    outline-offset: 1px;
 }
 
 /* popover is used by gui and paint */

@@ -10,8 +10,8 @@
     */
     display: block;
 
-    border-radius: $space;
-    border: $stage-standard-border-width solid $ui-black-transparent;
+    border-radius: 0;
+    border: $stage-standard-border-width solid $rule-strong;
     overflow: hidden;
 
     /* @todo: This is for overriding the value being set somewhere. Where is it being set? */
@@ -33,6 +33,29 @@
 
 .stage.full-screen {
     border: $stage-full-screen-border-width solid $ui-black-transparent;
+}
+
+/* Monitor frame guides: four corner marks drawn over the picture, as on a camera's OSD. */
+.stage.frame-guides::after {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
+    --guide: 10px;
+    --guide-color: #ffffff;
+    background:
+        linear-gradient(var(--guide-color), var(--guide-color)) top left / var(--guide) 1px,
+        linear-gradient(var(--guide-color), var(--guide-color)) top left / 1px var(--guide),
+        linear-gradient(var(--guide-color), var(--guide-color)) top right / var(--guide) 1px,
+        linear-gradient(var(--guide-color), var(--guide-color)) top right / 1px var(--guide),
+        linear-gradient(var(--guide-color), var(--guide-color)) bottom left / var(--guide) 1px,
+        linear-gradient(var(--guide-color), var(--guide-color)) bottom left / 1px var(--guide),
+        linear-gradient(var(--guide-color), var(--guide-color)) bottom right / var(--guide) 1px,
+        linear-gradient(var(--guide-color), var(--guide-color)) bottom right / 1px var(--guide);
+    background-repeat: no-repeat;
+    mix-blend-mode: difference;
 }
 
 .with-color-picker {
@@ -113,9 +136,9 @@ stage doesn't "spill" out from under its rounded corners. instead, shift these o
 }
 
 .frame {
-    background: $looks-transparent;
-    border: 2px solid $looks-secondary;
-    border-radius: 0.5rem;
+    background: $looks-light-transparent;
+    border: 1px solid $looks-secondary;
+    border-radius: 0;
     animation-name: flash;
     animation-duration: 0.75s;
     animation-fill-mode: forwards; /* Leave at 0 opacity after animation */
@@ -127,8 +150,8 @@ stage doesn't "spill" out from under its rounded corners. instead, shift these o
     display: flex;
     justify-content: center;
     align-items: center;
-    background: rgba(0,0,0,0.25);
-    border-radius: 0.5rem;
+    background: rgba(0,0,0,0.45);
+    border-radius: 0;
     pointer-events: all;
     cursor: pointer;
 }

@@ -5,6 +5,7 @@ import {defineMessages, intlShape, injectIntl} from 'react-intl';
 import VM from 'scratch-vm';
 
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+import emptyStyles from '../components/video-editor/video-editor.css';
 import soundIcon from '../components/asset-panel/icon--sound.svg';
 import soundIconRtl from '../components/asset-panel/icon--sound-rtl.svg';
 import addSoundFromLibraryIcon from '../components/asset-panel/icon--add-sound-lib.svg';
@@ -222,6 +223,16 @@ class SoundTab extends React.Component {
                 defaultMessage: 'Choose a Sound',
                 description: 'Button to add a sound in the editor tab',
                 id: 'gui.soundTab.addSoundFromLibrary'
+            },
+            emptyTitle: {
+                defaultMessage: 'Add a sound to this sprite',
+                description: 'Heading shown in the sounds tab when the sprite has no sounds',
+                id: 'movie.soundTab.emptyTitle'
+            },
+            emptyDescription: {
+                defaultMessage: 'Choose from the library, record, or upload with the button at the bottom left.',
+                description: 'Description shown in the sounds tab when the sprite has no sounds',
+                id: 'movie.soundTab.emptyDescription'
             }
         });
 
@@ -268,7 +279,27 @@ class SoundTab extends React.Component {
                     ) : (
                         <SoundEditorNotSupported />
                     )
-                ) : null}
+                ) : (isSupported ? (
+                    <div className={emptyStyles.emptyState}>
+                        <div className={emptyStyles.emptyIcon}>
+                            <img
+                                alt=""
+                                draggable={false}
+                                src={addSoundFromRecordingIcon}
+                            />
+                        </div>
+                        <h2>{intl.formatMessage(messages.emptyTitle)}</h2>
+                        <p>{intl.formatMessage(messages.emptyDescription)}</p>
+                        <div className={emptyStyles.emptyActions}>
+                            <button onClick={onNewSoundFromLibraryClick}>
+                                {intl.formatMessage(messages.addSound)}
+                            </button>
+                            <button onClick={onNewSoundFromRecordingClick}>
+                                {intl.formatMessage(messages.recordSound)}
+                            </button>
+                        </div>
+                    </div>
+                ) : null)}
                 {this.props.soundRecorderVisible ? (
                     <RecordModal
                         onNewSound={this.handleNewSound}

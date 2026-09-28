@@ -2,7 +2,7 @@
 @import "../../css/units.css";
 
 .author-info {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     display: flex;
     justify-content: flex-start;
     align-items: center;

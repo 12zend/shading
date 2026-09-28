@@ -9,7 +9,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
 }
 
 .title {
@@ -33,9 +33,9 @@
     padding: 0.25rem 0.5rem;
     margin: 0;
     background: none;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
 }
 .server.selected {
     background-color: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }

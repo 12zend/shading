@@ -18,7 +18,7 @@ $more-button-size: 2.25rem;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     background: $looks-secondary;
     outline: none;
     border: none;
@@ -30,7 +30,7 @@ button::-moz-focus-inner {
 }
 
 .button:hover {
-    background: $extensions-primary;
+    background: $drop-highlight;
 }
 
 .button:active {
@@ -41,23 +41,20 @@ button::-moz-focus-inner {
     background: $data-primary;
 }
 
+/* A square lit key, not a floating bubble. */
 .main-button {
-    border-radius: 100%;
+    border-radius: var(--radius-m);
     width: $main-button-size;
     height: $main-button-size;
-    box-shadow: 0 0 0 4px $looks-transparent;
+    box-shadow: 0 6px 16px -6px $shadow;
     z-index: $z-index-add-button;
-    transition: transform, box-shadow 0.5s;
-}
-
-.main-button:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 0 6px $looks-transparent;
+    transition: background-color 120ms ease-out;
 }
 
 .main-icon {
-    width: calc($main-button-size - 1rem);
-    height: calc($main-button-size - 1rem);
+    width: calc($main-button-size - 1.25rem);
+    height: calc($main-button-size - 1.25rem);
+    filter: brightness(0) opacity(0.85);
 }
 
 [dir="rtl"] .main-icon {
@@ -72,9 +69,11 @@ button::-moz-focus-inner {
     */
     overflow-y: hidden;
 
-    background: $looks-secondary-dark;
-    border-top-left-radius: $more-button-size;
-    border-top-right-radius: $more-button-size;
+    background: $zone-4;
+    border: 1px solid $rule-strong;
+    border-bottom: 0;
+    border-top-left-radius: var(--radius-m);
+    border-top-right-radius: var(--radius-m);
     width: $more-button-size;
     margin-left: calc(($main-button-size - $more-button-size) / 2);
     margin-right: calc(($main-button-size - $more-button-size) / 2);
@@ -108,14 +107,18 @@ button::-moz-focus-inner {
 }
 
 .more-buttons:first-child { /* Round off top button */
-    border-top-right-radius: $more-button-size;
-    border-top-left-radius: $more-button-size;
+    border-top-right-radius: var(--radius-m);
+    border-top-left-radius: var(--radius-m);
 }
 
 .more-button {
     width: $more-button-size;
     height: $more-button-size;
-    background: $looks-secondary-dark;
+    background: $zone-4;
+}
+
+.more-button:hover {
+    background: $zone-6;
 }
 
 .more-icon {
@@ -133,15 +136,16 @@ button::-moz-focus-inner {
     is not very easy to style.
 */
 .tooltip {
-    background-color: $extensions-primary !important;
+    background-color: $zone-5 !important;
+    color: $zone-10 !important;
     opacity: 1 !important;
     border: 1px solid hsla(0, 0%, 0%, .1) !important;
     box-shadow: 0 0 .5rem hsla(0, 0%, 0%, .25) !important;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: var(--font-ui) !important;
 }
 
 .tooltip:after {
-    background-color: $extensions-primary;
+    background-color: $zone-5;
 }
 
 .coming-soon-tooltip {
@@ -156,7 +160,7 @@ button::-moz-focus-inner {
     border: 1px solid hsla(0, 0%, 0%, .1) !important;
     border-radius: $form-radius !important;
     box-shadow: 0 0 .5rem hsla(0, 0%, 0%, .25) !important;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: var(--font-ui) !important;
     z-index: $z-index-tooltip !important;
 }
 
