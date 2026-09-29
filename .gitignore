@@ -90,17 +90,17 @@ scratch-blocks/**/.vscode
 
 # Build
 scratch-blocks/accessible/*
-scratch-blocks/dist
+scratch-blocks/dist/*
+!scratch-blocks/dist/vertical.js
 scratch-blocks/msg/js/*
 !scratch-blocks/msg/js/en.js
 scratch-blocks/msg/json/*
 !scratch-blocks/msg/json/en.json
 scratch-blocks/blockly_compressed_horizontal.js
-scratch-blocks/blockly_compressed_vertical.js
+# Prebuilt vertical output is committed for hosts without Java (see scripts/build-scratch-blocks.cjs)
 scratch-blocks/blockly_uncompressed_horizontal.js
 scratch-blocks/blockly_uncompressed_vertical.js
 scratch-blocks/blocks_compressed_horizontal.js
-scratch-blocks/blocks_compressed_vertical.js
 scratch-blocks/blocks_compressed.js
 scratch-blocks/gh-pages/main.js
 scratch-blocks/gh-pages/playgrounds

@@ -2,7 +2,7 @@
 // Usage: node scripts/build-scratch-blocks.cjs [--if-missing]
 const fs = require('fs');
 const path = require('path');
-const {execFileSync} = require('child_process');
+const {execFileSync, spawnSync} = require('child_process');
 
 const root = path.resolve(__dirname, '..', 'scratch-blocks');
 const outputs = [
@@ -24,6 +24,14 @@ for (const bin of ['/opt/homebrew/opt/openjdk/bin', '/usr/local/opt/openjdk/bin'
         env.PATH = `${bin}${path.delimiter}${env.PATH}`;
         break;
     }
+}
+
+// Hosted builders (e.g. Cloudflare Pages) have no Java, so the Closure Compiler cannot run there.
+// Use the committed compiled output in that case instead of failing the whole build.
+const hasJava = spawnSync('java', ['-version'], {env, stdio: 'ignore'}).status === 0;
+if (!hasJava && outputs.every(file => fs.existsSync(path.join(root, file)))) {
+    console.warn('Java not found; using the prebuilt scratch-blocks output.');
+    process.exit(0);
 }
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
