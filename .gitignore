@@ -101,7 +101,6 @@ scratch-blocks/blockly_compressed_horizontal.js
 scratch-blocks/blockly_uncompressed_horizontal.js
 scratch-blocks/blockly_uncompressed_vertical.js
 scratch-blocks/blocks_compressed_horizontal.js
-scratch-blocks/blocks_compressed.js
 scratch-blocks/gh-pages/main.js
 scratch-blocks/gh-pages/playgrounds
 scratch-blocks/gh-pages/Gemfile.lock

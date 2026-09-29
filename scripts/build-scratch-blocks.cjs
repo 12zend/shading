@@ -7,6 +7,7 @@ const {execFileSync, spawnSync} = require('child_process');
 const root = path.resolve(__dirname, '..', 'scratch-blocks');
 const outputs = [
     'blockly_compressed_vertical.js',
+    'blocks_compressed.js',
     'blocks_compressed_vertical.js',
     'msg/scratch_msgs.js',
     'dist/vertical.js'
