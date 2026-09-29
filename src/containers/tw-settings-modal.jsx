@@ -30,11 +30,12 @@ class UsernameModal extends React.Component {
             'handleStageWidthChange',
             'handleStageHeightChange',
             'handleDisableCompilerChange',
-            'handleStoreProjectOptions'
+            'storeProjectOptions'
         ]);
     }
     handleFramerateChange (e) {
         this.props.vm.setFramerate(e.target.checked ? 60 : 30);
+        this.storeProjectOptions();
     }
     async handleCustomizeFramerate () {
         // prompt() returns Promise in desktop app
@@ -43,43 +44,55 @@ class UsernameModal extends React.Component {
         const parsed = parseFloat(newFramerate);
         if (isFinite(parsed)) {
             this.props.vm.setFramerate(parsed);
+            this.storeProjectOptions();
         }
     }
     handleInterpolationChange (e) {
         this.props.vm.setInterpolation(e.target.checked);
+        this.storeProjectOptions();
     }
     handleInfiniteClonesChange (e) {
         this.props.vm.setRuntimeOptions({
             maxClones: e.target.checked ? Infinity : 300
         });
+        this.storeProjectOptions();
     }
     handleRemoveFencingChange (e) {
         this.props.vm.setRuntimeOptions({
             fencing: !e.target.checked
         });
+        this.storeProjectOptions();
     }
     handleRemoveLimitsChange (e) {
         this.props.vm.setRuntimeOptions({
             miscLimits: !e.target.checked
         });
+        this.storeProjectOptions();
     }
     handleWarpTimerChange (e) {
         this.props.vm.setCompilerOptions({
             warpTimer: e.target.checked
         });
+        this.storeProjectOptions();
     }
     handleDisableCompilerChange (e) {
         this.props.vm.setCompilerOptions({
             enabled: !e.target.checked
         });
+        this.storeProjectOptions();
     }
     handleStageWidthChange (value) {
         this.props.vm.setStageSize(value, this.props.customStageSize.height);
+        this.storeProjectOptions();
     }
     handleStageHeightChange (value) {
         this.props.vm.setStageSize(this.props.customStageSize.width, value);
+        this.storeProjectOptions();
     }
-    handleStoreProjectOptions () {
+    storeProjectOptions () {
+        // Advanced settings are saved in the project file instead of the URL.
+        // Embedded players cannot save projects, so do not mark them as changed.
+        if (this.props.isEmbedded) return;
         storeProjectOptions(this.props.vm, defaultStageSize);
     }
     render () {
@@ -109,7 +122,6 @@ class UsernameModal extends React.Component {
                     this.props.customStageSize.width !== defaultStageSize.width ||
                     this.props.customStageSize.height !== defaultStageSize.height
                 }
-                onStoreProjectOptions={this.handleStoreProjectOptions}
                 {...props}
             />
         );

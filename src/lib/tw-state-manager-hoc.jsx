@@ -4,7 +4,7 @@ import {connect} from 'react-redux';
 import bindAll from 'lodash.bindall';
 import VM from 'scratch-vm';
 import log from './log';
-import {defineMessages, intlShape, injectIntl} from 'react-intl';
+import {intlShape, injectIntl} from 'react-intl';
 
 import {
     setUsername
@@ -19,26 +19,30 @@ import {
 } from '../reducers/mode';
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
-import {defaultStageSize} from '../reducers/custom-stage-size';
 import {getTeamIdFromPath, getTeamPath} from './team-route';
 import {isSharePath} from './share-link/share-link-url';
 
 /* eslint-disable no-alert */
 
-const messages = defineMessages({
-    invalidFPS: {
-        defaultMessage: '"fps" URL parameter is invalid',
-        description: 'Alert displayed when fps URL parameter is invalid',
-        id: 'tw.invalidParameters.fps'
-    },
-    invalidClones: {
-        defaultMessage: '"clone" URL parameter is invalid',
-        description: 'Alert displayed when clones URL parameter is invalid',
-        id: 'tw.invalidParameters.clones'
-    }
-});
-
 const USERNAME_KEY = 'tw:username';
+
+/**
+ * URL parameters that used to carry Advanced Settings. These settings are now stored in the
+ * project file, so they are ignored and removed from links.
+ */
+const LEGACY_SETTINGS_PARAMS = [
+    'hqpen',
+    'fps',
+    '60fps',
+    'interpolate',
+    'stuck',
+    'warp_timer',
+    'nocompile',
+    'clones',
+    'offscreen',
+    'limitless',
+    'size'
+];
 
 /**
  * The State Manager is responsible for managing persistent state and the URL.
@@ -351,21 +355,6 @@ const TWStateManager = function (WrappedComponent) {
         componentDidMount () {
             const urlParams = new URLSearchParams(location.search);
 
-            if (urlParams.has('fps')) {
-                const fps = +urlParams.get('fps');
-                if (Number.isNaN(fps) || fps < 0) {
-                    alert(this.props.intl.formatMessage(messages.invalidFPS));
-                } else {
-                    this.props.vm.setFramerate(fps);
-                }
-            } else if (urlParams.has('60fps')) {
-                this.props.vm.setFramerate(60);
-            }
-
-            if (urlParams.has('interpolate')) {
-                this.props.vm.setInterpolation(true);
-            }
-
             if (urlParams.has('username')) {
                 const username = urlParams.get('username');
                 // Do not save username when loaded from URL
@@ -387,49 +376,17 @@ const TWStateManager = function (WrappedComponent) {
             // High quality pen rendering is always enabled in Shading.
             this.props.vm.renderer.setUseHighQualityRender(true);
 
-            // Remove the old opt-in parameter from links while retaining all other URL options.
-            if (urlParams.has('hqpen')) {
-                urlParams.delete('hqpen');
+            // Advanced Settings live in the project file. Remove them from links while
+            // retaining all other URL options.
+            if (LEGACY_SETTINGS_PARAMS.some(param => urlParams.has(param))) {
+                for (const param of LEGACY_SETTINGS_PARAMS) {
+                    urlParams.delete(param);
+                }
                 setSearchParams(urlParams);
             }
 
             if (urlParams.has('turbo')) {
                 this.props.vm.setTurboMode(true);
-            }
-
-            if (urlParams.has('stuck') || urlParams.has('warp_timer')) {
-                this.props.vm.setCompilerOptions({
-                    warpTimer: true
-                });
-            }
-
-            if (urlParams.has('nocompile')) {
-                this.props.vm.setCompilerOptions({
-                    enabled: false
-                });
-            }
-
-            if (urlParams.has('clones')) {
-                const clones = +urlParams.get('clones');
-                if (Number.isNaN(clones) || clones < 0) {
-                    alert(this.props.intl.formatMessage(messages.invalidClones));
-                } else {
-                    this.props.vm.setRuntimeOptions({
-                        maxClones: clones
-                    });
-                }
-            }
-
-            if (urlParams.has('offscreen')) {
-                this.props.vm.setRuntimeOptions({
-                    fencing: false
-                });
-            }
-
-            if (urlParams.has('limitless')) {
-                this.props.vm.setRuntimeOptions({
-                    miscLimits: false
-                });
             }
 
             for (const extension of urlParams.getAll('extension')) {
@@ -469,78 +426,13 @@ const TWStateManager = function (WrappedComponent) {
                 }
             }
 
-            if (
-                this.props.customStageSize !== prevProps.customStageSize ||
-                this.props.runtimeOptions !== prevProps.runtimeOptions ||
-                this.props.compilerOptions !== prevProps.compilerOptions ||
-                this.props.framerate !== prevProps.framerate ||
-                this.props.interpolation !== prevProps.interpolation ||
-                this.props.turbo !== prevProps.turbo
-            ) {
+            if (this.props.turbo !== prevProps.turbo) {
                 const searchParams = new URLSearchParams(location.search);
-                const runtimeOptions = this.props.runtimeOptions;
-                const compilerOptions = this.props.compilerOptions;
-
-                // Always remove legacy parameter
-                searchParams.delete('60fps');
-
-                const {width, height} = this.props.customStageSize;
-                if (width === defaultStageSize.width && height === defaultStageSize.height) {
-                    searchParams.delete('size');
-                } else {
-                    searchParams.set('size', `${width}x${height}`);
-                }
-
-                if (this.props.framerate === 30) {
-                    searchParams.delete('fps');
-                } else {
-                    searchParams.set('fps', this.props.framerate);
-                }
-
-                if (this.props.interpolation) {
-                    searchParams.set('interpolate', '');
-                } else {
-                    searchParams.delete('interpolate');
-                }
-
                 if (this.props.turbo) {
                     searchParams.set('turbo', '');
                 } else {
                     searchParams.delete('turbo');
                 }
-
-                if (compilerOptions.enabled) {
-                    searchParams.delete('nocompile');
-                }
-
-                if (this.props.isPlayerOnly) {
-                    if (compilerOptions.warpTimer) {
-                        searchParams.set('stuck', '');
-                    } else {
-                        searchParams.delete('stuck');
-                    }
-                } else {
-                    // Leave ?stuck as-is when in editor
-                }
-
-                if (runtimeOptions.maxClones === 300) {
-                    searchParams.delete('clones');
-                } else {
-                    searchParams.set('clones', runtimeOptions.maxClones);
-                }
-
-                if (runtimeOptions.fencing) {
-                    searchParams.delete('offscreen');
-                } else {
-                    searchParams.set('offscreen', '');
-                }
-
-                if (runtimeOptions.miscLimits) {
-                    searchParams.delete('limitless');
-                } else {
-                    searchParams.set('limitless', '');
-                }
-
                 setSearchParams(searchParams);
             }
         }
@@ -576,16 +468,10 @@ const TWStateManager = function (WrappedComponent) {
             const {
                 /* eslint-disable no-unused-vars */
                 intl,
-                customStageSize,
                 isFullScreen,
                 isPlayerOnly,
                 isEmbedded,
                 projectChanged,
-                compilerOptions,
-                runtimeOptions,
-                highQualityPen,
-                framerate,
-                interpolation,
                 turbo,
                 onSetIsFullScreen,
                 onSetIsPlayerOnly,
@@ -607,27 +493,11 @@ const TWStateManager = function (WrappedComponent) {
     }
     StateManagerComponent.propTypes = {
         intl: intlShape,
-        customStageSize: PropTypes.shape({
-            width: PropTypes.number,
-            height: PropTypes.number
-        }),
         isFullScreen: PropTypes.bool,
         isPlayerOnly: PropTypes.bool,
         isEmbedded: PropTypes.bool,
         projectChanged: PropTypes.bool,
         projectId: PropTypes.string,
-        compilerOptions: PropTypes.shape({
-            enabled: PropTypes.bool,
-            warpTimer: PropTypes.bool
-        }),
-        runtimeOptions: PropTypes.shape({
-            miscLimits: PropTypes.bool,
-            fencing: PropTypes.bool,
-            maxClones: PropTypes.number
-        }),
-        highQualityPen: PropTypes.bool,
-        framerate: PropTypes.number,
-        interpolation: PropTypes.bool,
         turbo: PropTypes.bool,
         onSetIsFullScreen: PropTypes.func,
         onSetIsPlayerOnly: PropTypes.func,
@@ -642,17 +512,11 @@ const TWStateManager = function (WrappedComponent) {
         routingStyle: 'team'
     };
     const mapStateToProps = state => ({
-        customStageSize: state.scratchGui.customStageSize,
         isFullScreen: state.scratchGui.mode.isFullScreen,
         isPlayerOnly: state.scratchGui.mode.isPlayerOnly,
         isEmbedded: state.scratchGui.mode.isEmbedded,
         projectChanged: state.scratchGui.projectChanged,
         reduxProjectId: state.scratchGui.projectState.projectId,
-        compilerOptions: state.scratchGui.tw.compilerOptions,
-        runtimeOptions: state.scratchGui.tw.runtimeOptions,
-        highQualityPen: state.scratchGui.tw.highQualityPen,
-        framerate: state.scratchGui.tw.framerate,
-        interpolation: state.scratchGui.tw.interpolation,
         turbo: state.scratchGui.vmStatus.turbo,
         username: state.scratchGui.tw.username,
         vm: state.scratchGui.vm

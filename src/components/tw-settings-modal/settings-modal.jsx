@@ -372,34 +372,6 @@ CustomStageSize.propTypes = {
     onStageHeightChange: PropTypes.func
 };
 
-const StoreProjectOptions = ({onStoreProjectOptions}) => (
-    <div className={styles.setting}>
-        <div>
-            <button
-                onClick={onStoreProjectOptions}
-                className={styles.button}
-            >
-                <FormattedMessage
-                    defaultMessage="Store settings in project"
-                    description="Button in settings modal"
-                    id="tw.settingsModal.storeProjectOptions"
-                />
-            </button>
-            <p>
-                <FormattedMessage
-                    // eslint-disable-next-line max-len
-                    defaultMessage="Stores the selected settings in the project so they will be automatically applied when TurboWarp loads this project. Warp timer and disable compiler will not be saved."
-                    description="Help text for the store settings in project button"
-                    id="tw.settingsModal.storeProjectOptionsHelp"
-                />
-            </p>
-        </div>
-    </div>
-);
-StoreProjectOptions.propTypes = {
-    onStoreProjectOptions: PropTypes.func
-};
-
 const Header = props => (
     <div className={styles.header}>
         {props.children}
@@ -473,11 +445,6 @@ const SettingsModalComponent = props => (
                 value={props.disableCompiler}
                 onChange={props.onDisableCompilerChange}
             />
-            {!props.isEmbedded && (
-                <StoreProjectOptions
-                    {...props}
-                />
-            )}
         </Box>
     </Modal>
 );

@@ -2882,6 +2882,18 @@ class Runtime extends EventEmitter {
         if (parsed.runtimeOptions) {
             this.setRuntimeOptions(parsed.runtimeOptions);
         }
+        if (parsed.compilerOptions && typeof parsed.compilerOptions === 'object') {
+            const compilerOptions = {};
+            if (typeof parsed.compilerOptions.enabled === 'boolean') {
+                compilerOptions.enabled = parsed.compilerOptions.enabled;
+            }
+            if (typeof parsed.compilerOptions.warpTimer === 'boolean') {
+                compilerOptions.warpTimer = parsed.compilerOptions.warpTimer;
+            }
+            if (Object.keys(compilerOptions).length > 0) {
+                this.setCompilerOptions(compilerOptions);
+            }
+        }
         if (parsed.hq && this.renderer) {
             this.renderer.setUseHighQualityRender(true);
         }
@@ -2896,6 +2908,10 @@ class Runtime extends EventEmitter {
         return {
             framerate: this.frameLoop.framerate,
             runtimeOptions: this.runtimeOptions,
+            compilerOptions: {
+                enabled: this.compilerOptions.enabled,
+                warpTimer: this.compilerOptions.warpTimer
+            },
             interpolation: this.interpolationEnabled,
             turbo: this.turboMode,
             hq: this.renderer ? this.renderer.useHighQualityRender : false,

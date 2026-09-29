@@ -55,4 +55,55 @@ describe('storeProjectOptions', () => {
         expect(reloadedVM.runtime.stageWidth).toBe(480);
         expect(reloadedVM.runtime.stageHeight).toBe(360);
     });
+
+    test('stores every advanced setting in the project', async () => {
+        const vm = new VM();
+        await vm.loadProject(JSON.stringify(projectJSON));
+        vm.setFramerate(60);
+        vm.setInterpolation(true);
+        vm.setRuntimeOptions({
+            maxClones: Infinity,
+            fencing: false,
+            miscLimits: false
+        });
+        vm.setCompilerOptions({
+            enabled: false,
+            warpTimer: false
+        });
+        vm.setStageSize(640, 360);
+        storeProjectOptions(vm, defaultStageSize);
+        const archive = await vm.saveProjectSb3('arraybuffer');
+
+        const reloadedVM = new VM();
+        reloadedVM.setStageSize(defaultStageSize.width, defaultStageSize.height);
+        // The editor enables the warp timer before loading projects.
+        reloadedVM.setCompilerOptions({warpTimer: true});
+        await reloadedVM.loadProject(archive);
+
+        expect(reloadedVM.runtime.frameLoop.framerate).toBe(60);
+        expect(reloadedVM.runtime.interpolationEnabled).toBe(true);
+        expect(reloadedVM.runtime.runtimeOptions).toMatchObject({
+            maxClones: Infinity,
+            fencing: false,
+            miscLimits: false
+        });
+        expect(reloadedVM.runtime.compilerOptions).toMatchObject({
+            enabled: false,
+            warpTimer: false
+        });
+        expect(reloadedVM.runtime.stageWidth).toBe(640);
+        expect(reloadedVM.runtime.stageHeight).toBe(360);
+    });
+
+    test('does not store the editor warp timer default', async () => {
+        const vm = new VM();
+        await vm.loadProject(JSON.stringify(projectJSON));
+        vm.setCompilerOptions({warpTimer: true});
+        storeProjectOptions(vm, defaultStageSize);
+
+        expect(vm.runtime._defaultStoredSettings.compilerOptions.warpTimer).toBe(false);
+        const reloadedVM = new VM();
+        await reloadedVM.loadProject(vm.toJSON());
+        expect(reloadedVM.runtime.compilerOptions.warpTimer).toBe(false);
+    });
 });

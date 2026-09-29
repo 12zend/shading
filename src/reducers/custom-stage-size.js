@@ -1,41 +1,11 @@
 const SET_CUSTOM_STAGE_SIZE = 'tw/custom-stage-size/SET';
 
-const getDimensions = () => {
-    // Running in node.js
-    if (typeof URLSearchParams === 'undefined' || typeof location === 'undefined') {
-        return null;
-    }
-
-    const urlParameters = new URLSearchParams(location.search);
-    const dimensionsQuery = urlParameters.get('size');
-    if (dimensionsQuery === null) {
-        return null;
-    }
-    const match = dimensionsQuery.match(/^(\d+)[^\d]+(\d+)$/);
-    if (!match) {
-        // eslint-disable-next-line no-alert
-        alert('Could not parse custom stage size');
-        return null;
-    }
-    const [_, widthText, heightText] = match;
-    if (!widthText || !heightText) {
-        return null;
-    }
-
-    const width = Math.max(0, Math.min(4096, +widthText));
-    const height = Math.max(0, Math.min(4096, +heightText));
-    return {
-        width,
-        height
-    };
-};
-
 const defaultStageSize = {
     width: 480,
     height: 270
 };
 
-const initialState = getDimensions() || defaultStageSize;
+const initialState = defaultStageSize;
 
 const reducer = function (state, action) {
     if (typeof state === 'undefined') state = initialState;
