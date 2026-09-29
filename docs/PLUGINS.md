@@ -56,7 +56,7 @@ my-plugin.zip
 | `id` | はい | 小文字英数字と `-`、最大48文字。同じ id を読み込むと置き換え |
 | `name`, `version`, `description`, `author`, `license`, `homepage` | 推奨 | 確認画面と管理画面に表示 |
 | `main` | 任意 | 起動する .js（既定 `main.js`） |
-| `permissions` | 任意 | 使う機能の申告。`network` `storage` `dynamic-code` `wasm` `workers` `dom` `navigation` `clipboard` `media` `desktop` |
+| `permissions` | 任意 | 使う機能の申告。`network` `storage` `dynamic-code` `wasm` `workers` `dom` `navigation` `clipboard` `media` |
 | `dependencies` | 任意 | 先に有効化が必要なプラグイン id |
 | `recommends` | 任意 | 併用を推奨するプラグイン id（管理画面に表示） |
 | `locales` | 任意 | 言語ごとの `name` / `description` |

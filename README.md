@@ -15,7 +15,6 @@ Shading は scratch.mit.edu で動くことを最優先にした Scratch MOD で
 - **Looks（PenFX）**: ぼかし、グロー、色調補正などのシェーダーエフェクト。独自の GLSL シェーダーパッケージも読み込めます。
 - **プラグイン**: ブロック、エフェクト、エディターのタブなどを zip で追加できます。エフェクトの多くは公式プラグインとして配布しています。
 - **書き出し**: MP4、WebM（透過対応）、PNG 連番、1 フレームの PNG、音声のみの WAV
-- **デスクトップアプリ**: macOS / Windows 用の Electron アプリ
 
 ## ドキュメント
 
@@ -75,30 +74,6 @@ npx jest test/unit/plugins test/unit/util
 
 `npm run test:unit` は addons のテストのみを実行します。プラグインとエフェクトのテストは、隣に置いた
 shading-plugins のチェックアウト（または `SHADING_PLUGINS_DIR`）から公式プラグインを読み込みます。
-
-## Shading Desktop
-
-デスクトップアプリはこのリポジトリにあり、Web 版と同じ `build` の出力を使います。Electron はその出力を固定の
-localhost オリジンから配信するため、ブラウザ版のプロジェクトファイル、IndexedDB のデータ、プロジェクト形式と互換性があります。
-共同編集はどちらのアプリでも有効になっていません。
-
-```bash
-npm ci
-npm run build:desktop
-npm run electron:start
-```
-
-開発時は `npm run electron:dev` で webpack-dev-server と Electron を一緒に起動できます。
-
-`npm run package:desktop` で macOS と Windows のパッケージを作成します。出力先は `release/` で、macOS の `.dmg` / `.zip`、
-Windows の NSIS インストーラー `.exe`、ポータブル版 `.exe` が含まれます。展開済みのアプリフォルダーが必要な場合は
-`npm run package:desktop:dir` を使います。
-
-プロジェクトファイルは、アプリ内での選択、コマンドライン引数、OS のファイル関連付けのいずれでも開けます。保存は一時ファイルに
-書いてから置き換えるため途中で壊れず、未保存のプロジェクトを閉じるときは確認します。
-
-macOS では、起動前に Chromium の ANGLE Metal バックエンドを選択します。Scratch レンダラー、PenFX、Three.js のモデル描画が
-使う WebGL の経路はすべてこれで動きます。`--use-gl`、`--use-angle`、`--disable-gpu` を明示した場合はそちらを優先します。
 
 ## License
 

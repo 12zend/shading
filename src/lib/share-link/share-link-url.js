@@ -73,9 +73,7 @@ const buildSharePath = (payload, root) => {
 };
 
 const getShareOrigin = () => {
-    // The desktop app serves the editor from a private local origin; its links point at the public site.
-    const isDesktop = typeof window !== 'undefined' && Boolean(window.shadingDesktop);
-    if (!isDesktop && typeof location !== 'undefined' &&
+    if (typeof location !== 'undefined' &&
         (location.protocol === 'http:' || location.protocol === 'https:')) {
         return location.origin;
     }

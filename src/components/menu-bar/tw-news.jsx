@@ -1,5 +1,4 @@
 import React from 'react';
-import {isScratchDesktop} from '../../lib/isScratchDesktop';
 import CloseButton from '../close-button/close-button.jsx';
 import styles from './tw-news.css';
 
@@ -64,7 +63,7 @@ class TWNews extends React.Component {
         });
     }
     render () {
-        if (this.state.closed || isScratchDesktop()) {
+        if (this.state.closed) {
             return null;
         }
         return (

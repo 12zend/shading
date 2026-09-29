@@ -105,7 +105,6 @@ import oldtimeyLogo from './oldtimey-logo.svg';
 import sharedMessages from '../../lib/shared-messages';
 
 import SeeInsideButton from './tw-see-inside.jsx';
-import {notScratchDesktop} from '../../lib/isScratchDesktop.js';
 import {restartTutorial} from '../../lib/tutorial/tutorial-storage';
 
 const ariaMessages = defineMessages({
@@ -214,12 +213,10 @@ class MenuBar extends React.Component {
         bindAll(this, [
             'handleClickSeeInside',
             'handleClickNew',
-            'handleClickNewWindow',
             'handleClickRemix',
             'handleClickSave',
             'handleClickSaveAsCopy',
             'handleClickPackager',
-            'handleClickDesktopSettings',
             'handleClickRestorePoints',
             'handleClickShareLink',
             'handleClickOpenShareLink',
@@ -235,17 +232,9 @@ class MenuBar extends React.Component {
     }
     componentDidMount () {
         document.addEventListener('keydown', this.handleKeyPress);
-        if (typeof window !== 'undefined' && window.shadingDesktop &&
-            typeof window.shadingDesktop.onSaveRequest === 'function') {
-            this.removeDesktopSaveListener = window.shadingDesktop.onSaveRequest(() => {
-                if (this.props.handleSaveProject) return this.props.handleSaveProject();
-                return;
-            });
-        }
     }
     componentWillUnmount () {
         document.removeEventListener('keydown', this.handleKeyPress);
-        if (this.removeDesktopSaveListener) this.removeDesktopSaveListener();
     }
     handleClickNew () {
         // if the project is dirty, and user owns the project, we will autosave.
@@ -260,10 +249,6 @@ class MenuBar extends React.Component {
         if (readyToReplaceProject) {
             this.props.onClickNew(this.props.canSave && this.props.canCreateNew);
         }
-        this.props.onRequestCloseFile();
-    }
-    handleClickNewWindow () {
-        this.props.onClickNewWindow();
         this.props.onRequestCloseFile();
     }
     handleClickRemix () {
@@ -281,10 +266,6 @@ class MenuBar extends React.Component {
     handleClickPackager () {
         this.props.onClickPackager();
         this.props.onRequestCloseFile();
-    }
-    handleClickDesktopSettings () {
-        this.props.onClickDesktopSettings();
-        this.props.onRequestCloseSettings();
     }
     handleClickPlugins () {
         const plugins = this.props.vm.shadingPlugins;
@@ -575,10 +556,6 @@ class MenuBar extends React.Component {
                             isRtl={this.props.isRtl}
                             onClickAddonSettings={this.props.onClickAddonSettings}
                             onClickSettingsModal={this.props.onClickSettingsModal}
-                            onClickDesktopSettings={
-                                this.props.onClickDesktopSettings &&
-                                this.handleClickDesktopSettings
-                            }
                             // eslint-disable-next-line react/jsx-no-bind
                             onOpenCustomSettings={
                                 this.props.onClickAddonSettings &&
@@ -612,19 +589,6 @@ class MenuBar extends React.Component {
                                     >
                                         {newProjectMessage}
                                     </MenuItem>
-                                    {this.props.onClickNewWindow && (
-                                        <MenuItem
-                                            isRtl={this.props.isRtl}
-                                            onClick={this.handleClickNewWindow}
-                                        >
-                                            <FormattedMessage
-                                                defaultMessage="New window"
-                                                // eslint-disable-next-line max-len
-                                                description="Part of desktop app. Menu bar item that creates a new window."
-                                                id="tw.menuBar.newWindow"
-                                            />
-                                        </MenuItem>
-                                    )}
                                     {(this.props.canSave || this.props.canCreateCopy || this.props.canRemix) && (
                                         <MenuSection>
                                             {this.props.canSave && (
@@ -682,26 +646,24 @@ class MenuBar extends React.Component {
                                                             </MenuItem>
                                                         </React.Fragment>
                                                     )}
-                                                    {notScratchDesktop() && (
-                                                        <MenuItem
-                                                            onClick={this.getSaveToComputerHandler(downloadProject)}
-                                                        >
-                                                            {extended.available ? (
-                                                                <FormattedMessage
-                                                                    defaultMessage="Save to separate file..."
-                                                                    // eslint-disable-next-line max-len
-                                                                    description="Download the project once, without being able to easily save to the same spot"
-                                                                    id="tw.oldDownload"
-                                                                />
-                                                            ) : (
-                                                                <FormattedMessage
-                                                                    defaultMessage="Save to your computer"
-                                                                    description="Menu bar item for downloading a project to your computer" // eslint-disable-line max-len
-                                                                    id="gui.menuBar.downloadToComputer"
-                                                                />
-                                                            )}
-                                                        </MenuItem>
-                                                    )}
+                                                    <MenuItem
+                                                        onClick={this.getSaveToComputerHandler(downloadProject)}
+                                                    >
+                                                        {extended.available ? (
+                                                            <FormattedMessage
+                                                                defaultMessage="Save to separate file..."
+                                                                // eslint-disable-next-line max-len
+                                                                description="Download the project once, without being able to easily save to the same spot"
+                                                                id="tw.oldDownload"
+                                                            />
+                                                        ) : (
+                                                            <FormattedMessage
+                                                                defaultMessage="Save to your computer"
+                                                                description="Menu bar item for downloading a project to your computer" // eslint-disable-line max-len
+                                                                id="gui.menuBar.downloadToComputer"
+                                                            />
+                                                        )}
+                                                    </MenuItem>
                                                 </React.Fragment>
                                             )}
                                         </SB3Downloader>
@@ -1072,7 +1034,6 @@ MenuBar.propTypes = {
     ]),
     onClickAccount: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
-    onClickDesktopSettings: PropTypes.func,
     onClickPackager: PropTypes.func,
     onClickRestorePoints: PropTypes.func,
     onClickShareLink: PropTypes.func,
@@ -1082,7 +1043,6 @@ MenuBar.propTypes = {
     onClickLogin: PropTypes.func,
     onClickMode: PropTypes.func,
     onClickNew: PropTypes.func,
-    onClickNewWindow: PropTypes.func,
     onClickRemix: PropTypes.func,
     onClickSave: PropTypes.func,
     onClickSaveAsCopy: PropTypes.func,

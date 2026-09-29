@@ -2,7 +2,7 @@ import {decodeText} from './archive';
 
 // Static checks run on every file of a plugin before the user decides to install it. Plugins run with the same
 // privileges as the editor, so this cannot prove a plugin safe: it points out code that reaches outside the editor
-// (network, storage, navigation, desktop bridge), loads further code, or is hard to review. Obfuscated code can
+// (network, storage, navigation), loads further code, or is hard to review. Obfuscated code can
 // evade any static check; the review dialog says so.
 
 /* eslint-disable max-len */
@@ -104,15 +104,6 @@ const RULES = [
         pattern: /\b(?:window|top|parent|self|document)\s*\.\s*location\s*(?:=|\.\s*(?:href\s*=|assign\s*\(|replace\s*\())|\blocation\s*\.\s*href\s*=|\bwindow\s*\.\s*open\s*\(|\.\s*opener\b/g,
         en: 'Navigates away from the editor or opens other windows (unsaved work could be lost).',
         ja: 'エディターから別ページへ移動、または別ウィンドウを開きます（未保存の作業が失われる可能性があります）。'
-    },
-    {
-        id: 'desktop-bridge',
-        severity: 'high',
-        permission: 'desktop',
-        files: 'script',
-        pattern: /\bshadingDesktop\b|\bipcRenderer\b|\brequire\s*\(\s*['"`](?:child_process|fs|os|net|http|https|electron|vm|worker_threads|module)['"`]\s*\)|\bprocess\s*\.\s*(?:env|exit|binding|versions|platform)\b/g,
-        en: 'Uses desktop-app or Node.js interfaces that can reach files on your computer.',
-        ja: 'デスクトップアプリやNode.jsの機能を使います。パソコン上のファイルに触れる可能性があります。'
     },
     {
         id: 'global-hooks',

@@ -9,7 +9,6 @@ import MenuLabel from './tw-menu-label.jsx';
 import TWAccentThemeMenu from './tw-theme-accent.jsx';
 import TWGuiThemeMenu from './tw-theme-gui.jsx';
 import TWBlocksThemeMenu from './tw-theme-blocks.jsx';
-import TWDesktopSettings from './tw-desktop-settings.jsx';
 
 import menuBarStyles from './menu-bar.css';
 
@@ -18,7 +17,6 @@ const SettingsMenu = ({
     canChangeTheme,
     isRtl,
     onClickAddonSettings,
-    onClickDesktopSettings,
     onClickSettingsModal,
     onOpenCustomSettings,
     onRequestClose,
@@ -42,7 +40,7 @@ const SettingsMenu = ({
             open={settingsMenuOpen}
             place={isRtl ? 'left' : 'right'}
         >
-            {(canChangeLanguage || canChangeTheme || onClickDesktopSettings) && (
+            {(canChangeLanguage || canChangeTheme) && (
                 <MenuSection>
                     {canChangeLanguage && <LanguageMenu onRequestCloseSettings={onRequestClose} />}
                     {canChangeTheme && (
@@ -54,7 +52,6 @@ const SettingsMenu = ({
                             <TWAccentThemeMenu />
                         </React.Fragment>
                     )}
-                    {onClickDesktopSettings && <TWDesktopSettings onClick={onClickDesktopSettings} />}
                 </MenuSection>
             )}
             {(onClickAddonSettings || onClickSettingsModal) && (
@@ -98,7 +95,6 @@ SettingsMenu.propTypes = {
     canChangeTheme: PropTypes.bool,
     isRtl: PropTypes.bool,
     onClickAddonSettings: PropTypes.func,
-    onClickDesktopSettings: PropTypes.func,
     onClickSettingsModal: PropTypes.func,
     onOpenCustomSettings: PropTypes.func,
     onRequestClose: PropTypes.func,

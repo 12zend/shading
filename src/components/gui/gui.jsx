@@ -145,8 +145,6 @@ const GUIComponent = props => {
         onClickAccountNav,
         onCloseAccountNav,
         onClickAddonSettings,
-        onClickDesktopSettings,
-        onClickNewWindow,
         onClickPackager,
         onLogOut,
         onOpenRegistration,
@@ -295,7 +293,6 @@ const GUIComponent = props => {
                 {isBrowserSupported() ? null : (
                     <BrowserModal
                         isRtl={isRtl}
-                        onClickDesktopSettings={onClickDesktopSettings}
                     />
                 )}
                 {tipsLibraryVisible ? (
@@ -350,8 +347,6 @@ const GUIComponent = props => {
                     onClickAbout={onClickAbout}
                     onClickAccountNav={onClickAccountNav}
                     onClickAddonSettings={onClickAddonSettings}
-                    onClickDesktopSettings={onClickDesktopSettings}
-                    onClickNewWindow={onClickNewWindow}
                     onClickPackager={onClickPackager}
                     onClickLogo={onClickLogo}
                     onCloseAccountNav={onCloseAccountNav}
@@ -674,8 +669,6 @@ GUIComponent.propTypes = {
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
     onClickAddonSettings: PropTypes.func,
-    onClickDesktopSettings: PropTypes.func,
-    onClickNewWindow: PropTypes.func,
     onClickPackager: PropTypes.func,
     onClickLogo: PropTypes.func,
     onCloseAccountNav: PropTypes.func,

@@ -12,8 +12,7 @@ const MAX_EXPANDED_BYTES = 768 * 1024 * 1024;
 const MAX_FILES = 8000;
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const PERMISSIONS = [
-    'network', 'storage', 'dynamic-code', 'wasm', 'workers', 'dom', 'navigation', 'clipboard', 'media',
-    'desktop'
+    'network', 'storage', 'dynamic-code', 'wasm', 'workers', 'dom', 'navigation', 'clipboard', 'media'
 ];
 const IGNORED_ENTRY = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$)/;
 

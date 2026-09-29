@@ -8,7 +8,6 @@ import Modal from '../../containers/modal.jsx';
 
 import styles from './prompt.css';
 import {SCRATCH_MAX_CLOUD_VARIABLES} from '../../lib/tw-cloud-limits.js';
-import isScratchDesktop from '../../lib/isScratchDesktop.js';
 
 
 const messages = defineMessages({
@@ -152,28 +151,16 @@ const PromptComponent = props => (
 
             {props.cloudSelected && props.canAddCloudVariable && (
                 <Box className={styles.infoMessage}>
-                    {isScratchDesktop() ? (
-                        <FormattedMessage
-                            // eslint-disable-next-line max-len
-                            defaultMessage="In the desktop app, cloud variables sync between all desktop app windows on this computer. Upload the project to Scratch or use a tool like the {packager} for them to sync globally."
-                            description="Appears when creating a cloud variable in the desktop app"
-                            values={{
-                                packager: <Packager />
-                            }}
-                            id="tw.desktopCloud"
-                        />
-                    ) : (
-                        <FormattedMessage
-                            /* eslint-disable-next-line max-len */
-                            defaultMessage="Although you can create cloud variables, they won't work unless this project is uploaded to Scratch or converted using a tool like the {packager}."
-                            // eslint-disable-next-line max-len
-                            description="Reminder that cloud variables may not work when the editor is open. {packager} is replaced with a link to open the TurboWarp Packager, always English."
-                            values={{
-                                packager: <Packager />
-                            }}
-                            id="tw.cantUseCloud"
-                        />
-                    )}
+                    <FormattedMessage
+                        /* eslint-disable-next-line max-len */
+                        defaultMessage="Although you can create cloud variables, they won't work unless this project is uploaded to Scratch or converted using a tool like the {packager}."
+                        // eslint-disable-next-line max-len
+                        description="Reminder that cloud variables may not work when the editor is open. {packager} is replaced with a link to open the TurboWarp Packager, always English."
+                        values={{
+                            packager: <Packager />
+                        }}
+                        id="tw.cantUseCloud"
+                    />
                 </Box>
             )}
 

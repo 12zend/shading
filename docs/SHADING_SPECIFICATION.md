@@ -500,37 +500,11 @@ MovieAssetManager が扱う主要な project JSON key は次のとおり。
 
 プロジェクト読み込み時は marker だけに依存せず、block opcode と asset key から Movie feature を再検出できる。これにより marker がない旧ファイルも Movie プロジェクトとして扱える。
 
-### 10.3 保存の安全性
-
-デスクトップ版の保存は、一時ディレクトリへ書き込み、flush・sync 後に対象ファイルへ置換する。置換に失敗した場合は元ファイルを復元し、保存途中の内容で元ファイルを切り詰めない。
-
-## 11. デスクトップ版
-
-- Electron はブラウザー版と同じ `build` 出力を使用する。
-- ローカルの安定した localhost origin からアプリを配信し、ブラウザー版とプロジェクト形式・IndexedDB の互換性を保つ。
-- プロジェクトファイルの関連付けは `.shade`、`.mb3`、`.sb3`、`.sb2`、`.sb`。
-- 起動時のファイル指定、OS の open-file、ファイル picker を同じ読み込み経路へ集約する。
-- 未保存変更がある状態で閉じる場合は確認を行う。
-- macOS では明示的な GPU スイッチがない限り ANGLE Metal backend を使用する。
-- `--use-gl`、`--use-angle`、`--disable-gpu` などの明示的な起動指定は尊重する。
-- パッケージングでは macOS の `.app` 向けターゲットに加えて、Windows の NSIS インストーラー `.exe` と portable `.exe` を生成する。
-
-開発・パッケージングの主なコマンドは次のとおり。
-
-```sh
-npm ci
-npm run build:desktop
-npm run electron:start
-npm run electron:dev
-npm run package:desktop
-npm run package:desktop:dir
-```
-
-## 12. 互換性専用の非表示ブロック
+## 11. 互換性専用の非表示ブロック
 
 この節の opcode は、現在のツールボックスに表示する機能ではない。`getInfo()`、primitive、compiler compatibility、project format の検出に残っている場合があっても、現行機能として新規利用することを前提にしない。
 
-### 12.1 Objects の非表示ブロック
+### 11.1 Objects の非表示ブロック
 
 #### 旧アニメーション／カーブ系
 
@@ -548,7 +522,7 @@ npm run package:desktop:dir
 `objects_timeRange`、`objects_timeScale`、`objects_timeLoop`、`objects_timeFreeze`、
 `objects_timeReverse`、`objects_timeRemap`
 
-### 12.2 旧 Movie Looks／Sound opcode
+### 11.2 旧 Movie Looks／Sound opcode
 
 標準 Looks カテゴリを表示しないため、次の Movie opcode は旧プロジェクトのロード・実行用である。
 
@@ -567,7 +541,7 @@ npm run package:desktop:dir
 
 `looks_rendervideo` は旧 exact-frame 描画のために残り、直後の stamp が正しい video frame を消費できるよう内部で blocking render として扱う。
 
-### 12.3 My Blocks Scene
+### 11.3 My Blocks Scene
 
 My Blocks Scene は `myBlocksScene` カテゴリとして My Blocks の直下に表示する。Scene の定義は `myblocksscene_return` の条件と RGB を、内蔵 `scene.frag` の `vec3 scene(vec3 p)` 関数へコンパイルする。条件には Scratch の全標準演算ブロックを使用でき、条件が true の点は RGB を返して塗りつぶし、false の点は `vec3(0.0)` を返して空洞にする。`p x`、`p y`、`p z` はワールド空間の `p.x`、`p.y`、`p.z` を返す。
 
@@ -577,7 +551,7 @@ Scene の式は固定のワールド空間ボックスで切らない。した�
 
 Scene の固定ライトは持たない。`lights === null` のときは Objects の studio lighting、`looks_addpointlight`／`looks_addlight` または `looks_clearlight` 実行後は Objects と同じ authored light 配列を使い、位置、色、強度、半径、スポット角、影の強さを Scene のライティング uniform へ渡す。
 
-## 13. 実装上のエラーと状態管理
+## 12. 実装上のエラーと状態管理
 
 - 非同期資産の失敗は VM を Promise 待ちにせず、MovieAssetManager の render error／diagnostics 経路へ通知する。
 - 対象削除、停止、シーク、プロジェクト変更、render cache generation の更新時は、対象に紐づく古い queue と bitmap を無効化する。
@@ -587,7 +561,7 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 - 書き出し中の frame エラーは `renderingFrameErrors` に frame、時刻、message を保存し、PNG sequence では `render-errors.json` として出力できる。
 - PenFX の compile/render エラーは GL state を復元して後続描画を保護する。
 
-## 14. 仕様の一次ソース
+## 13. 仕様の一次ソース
 
 | ファイル | 仕様上の責務 |
 | --- | --- |
@@ -609,7 +583,6 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | `src/lib/my-blocks-scene.js` | My Blocks Scene compiler、内蔵 `scene.frag` への関数合成、PenFX custom shader 実行 |
 | `src/lib/my-blocks-scene-blocks.js` | My Blocks Scene の Blockly 定義、カテゴリ、procedure mutation |
 | `scratch-render/src/model-runtime.js` | Three.js model、camera、light、depth rendering |
-| `electron/main.js`、`electron/file-store.js`、`electron/graphics.js` | デスクトップ起動、保存、GPU backend |
 | `src/lib/tutorial/`、`src/components/shading-tutorial/` | 初回チュートリアルのページ、文言、ブロックの段階、表示 |
 
 関連する検証コードは `test/unit/util/tutorial-blocks.test.js`、`test/unit/util/tutorial-steps.test.js`、`test/unit/components/shading-tutorial.test.jsx`、`test/unit/util/movie-project-roundtrip.test.js`、`test/unit/util/pen-fx-custom-shaders.test.js`、`test/unit/util/object-blocks.test.js`、`test/unit/util/movie-asset-manager.test.js`、`test/unit/components/timeline.test.jsx` にある。

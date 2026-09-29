@@ -5,7 +5,6 @@ import {connect} from 'react-redux';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import {openUsernameModal} from '../reducers/modals';
 import {closeEditMenu} from '../reducers/menus';
-import isScratchDesktop from '../lib/isScratchDesktop';
 
 const messages = defineMessages({
     cannotChangeWhileRunning: {
@@ -23,7 +22,7 @@ class ChangeUsername extends React.Component {
         ]);
     }
     changeUsername () {
-        if (this.props.running && !isScratchDesktop()) {
+        if (this.props.running) {
             // eslint-disable-next-line no-alert
             alert(this.props.intl.formatMessage(messages.cannotChangeWhileRunning));
             return;

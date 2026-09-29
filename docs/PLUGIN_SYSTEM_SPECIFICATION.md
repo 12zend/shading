@@ -102,7 +102,7 @@ src/lib/plugins/
 | `dependencies` / `recommends` | id の配列（≤64 件）。重複除去 | `[]` |
 | `locales` | `{locale: {name, description}}`、最大 32 言語 | `{}` |
 
-`permissions` の列挙値: `network` `storage` `dynamic-code` `wasm` `workers` `dom` `navigation` `clipboard` `media` `desktop`。
+`permissions` の列挙値: `network` `storage` `dynamic-code` `wasm` `workers` `dom` `navigation` `clipboard` `media`。
 これは**申告**であり実行時の制限ではありません。検査結果との突き合わせ（未申告の表示）にのみ使います。
 
 ### 3.4 アーカイブのハッシュ
@@ -136,7 +136,7 @@ src/lib/plugins/
 
 | 重大度 | ルール id（対応 permission） |
 | --- | --- |
-| 高 | `dynamic-code`(dynamic-code), `remote-code`(network), `script-injection`(dom), `markup-script`(dom), `credentials`, `navigation`(navigation), `desktop-bridge`(desktop), `global-hooks`, `service-worker`, `mining`, `executable-file`, `symlink` |
+| 高 | `dynamic-code`(dynamic-code), `remote-code`(network), `script-injection`(dom), `markup-script`(dom), `credentials`, `navigation`(navigation), `global-hooks`, `service-worker`, `mining`, `executable-file`, `symlink` |
 | 注意 | `network`(network), `external-url`(network), `browser-storage`(storage), `media-access`, `clipboard`, `wasm`, `workers`, `iframe`, `embedded-blob`, `escaped-code`, `wasm-binary`(wasm), `unscannable` |
 | 低 | `window-messaging`, `html-injection`, `encoded-strings`, `css-import`, `minified` |
 

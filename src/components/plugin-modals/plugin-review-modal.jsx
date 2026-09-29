@@ -32,8 +32,7 @@ const PERMISSION_TEXT = {
     'dom': ['Page contents', 'ページの内容の変更'],
     'navigation': ['Opens pages', '別ページを開く'],
     'clipboard': ['Clipboard', 'クリップボード'],
-    'media': ['Camera / microphone / location', 'カメラ・マイク・位置情報'],
-    'desktop': ['Desktop app features', 'デスクトップアプリの機能']
+    'media': ['Camera / microphone / location', 'カメラ・マイク・位置情報']
 };
 
 const formatBytes = bytes => {

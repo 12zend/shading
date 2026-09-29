@@ -48,7 +48,6 @@ import vmManagerHOC from '../lib/vm-manager-hoc.jsx';
 import cloudManagerHOC from '../lib/cloud-manager-hoc.jsx';
 
 import GUIComponent from '../components/gui/gui.jsx';
-import {setIsScratchDesktop} from '../lib/isScratchDesktop.js';
 import TWFullScreenResizerHOC from '../lib/tw-fullscreen-resizer-hoc.jsx';
 import TWThemeManagerHOC from './tw-theme-manager-hoc.jsx';
 
@@ -82,7 +81,6 @@ class GUI extends React.Component {
         };
     }
     componentDidMount () {
-        setIsScratchDesktop(this.props.isScratchDesktop);
         this.props.onStorageInit(storage);
         installShadingFeatures(this.props.vm);
         // Installed plugins load before any project; vm.deserializeProject waits for them.
@@ -128,7 +126,6 @@ class GUI extends React.Component {
             cloudHost,
             error,
             isError,
-            isScratchDesktop,
             isShowingProject,
             onProjectLoaded,
             onStorageInit,
@@ -168,7 +165,6 @@ GUI.propTypes = {
     isEmbedded: PropTypes.bool,
     isFullScreen: PropTypes.bool,
     isLoading: PropTypes.bool,
-    isScratchDesktop: PropTypes.bool,
     isShowingProject: PropTypes.bool,
     isTotallyNormal: PropTypes.bool,
     loadingStateVisible: PropTypes.bool,
@@ -185,7 +181,6 @@ GUI.propTypes = {
 };
 
 GUI.defaultProps = {
-    isScratchDesktop: false,
     isTotallyNormal: false,
     onStorageInit: storageInstance => storageInstance.addOfficialScratchWebStores(),
     onProjectLoaded: () => {},

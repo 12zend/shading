@@ -4,7 +4,6 @@ import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 import {connect} from 'react-redux';
 import {setCloud} from '../reducers/tw';
-import isScratchDesktop from '../lib/isScratchDesktop';
 
 const messages = defineMessages({
     cloudUnavailableAlert: {
@@ -54,7 +53,7 @@ CloudVariablesToggler.propTypes = {
 const mapStateToProps = state => ({
     username: state.scratchGui.tw.username,
     enabled: state.scratchGui.tw.cloud,
-    canUseCloudVariables: isScratchDesktop() || !state.scratchGui.mode.hasEverEnteredEditor
+    canUseCloudVariables: !state.scratchGui.mode.hasEverEnteredEditor
 });
 
 const mapDispatchToProps = dispatch => ({
