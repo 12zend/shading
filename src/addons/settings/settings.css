@@ -20,7 +20,7 @@
 body {
     background-color: $page-background;
     color: $page-foreground;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     margin: 0;
 }
 
@@ -499,7 +499,7 @@ a:active, a:focus {
     border-right-width: 1px;
 }
 .select-option.selected {
-    color: white;
+    color: var(--accent-foreground);
     background: $looks-secondary;
 }
 .select-option:active, .select-option:focus-within {

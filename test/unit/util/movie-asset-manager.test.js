@@ -1397,6 +1397,38 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.runtime.stopAll).toHaveBeenCalled();
     });
 
+    test.each([
+        [10, 20],
+        [3, 10],
+        [20, 5]
+    ])('preview uses the applied duration after rendering to %s and applying %s', (renderEnd, duration) => {
+        const manager = makeTimelineManager();
+        const clock = manager.runtime.ioDevices.clock;
+        manager.timeline.renderEndTime = renderEnd;
+        manager.addRenderingFrame = jest.fn();
+
+        expect(manager.updateTimelineSettings({duration, framerate: 30})).toBeUndefined();
+        manager.playTimeline();
+
+        const previewTime = Math.min(renderEnd + 0.5, duration - 0.5);
+        clock.projectTimerWithoutOffset.mockReturnValue(previewTime);
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.timeline.currentTime).toBe(previewTime);
+        expect(manager.timeline.playing).toBe(true);
+
+        clock.projectTimerWithoutOffset.mockReturnValue(duration);
+        manager.handleTimelineBeforeExecute();
+        manager.handleTimelineAfterExecute();
+
+        expect(manager.timeline.currentTime).toBe(duration);
+        expect(manager.timeline.playing).toBe(false);
+        expect(clock._paused).toBe(true);
+        expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        expect(manager.emit).not.toHaveBeenCalledWith('timelineRenderComplete', expect.anything());
+    });
+
     test('keeps timer offsets out of timeline clock advancement', () => {
         const manager = makeTimelineManager();
         const clock = manager.runtime.ioDevices.clock;

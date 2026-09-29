@@ -672,11 +672,9 @@ const MovieAssetManagerTimelineMethods = {
             const completedRendering = this.timeline.recording;
             this.timeline.recording = false;
             if (completedRendering) this.emit('timelineRenderComplete', this.getTimelineState());
-        } else if (this.timeline.playing && this.timeline.currentTime >= this.getRenderEndTime()) {
-            const completedRendering = this.timeline.recording;
-            this.timeline.recording = false;
+        } else if (this.timeline.playing && this.timeline.currentTime >= this.timeline.duration) {
+            // Preview playback follows the project duration, independent of the last export range.
             this.pauseTimeline();
-            if (completedRendering) this.emit('timelineRenderComplete', this.getTimelineState());
         }
     }
 };

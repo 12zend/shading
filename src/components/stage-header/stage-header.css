@@ -33,12 +33,13 @@
     flex-shrink: 0;
     align-items: center;
     height: $stage-menu-height;
-    padding-top: $space;
-    padding-bottom: $space;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
 }
 
 .stage-size-row {
     display: flex;
+    gap: 0.375rem;
 }
 
 .stage-size-toggle-group {
@@ -46,35 +47,38 @@
 }
 
 .stage-size-row > *, .unselect-wrapper {
-    /* Use a white background so semi-transparent selection states look correct */
-    background-color: $ui-white;
-    border-radius: $form-radius;
+    border-radius: var(--radius-m);
 }
 
-[dir="ltr"] .stage-size-toggle-group,
 [dir="ltr"] .settings-button {
-    margin-right: .2rem;
+    margin-right: .25rem;
 }
 
-[dir="rtl"] .stage-size-toggle-group,
 [dir="rtl"] .settings-button {
-    margin-left: .2rem;
+    margin-left: .25rem;
 }
 
 .stage-button {
-    display: block;
-    border: 1px solid $ui-black-transparent;
-    border-radius: $form-radius;
-    width: calc(2rem + 2px);
-    height: calc(2rem + 2px);
-    background: $ui-white;
-    padding: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-m);
+    width: 1.75rem;
+    height: 1.625rem;
+    background: transparent;
+    padding: 0.3125rem;
     user-select: none;
     cursor: pointer;
+    transition: background-color 120ms ease-out;
+}
+
+.stage-button:hover {
+    background-color: $zone-3;
 }
 
 .stage-button:active {
-    background-color: $looks-transparent;
+    background-color: $zone-4;
 }
 
 .stage-button-icon {
@@ -90,4 +94,5 @@
 .fullscreen-buttons-row {
     /* relied on by addons */
     display: flex;
+    gap: 0.25rem;
 }

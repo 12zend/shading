@@ -5,6 +5,7 @@ import bindAll from 'lodash.bindall';
 import {connect} from 'react-redux';
 
 import {setProjectUnchanged} from '../reducers/project-changed';
+import {setProjectTitle} from '../reducers/project-title';
 import {
     LoadingStates,
     getIsCreatingNew,
@@ -26,6 +27,24 @@ import {ProjectUnsharedError, ProjectFetchError} from './tw-load-project-error';
 
 import VM from 'scratch-vm';
 import {fetchProjectMeta} from './tw-project-meta-fetcher-hoc.jsx';
+import {
+    buildSharePath,
+    getRootPath,
+    isSharePath,
+    takePendingSharePayload
+} from './share-link/share-link-url';
+
+const replaceURL = path => {
+    try {
+        history.replaceState(null, '', path);
+    } catch (error) {
+        // Browsers refuse URLs past their length limit; the project is loaded either way.
+        log.warn('Could not update the URL', error);
+    }
+};
+
+const isHTTP = () => typeof location !== 'undefined' &&
+    (location.protocol === 'http:' || location.protocol === 'https:');
 
 // TW: Temporary hack for project tokens
 const fetchProjectToken = async projectId => {
@@ -61,8 +80,11 @@ const ProjectFetcherHOC = function (WrappedComponent) {
         constructor (props) {
             super(props);
             bindAll(this, [
-                'fetchProject'
+                'fetchProject',
+                'fetchSharedProject'
             ]);
+            this.sharedProjectTitle = null;
+            this.sharedPlugins = null;
             storage.setProjectHost(props.projectHost);
             storage.setProjectToken(props.projectToken);
             storage.setAssetHost(props.assetHost);
@@ -94,6 +116,19 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             }
             if (this.props.isShowingProject && !prevProps.isShowingProject) {
                 this.props.onProjectUnchanged();
+                // Runs after TitledHOC (a child) has reset the title of the new project.
+                if (this.sharedProjectTitle !== null) {
+                    if (this.sharedProjectTitle) this.props.onSetProjectTitle(this.sharedProjectTitle);
+                    this.sharedProjectTitle = null;
+                }
+                // The project is open (plugin blocks show as placeholders); now offer its embedded plugins.
+                if (this.sharedPlugins) {
+                    const manager = this.props.vm.shadingPlugins;
+                    if (manager && typeof manager.offerSharedPlugins === 'function') {
+                        manager.offerSharedPlugins(this.sharedPlugins);
+                    }
+                    this.sharedPlugins = null;
+                }
             }
             if (this.props.isShowingProject && (prevProps.isLoadingProject || prevProps.isCreatingNew)) {
                 this.props.onActivateTab(BLOCKS_TAB_INDEX);
@@ -105,6 +140,15 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             // the project shouldn't be running while fetching the new project
             this.props.vm.clear();
             this.props.vm.quit();
+            this.sharedProjectTitle = null;
+            this.sharedPlugins = null;
+
+            const sharePayload = takePendingSharePayload();
+            if (sharePayload) return this.fetchSharedProject(sharePayload, loadingState);
+            if (isHTTP() && isSharePath()) {
+                // Leaving a shared project (e.g. File > New): drop its link from the address bar.
+                replaceURL(`${getRootPath()}${location.search}`);
+            }
 
             let assetPromise;
             // In case running in node...
@@ -159,6 +203,24 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                     log.error(err);
                 });
         }
+        fetchSharedProject (payload, loadingState) {
+            // Loaded lazily: the codec and its Brotli WebAssembly are only needed for share links.
+            return import(/* webpackChunkName: "share-link" */ './share-link/share-link')
+                .then(shareLink => shareLink.decodeShareLink(payload))
+                .then(({title, projectData, plugins}) => {
+                    this.sharedProjectTitle = title;
+                    this.sharedPlugins = plugins.length ? plugins : null;
+                    if (isHTTP()) {
+                        const sharePath = buildSharePath(payload);
+                        if (`${location.pathname}${location.hash}` !== sharePath) replaceURL(sharePath);
+                    }
+                    this.props.onFetchedProjectData(projectData, loadingState);
+                })
+                .catch(err => {
+                    this.props.onError(err);
+                    log.error(err);
+                });
+        }
         render () {
             const {
                 /* eslint-disable no-unused-vars */
@@ -170,6 +232,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                 onError: onErrorProp,
                 onFetchedProjectData: onFetchedProjectDataProp,
                 onProjectUnchanged,
+                onSetProjectTitle,
                 projectHost,
                 projectId,
                 reduxProjectId,
@@ -199,6 +262,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
         onError: PropTypes.func,
         onFetchedProjectData: PropTypes.func,
         onProjectUnchanged: PropTypes.func,
+        onSetProjectTitle: PropTypes.func,
         projectHost: PropTypes.string,
         projectToken: PropTypes.string,
         projectId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -226,7 +290,8 @@ const ProjectFetcherHOC = function (WrappedComponent) {
         onFetchedProjectData: (projectData, loadingState) =>
             dispatch(onFetchedProjectData(projectData, loadingState)),
         setProjectId: projectId => dispatch(setProjectId(projectId)),
-        onProjectUnchanged: () => dispatch(setProjectUnchanged())
+        onProjectUnchanged: () => dispatch(setProjectUnchanged()),
+        onSetProjectTitle: title => dispatch(setProjectTitle(title))
     });
     // Allow incoming props to override redux-provided props. Used to mock in tests.
     const mergeProps = (stateProps, dispatchProps, ownProps) => Object.assign(

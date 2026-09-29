@@ -9,41 +9,31 @@ can set a width for example or what it should do in a flex box (eg. grow).
 */
 
 .title-field {
-    border: 1px dashed $ui-black-transparent;
-    border-radius: $form-radius;
-    -webkit-border-radius: $form-radius;
-    -moz-border-radius: $form-radius;
+    border: 1px solid transparent;
+    border-radius: var(--radius-m);
     background-color: $project-title-inactive;
     background-clip: padding-box;
-    -webkit-background-clip: padding-box;
-    height: auto;
-    padding: .5rem;
-}
-
-.title-field {
-    color: $menu-bar-foreground;
-    font-weight: bold;
-    font-size: .8rem;
+    height: 1.625rem;
+    padding: 0 0.5rem;
+    color: $text-primary;
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
 }
 
 .title-field::placeholder {
-    color: $menu-bar-foreground;
-    opacity: 0.8;
-    font-weight: normal;
-    font-size: .8rem;
-    font-style: italic;
+    color: $zone-8;
+    font-weight: 400;
 }
 
 .title-field:hover {
-    background-color: $project-title-hover;
-    border-color: $ui-black-transparent; /* dont use hover border from custom input */
+    background-color: $toolbar-hover;
 }
 
 .title-field:focus {
-    outline:none;
-    border: 1px solid $ui-transparent;
-    -webkit-box-shadow: 0 0 0 calc($space * .5) $ui-white-transparent-default;
-    box-shadow: 0 0 0 calc($space * .5) $ui-white-transparent-default;
-    background-color: $ui-white;
+    outline: none;
+    box-shadow: var(--focus-ring);
+    background-color: $input-background;
     color: $text-primary;
 }

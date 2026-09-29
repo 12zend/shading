@@ -19,7 +19,7 @@
 .shader-note {
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     background: rgba(107, 86, 217, 0.12);
     color: $text-primary;
     font-size: 0.875rem;
@@ -53,7 +53,7 @@
 .option-card {
     background: $ui-white;
     border: 2px solid $ui-black-transparent;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     padding: calc($space * 2);
     text-align: center;
     flex-grow: 1;
@@ -105,7 +105,7 @@
 .button-row button.ok-button {
     background: $looks-secondary;
     border: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }
 
 [dir="ltr"] .button-row button + button {

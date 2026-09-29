@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import React from 'react';
 import {OrderedMap} from 'immutable';
 import configureStore from 'redux-mock-store';

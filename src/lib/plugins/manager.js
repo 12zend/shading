@@ -587,6 +587,16 @@ class ShadingPluginManager extends EventEmitter {
         this.emit('openManager');
     }
 
+    /**
+     * Offer the plugins embedded in a project opened from a share link. The editor lists them for the user;
+     * installing any of them still goes through requestReview().
+     * @param {Array<{id: string, name: string, version: string, file: Blob}>} plugins Embedded plugins.
+     */
+    offerSharedPlugins (plugins) {
+        const offered = [].concat(plugins || []).filter(plugin => plugin && plugin.id && plugin.file);
+        if (offered.length) this.emit('sharedPlugins', offered);
+    }
+
     notify (pluginId, message) {
         this.emit('notify', {pluginId, message: String(message)});
     }

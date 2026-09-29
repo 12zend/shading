@@ -61,3 +61,54 @@ scratch-render/playground
 
 # Act
 scratch-render/.secrets
+
+# Integrated scratch-blocks (upstream ignore rules)
+# OSX
+scratch-blocks/.DS_Store
+
+# NPM
+scratch-blocks/node_modules
+scratch-blocks/npm-*
+
+# Localization / I18N
+scratch-blocks/**/common.pyc
+scratch-blocks/**/.settings
+scratch-blocks/**/.project
+scratch-blocks/**/*.pyc
+scratch-blocks/**/*.komodoproject
+scratch-blocks/nbproject/private/
+
+# Unused by scratch-blocks
+scratch-blocks/**/dart_compressed.js
+scratch-blocks/**/javascript_compressed.js
+scratch-blocks/**/lua_compressed.js
+scratch-blocks/**/php_compressed.js
+scratch-blocks/**/python_compressed.js
+
+# Editor
+scratch-blocks/**/.vscode
+
+# Build
+scratch-blocks/accessible/*
+scratch-blocks/dist
+scratch-blocks/msg/js/*
+!scratch-blocks/msg/js/en.js
+scratch-blocks/msg/json/*
+!scratch-blocks/msg/json/en.json
+scratch-blocks/blockly_compressed_horizontal.js
+scratch-blocks/blockly_compressed_vertical.js
+scratch-blocks/blockly_uncompressed_horizontal.js
+scratch-blocks/blockly_uncompressed_vertical.js
+scratch-blocks/blocks_compressed_horizontal.js
+scratch-blocks/blocks_compressed_vertical.js
+scratch-blocks/blocks_compressed.js
+scratch-blocks/gh-pages/main.js
+scratch-blocks/gh-pages/playgrounds
+scratch-blocks/gh-pages/Gemfile.lock
+scratch-blocks/gh-pages/closure-library
+scratch-blocks/gh-pages/_site
+scratch-blocks/*compiler*.jar
+scratch-blocks/local_blockly_compressed_vertical.js
+scratch-blocks/chromedriver
+# --flagfiles used on Windows
+scratch-blocks/*.config

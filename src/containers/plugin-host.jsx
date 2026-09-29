@@ -3,6 +3,7 @@ import React from 'react';
 import {connect} from 'react-redux';
 import bindAll from 'lodash.bindall';
 import PluginReviewModal from '../components/plugin-modals/plugin-review-modal.jsx';
+import SharedPluginsModal from '../components/plugin-modals/shared-plugins-modal.jsx';
 import {localize} from '../lib/movie-block-l10n';
 import {activateTab, PLUGINS_TAB_INDEX} from '../reducers/editor-tab';
 import styles from '../components/plugin-modals/plugin-modals.css';
@@ -22,10 +23,14 @@ class PluginHost extends React.Component {
             'handleMissing',
             'handleNotify',
             'handleInstall',
-            'handleCancelReview'
+            'handleCancelReview',
+            'handleSharedPlugins',
+            'handleSharedReview',
+            'handleCloseShared'
         ]);
         this.state = {
             review: null,
+            shared: null,
             toast: null
         };
         this.manager = null;
@@ -43,6 +48,7 @@ class PluginHost extends React.Component {
         this.manager.removeListener('openManager', this.handleOpenManager);
         this.manager.removeListener('missingPlugins', this.handleMissing);
         this.manager.removeListener('notify', this.handleNotify);
+        this.manager.removeListener('sharedPlugins', this.handleSharedPlugins);
     }
     attach (manager) {
         if (this.manager) return;
@@ -52,6 +58,7 @@ class PluginHost extends React.Component {
         manager.on('openManager', this.handleOpenManager);
         manager.on('missingPlugins', this.handleMissing);
         manager.on('notify', this.handleNotify);
+        manager.on('sharedPlugins', this.handleSharedPlugins);
     }
     t (en, ja) {
         return localize(this.props.locale, en, ja);
@@ -102,6 +109,26 @@ class PluginHost extends React.Component {
                 this.showToast(`${this.t('The plugin could not start', 'プラグインを開始できませんでした')}: ${error.message}`);
             });
     }
+    handleSharedPlugins (plugins) {
+        const shared = plugins.map(plugin => {
+            const record = this.manager.records.get(plugin.id);
+            let status = 'installed';
+            if (!record || record.state === 'error') status = 'missing';
+            else if (record.manifest.version !== plugin.version) status = 'different';
+            return Object.assign({}, plugin, {status, installedVersion: record ? record.manifest.version : ''});
+        });
+        // Nothing to offer when this editor already has exactly these versions.
+        if (shared.every(plugin => plugin.status === 'installed')) return;
+        this.setState({shared});
+    }
+    handleSharedReview (ids) {
+        const files = this.state.shared.filter(plugin => ids.includes(plugin.id)).map(plugin => plugin.file);
+        this.setState({shared: null});
+        if (files.length) this.manager.requestReview(files);
+    }
+    handleCloseShared () {
+        this.setState({shared: null});
+    }
     handleCancelReview () {
         this.manager.cancelReview();
         this.setState({review: null});
@@ -109,6 +136,14 @@ class PluginHost extends React.Component {
     render () {
         return (
             <React.Fragment>
+                {this.state.shared && !this.state.review ? (
+                    <SharedPluginsModal
+                        locale={this.props.locale}
+                        plugins={this.state.shared}
+                        onClose={this.handleCloseShared}
+                        onReview={this.handleSharedReview}
+                    />
+                ) : null}
                 {this.state.review ? (
                     <PluginReviewModal
                         locale={this.props.locale}

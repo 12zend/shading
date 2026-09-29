@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 /* global WebAudioTestAPI */
 import 'web-audio-test-api';
 WebAudioTestAPI.setState({

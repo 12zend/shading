@@ -13,7 +13,7 @@
     justify-content: center;
     border-radius: $form-radius;
     background: $motion-primary;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }
 
 .tile-model svg {
@@ -80,7 +80,7 @@
     padding: 0.15rem 0.45rem;
     border-radius: 999px;
     background: $motion-primary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     font-size: 0.625rem;
     font-weight: bold;
     letter-spacing: 0.04em;
@@ -181,7 +181,7 @@
     border: 0;
     border-radius: $form-radius;
     background: $motion-primary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     cursor: pointer;
     font: inherit;
     font-size: 0.75rem;
@@ -258,7 +258,7 @@
     border: 0;
     border-radius: $form-radius;
     background: $motion-primary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     cursor: pointer;
     font: inherit;
     font-weight: bold;
@@ -297,7 +297,7 @@
     justify-content: center;
     border-radius: 50%;
     background: $motion-primary;
-    color: #ffffff;
+    color: var(--accent-foreground);
 }
 
 .empty-icon svg {

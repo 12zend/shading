@@ -17,13 +17,13 @@
 }
 
 .error {
-    font-family: monospace;
+    font-family: var(--font-mono);
     height: 125px;
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
     padding: $space;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     border: 1px solid $ui-black-transparent;
     background-color: $input-background;
     color: inherit;
@@ -36,5 +36,5 @@
     border-radius: 0.25rem;
     border: 1px solid $ui-black-transparent;
     background-color: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }

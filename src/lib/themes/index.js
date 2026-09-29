@@ -4,6 +4,7 @@ import * as accentPurple from './accent/purple';
 import * as accentBlue from './accent/blue';
 import * as accentRed from './accent/red';
 import * as accentRainbow from './accent/rainbow';
+import * as accentAmber from './accent/amber';
 
 import * as guiLight from './gui/light';
 import * as guiDark from './gui/dark';
@@ -16,13 +17,15 @@ const ACCENT_PURPLE = 'purple';
 const ACCENT_BLUE = 'blue';
 const ACCENT_RED = 'red';
 const ACCENT_RAINBOW = 'rainbow';
+const ACCENT_AMBER = 'amber';
 const ACCENT_MAP = {
     [ACCENT_PURPLE]: accentPurple,
     [ACCENT_BLUE]: accentBlue,
     [ACCENT_RED]: accentRed,
-    [ACCENT_RAINBOW]: accentRainbow
+    [ACCENT_RAINBOW]: accentRainbow,
+    [ACCENT_AMBER]: accentAmber
 };
-const ACCENT_DEFAULT = ACCENT_RED;
+const ACCENT_DEFAULT = ACCENT_BLUE;
 
 const GUI_LIGHT = 'light';
 const GUI_DARK = 'dark';
@@ -30,7 +33,7 @@ const GUI_MAP = {
     [GUI_LIGHT]: guiLight,
     [GUI_DARK]: guiDark
 };
-const GUI_DEFAULT = GUI_LIGHT;
+const GUI_DEFAULT = GUI_DARK;
 
 const BLOCKS_THREE = 'three';
 const BLOCKS_DARK = 'dark';
@@ -150,6 +153,7 @@ export {
     ACCENT_PURPLE,
     ACCENT_BLUE,
     ACCENT_RAINBOW,
+    ACCENT_AMBER,
     ACCENT_MAP,
 
     GUI_LIGHT,

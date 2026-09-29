@@ -10,7 +10,7 @@
     margin: 5px 0 8px 0;
     border: 1px solid $badge-border;
     background-color: $badge-background;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
 }
 
 .description a {

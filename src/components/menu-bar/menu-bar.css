@@ -1,36 +1,27 @@
 @import "../../css/colors.css";
 @import "../../css/units.css";
 @import "../../css/z-index.css";
+@import "../../css/filters.css";
 
+/* A unified macOS-style toolbar: plain text menus, the project title, save state and Share. */
 .menu-bar {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     flex-wrap: nowrap;
     gap: 0.5rem;
-
-    /*
-        For most things, we shouldn't explicitly set height, and let the
-        content push the element to whatever fits. Using a fixed height
-        instead, will help us subtract the value we assign from the body,
-        adding up to a perfect 100%. This means we don't need to set
-        overflow: hidden, which makes it hard to debug. border-box
-        simplifies by all of this by removing padding from the equation.
-    */
     box-sizing: border-box;
     height: $menu-bar-height;
+    padding: 0 0.625rem;
 
-    /*
-        @todo: This adds ~20px in Chrome, when scrolling to the right,
-        but fixes [FFx + Safari] [resize window down + scroll to the right] bug.
-        width: 100%;
-    */
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: $menu-bar-standard-font-size;
-    font-weight: bold;
-    background-color: $menu-bar-background;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    background-color: $toolbar-background;
     background-image: $menu-bar-background-image;
     color: $menu-bar-foreground;
+    border-bottom: 1px solid $rule;
 }
 
 .main-menu {
@@ -40,8 +31,20 @@
     flex-wrap: nowrap;
     align-items: center;
     flex-grow: 1;
+    min-width: 0;
     gap: 0.5rem;
 }
+
+.spacer {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Marks where the block search goes: directly right of the project title. */
+.search-slot {
+    min-width: 0;
+}
+
 .inactive {
     opacity: 0;
 }
@@ -61,8 +64,15 @@
     align-self: center;
     position: relative;
     align-items: center;
+    gap: 0.25rem;
     white-space: nowrap;
-    height: $menu-bar-height;
+    height: 1.625rem;
+    border-radius: var(--radius-m);
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.menu-bar-item img {
+    filter: var(--toolbar-icon-filter);
 }
 
 .menu-bar-item.hoverable {
@@ -71,7 +81,32 @@
 
 .menu-bar-item.active,
 .menu-bar-item.hoverable:hover {
-    background-color: $ui-black-transparent;
+    background-color: $toolbar-hover;
+}
+
+.menu-label-text {
+    margin: 0;
+}
+
+/* The block search field (find-bar addon) sits in the toolbar as a rounded search field. */
+.main-menu :global(.sa-find-input) {
+    height: 1.625rem !important;
+    padding-left: 0.625rem !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--radius-m) !important;
+    background: $toolbar-hover !important;
+    color: $text-primary !important;
+    font-size: 0.8125rem !important;
+    transition: box-shadow 120ms ease-out, background-color 120ms ease-out;
+}
+
+.main-menu :global(.sa-find-input)::placeholder {
+    color: $zone-8;
+}
+
+.main-menu :global(.sa-find-input):focus {
+    background: $input-background !important;
+    box-shadow: var(--focus-ring) !important;
 }
 
 .menu-bar-item.growable {
@@ -82,13 +117,14 @@
 .title-field-growable {
     flex-grow: 1;
     width: 2rem;
+    min-width: 7rem;
 }
 
 .file-group {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0;
 }
 
 .file-group .menu-bar-item {
@@ -96,12 +132,13 @@
 }
 
 .menu-bar-menu {
-    margin-top: $menu-bar-height;
+    margin-top: calc(1.625rem + 4px);
     z-index: $z-index-menu-bar;
 }
 
 .divider {
-    height: 34px;
+    height: 1.25rem;
+    margin: 0 0.25rem;
 }
 
 .author-info {
@@ -110,11 +147,11 @@
 }
 
 .menu-bar-button {
-    height: $menu-bar-button-size;
+    height: 1.625rem;
 }
 
 .remix-button {
-    background-color: $pen-primary
+    background-color: $toolbar-hover;
 }
 
 .remix-button-icon {
@@ -192,10 +229,6 @@
 }
 .mystuff > a:hover {
   background-size: 50%;
-}
-
-.mystuff > a {
-  /* background-image: url("/images/mystuff.png"); */
 }
 
 .about-icon {

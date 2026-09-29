@@ -13,10 +13,9 @@ const systemPreferencesTheme = () => {
     if (PREFERS_HIGH_CONTRAST_QUERY && PREFERS_HIGH_CONTRAST_QUERY.matches) {
         return Theme.highContrast;
     }
-    if (PREFERS_DARK_QUERY && PREFERS_DARK_QUERY.matches) {
-        return Theme.dark;
-    }
-    return Theme.light;
+    // Shading is a monitor-style editor: dark is the default regardless of the OS
+    // appearance. Light remains available as an explicit choice.
+    return Theme.dark;
 };
 
 /**

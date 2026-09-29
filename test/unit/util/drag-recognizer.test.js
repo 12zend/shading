@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import DragRecognizer from '../../../src/lib/drag-recognizer';
 
 describe('DragRecognizer', () => {

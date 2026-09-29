@@ -7,24 +7,25 @@
 }
 
 .backpack-header {
-    margin-top: 0.5rem;
-    border: 1px solid $ui-black-transparent;
-    background: $ui-white;
-    padding: 0.25rem;
-    text-align: center;
-    font-size: 0.85rem;
-    color: $text-primary;
-    transition: 0.2s;
+    border-top: 1px solid $rule;
+    background: $zone-1;
+    height: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: $zone-8;
+    transition: background-color 120ms ease-out, color 120ms ease-out;
     cursor: pointer;
     user-select: none;
 }
 
-[dir="ltr"] .backpack-header {
-    border-top-right-radius: $space;
-}
-
-[dir="rtl"] .backpack-header {
-    border-top-left-radius: $space;
+.backpack-header:hover {
+    background: $zone-3;
+    color: $zone-10;
 }
 
 .backpack-list {
@@ -32,7 +33,8 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    border-right: 1px solid $ui-black-transparent;
+    background: $zone-1;
+    border-top: 1px solid $rule;
     min-height: 5.5rem;
 }
 
@@ -69,7 +71,7 @@
 }
 
 .error-message {
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 .backpack-item {
@@ -93,7 +95,7 @@
     border: none;
     outline: none;
     font-weight: bold;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     font-size: 0.85rem;
     padding: 0.5rem;
     margin: 0.5rem;

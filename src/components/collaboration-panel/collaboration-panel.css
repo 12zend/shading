@@ -4,7 +4,7 @@
 
 .root {
     position: static;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
 }
 
 .launcher {
@@ -59,7 +59,7 @@
     min-width: 1.25rem;
     height: 1.25rem;
     border: 2px solid $ui-primary;
-    border-radius: 0.625rem;
+    border-radius: var(--radius-m);
     padding: 0 0.25rem;
     background: $control-primary;
     color: $ui-white;
@@ -80,7 +80,7 @@
     width: min(24rem, calc(100vw - 1.5rem));
     height: min(42rem, calc(100vh - 4.5rem));
     overflow: hidden;
-    border-radius: 0.75rem;
+    border-radius: var(--radius-m);
     background: $ui-white;
     color: $text-primary;
     box-shadow: 0 0.5rem 2rem $shadow;
@@ -201,7 +201,7 @@
 }
 
 .role-badge {
-    border-radius: 0.65rem;
+    border-radius: var(--radius-m);
     padding: 0.2rem 0.45rem;
     background: $looks-light-transparent;
     color: $text-primary;
@@ -459,7 +459,7 @@
 
 .entry {
     margin-bottom: 0.625rem;
-    border-radius: 0.75rem;
+    border-radius: var(--radius-m);
     padding: 0.7rem 0.75rem;
     background: $ui-white;
     box-shadow: 0 0.125rem 0.35rem $shadow;
@@ -609,7 +609,7 @@
 .inline-edit textarea {
     display: block;
     border: 1px solid $ui-black-transparent;
-    border-radius: 0.625rem;
+    border-radius: var(--radius-m);
     padding: 0.625rem;
     background: $input-background;
     color: $text-primary;

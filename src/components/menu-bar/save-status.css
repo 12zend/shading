@@ -1,13 +1,27 @@
 @import "../../css/colors.css";
 
+/* Unsaved changes: a small blue dot beside "Save now", like a macOS edited-document marker. */
 .save-now {
     cursor: pointer;
-    padding: 0 0.5rem;
-    height: 100%;
     display: flex;
     align-items: center;
+    gap: 0.4375rem;
+    height: 1.625rem;
+    padding: 0 0.625rem;
+    border-radius: var(--radius-m);
+    color: $text-primary;
+    font-weight: 400;
+    transition: background-color 120ms ease-out;
+}
+
+.save-now::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: $looks-secondary;
 }
 
 .save-now:hover {
-    background-color: $ui-black-transparent;
+    background-color: $toolbar-hover;
 }

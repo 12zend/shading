@@ -4,7 +4,7 @@
 // shading.app links stay collaboration-free until a link is generated.
 
 let theme = '';
-let accent = '#ff4c4c';
+let accent = '#ffb020';
 let themeSetting;
 
 try {
@@ -19,13 +19,15 @@ if (themeSetting === 'light' || themeSetting === 'dark') {
         const parsed = JSON.parse(themeSetting);
         if (parsed.accent === 'purple') accent = '#855cd6';
         if (parsed.accent === 'blue') accent = '#4c97ff';
+        if (parsed.accent === 'red') accent = '#ff4c4c';
         if (parsed.gui === 'dark' || parsed.gui === 'light') theme = parsed.gui;
     } catch (error) {
         // Ignore malformed legacy theme settings.
     }
 }
 
-if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+// Shading defaults to the dark monitor theme regardless of OS appearance.
+if (!theme) theme = 'dark';
 
 const splash = document.querySelector('.spash-waiting-for-js');
 splash.setAttribute('data-theme', theme);

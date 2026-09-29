@@ -1,10 +1,21 @@
 @import "../../css/colors.css";
 
+/* The one blue push button in the toolbar. */
 .share-button {
-    background: $data-primary;
+    background: $looks-secondary;
+    color: $accent-foreground;
+    border-radius: var(--radius-m);
+    padding: 0 0.875rem;
+    font-weight: 500;
+    transition: background-color 120ms ease-out;
+}
+
+.share-button:hover {
+    background: $looks-secondary-dark;
 }
 
 .share-button-is-shared {
-    background: $ui-black-transparent;
+    background: $toolbar-hover;
+    color: $text-primary;
     cursor: default;
 }

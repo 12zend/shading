@@ -45,10 +45,21 @@ const base = {
                 {from: /^\/editor\/?$/, to: '/index.html'},
                 {from: /^\/player\/?$/, to: '/player.html'},
                 {from: /^\/addons\/?$/, to: '/addons.html'},
+                {from: /^\/p\/[A-Za-z0-9_-]*\/?$/, to: '/index.html'},
                 {from: /^\/[a-z0-9-]{6,48}\/?$/, to: '/index.html'},
                 {from: /^\/[a-z0-9-]{6,48}\/fullscreen\/?$/, to: '/fullscreen.html'},
                 {from: /^\/[a-z0-9-]{6,48}\/player\/?$/, to: '/player.html'}
             ]
+        },
+        // Share links live at /p/<payload>. The app is built with relative asset URLs, so a page
+        // opened there requests /p/js/..., /p/static/... and so on: serve those from the root,
+        // like cloudflare/collaboration-worker.mjs does in production.
+        before: app => {
+            app.use((req, res, next) => {
+                const match = /^\/p\/([^?]*[/.][^?]*)(\?.*)?$/.exec(req.url);
+                if (match) req.url = `/${match[1]}${match[2] || ''}`;
+                next();
+            });
         }
     },
     output: {
@@ -76,6 +87,19 @@ const base = {
     },
     module: {
         rules: [{
+            test: /node_modules[\\/]brotli-wasm[\\/]pkg\.web[\\/]brotli_wasm\.js$/,
+            loader: path.resolve(__dirname, 'scripts/brotli-wasm-loader.js')
+        }, {
+            // Share links load this module at runtime; emit it as a plain file instead of
+            // webpack 4's experimental WebAssembly modules.
+            test: /brotli_wasm_bg\.wasm$/,
+            type: 'javascript/auto',
+            loader: 'file-loader',
+            options: {
+                name: 'static/assets/[name].[contenthash:8].[ext]',
+                esModule: false
+            }
+        }, {
             test: /node_modules[\\/]scratch-paint[\\/]src[\\/].*\.(jsx?|svg)$/,
             enforce: 'pre',
             loader: path.resolve(__dirname, 'scripts/penguinmod-paint-theme-loader.js')

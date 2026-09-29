@@ -10,7 +10,7 @@
 .pos-container {
   font-size: 0.6rem;
   font-weight: bold;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   color: #5cb1d6;
   white-space: nowrap;
 }

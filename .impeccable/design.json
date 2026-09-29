@@ -1,0 +1,609 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-28T15:11:42.039909+00:00",
+  "title": "Design System: Shading",
+  "extensions": {
+    "colorMeta": {
+      "selected-amber": {
+        "role": "primary",
+        "displayName": "Selected Amber",
+        "canonical": "#ffb020",
+        "cssVar": "--looks-secondary",
+        "tonalRamp": [
+          "#1a1200",
+          "#3a2a08",
+          "#5a4410",
+          "#a06a08",
+          "#d68f0a",
+          "#ffb020",
+          "#ffcf6b",
+          "#ffe7b0"
+        ]
+      },
+      "amber-deep": {
+        "role": "primary",
+        "displayName": "Amber Deep",
+        "canonical": "#d68f0a",
+        "cssVar": "--looks-secondary-dark",
+        "tonalRamp": [
+          "#1a1200",
+          "#3a2a08",
+          "#5a4410",
+          "#a06a08",
+          "#d68f0a",
+          "#ffb020",
+          "#ffcf6b",
+          "#ffe7b0"
+        ]
+      },
+      "amber-lit": {
+        "role": "primary",
+        "displayName": "Amber Lit",
+        "canonical": "#ffcf6b",
+        "cssVar": "--drop-highlight",
+        "tonalRamp": [
+          "#1a1200",
+          "#3a2a08",
+          "#5a4410",
+          "#a06a08",
+          "#d68f0a",
+          "#ffb020",
+          "#ffcf6b",
+          "#ffe7b0"
+        ]
+      },
+      "amber-ink": {
+        "role": "primary",
+        "displayName": "Amber Ink",
+        "canonical": "#1a1200",
+        "cssVar": "--accent-foreground",
+        "tonalRamp": [
+          "#1a1200",
+          "#3a2a08",
+          "#5a4410",
+          "#a06a08",
+          "#d68f0a",
+          "#ffb020",
+          "#ffcf6b",
+          "#ffe7b0"
+        ]
+      },
+      "amber-link": {
+        "role": "primary",
+        "displayName": "Amber Link",
+        "canonical": "#ffc453",
+        "cssVar": "--link-color",
+        "tonalRamp": [
+          "#1a1200",
+          "#3a2a08",
+          "#5a4410",
+          "#a06a08",
+          "#d68f0a",
+          "#ffb020",
+          "#ffcf6b",
+          "#ffe7b0"
+        ]
+      },
+      "rec-red": {
+        "role": "secondary",
+        "displayName": "REC Red",
+        "canonical": "#ff3b30",
+        "light": "#e0281e",
+        "cssVar": "--rec",
+        "tonalRamp": [
+          "#2a0806",
+          "#5c0f0b",
+          "#931a13",
+          "#c9241b",
+          "#ff3b30",
+          "#ff6b63",
+          "#ff9c96",
+          "#ffd0cd"
+        ]
+      },
+      "fault-orange": {
+        "role": "tertiary",
+        "displayName": "Fault Orange",
+        "canonical": "#ff6a3d",
+        "cssVar": "--error-primary",
+        "tonalRamp": [
+          "#2b1006",
+          "#5e220d",
+          "#933515",
+          "#c9491d",
+          "#ff6a3d",
+          "#ff9a7a",
+          "#ffbfa9",
+          "#ffe3d9"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#eceae514",
+        "light": "#0e0f1114",
+        "cssVar": "--rule",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Rule Strong",
+        "canonical": "#eceae526",
+        "light": "#0e0f1126",
+        "cssVar": "--rule-strong",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "osd-rule": {
+        "role": "neutral",
+        "displayName": "OSD Rule",
+        "canonical": "#eceae51f",
+        "light": "#eceae51f",
+        "cssVar": "--osd-rule",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-0-glass": {
+        "role": "neutral",
+        "displayName": "Glass",
+        "canonical": "#08090a",
+        "light": "#ffffff",
+        "cssVar": "--zone-0",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-1-page": {
+        "role": "neutral",
+        "displayName": "Page",
+        "canonical": "#0e0f11",
+        "light": "#f5f4f1",
+        "cssVar": "--zone-1",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-2-panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#141619",
+        "light": "#efeeea",
+        "cssVar": "--zone-2",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-3-raised": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "canonical": "#1b1d21",
+        "light": "#e6e5e1",
+        "cssVar": "--zone-3",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-4-control": {
+        "role": "neutral",
+        "displayName": "Control",
+        "canonical": "#24272c",
+        "light": "#dcdad5",
+        "cssVar": "--zone-4",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-5-strong": {
+        "role": "neutral",
+        "displayName": "Strong",
+        "canonical": "#30343a",
+        "light": "#c9c7c1",
+        "cssVar": "--zone-5",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-6-disabled": {
+        "role": "neutral",
+        "displayName": "Disabled",
+        "canonical": "#464b53",
+        "light": "#a3a19b",
+        "cssVar": "--zone-6",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-7-quiet": {
+        "role": "neutral",
+        "displayName": "Quiet",
+        "canonical": "#6b7079",
+        "light": "#6b7079",
+        "cssVar": "--zone-7",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-8-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "#9a9ea5",
+        "light": "#4f545c",
+        "cssVar": "--zone-8",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-9-primary": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "#c9cbcf",
+        "light": "#24272c",
+        "cssVar": "--zone-9",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      },
+      "zone-10-emphasis": {
+        "role": "neutral",
+        "displayName": "Emphasis Ink",
+        "canonical": "#eceae5",
+        "light": "#0e0f11",
+        "cssVar": "--zone-10",
+        "tonalRamp": [
+          "#08090a",
+          "#0e0f11",
+          "#141619",
+          "#24272c",
+          "#30343a",
+          "#6b7079",
+          "#c9cbcf",
+          "#eceae5"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Empty-state titles in asset tabs."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Modal headers, timeline title."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanatory copy; empty-state paragraphs cap at 30rem."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Menu bar, menu items (500), buttons, fields (500)."
+      },
+      "label-small": {
+        "displayName": "Label Small",
+        "purpose": "Page-rail captions, asset tile info; keep-all line breaking."
+      },
+      "timecode": {
+        "displayName": "Timecode",
+        "purpose": "SMPTE HH:MM:SS:FF clock in the OSD strip and timeline transport."
+      },
+      "numeric": {
+        "displayName": "Numeric",
+        "purpose": "fps, resolution, frame counts, zoom, coordinates."
+      },
+      "osd-status": {
+        "displayName": "OSD Status",
+        "purpose": "Uppercase tally words STBY/RUN/PLAY/REC, TURBO flag, units."
+      }
+    },
+    "themes": {
+      "default": "dark",
+      "lightZoneRamp": [
+        "#ffffff",
+        "#f5f4f1",
+        "#efeeea",
+        "#e6e5e1",
+        "#dcdad5",
+        "#c9c7c1",
+        "#a3a19b",
+        "#6b7079",
+        "#4f545c",
+        "#24272c",
+        "#0e0f11"
+      ],
+      "note": "Frontmatter colours are dark-theme values. The light theme remaps the zone ramp and rules to paper; the OSD strip (osd-*) and drop-down menus stay black glass; the page rail follows the theme. Accent is swappable; amber is the default."
+    },
+    "shadows": [
+      {
+        "name": "menu-drop",
+        "value": "0 12px 28px -6px var(--shadow), 0 2px 6px var(--shadow)",
+        "purpose": "Drop-down menus."
+      },
+      {
+        "name": "modal-drop",
+        "value": "0 24px 64px -12px #000000cc, 0 2px 8px var(--shadow)",
+        "purpose": "Modal dialogs over the 72% black overlay."
+      },
+      {
+        "name": "action-drop",
+        "value": "0 6px 16px -6px var(--shadow)",
+        "purpose": "Square add-asset action key."
+      },
+      {
+        "name": "popover",
+        "value": "0 0 8px 1px var(--shadow)",
+        "purpose": "GUI and paint popovers."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 1px var(--zone-0), 0 0 0 2px var(--looks-secondary)",
+        "purpose": "Focus on composited keys (--focus-ring)."
+      },
+      {
+        "name": "selected-ring",
+        "value": "0 0 0 1px var(--looks-secondary)",
+        "purpose": "Selected asset tile and focused input."
+      },
+      {
+        "name": "osd-inset-rule",
+        "value": "inset 0 0 0 1px var(--osd-rule)",
+        "purpose": "Edge of the OSD readout field."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-standard",
+        "value": "120ms ease-out",
+        "purpose": "Colour/opacity transitions on keys, rail, tiles, fields, menu-bar items."
+      },
+      {
+        "name": "tally-change",
+        "value": "160ms ease-out",
+        "purpose": "Tally chip background/colour change."
+      },
+      {
+        "name": "rec-blink",
+        "value": "1s steps(1, end) infinite",
+        "purpose": "REC lamp blink; disabled under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "osd-fields-hide",
+        "value": "1180px",
+        "purpose": "Below this width the OSD fps/resolution fields drop; tally and timecode stay."
+      }
+    ],
+    "layout": {
+      "osdStripHeight": "40px",
+      "pageRailWidth": "76px",
+      "controlHeight": "28px",
+      "fieldHeight": "30px",
+      "actionKey": "44px",
+      "modalHeaderHeight": "50px",
+      "selectionBrackets": "amber 2px stroke, 7-8px arms, top-left and bottom-right corners"
+    }
+  },
+  "components": [
+    {
+      "name": "OSD Readout",
+      "kind": "custom",
+      "refersTo": "osd-readout",
+      "description": "Monitor status in the top strip: tally, SMPTE timecode, fps and resolution on black glass.",
+      "html": "<div class=\"ds-osd-strip\"><div class=\"ds-osd\" role=\"status\"><span class=\"ds-tally\"><span class=\"ds-lamp\"></span>STBY</span><span class=\"ds-tally ds-run\"><span class=\"ds-lamp\"></span>RUN</span><span class=\"ds-tally ds-rec\"><span class=\"ds-lamp\"></span>REC</span><span class=\"ds-tc\">00:00:04:12</span><span class=\"ds-field\"><span class=\"ds-v\">30</span><span class=\"ds-u\">fps</span></span><span class=\"ds-field\"><span class=\"ds-v\">480×270</span></span></div></div>",
+      "css": ".ds-osd-strip{background:#08090a;padding:6px;border-bottom:1px solid #eceae51f} .ds-osd{display:inline-flex;align-items:center;gap:14px;height:28px;padding:0 12px 0 4px;border-radius:4px;background:#0e0f11;box-shadow:inset 0 0 0 1px #eceae51f;color:#9a9ea5;font-family:'SF Mono', ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;font-size:10px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap} .ds-tally{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:3px;font-weight:700;letter-spacing:.08em;color:#6b7079;transition:background-color 160ms ease-out,color 160ms ease-out} .ds-lamp{width:6px;height:6px;border-radius:50%;background:currentColor} .ds-run{color:#ffb020} .ds-rec{background:#ff3b30;color:#fff} .ds-rec .ds-lamp{animation:ds-blink 1s steps(1,end) infinite} @keyframes ds-blink{50%{opacity:0}} @media (prefers-reduced-motion:reduce){.ds-rec .ds-lamp{animation:none}} .ds-tc{color:#eceae5;font-size:13px;font-weight:600;letter-spacing:.04em} .ds-field{display:inline-flex;align-items:baseline;gap:4px;padding-left:14px;border-left:1px solid #eceae51f} .ds-v{color:#eceae5} .ds-u{color:#6b7079;text-transform:uppercase}"
+    },
+    {
+      "name": "Page Rail",
+      "kind": "nav",
+      "refersTo": "rail-tab",
+      "description": "Vertical 76px page rail; the selected page carries amber corner brackets.",
+      "html": "<nav class=\"ds-rail\"><button class=\"ds-rail-tab ds-sel\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 6h12M4 10h8M4 14h10\"/></svg><span>Code</span></button><button class=\"ds-rail-tab\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M5 15l8-8 2 2-8 8H5z\"/></svg><span>Costumes</span></button><button class=\"ds-rail-tab\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><rect x=\"3\" y=\"5\" width=\"10\" height=\"10\" rx=\"1\"/><path d=\"M13 9l4-2v6l-4-2\"/></svg><span>Videos</span></button></nav>",
+      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:76px;padding:4px;background:#08090a;border-right:1px solid #eceae514} .ds-rail-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border:0;border-radius:4px;background:transparent;color:#9a9ea5;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;font-size:10px;font-weight:600;line-height:1.2;cursor:pointer;transition:background-color 120ms ease-out,color 120ms ease-out} .ds-rail-tab svg{opacity:.72} .ds-rail-tab:hover,.ds-sel{background:#1b1d21;color:#eceae5} .ds-rail-tab:hover svg,.ds-sel svg{opacity:1} .ds-rail-tab:focus-visible{outline:1px solid #ffb020;outline-offset:1px} .ds-sel::before,.ds-sel::after{content:'';position:absolute;width:7px;height:7px;border:0 solid #ffb020;pointer-events:none} .ds-sel::before{top:0;left:0;border-top-width:2px;border-left-width:2px;border-top-left-radius:4px} .ds-sel::after{right:0;bottom:0;border-right-width:2px;border-bottom-width:2px;border-bottom-right-radius:4px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one lit amber key per region: Share, empty-state action.",
+      "html": "<button class=\"ds-btn-primary\">Add video</button>",
+      "css": ".ds-btn-primary{height:30px;padding:0 14px;border:1px solid transparent;border-radius:4px;background:#ffb020;color:#1a1200;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:background-color 120ms ease-out} .ds-btn-primary:hover{background:#ffcf6b} .ds-btn-primary:focus-visible{outline:1px solid #ffb020;outline-offset:1px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet control-tone key beside a primary.",
+      "html": "<button class=\"ds-btn-secondary\">Record</button>",
+      "css": ".ds-btn-secondary{height:30px;padding:0 14px;border:1px solid #eceae526;border-radius:4px;background:#24272c;color:#eceae5;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background-color 120ms ease-out} .ds-btn-secondary:hover{background:#30343a} .ds-btn-secondary:focus-visible{outline:1px solid #ffb020;outline-offset:1px}"
+    },
+    {
+      "name": "Transport",
+      "kind": "custom",
+      "refersTo": "transport-play",
+      "description": "Timeline transport: play is the one lit key; SMPTE clock in mono.",
+      "html": "<div class=\"ds-transport\"><button class=\"ds-play\" aria-label=\"Play\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 12 12\"><path d=\"M3 1.5v9l7.5-4.5z\" fill=\"currentColor\"/></svg></button><button class=\"ds-key\" aria-label=\"Stop\"><span class=\"ds-stop\"></span></button><span class=\"ds-clock\">00:00:04:12<span> / 00:00:10:00</span></span></div>",
+      "css": ".ds-transport{display:flex;align-items:center;gap:8px;padding:8px;background:#141619;border:1px solid #eceae514;border-radius:4px} .ds-key,.ds-play{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #eceae526;border-radius:4px;background:#1b1d21;color:#c9cbcf;cursor:pointer;transition:background-color 120ms ease-out,color 120ms ease-out} .ds-key:hover{background:#30343a;color:#eceae5} .ds-play{width:36px;border-color:transparent;background:#ffb020;color:#1a1200} .ds-play:hover{background:#ffcf6b} .ds-key:focus-visible,.ds-play:focus-visible{outline:1px solid #ffb020;outline-offset:1px} .ds-stop{width:10px;height:10px;border-radius:1px;background:currentColor} .ds-clock{margin-left:auto;font-family:'SF Mono', ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;letter-spacing:.03em;color:#eceae5} .ds-clock span{color:#6b7079;font-weight:400}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Glass well with hairline border; amber border and ring on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Sprite name\" value=\"Camera 1\">",
+      "css": ".ds-input{height:30px;padding:0 10px;border:1px solid #eceae526;border-radius:4px;background:#08090a;color:#eceae5;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;font-size:12px;font-weight:500;outline:none;transition:border-color 120ms ease-out} .ds-input::placeholder{color:#6b7079} .ds-input:hover{border-color:#464b53} .ds-input:focus{border-color:#ffb020;box-shadow:0 0 0 1px #ffb020} .ds-input::selection{background:#ffb02059}"
+    },
+    {
+      "name": "Menu",
+      "kind": "custom",
+      "refersTo": "menu",
+      "description": "Drop-down menu as black-glass OSD overlay in both themes.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><div class=\"ds-mi\" role=\"menuitem\">New</div><div class=\"ds-mi\" role=\"menuitem\">Load from your computer</div><div class=\"ds-mi ds-sec\" role=\"menuitem\">Save to your computer</div></div>",
+      "css": ".ds-menu{min-width:200px;padding:4px 0;border:1px solid #eceae51f;border-radius:4px;background:#0e0f11;color:#eceae5;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;box-shadow:0 12px 28px -6px #00000099,0 2px 6px #00000099} .ds-mi{margin:0 4px;padding:0 12px;line-height:28px;border-radius:3px;font-size:12px;font-weight:500;cursor:pointer} .ds-mi:hover{background:#24272c} .ds-sec{border-top:1px solid #eceae51f;margin-top:4px;padding-top:4px}"
+    },
+    {
+      "name": "Asset Tile",
+      "kind": "card",
+      "refersTo": "asset-tile-selected",
+      "description": "Sprite/costume tile; selection is amber ring plus corner brackets, never lift.",
+      "html": "<div class=\"ds-tiles\"><div class=\"ds-tile\"><div class=\"ds-thumb\"></div><div class=\"ds-info\">Sprite1<span>1</span></div></div><div class=\"ds-tile ds-tile-sel\" tabindex=\"0\"><div class=\"ds-thumb\"></div><div class=\"ds-info\">Camera<span>2</span></div></div></div>",
+      "css": ".ds-tiles{display:flex;gap:8px;padding:8px;background:#0e0f11} .ds-tile{position:relative;width:84px;border:1px solid #eceae526;border-radius:4px;background:#141619;color:#c9cbcf;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;font-size:12px;transition:border-color 120ms ease-out,background-color 120ms ease-out;cursor:pointer} .ds-tile:hover{border-color:#464b53;background:#1b1d21} .ds-thumb{height:56px} .ds-info{display:flex;justify-content:space-between;padding:4px;border-top:1px solid #eceae514;font-size:10px} .ds-info span{font-family:'SF Mono', ui-monospace, Menlo, Consolas, 'Liberation Mono', monospace;font-size:9px;font-weight:600;color:#9a9ea5} .ds-tile-sel{border-color:#ffb020;background:#1b1d21;box-shadow:0 0 0 1px #ffb020} .ds-tile-sel .ds-info{color:#eceae5} .ds-tile-sel::before,.ds-tile-sel::after{content:'';position:absolute;width:8px;height:8px;border:0 solid #ffb020} .ds-tile-sel::before{top:-1px;left:-1px;border-top-width:2px;border-left-width:2px} .ds-tile-sel::after{right:-1px;bottom:-1px;border-right-width:2px;border-bottom-width:2px} .ds-tile:focus-visible{outline:1px solid #ffb020;outline-offset:1px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The On-Set Camera Monitor",
+    "overview": "The stage is the picture; everything around it is on-screen display laid over black glass. Chrome reads like a field monitor's OSD: a thin status strip across the top, measurements set in tabular mono on a fixed-width graticule, hairline rules instead of panels-on-panels, and one warm marker colour that says \"this is the selected thing\". The creator spends long sessions in dim rooms beside other video tools, so the surround is dark, low-chroma and quiet, and the picture is always the brightest, most saturated object in view (along with the block categories, which keep their Scratch colours).\n\nDensity is instrument-grade: 28px controls, 10–13px type, 4px corners. Nothing is rounded, pastel or tabbed-folder; nothing is a generic grey NLE panel either. Every grey comes from one 11-step zone ramp, and state is spoken in exactly two chromatic voices: amber for selected/active/playing, REC red for rendering. The OSD strip and drop-down menus stay black glass in both themes; the light theme re-maps the zone ramp to paper and is selectable, but dark is the default and the reference.",
+    "keyCharacteristics": [
+      "One 11-step neutral zone ramp (glass to paper) is the only source of grey.",
+      "Amber marks selection, the active page, focus, and play/run; REC red marks rendering only.",
+      "Hairline 1px rules at low alpha; 2–4px corners; tonal layering over shadow.",
+      "Platform tabular mono for every number (timecode, fps, resolution, counts, zoom); the platform UI face for labels.",
+      "Corner brackets mark selection, the way a monitor marks a focus area.",
+      "A 40px OSD strip on top, a 76px vertical page rail on the left, and a transport with one lit key."
+    ],
+    "rules": [
+      {
+        "name": "The One Ramp Rule",
+        "body": "Every grey is a zone step (or a paper-white rule alpha). If a neutral is not on the ramp, it is drift.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Amber means selected, focused, active or playing. REC red means rendering. Neither is decoration, and neither borrows the other's meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dark Ink On Amber Rule",
+        "body": "Anything placed on amber is set in Amber Ink; white-on-amber fails.",
+        "section": "colors"
+      },
+      {
+        "name": "The Graticule Rule",
+        "body": "Every number that can change is set in `--font-mono` with `tabular-nums`, so readouts never jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Status-Word Rule",
+        "body": "Tracked uppercase belongs only to OSD status words and units. Labels, headings and section names stay in sentence case in the UI face.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Glass Rule",
+        "body": "Surfaces at rest are flat and separated by tone and hairlines. Only floating layers cast shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every neutral from the zone ramp (`--zone-0` … `--zone-10`) or the paper-white rule alphas (`--rule` 8%, `--rule-strong` 15%, `--osd-rule` 12%).",
+      "Do mark the selected, focused, active or playing thing in amber, and set any ink on amber in Amber Ink (#1a1200).",
+      "Do set every changing number in `--font-mono` with `tabular-nums`, and every clock as SMPTE `HH:MM:SS:FF` via `src/lib/timecode.js`.",
+      "Do use 1px hairlines and 4px corners (`--radius-m`) for controls, fields, tiles, panels, menus and modals.",
+      "Do mark selection with the two-corner amber bracket (2px stroke, 7–8px arms) on rail pages and asset tiles.",
+      "Do keep the OSD strip and menus black glass in both themes.",
+      "Do keep transitions to colour and opacity, 120ms ease-out (160ms for tally changes), and honour `prefers-reduced-motion`."
+    ],
+    "donts": [
+      "Don't use REC red for anything but rendering; errors use Fault Orange.",
+      "Don't re-tint block category colours; they stay the Scratch palette.",
+      "Don't use tracked uppercase for labels, headings or section names; it is reserved for OSD status words and units.",
+      "Don't draw corner brackets as decoration; they appear only on selection. Never draw guides or marks over the stage picture.",
+      "Don't give resting layout surfaces a shadow, or lift a selected item; selection is amber ring and brackets.",
+      "Don't round beyond 4px on rectangular UI or use pill buttons; circles are reserved for status lamps.",
+      "Don't colour rail or paint-toolbar glyphs; they are monochrome instrumentation."
+    ]
+  }
+}

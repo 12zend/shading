@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import React from 'react';
 import {Provider} from 'react-redux';
 const {mountWithIntl} = require('../../helpers/intl-helpers.jsx');

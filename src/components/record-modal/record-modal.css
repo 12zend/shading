@@ -40,7 +40,7 @@
 
 .help-text {
     margin: 10px auto 0;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     color: rgb(167, 170, 181);
     font-size: 0.95rem;
     font-weight: 500;
@@ -95,7 +95,7 @@
 .button-row button.ok-button {
     background: $looks-secondary;
     border: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }
 
 .button-row button + button {

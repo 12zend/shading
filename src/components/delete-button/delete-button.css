@@ -22,7 +22,7 @@
   background-color: $looks-secondary;
   color: $ui-white;
   border-radius: 50%;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   user-select: none;
   cursor: pointer;
   transition: all 0.15s ease-out;

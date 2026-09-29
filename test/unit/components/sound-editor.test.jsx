@@ -1,6 +1,11 @@
+/**
+ * @jest-environment jsdom
+ */
 import React from 'react';
 import {mountWithIntl, componentWithIntl} from '../../helpers/intl-helpers.jsx';
 import SoundEditor from '../../../src/components/sound-editor/sound-editor';
+
+jest.mock('../../../src/lib/tw-recolor/render.jsx', () => require('../../__mocks__/recolored-image.jsx'));
 
 describe('Sound Editor Component', () => {
     let props;

@@ -4,8 +4,8 @@
 .tag-button {
     padding: .625rem 1rem;
     background: $looks-secondary;
-    border-radius: 1.375rem;
-    color: white;
+    border-radius: var(--radius-m);
+    color: var(--accent-foreground);
     height: $library-filter-bar-height;
 }
 

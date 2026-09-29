@@ -16,7 +16,7 @@
 }
 
 .details {
-    font-family: monospace;
+    font-family: var(--font-mono);
     user-select: text;
     text-wrap: nowrap;
     overflow: hidden;
@@ -33,7 +33,7 @@
     border-radius: 0.25rem;
     border: 1px solid $ui-black-transparent;
     background-color: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
 }
 .button:disabled {
     opacity: 0.8;

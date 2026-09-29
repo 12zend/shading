@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   white-space: nowrap;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   width: 100%;
   height: 100%;
   margin-left: 1em;
@@ -15,8 +15,9 @@
 }
 
 .sa-find-bar-menu {
-  flex: 0 0 16em;
-  width: 16em;
+  flex: 0 1 12em;
+  width: 12em;
+  min-width: 6em;
   margin-left: 0;
 }
 
@@ -51,12 +52,6 @@
 
 /* We need to modify Scratch styles so that the place where the find bar is injected */
 /* has actually correct size information, which is used to make the find bar not cover up controls */
-[class*="gui_tab-list_"] {
-  width: 100%;
-}
-[class*="gui_tab_"] {
-  flex-grow: 0;
-}
 
 .sa-find-input {
   width: 100%;

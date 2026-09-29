@@ -8,7 +8,7 @@
     flex-grow: 1;
 
     background: $ui-white;
-    border-radius: 10rem;
+    border-radius: var(--radius-m);
     user-select: none;
     height: $library-filter-bar-height;
 

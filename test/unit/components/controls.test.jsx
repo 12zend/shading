@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import React from 'react';
 import {mountWithIntl} from '../../helpers/intl-helpers.jsx';
 import Controls from '../../../src/components/controls/controls';

@@ -4,6 +4,7 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
+import formatTimecode from '../../lib/timecode';
 
 import {
     CloseIcon,
@@ -614,9 +615,6 @@ class Timeline extends React.Component {
             Math.max(1, this.state.viewportWidth - 2)
         );
         const rulerTicks = this.getRulerTicks();
-        const zoomPercent = Math.round(
-            (this.state.pixelsPerSecond / DEFAULT_PIXELS_PER_SECOND) * 100
-        );
         const keyframes = Array.isArray(timeline.keyframes) ? timeline.keyframes : [];
         const timelineCanvasHeight = 68;
         return (
@@ -665,7 +663,8 @@ class Timeline extends React.Component {
                             aria-live="off"
                             className={styles.timecode}
                         >
-                            {formatTime(timeline.currentTime)} <span>{'/ '}{formatTime(timeline.duration)}</span>
+                            {formatTimecode(timeline.currentTime, timeline.framerate)}{' '}
+                            <span>{'/ '}{formatTimecode(timeline.duration, timeline.framerate)}</span>
                         </output>
                         <button
                             aria-expanded={this.state.settingsOpen}
@@ -800,8 +799,7 @@ class Timeline extends React.Component {
                             [styles.isRecording]: timeline.recording
                         })}
                     >
-                        {timeline.recording ? (timeline.playing ? 'Rendering…' : 'Render paused') :
-                            `${keyframes.length} ${keyframes.length === 1 ? 'keyframe' : 'keyframes'}`}
+                        {timeline.recording ? (timeline.playing ? 'Rendering…' : 'Render paused') : null}
                     </span>
                     <div
                         aria-label="Timeline zoom"
@@ -816,9 +814,6 @@ class Timeline extends React.Component {
                             type="button"
                             onClick={this.handleZoomOut}
                         ><ZoomOutIcon /></button>
-                        <span
-                            className={styles.zoomLevel}
-                        >{zoomPercent}{'%'}</span>
                         <button
                             aria-label="Zoom in timeline"
                             className={styles.zoomButton}

@@ -1,15 +1,21 @@
 @import "../../css/colors.css";
+@import "../../css/filters.css";
 
+/* macOS menus: translucent material, a hairline edge, rows highlighted in the accent. */
 .menu {
     position: absolute;
-    border: 1px solid $ui-black-transparent;
-    border-radius: 0 0 8px 8px;
-    background-color: $menu-bar-background;
-    padding: 0;
+    border: 1px solid $menu-rule;
+    border-radius: var(--radius-l);
+    background-color: $menu-background;
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    color: $text-primary;
+    padding: 0.3125rem 0;
     margin: 0;
-    min-width: 186px;
+    min-width: 200px;
     overflow: visible;
-    box-shadow: 0 8px 8px 0 $shadow;
+    box-shadow: 0 0 0 0.5px $menu-edge, 0 12px 32px -8px $shadow, 0 2px 6px $shadow;
+    font-family: var(--font-ui);
 }
 
 .menu.left {
@@ -22,19 +28,31 @@
 
 .menu-item {
     display: block;
-    line-height: 34px;
+    line-height: 1.5rem;
     white-space: nowrap;
-    padding: 0 10px;
-    font-size: .75rem;
-    margin: 0;
-    font-weight: bold;
+    padding: 0 0.625rem;
+    margin: 0 0.3125rem;
+    border-radius: var(--radius-s);
+    font-size: 0.8125rem;
+    font-weight: 400;
     position: relative;
+}
+
+.menu-item img {
+    filter: var(--toolbar-icon-filter);
 }
 
 .menu-item.active,
 .menu-item:hover,
 .menu-item.expanded {
-    background-color: $ui-black-transparent;
+    background-color: $looks-secondary;
+    color: $accent-foreground;
+}
+
+.menu-item.active img,
+.menu-item:hover img,
+.menu-item.expanded img {
+    filter: brightness(0) invert(100%);
 }
 
 .menu-item.hoverable {
@@ -42,33 +60,39 @@
 }
 
 .menu-section {
-    border-top: 1px solid $ui-black-transparent;
+    border-top: 1px solid $menu-rule;
+    margin-top: 0.3125rem;
+    padding-top: 0.3125rem;
+}
+
+.menu > .menu-section:first-child {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .submenu {
     display: none;
     position: absolute;
-    top: -1px;
-    min-width: 186px;
+    top: calc(-0.3125rem - 1px);
+    min-width: 200px;
     height: max-content;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: var(--radius-l);
 }
 
 .submenu.right {
-    left: 100%;
+    left: calc(100% + 0.25rem);
 }
 
 .submenu.left {
-    right: 100%;
+    right: calc(100% + 0.25rem);
 }
 
 .submenu > .menu {
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
-    scrollbar-color: $menu-bar-foreground $menu-bar-background;
-    border-radius: 8px;
 }
 
 .menu-item.expanded > .submenu {
@@ -77,20 +101,4 @@
 
 :not(:has(> .menu-item.expanded)) > .menu-item:hover > .submenu {
     display: block;
-}
-
-/* Fallback styling for webkit browsers that don't support scrollbar-color */
-
-.submenu > .menu::-webkit-scrollbar {
-    width: 12px;
-}
-
-.submenu > .menu::-webkit-scrollbar-track {
-    background: $menu-bar-background;
-}
-
-.submenu > .menu::-webkit-scrollbar-thumb {
-    background-color: $menu-bar-foreground;
-    border-radius: 12px;
-    border: 3px solid $menu-bar-background;
 }

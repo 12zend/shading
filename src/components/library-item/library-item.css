@@ -12,13 +12,13 @@
     max-width: 160px;
     margin: $space;
     padding: 1rem 1rem 0 1rem;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     color: $text-primary;
     background: $ui-white;
     border-width: 2px;
     border-style: solid;
     border-color: $ui-black-transparent;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     text-align: center;
     cursor: pointer;
 }
@@ -67,7 +67,7 @@
     background-color: $pen-primary;
     width: 3.5rem;
     height: 3.5rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-m);
     border: 0.25rem solid $ui-white;
 }
 
@@ -206,7 +206,7 @@
 .coming-soon-text {
     position: absolute;
     background-color: $data-primary;
-    border-radius: 1rem;
+    border-radius: var(--radius-m);
     box-shadow: 0 0 .5rem hsla(0, 0%, 0%, .25);
     padding: .5rem 1rem;
     font-size: .875rem;

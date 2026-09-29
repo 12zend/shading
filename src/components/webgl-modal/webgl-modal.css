@@ -18,7 +18,7 @@
     outline: none;
     border: .25rem solid $ui-white-transparent;
     padding: 0;
-    border-radius: $space;
+    border-radius: var(--radius-m);
     user-select: none;
     width: 500px;
 
@@ -58,7 +58,7 @@
     border-radius: 0.25rem;
     padding: 0.5rem 2rem;
     background: $looks-secondary;
-    color: white;
+    color: var(--accent-foreground);
     font-weight: bold;
     font-size: 0.875rem;
 }

@@ -22,7 +22,7 @@
     background-color: $extensions-primary !important;
     border: 1px solid $ui-black-transparent !important;
     box-shadow: 0 0 .5rem $shadow !important;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: var(--font-ui) !important;
     z-index: $z-index-menu-bar !important;
 }
 

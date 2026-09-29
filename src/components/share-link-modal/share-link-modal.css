@@ -1,0 +1,129 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.modal-content {
+    width: min(38rem, calc(100vw - 2rem));
+    margin-top: 2rem;
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: calc(100vh - 10rem);
+    overflow: auto;
+    padding: 1.25rem 1.5rem;
+    background: $ui-modal-background;
+    color: $text-primary;
+    font-size: 0.85rem;
+}
+
+.body p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.link {
+    width: 100%;
+    min-height: 6rem;
+    box-sizing: border-box;
+    padding: 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.25rem;
+    background: $input-background;
+    color: inherit;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    word-break: break-all;
+    resize: vertical;
+}
+
+.progress {
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 0.25rem;
+    background: $ui-black-transparent;
+}
+
+.progress-bar {
+    height: 100%;
+    background: $looks-secondary;
+    transition: width 0.15s linear;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+    margin: 0;
+}
+
+.stats dt {
+    color: $text-primary-transparent;
+}
+
+.stats dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.option input {
+    margin-top: 0.2rem;
+}
+
+.note {
+    color: $text-primary-transparent;
+    font-size: 0.75rem;
+}
+
+.warning {
+    padding: 0.75rem;
+    border: 1px solid #ff8c1a66;
+    border-radius: var(--radius-m);
+    background: rgba(255, 140, 26, 0.12);
+}
+
+.error {
+    padding: 0.75rem;
+    border: 1px solid #e5484d66;
+    border-radius: var(--radius-m);
+    background: rgba(229, 72, 77, 0.12);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.button {
+    padding: 0.6rem 1rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.25rem;
+    background: $ui-white;
+    color: $text-primary;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.primary {
+    border-color: $looks-secondary;
+    background: $looks-secondary;
+    color: var(--accent-foreground);
+}

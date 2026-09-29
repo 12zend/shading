@@ -13,7 +13,6 @@ import Box from '../box/box.jsx';
 import Button from '../button/button.jsx';
 import ShareButton from './share-button.jsx';
 import {ComingSoonTooltip} from '../coming-soon/coming-soon.jsx';
-import Divider from '../divider/divider.jsx';
 import SaveStatus from './save-status.jsx';
 import ProjectWatcher from '../../containers/project-watcher.jsx';
 import MenuBarMenu from './menu-bar-menu.jsx';
@@ -33,7 +32,13 @@ import CloudVariablesToggler from '../../containers/tw-cloud-toggler.jsx';
 import TWSaveStatus from './tw-save-status.jsx';
 import TWNews from './tw-news.jsx';
 
-import {openTipsLibrary, openSettingsModal, openRestorePointModal} from '../../reducers/modals';
+import {
+    openTipsLibrary,
+    openSettingsModal,
+    openRestorePointModal,
+    openShareLinkModal,
+    openOpenShareLinkModal
+} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -90,11 +95,7 @@ import profileIcon from './icon--profile.png';
 import remixIcon from './icon--remix.svg';
 import dropdownCaret from './dropdown-caret.svg';
 import aboutIcon from './icon--about.svg';
-import fileIcon from './icon--file.svg';
-import editIcon from './icon--edit.svg';
-import addonsIcon from './addons.svg';
 import errorIcon from './tw-error.svg';
-import advancedIcon from './tw-advanced.svg';
 
 import ninetiesLogo from './nineties_logo.svg';
 import catLogo from './cat_logo.svg';
@@ -219,6 +220,8 @@ class MenuBar extends React.Component {
             'handleClickPackager',
             'handleClickDesktopSettings',
             'handleClickRestorePoints',
+            'handleClickShareLink',
+            'handleClickOpenShareLink',
             'handleClickPlugins',
             'handleClickShare',
             'handleSetMode',
@@ -288,6 +291,14 @@ class MenuBar extends React.Component {
     }
     handleClickRestorePoints () {
         this.props.onClickRestorePoints();
+        this.props.onRequestCloseFile();
+    }
+    handleClickShareLink () {
+        this.props.onClickShareLink();
+        this.props.onRequestCloseFile();
+    }
+    handleClickOpenShareLink () {
+        this.props.onClickOpenShareLink();
         this.props.onRequestCloseFile();
     }
     handleClickShare (waitForUpdate) {
@@ -547,10 +558,17 @@ class MenuBar extends React.Component {
                                 </MenuBarMenu>
                             </MenuLabel>
                         </div>}
-                        {(this.props.canChangeTheme || this.props.canChangeLanguage) && (<SettingsMenu
+                        {(
+                            this.props.canChangeTheme ||
+                            this.props.canChangeLanguage ||
+                            this.props.onClickAddonSettings ||
+                            this.props.onClickSettingsModal
+                        ) && (<SettingsMenu
                             canChangeLanguage={this.props.canChangeLanguage}
                             canChangeTheme={this.props.canChangeTheme}
                             isRtl={this.props.isRtl}
+                            onClickAddonSettings={this.props.onClickAddonSettings}
+                            onClickSettingsModal={this.props.onClickSettingsModal}
                             onClickDesktopSettings={
                                 this.props.onClickDesktopSettings &&
                                 this.handleClickDesktopSettings
@@ -570,25 +588,13 @@ class MenuBar extends React.Component {
                                 onOpen={this.props.onClickFile}
                                 onClose={this.props.onRequestCloseFile}
                             >
-                                <img
-                                    src={fileIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
+                                <span className={styles.menuLabelText}>
                                     <FormattedMessage
                                         defaultMessage="File"
                                         description="Text for file dropdown menu"
                                         id="gui.menuBar.file"
                                     />
                                 </span>
-                                <img
-                                    src={dropdownCaret}
-                                    draggable={false}
-                                    width={8}
-                                    height={5}
-                                />
                                 <MenuBarMenu
                                     className={classNames(styles.menuBarMenu)}
                                     open={this.props.fileMenuOpen}
@@ -694,6 +700,23 @@ class MenuBar extends React.Component {
                                             )}
                                         </SB3Downloader>
                                     </MenuSection>
+                                    <MenuSection>
+                                        <MenuItem onClick={this.handleClickShareLink}>
+                                            <FormattedMessage
+                                                defaultMessage="Create share link…"
+                                                // eslint-disable-next-line max-len
+                                                description="Menu bar item that compresses the whole project into a link"
+                                                id="movie.menuBar.createShareLink"
+                                            />
+                                        </MenuItem>
+                                        <MenuItem onClick={this.handleClickOpenShareLink}>
+                                            <FormattedMessage
+                                                defaultMessage="Open share link…"
+                                                description="Menu bar item that opens a pasted share link"
+                                                id="movie.menuBar.openShareLink"
+                                            />
+                                        </MenuItem>
+                                    </MenuSection>
                                     {this.props.onClickPackager && (
                                         <MenuSection>
                                             <MenuItem
@@ -725,25 +748,13 @@ class MenuBar extends React.Component {
                             onOpen={this.props.onClickEdit}
                             onClose={this.props.onRequestCloseEdit}
                         >
-                            <img
-                                src={editIcon}
-                                draggable={false}
-                                width={20}
-                                height={20}
-                            />
-                            <span className={styles.collapsibleLabel}>
+                            <span className={styles.menuLabelText}>
                                 <FormattedMessage
                                     defaultMessage="Edit"
                                     description="Text for edit dropdown menu"
                                     id="gui.menuBar.edit"
                                 />
                             </span>
-                            <img
-                                src={dropdownCaret}
-                                draggable={false}
-                                width={8}
-                                height={5}
-                            />
                             <MenuBarMenu
                                 className={classNames(styles.menuBarMenu)}
                                 open={this.props.editMenuOpen}
@@ -896,50 +907,7 @@ class MenuBar extends React.Component {
                                 </MenuBarMenu>
                             </MenuLabel>
                         )}
-
-                        {this.props.onClickAddonSettings && (
-                            <div
-                                className={classNames(styles.menuBarItem, styles.hoverable)}
-                                onClick={this.props.onClickAddonSettings}
-                            >
-                                <img
-                                    src={addonsIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
-                                    <FormattedMessage
-                                        defaultMessage="Addons"
-                                        description="Button to open addon settings"
-                                        id="tw.menuBar.addons"
-                                    />
-                                </span>
-                            </div>
-                        )}
-                        {this.props.onClickSettingsModal && (
-                            <div
-                                className={classNames(styles.menuBarItem, styles.hoverable)}
-                                onClick={this.props.onClickSettingsModal}
-                            >
-                                <img
-                                    src={advancedIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
-                                    <FormattedMessage
-                                        defaultMessage="Advanced"
-                                        description="Button to open advanced settings menu"
-                                        id="tw.menuBar.advanced"
-                                    />
-                                </span>
-                            </div>
-                        )}
                     </div>
-
-                    <Divider className={styles.divider} />
 
                     {this.props.canEditTitle ? (
                         <div className={classNames(styles.menuBarItem, styles.growable)}>
@@ -962,6 +930,13 @@ class MenuBar extends React.Component {
                             username={this.props.authorUsername}
                         />
                     ) : null)}
+                    {/* The block search (find-bar addon) is inserted here, directly right of the title. */}
+                    <div className={classNames(styles.spacer, styles.searchSlot)} />
+                    <div className={styles.accountInfoGroup}>
+                        <TWSaveStatus
+                            showSaveFilePicker={this.props.showSaveFilePicker}
+                        />
+                    </div>
                     {this.props.canShare ? (
                         (this.props.isShowingProject || this.props.isUpdating) && (
                             <div className={classNames(styles.menuBarItem)}>
@@ -988,7 +963,14 @@ class MenuBar extends React.Component {
                                 <ShareButton className={styles.menuBarButton} />
                             </MenuBarItemTooltip>
                         </div>
-                    ) : null}
+                    ) : (this.props.canUseShareLinks && (
+                        <div className={classNames(styles.menuBarItem)}>
+                            <ShareButton
+                                className={styles.menuBarButton}
+                                onClick={this.handleClickShareLink}
+                            />
+                        </div>
+                    ))}
                     {this.props.canRemix && (
                         <div className={classNames(styles.menuBarItem)}>
                             {remixButton}
@@ -1002,12 +984,6 @@ class MenuBar extends React.Component {
                             />
                         </div>
                     )}
-                </div>
-
-                <div className={styles.accountInfoGroup}>
-                    <TWSaveStatus
-                        showSaveFilePicker={this.props.showSaveFilePicker}
-                    />
                 </div>
 
                 {aboutButton}
@@ -1041,6 +1017,7 @@ MenuBar.propTypes = {
     canRemix: PropTypes.bool,
     canSave: PropTypes.bool,
     canShare: PropTypes.bool,
+    canUseShareLinks: PropTypes.bool,
     className: PropTypes.string,
     errors: PropTypes.arrayOf(PropTypes.shape({
         sprite: PropTypes.string,
@@ -1085,6 +1062,8 @@ MenuBar.propTypes = {
     onClickDesktopSettings: PropTypes.func,
     onClickPackager: PropTypes.func,
     onClickRestorePoints: PropTypes.func,
+    onClickShareLink: PropTypes.func,
+    onClickOpenShareLink: PropTypes.func,
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
     onClickLogin: PropTypes.func,
@@ -1147,6 +1126,7 @@ const mapStateToProps = (state, ownProps) => {
         isRtl: state.locales.isRtl,
         isUpdating: getIsUpdating(loadingState),
         isShowingProject: getIsShowingProject(loadingState),
+        canUseShareLinks: getIsShowingProject(loadingState),
         locale: state.locales.locale,
         loginMenuOpen: loginMenuOpen(state),
         modeMenuOpen: modeMenuOpen(state),
@@ -1184,6 +1164,8 @@ const mapDispatchToProps = dispatch => ({
     onRequestOpenAbout: () => dispatch(openAboutMenu()),
     onRequestCloseAbout: () => dispatch(closeAboutMenu()),
     onClickRestorePoints: () => dispatch(openRestorePointModal()),
+    onClickShareLink: () => dispatch(openShareLinkModal()),
+    onClickOpenShareLink: () => dispatch(openOpenShareLinkModal()),
     onClickSettings: () => dispatch(openSettingsMenu()),
     onClickSettingsModal: () => {
         dispatch(closeEditMenu());

@@ -1,15 +1,48 @@
 const guiColors = {
     'color-scheme': 'light',
 
-    'ui-primary': 'hsla(215, 100%, 95%, 1)', /* #E5F0FF */
-    'ui-secondary': 'hsla(215, 75%, 95%, 1)', /* #E9F1FC */
-    'ui-tertiary': 'hsla(215, 50%, 90%, 1)', /* #D9E3F2 */
+    'zone-0': '#ffffff',
+    'zone-1': '#f5f5f7',
+    'zone-2': '#fbfbfd',
+    'zone-3': '#ececf0',
+    'zone-4': '#e3e3e8',
+    'zone-5': '#d1d1d6',
+    'zone-6': '#aeaeb2',
+    'zone-7': '#8e8e93',
+    'zone-8': '#6e6e73',
+    'zone-9': '#2c2c2e',
+    'zone-10': '#1d1d1f',
 
-    'ui-modal-overlay': 'var(--motion-primary-transparent)',
+    'rec': '#ff3b30',
+    'rec-transparent': '#ff3b3026',
+    'rule': '#0000001a',
+    'rule-strong': '#00000026',
+
+    'accent-foreground': '#ffffff',
+
+    'toolbar-background': '#f6f6f8',
+    'toolbar-hover': '#0000000f',
+    'sidebar-background': '#ededf0',
+    'sidebar-selected': '#00000014',
+    'sidebar-ink': '#6e6e73',
+    'sidebar-ink-strong': '#1d1d1f',
+    'sidebar-icon-filter': 'brightness(0) opacity(0.6)',
+    'sidebar-icon-filter-selected': 'brightness(0) opacity(0.88)',
+    'toolbar-icon-filter': 'brightness(0) opacity(0.75)',
+    'segment-selected': '#ffffff',
+    'menu-background': '#f6f6f8e6',
+    'menu-rule': '#0000001a',
+    'menu-edge': '#00000033',
+
+    'ui-primary': '#f5f5f7',
+    'ui-secondary': '#fbfbfd',
+    'ui-tertiary': '#ececf0',
+
+    'ui-modal-overlay': '#00000040',
     'ui-modal-background': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
-    'ui-modal-foreground': 'hsla(225, 15%, 40%, 1)', /* #575E75 */
-    'ui-modal-header-background': 'var(--looks-secondary)',
-    'ui-modal-header-foreground': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
+    'ui-modal-foreground': '#2c2c2e',
+    'ui-modal-header-background': 'hsla(0, 100%, 100%, 1)',
+    'ui-modal-header-foreground': '#1d1d1f',
 
     'ui-white': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
     'ui-white-dim': 'hsla(0, 100%, 100%, 0.75)', /* 25% transparent version of ui-white */
@@ -18,8 +51,8 @@ const guiColors = {
 
     'ui-black-transparent': 'hsla(0, 0%, 0%, 0.15)', /* 15% transparent version of black */
 
-    'text-primary': 'hsla(225, 15%, 40%, 1)', /* #575E75 */
-    'text-primary-transparent': 'hsla(225, 15%, 40%, 0.75)',
+    'text-primary': '#2c2c2e',
+    'text-primary-transparent': '#6e6e73',
 
     'motion-primary': 'hsla(215, 100%, 65%, 1)', /* #4C97FF */
     'motion-primary-transparent': 'hsla(215, 100%, 65%, 0.9)', /* 90% transparent version of motion-primary */
@@ -44,9 +77,9 @@ const guiColors = {
     'pen-transparent': 'hsla(163, 85%, 40%, 0.25)', /* #0FBD8C */
     'pen-tertiary': 'hsla(163, 86%, 30%, 1)', /* #0B8E69 */
 
-    'error-primary': 'hsla(30, 100%, 55%, 1)', /* #FF8C1A */
-    'error-light': 'hsla(30, 100%, 70%, 1)', /* #FFB366 */
-    'error-transparent': 'hsla(30, 100%, 55%, 0.25)', /* #FF8C1A */
+    'error-primary': '#c93400',
+    'error-light': '#ff9500',
+    'error-transparent': '#ff950040',
 
     'extensions-primary': 'hsla(163, 85%, 40%, 1)', /* #0FBD8C */
     'extensions-tertiary': 'hsla(163, 85%, 30%, 1)', /* #0B8E69 */
@@ -55,9 +88,9 @@ const guiColors = {
 
     'drop-highlight': 'hsla(215, 100%, 77%, 1)', /* lighter than motion-primary */
 
-    'menu-bar-background': 'var(--looks-secondary)',
+    'menu-bar-background': '#f6f6f8',
     'menu-bar-background-image': 'none',
-    'menu-bar-foreground': '#ffffff',
+    'menu-bar-foreground': '#2c2c2e',
 
     'assets-background': '#ffffff',
 
@@ -67,19 +100,19 @@ const guiColors = {
 
     'shadow': 'hsla(0, 0%, 0%, 0.15)',
 
-    'badge-background': '#dbebff',
-    'badge-border': '#b9d6ff',
+    'badge-background': '#e5f0ff',
+    'badge-border': '#b3d4ff',
 
     'fullscreen-background': '#ffffff',
-    'fullscreen-accent': '#e8edf1',
+    'fullscreen-accent': '#f5f5f7',
 
     'page-background': '#ffffff',
-    'page-foreground': '#000000',
+    'page-foreground': '#1d1d1f',
 
-    'project-title-inactive': 'var(--ui-white-transparent)',
-    'project-title-hover': '#ffffff7f',
+    'project-title-inactive': 'transparent',
+    'project-title-hover': '#0000000f',
 
-    'link-color': '#2255dd',
+    'link-color': '#0066cc',
 
     'filter-icon-black': 'none',
     'filter-icon-gray': 'grayscale(100%)',

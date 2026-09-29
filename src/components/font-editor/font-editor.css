@@ -187,7 +187,7 @@
     border: 0;
     border-radius: $form-radius;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     font: inherit;
     font-weight: bold;
     cursor: pointer;
@@ -215,7 +215,7 @@
     justify-content: center;
     border-radius: 50%;
     background: $looks-secondary;
-    color: #ffffff;
+    color: var(--accent-foreground);
     font-size: 1rem;
     font-weight: bold;
 }
