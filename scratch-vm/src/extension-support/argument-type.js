@@ -51,7 +51,17 @@ const ArgumentType = {
     /**
      * Name of sound in the current target
      */
-    SOUND: 'sound'
+    SOUND: 'sound',
+
+    /**
+     * Time in seconds with a mini timeline picker
+     */
+    TIME: 'time',
+
+    /**
+     * Time range "start~end" in seconds with a mini timeline picker
+     */
+    TIME_RANGE: 'timeRange'
 };
 
 module.exports = ArgumentType;

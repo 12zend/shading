@@ -6,6 +6,11 @@ const categorySeparator = '<sep gap="36"/>';
 
 const blockSeparator = '<sep gap="36"/>'; // At default scale, about 28px
 
+const timeRange = (start, end) => (
+    `<value name="TIME_RANGE"><shadow type="math_time_range">` +
+    `<field name="RANGE">${start}~${end}</field></shadow></value>`
+);
+
 const translate = (id, english) => {
     if (LazyScratchBlocks.isLoaded()) {
         return LazyScratchBlocks.get().ScratchMsgs.translate(id, english);
@@ -373,14 +378,9 @@ const sound = function (soundName, colors) {
                     <field name="SOUND_MENU">${soundName}</field>
                 </shadow>
             </value>
-            <value name="T1">
-                <shadow type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-            <value name="T2">
-                <shadow type="math_number">
-                    <field name="NUM">Infinity</field>
+            <value name="TIME_RANGE">
+                <shadow type="math_time_range">
+                    <field name="RANGE">0~Infinity</field>
                 </shadow>
             </value>
             <value name="SPEED">
@@ -719,7 +719,7 @@ const proceduralShapeBlocks = function () {
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
     const appearance = (timeStart = 0, timeEnd = 'Infinity') => (`
-        ${number('T1', timeStart)}${number('T2', timeEnd)}
+        ${timeRange(timeStart, timeEnd)}
         <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
         ${number('OPACITY', 100)}
     `);
@@ -792,7 +792,7 @@ const objects = function (costumeName, locale) {
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
             ${number('SIZE', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${number('T1', 0)}${number('T2', 'Infinity')}
+            ${timeRange(0, 'Infinity')}
         </block>
         ${proceduralShapeBlocks().join('\n')}
         <block type="objects_grouping"/>
@@ -805,7 +805,7 @@ const objects = function (costumeName, locale) {
         <block type="objects_composite">
             ${number('OPACITY', 100)}<field name="BLEND">normal</field>
         </block>
-        <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
+        <block type="objects_timeWithin">${timeRange(0, 1)}</block>
         <block type="objects_keyframeTime">${number('ID', 1)}</block>
         <block type="objects_pass">
             ${text('POINTS', '')}

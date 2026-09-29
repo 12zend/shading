@@ -17,6 +17,7 @@ const MathUtil = require('../util/math-util');
 const StringUtil = require('../util/string-util');
 const VariableUtil = require('../util/variable-util');
 const compress = require('./tw-compress-sb3');
+const {migrateTimeInputs} = require('../lib/time-range');
 
 const {loadCostume} = require('../import/load-costume.js');
 const {loadSound} = require('../import/load-sound.js');
@@ -380,6 +381,27 @@ const serializeBlocks = function (blocks) {
  * @param {unknown} blocks Output of serializeStandaloneBlocks
  * @returns {{blocks: Block[], extensionURLs: Map<string, string>}}
  */
+/**
+ * Backpack and drag-to-sprite blocks may have been copied before Movie time arguments existed.
+ * @param {Block[]} blocks List of block objects. Mutated.
+ * @returns {Block[]} Migrated list of block objects.
+ */
+const migrateStandaloneTimeInputs = blocks => {
+    if (!Array.isArray(blocks)) return blocks;
+    const blockMap = {};
+    for (const block of blocks) {
+        if (block && block.id) blockMap[block.id] = block;
+    }
+    if (!migrateTimeInputs(blockMap, uid)) return blocks;
+    // Keep the top-level block first; shareBlocksToTarget relies on the original order.
+    const ordered = blocks.filter(block => block && blockMap[block.id] === block);
+    const known = new Set(ordered);
+    for (const id of Object.keys(blockMap)) {
+        if (!known.has(blockMap[id])) ordered.push(blockMap[id]);
+    }
+    return ordered;
+};
+
 const deserializeStandaloneBlocks = blocks => {
     // deep clone to ensure it's safe to modify later
     blocks = JSON.parse(JSON.stringify(blocks));
@@ -390,14 +412,14 @@ const deserializeStandaloneBlocks = blocks => {
             extensionURLs.set(id, url);
         }
         return {
-            blocks: blocks.blocks,
+            blocks: migrateStandaloneTimeInputs(blocks.blocks),
             extensionURLs
         };
     }
 
     // Vanilla Scratch format is just a list of block objects
     return {
-        blocks,
+        blocks: migrateStandaloneTimeInputs(blocks),
         extensionURLs: new Map()
     };
 };
@@ -1191,6 +1213,8 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     }
     if (Object.prototype.hasOwnProperty.call(object, 'blocks')) {
         deserializeBlocks(object.blocks);
+        // Older projects stored Movie time ranges as separate T1/T2 number inputs.
+        migrateTimeInputs(object.blocks, uid);
         // Take a second pass to create objects and add extensions
         for (const blockId in object.blocks) {
             if (!Object.prototype.hasOwnProperty.call(object.blocks, blockId)) continue;

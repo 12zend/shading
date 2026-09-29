@@ -10,6 +10,7 @@ import {
     normalizeShapeType
 } from './object-blocks';
 import installObjectCompositionBlockDefinitions from './object-composition-blocks-ui';
+import installTimeFields from './time-field';
 import log from './log';
 import {localize, resolveLocale} from './movie-block-l10n';
 
@@ -1101,6 +1102,7 @@ const makeObjectRightEdgeRenderer = ScratchBlocks => function (steps, inputRows,
 
 const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
     const translate = (english, japanese) => localize(resolveLocale(locale, vm), english, japanese);
+    installTimeFields(ScratchBlocks, vm);
     // Saved projects use looks_* lighting opcodes. Keep those IDs while presenting the blocks as Objects.
     const objectStatement = (message0, args0) => ({
         message0,
@@ -1213,8 +1215,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             this.appendValueInput('SIZE').appendField('size:');
             this.appendValueInput('WIDTH').appendField('width:');
             this.appendValueInput('HEIGHT').appendField('height:');
-            this.appendValueInput('T1').appendField('time:');
-            this.appendValueInput('T2').appendField('~');
+            this.appendValueInput('TIME_RANGE').appendField('time:');
             this.setInputsInline(true);
             this.setColour(PRIMARY, SECONDARY, TERTIARY);
             this.setPreviousStatement(true);
@@ -1364,8 +1365,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             this.appendValueInput('OUTER');
             this.appendValueInput('WIDTH').appendField('width:');
             this.appendValueInput('HEIGHT').appendField('height:');
-            this.appendValueInput('T1').appendField('time:');
-            this.appendValueInput('T2').appendField('~');
+            this.appendValueInput('TIME_RANGE').appendField('time:');
             this.appendValueInput('COLOR').appendField('color:');
             this.appendValueInput('OPACITY')
                 .appendField('opacity:')
@@ -1434,8 +1434,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
     };
 
     const addShapeAppearanceInputs = block => {
-        block.appendValueInput('T1').appendField('time:');
-        block.appendValueInput('T2').appendField('~');
+        block.appendValueInput('TIME_RANGE').appendField('time:');
         block.appendValueInput('COLOR').appendField('color:');
         block.appendValueInput('OPACITY')
             .appendField('opacity:')

@@ -269,8 +269,10 @@ const calculateWiggleValue = (frequency, amount, seed, time) => {
 };
 
 const isTimeWithin = (time, start, end) => {
-    const first = finiteNumber(start);
-    const second = finiteNumber(end);
+    // Time range inputs can be open-ended ("1.5~Infinity").
+    const boundary = value => (Math.abs(Number(value)) === Infinity ? Number(value) : finiteNumber(value));
+    const first = boundary(start);
+    const second = boundary(end);
     const minimum = Math.min(first, second);
     const maximum = Math.max(first, second);
     const current = finiteNumber(time);

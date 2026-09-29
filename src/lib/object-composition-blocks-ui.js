@@ -219,8 +219,8 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
     installObjectBlock('objects_animate', {
         message0: 'animate %1 to %2',
         args0: [numberInput('A'), numberInput('B')],
-        message1: 'from %1 sec to %2 sec',
-        args1: [numberInput('T1'), numberInput('T2')],
+        message1: 'time: %1',
+        args1: [numberInput('TIME_RANGE')],
         message2: 'easing %1',
         args2: [easingField()],
         inputsInline: true,
@@ -249,10 +249,18 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
     });
 
     installObjectBlock('objects_timeWithin', {
-        message0: localize(locale, 'time within %1 to %2 sec', '%1 から %2 まで'),
-        args0: [numberInput('T1'), numberInput('T2')],
+        message0: localize(locale, 'time within %1', '%1 の間'),
+        args0: [numberInput('TIME_RANGE')],
         inputsInline: true,
         extensions: ['output_boolean']
+    });
+
+    // Keeps reporter-driven T1/T2 values from older projects working inside a time range input.
+    installObjectBlock('objects_timeRangeValue', {
+        message0: '%1 ~ %2',
+        args0: [numberInput('T1'), numberInput('T2')],
+        inputsInline: true,
+        extensions: ['output_string']
     });
 
     installObjectBlock('objects_posterizeTime', {
@@ -265,8 +273,8 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
     installObjectBlock('objects_interpolateColor', {
         message0: 'interpolate color %1 to %2',
         args0: [numberInput('A'), numberInput('B')],
-        message1: 'from %1 sec to %2 sec easing %3',
-        args1: [numberInput('T1'), numberInput('T2'), easingField()],
+        message1: 'time: %1 easing %2',
+        args1: [numberInput('TIME_RANGE'), easingField()],
         inputsInline: true,
         extensions: ['output_string']
     });
@@ -274,8 +282,8 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
     installObjectBlock('objects_interpolateAngle', {
         message0: 'interpolate angle %1 to %2',
         args0: [numberInput('A'), numberInput('B')],
-        message1: 'from %1 sec to %2 sec easing %3',
-        args1: [numberInput('T1'), numberInput('T2'), easingField()],
+        message1: 'time: %1 easing %2',
+        args1: [numberInput('TIME_RANGE'), easingField()],
         inputsInline: true,
         extensions: ['output_number']
     });
@@ -291,8 +299,8 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
         args1: [numberInput('X1'), numberInput('Y1'), numberInput('Z1')],
         message2: 'to x: %1 y: %2 z: %3',
         args2: [numberInput('X2'), numberInput('Y2'), numberInput('Z2')],
-        message3: 'from %1 sec to %2 sec easing %3',
-        args3: [numberInput('T1'), numberInput('T2'), easingField()],
+        message3: 'time: %1 easing %2',
+        args3: [numberInput('TIME_RANGE'), easingField()],
         inputsInline: true,
         extensions: ['output_number']
     });

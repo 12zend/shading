@@ -50,6 +50,7 @@ const num = shadow('math_number', 'NUM');
 const whole = shadow('math_whole_number', 'NUM');
 const text = shadow('text', 'TEXT');
 const color = shadow('colour_picker', 'COLOUR');
+const timeRange = (start, end) => shadow('math_time_range', 'RANGE')(`${start}~${end}`);
 
 const node = (key, opcode, spec = {}) => Object.assign({key, opcode}, spec);
 
@@ -141,8 +142,7 @@ const drawText = (key, options = {}) => node(key, 'objects_draw', {
         SIZE: num(options.size || 50),
         WIDTH: num(100),
         HEIGHT: num(100),
-        T1: num(0),
-        T2: num('Infinity')
+        TIME_RANGE: timeRange(0, 'Infinity')
     }
 });
 
@@ -256,9 +256,9 @@ const exampleScript = variables => stack(
     }),
     node('ifCaption', 'control_if', {
         inputs: {
-            // `time within` needs finite bounds; 10 s is the length of a new project's timeline.
+            // 10 s is the length of a new project's timeline.
             CONDITION: node('captionTime', 'objects_timeWithin', {
-                inputs: {T1: num(1.5), T2: num(10)}
+                inputs: {TIME_RANGE: timeRange(1.5, 10)}
             }),
             SUBSTACK: drawText('caption', {text: text('Shading'), size: 30})
         }

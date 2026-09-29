@@ -53,6 +53,12 @@ const defaultBlockPackages = {
 const interpolate = require('./tw-interpolate');
 const FrameLoop = require('./tw-frame-loop');
 const MonitorRecord = require('./monitor-record.js');
+const {
+    TIME_FIELD,
+    TIME_RANGE_FIELD,
+    TIME_RANGE_SHADOW_OPCODE,
+    TIME_SHADOW_OPCODE
+} = require('../lib/time-range');
 
 const defaultExtensionColors = ['#0FBD8C', '#0DA57A', '#0B8E69'];
 
@@ -125,6 +131,18 @@ const ArgumentTypeMap = (() => {
         shadow: {
             type: 'sound_sounds_menu',
             fieldName: 'SOUND_MENU'
+        }
+    };
+    map[ArgumentType.TIME] = {
+        shadow: {
+            type: TIME_SHADOW_OPCODE,
+            fieldName: TIME_FIELD
+        }
+    };
+    map[ArgumentType.TIME_RANGE] = {
+        shadow: {
+            type: TIME_RANGE_SHADOW_OPCODE,
+            fieldName: TIME_RANGE_FIELD
         }
     };
     return map;

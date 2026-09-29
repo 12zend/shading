@@ -516,8 +516,8 @@ describe('Objects blocks', () => {
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
             'timelineTime', 'keyframeTime', 'leftKeyframeTime',
             'animate', 'loopValue', 'pingPongValue', 'wiggle',
-            'timeWithin', 'posterizeTime', 'interpolateColor', 'interpolateAngle', 'interpolateVector',
-            'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
+            'timeWithin', 'timeRangeValue', 'posterizeTime', 'interpolateColor', 'interpolateAngle',
+            'interpolateVector', 'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
         expect(Object.keys(info.blocks.find(block => block.opcode === 'draw').arguments)).toEqual([
             'SOURCE', 'ASSET', 'TEXT', 'ITALIC', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
@@ -525,7 +525,7 @@ describe('Objects blocks', () => {
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
             'SIZE', 'WIDTH', 'HEIGHT',
-            'T1', 'T2'
+            'TIME_RANGE'
         ]);
 
         const JapaneseObjectBlocks = createObjectBlocksClass({
@@ -544,7 +544,7 @@ describe('Objects blocks', () => {
             'SX', 'SY', 'SZ',
             'INNER', 'OUTER', 'WIDTH', 'HEIGHT',
             'COLOR', 'OPACITY',
-            'T1', 'T2'
+            'TIME_RANGE'
         ]);
         expect(info.menus.shapeType.items).toEqual(['polygon', 'star', 'curved star', 'flower']);
         expect(info.blocks.find(block => block.opcode === 'shape').arguments.RATIO.defaultValue).toBe(0.5);
@@ -553,16 +553,21 @@ describe('Objects blocks', () => {
         expect(info.menus.easing.items).toEqual(ANIMATION_EASING_TYPES);
         expect(info.menus.matteMode.items).toEqual(MATTE_MODES);
         expect(info.menus.pathComponent.items).toEqual(['x', 'y']);
-        expect(info.blocks.find(block => block.opcode === 'shape').text).toContain('time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %');
+        expect(info.blocks.find(block => block.opcode === 'shape').text).toContain('time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %');
         expect(info.blocks.find(block => block.opcode === 'shape').text).not.toContain('\n');
-        expect(info.blocks.find(block => block.opcode === 'draw').arguments.T2.defaultValue).toBe(Infinity);
-        expect(info.blocks.find(block => block.opcode === 'shape').arguments.T2.defaultValue).toBe(Infinity);
+        expect(info.blocks.find(block => block.opcode === 'draw').arguments.TIME_RANGE)
+            .toEqual({type: ArgumentType.TIME_RANGE, defaultValue: '0~Infinity'});
+        expect(info.blocks.find(block => block.opcode === 'shape').arguments.TIME_RANGE.defaultValue)
+            .toBe('0~Infinity');
         expect(info.blocks.find(block => block.opcode === 'arc').arguments).toEqual(expect.objectContaining({
             START: {type: ArgumentType.NUMBER, defaultValue: 0},
             END: {type: ArgumentType.NUMBER, defaultValue: 360},
-            T1: {type: expect.anything(), defaultValue: 0},
-            T2: {type: expect.anything(), defaultValue: Infinity}
+            TIME_RANGE: {type: ArgumentType.TIME_RANGE, defaultValue: '0~Infinity'}
         }));
+        expect(info.blocks.find(block => block.opcode === 'animate').arguments.TIME_RANGE.defaultValue)
+            .toBe('1~2');
+        expect(info.blocks.find(block => block.opcode === 'timeFreeze').arguments.TIME)
+            .toEqual({type: ArgumentType.TIME, defaultValue: 0});
         expect(info.blocks.find(block => block.opcode === 'circularSegment').arguments).toEqual(expect.objectContaining({
             START: {type: ArgumentType.NUMBER, defaultValue: 0},
             END: {type: ArgumentType.NUMBER, defaultValue: 360}
@@ -624,6 +629,25 @@ describe('Objects blocks', () => {
         expect(blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)).toBe(
             blocks.wiggle({FREQUENCY: 2, AMOUNT: 20, SEED: 1}, util)
         );
+    });
+
+    test('reads merged TIME_RANGE arguments like the old T1/T2 inputs', () => {
+        const runtime = {movieAssetManager: {timeline: {currentTime: 1}}};
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks.animate({A: 0, B: 100, TIME_RANGE: '0~2', EASING: 'Linear'}, util)).toBe(50);
+        expect(blocks.timeWithin({TIME_RANGE: '0.5~1.5'}, util)).toBe(true);
+        expect(blocks.timeWithin({TIME_RANGE: '2~3'}, util)).toBe(false);
+        // A plain number reporter in a range input means "from this time onwards".
+        expect(blocks.timeWithin({TIME_RANGE: 0.5}, util)).toBe(true);
+        expect(blocks.timeWithin({TIME_RANGE: '0~Infinity'}, util)).toBe(true);
+        expect(blocks.interpolateColor({
+            A: '#000000', B: '#ffffff', TIME_RANGE: '0 ~ 2', EASING: 'Linear'
+        }, util)).toBe('#808080');
+        expect(blocks.timeRangeValue({T1: 1.5, T2: Infinity})).toBe('1.5~Infinity');
+        expect(blocks.timeWithin({TIME_RANGE: blocks.timeRangeValue({T1: 0, T2: 2})}, util)).toBe(true);
     });
 
     test('applies transform C-block context to every child draw without yielding', () => {
@@ -994,10 +1018,11 @@ describe('Objects blocks', () => {
         const util = makeUtil();
 
         expect(blocks[opcode](Object.assign({
-            COLOR: '#ff0000', OPACITY: 65, T1: 0, T2: Infinity
+            COLOR: '#ff0000', OPACITY: 65, TIME_RANGE: '0~Infinity'
         }, args), util)).toBeUndefined();
         expect(manager.drawShape).toHaveBeenCalledWith(util.target, expect.objectContaining({
-            shape: opcode === 'circularSegment' ? 'circular segment' : opcode
+            shape: opcode === 'circularSegment' ? 'circular segment' : opcode,
+            time: {start: 0, end: Infinity}
         }));
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });
@@ -1029,8 +1054,7 @@ describe('Objects blocks', () => {
             SX: 2,
             SY: 3,
             SZ: 4,
-            T1: 1,
-            T2: 4,
+            TIME_RANGE: '1~4',
             WIDTH: 120,
             COLOR: '#ff0000',
             OPACITY: 65
