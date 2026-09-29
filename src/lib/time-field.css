@@ -16,8 +16,9 @@
 }
 
 .label {
-    fill: rgba(87, 94, 117, 0.85);
-    font-size: 7.5px;
+    fill: #575e75;
+    font-size: 9px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
 }

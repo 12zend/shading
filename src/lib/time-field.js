@@ -15,12 +15,12 @@ const DEFAULT_DURATION = 10;
 
 // The timeline lives inside the shadow block, right of the value, and is edited in place:
 // drag the handles, wheel to scroll, Ctrl/⌘ + wheel (or pinch) to zoom. Clicking the value types it.
-const INLINE_WIDTH = 168;
+const INLINE_WIDTH = 216;
 const INLINE_INFINITY_WIDTH = 15;
 const INLINE_GAP = 8;
 const INLINE_RIGHT_PADDING = 12;
 const INLINE_HEIGHT = 30;
-const LABEL_Y = 7;
+const LABEL_Y = 7.5;
 const TRACK_Y = 9;
 const TRACK_HEIGHT = 17;
 const THUMB_Y = TRACK_Y + TRACK_HEIGHT + 2;
@@ -113,7 +113,7 @@ const getTimeline = vm => {
 
 const getLabelStep = pixelsPerSecond => {
     const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-    return steps.find(step => step * pixelsPerSecond >= 30) || steps[steps.length - 1];
+    return steps.find(step => step * pixelsPerSecond >= 28) || steps[steps.length - 1];
 };
 
 const formatLabelTime = seconds => {
@@ -356,7 +356,7 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
                     y1: major ? TRACK_Y - 1.5 : TRACK_Y,
                     y2: major ? TRACK_Y + TRACK_HEIGHT : TRACK_Y + 2.5
                 }, clipped);
-                if (major && x <= trackWidth - 8) {
+                if (major && x <= trackWidth - 10) {
                     svg('text', {
                         'class': styles.label,
                         'text-anchor': 'start',
