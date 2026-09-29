@@ -151,8 +151,7 @@ const easing = (key, type, v0, v1, t0, t1, power) => node(key, 'operator_easing'
     inputs: {
         V0: num(v0),
         V1: num(v1),
-        T0: num(t0),
-        T1: num(t1),
+        TIME_RANGE: timeRange(t0, t1),
         POWER: num(power),
         SPEED: num(0),
         STRENGTH: num(1)

@@ -30,8 +30,15 @@ const TIME_RANGE_OPCODES = {
     objects_interpolateColor: [0, 1],
     objects_interpolateAngle: [0, 1],
     objects_interpolateVector: [0, 1],
-    sound_playattime: [0, Infinity]
+    sound_playattime: [0, Infinity],
+    operator_easing: [0, 1]
 };
+
+/** Old input names of the range pair, when they are not T1/T2. */
+const TIME_RANGE_LEGACY_INPUTS = {
+    operator_easing: ['T0', 'T1']
+};
+const DEFAULT_LEGACY_INPUTS = ['T1', 'T2'];
 
 /** Opcodes whose TIME input holds a single time in seconds. */
 const TIME_OPCODES = {
@@ -190,8 +197,9 @@ const migrateTimeInputs = (blocks, makeId) => {
 
         if (!Object.prototype.hasOwnProperty.call(TIME_RANGE_OPCODES, block.opcode)) continue;
         if (block.inputs[TIME_RANGE_INPUT]) continue;
-        const t1 = block.inputs.T1;
-        const t2 = block.inputs.T2;
+        const [startName, endName] = TIME_RANGE_LEGACY_INPUTS[block.opcode] || DEFAULT_LEGACY_INPUTS;
+        const t1 = block.inputs[startName];
+        const t2 = block.inputs[endName];
         // sound_playattime also has an older TIME-only form; that one is not a range.
         if (!t1 && !t2) continue;
 
@@ -240,8 +248,8 @@ const migrateTimeInputs = (blocks, makeId) => {
             };
         }
 
-        delete block.inputs.T1;
-        delete block.inputs.T2;
+        delete block.inputs[startName];
+        delete block.inputs[endName];
         block.inputs[TIME_RANGE_INPUT] = {
             name: TIME_RANGE_INPUT,
             block: rangeBlockId,

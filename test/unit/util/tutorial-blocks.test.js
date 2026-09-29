@@ -73,7 +73,12 @@ const shadowValue = (target, blockId, inputName) => {
 
 const easingValues = (target, easingId) => ({
     type: target.blocks.getBlock(easingId).fields.TYPE.value,
-    values: ['V0', 'V1', 'T0', 'T1', 'POWER'].map(name => Number(shadowValue(target, easingId, name)))
+    values: [
+        Number(shadowValue(target, easingId, 'V0')),
+        Number(shadowValue(target, easingId, 'V1')),
+        ...String(shadowValue(target, easingId, 'TIME_RANGE')).split('~').map(Number),
+        Number(shadowValue(target, easingId, 'POWER'))
+    ]
 });
 
 describe('tutorial block stages', () => {

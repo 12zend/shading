@@ -36,6 +36,7 @@ const MODE_RANGE = 'range';
 
 // Animations interpolate between the two times, so an open end has no meaning there.
 const FINITE_RANGE_OPCODES = new Set([
+    'operator_easing',
     'objects_animate',
     'objects_interpolateAngle',
     'objects_interpolateColor',

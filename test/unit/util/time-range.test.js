@@ -3,6 +3,7 @@ jest.mock('scratch-render-fonts', () => () => ({}), {virtual: true});
 import VM from 'scratch-vm';
 
 import installObjectBlocks from '../../../src/lib/object-blocks';
+import installMovieEasing from '../../../src/lib/movie-easing';
 import {
     formatTimeRange,
     migrateTimeInputs,
@@ -339,5 +340,143 @@ describe('loading shade files saved with T1/T2 inputs', () => {
         expect(thread.isCompiled).toBe(compilerEnabled);
         expect(timeWithin).toHaveBeenCalledTimes(1);
         expect(timeWithin.mock.calls[0][0]).toEqual(expect.objectContaining({TIME_RANGE: '1.5~10'}));
+    });
+});
+
+describe('migrating old easing blocks (T0/T1)', () => {
+    const easingBlock = inputs => ({
+        id: 'easing',
+        opcode: 'operator_easing',
+        next: null,
+        parent: null,
+        inputs,
+        fields: {TYPE: {name: 'TYPE', value: 'PowerIn'}, TYPE2: {name: 'TYPE2', value: 'Elastic'}},
+        shadow: false,
+        topLevel: true
+    });
+
+    test('merges T0/T1 into a time range and keeps the other inputs', () => {
+        const blocks = {
+            easing: easingBlock({
+                V0: {name: 'V0', block: 'v0', shadow: 'v0'},
+                T0: {name: 'T0', block: 't0', shadow: 't0'},
+                T1: {name: 'T1', block: 't1', shadow: 't1'}
+            }),
+            v0: numberShadow('v0', 'easing', '0'),
+            t0: numberShadow('t0', 'easing', '0.5'),
+            t1: numberShadow('t1', 'easing', '2')
+        };
+        migrateTimeInputs(blocks, makeIds());
+        expect(Object.keys(blocks.easing.inputs).sort()).toEqual(['TIME_RANGE', 'V0']);
+        expect(blocks[blocks.easing.inputs.TIME_RANGE.shadow].fields.RANGE.value).toBe('0.5~2');
+        expect(blocks.t0).toBeUndefined();
+        expect(blocks.t1).toBeUndefined();
+    });
+
+    test('keeps a reporter plugged into T0 inside a range reporter', () => {
+        const blocks = {
+            easing: easingBlock({
+                T0: {name: 'T0', block: 'timer', shadow: 't0'},
+                T1: {name: 'T1', block: 't1', shadow: 't1'}
+            }),
+            timer: {
+                id: 'timer', opcode: 'sensing_timer', next: null, parent: 'easing',
+                inputs: {}, fields: {}, shadow: false, topLevel: false
+            },
+            t0: numberShadow('t0', 'easing', '0'),
+            t1: numberShadow('t1', 'easing', '1')
+        };
+        migrateTimeInputs(blocks, makeIds());
+        const reporter = blocks[blocks.easing.inputs.TIME_RANGE.block];
+        expect(reporter.opcode).toBe('objects_timeRangeValue');
+        expect(reporter.inputs.T1.block).toBe('timer');
+        expect(reporter.inputs.T2.shadow).toBe('t1');
+        expect(blocks.timer.parent).toBe(reporter.id);
+    });
+});
+
+describe('loading shade files with the original easing block', () => {
+    // set [out] to (easing PowerIn 0 → 100, time 1 ~ 3, power 2) with the timer at 2 s: 25.
+    const easingProject = () => ({
+        targets: [{
+            isStage: true,
+            name: 'Stage',
+            variables: {out: ['out', 0]},
+            lists: {},
+            broadcasts: {},
+            blocks: {
+                set: {
+                    opcode: 'data_setvariableto',
+                    next: null,
+                    parent: null,
+                    inputs: {VALUE: [3, 'easing', [10, '']]},
+                    fields: {VARIABLE: ['out', 'out']},
+                    shadow: false,
+                    topLevel: true,
+                    x: 0,
+                    y: 0
+                },
+                easing: {
+                    opcode: 'operator_easing',
+                    next: null,
+                    parent: 'set',
+                    inputs: {
+                        V0: [1, [4, '0']],
+                        V1: [1, [4, '100']],
+                        T0: [1, [4, '1']],
+                        T1: [1, [4, '3']],
+                        POWER: [1, [4, '2']],
+                        SPEED: [1, [4, '0']],
+                        STRENGTH: [1, [4, '0']]
+                    },
+                    fields: {TYPE: ['PowerIn', null], TYPE2: ['Elastic', null]},
+                    shadow: false,
+                    topLevel: false
+                }
+            },
+            comments: {},
+            currentCostume: 0,
+            costumes: [],
+            sounds: [],
+            volume: 100,
+            layerOrder: 0,
+            tempo: 60,
+            videoTransparency: 50,
+            videoState: 'on',
+            textToSpeechLanguage: null
+        }],
+        monitors: [],
+        extensions: [],
+        meta: {semver: '3.0.0', vm: '0.2.0', agent: ''}
+    });
+
+    test.each([
+        ['compiled', true],
+        ['interpreted', false]
+    ])('evaluates to the same value as before when %s', async (name, compilerEnabled) => {
+        const vm = new VM();
+        installObjectBlocks(vm);
+        installMovieEasing(vm);
+        await vm.loadProject(JSON.stringify(easingProject()));
+        vm.setCompilerOptions({enabled: compilerEnabled});
+        const runtime = vm.runtime;
+        const stage = runtime.targets[0];
+
+        const easing = Object.values(stage.blocks._blocks).find(block => block.opcode === 'operator_easing');
+        expect(Object.keys(easing.inputs)).not.toContain('T0');
+        expect(stage.blocks.getBlock(easing.inputs.TIME_RANGE.shadow).fields.RANGE.value).toBe('1~3');
+
+        runtime.ioDevices.clock.projectTimer = () => 2;
+        runtime.currentStepTime = 1000 / 30;
+        const thread = runtime._pushThread('set', stage);
+        runtime.sequencer.stepThreads();
+
+        expect(thread.isCompiled).toBe(compilerEnabled);
+        expect(Number(stage.variables.out.value)).toBeCloseTo(25);
+        expect(Number(stage.variables.out.value)).toBeCloseTo(
+            runtime._primitives.operator_easing({
+                TYPE: 'PowerIn', TYPE2: 'Elastic', V0: 0, V1: 100, T0: 1, T1: 3, POWER: 2, SPEED: 0, STRENGTH: 0
+            }, {ioQuery: () => 2})
+        );
     });
 });
