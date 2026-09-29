@@ -164,6 +164,8 @@ class Blocks extends React.Component {
             Blocks.defaultOptions
         );
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
+        // Make the existing return block available in My Blocks, even before defining a procedure.
+        this.workspace.enableProcedureReturns();
         AddonHooks.blocklyWorkspace = this.workspace;
 
         // Register buttons under new callback keys for creating variables,
