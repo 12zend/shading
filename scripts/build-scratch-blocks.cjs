@@ -29,7 +29,12 @@ for (const bin of ['/opt/homebrew/opt/openjdk/bin', '/usr/local/opt/openjdk/bin'
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const run = args => execFileSync(npm, args, {cwd: root, env, stdio: 'inherit', shell: process.platform === 'win32'});
 
-if (!fs.existsSync(path.join(root, 'node_modules'))) {
+// The root `npm ci` links this checkout via `file:./scratch-blocks` and can leave a partial
+// scratch-blocks/node_modules behind (its dependencies get hoisted to the root), so check for the
+// Closure packages build.py needs rather than only for the directory.
+const hasClosure = ['google-closure-library', 'google-closure-compiler']
+    .every(name => fs.existsSync(path.join(root, 'node_modules', name)));
+if (!hasClosure) {
     // Skip install scripts: chromedriver and friends are only needed for scratch-blocks' own browser tests.
     run(['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
 }
