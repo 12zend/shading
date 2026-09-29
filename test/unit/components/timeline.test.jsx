@@ -175,6 +175,159 @@ describe('Timeline keyboard controls', () => {
         expect(manager.seekTimeline).not.toHaveBeenCalled();
     });
 
+    test('shift+arrow keys move by one second snapped to frames', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {currentTime: 2})
+        });
+
+        instance.handleKeyDown(makeEvent({key: 'ArrowRight', keyCode: 39, shiftKey: true}));
+        instance.handleKeyDown(makeEvent({key: 'ArrowLeft', keyCode: 37, shiftKey: true}));
+
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(1, 3);
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(2, 1);
+    });
+
+    test('comma and period step one frame', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {currentTime: 1})
+        });
+
+        instance.handleKeyDown(makeEvent({key: '.'}));
+        instance.handleKeyDown(makeEvent({key: ','}));
+
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(1, 31 / 30);
+        expect(manager.seekTimeline).toHaveBeenNthCalledWith(2, 29 / 30);
+    });
+
+    test('shift+space stops playback', () => {
+        manager.stopTimeline = jest.fn();
+        const event = makeEvent({key: ' ', code: 'Space', shiftKey: true});
+
+        instance.handleKeyDown(event);
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(manager.stopTimeline).toHaveBeenCalled();
+        expect(manager.playTimeline).not.toHaveBeenCalled();
+    });
+
+    test('brackets jump to the previous and next keyframe and select it', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {
+                currentTime: 4,
+                keyframes: [1, 4, 7]
+            })
+        });
+
+        instance.handleKeyDown(makeEvent({key: ']'}));
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(7);
+        expect(instance.state.selectedKeyframeTime).toBe(7);
+
+        instance.handleKeyDown(makeEvent({key: '['}));
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(1);
+        expect(instance.state.selectedKeyframeTime).toBe(1);
+    });
+
+    test('K adds a keyframe and Shift+K deletes the selected keyframe', () => {
+        component.setState({
+            selectedKeyframeTime: 4,
+            timeline: Object.assign({}, instance.state.timeline, {
+                currentTime: 2,
+                keyframes: [1, 4]
+            })
+        });
+
+        instance.handleKeyDown(makeEvent({key: 'K', shiftKey: true}));
+        expect(manager.removeTimelineKeyframe).toHaveBeenCalledWith(2);
+
+        instance.handleKeyDown(makeEvent({key: 'k'}));
+        expect(manager.addTimelineKeyframe).toHaveBeenCalledWith(2);
+    });
+
+    test('editing shortcuts are ignored while rendering', () => {
+        component.setState({
+            timeline: Object.assign({}, instance.state.timeline, {recording: true})
+        });
+
+        instance.handleKeyDown(makeEvent({key: 'k'}));
+        instance.handleKeyDown(makeEvent({key: '.'}));
+
+        expect(manager.addTimelineKeyframe).not.toHaveBeenCalled();
+        expect(manager.seekTimeline).not.toHaveBeenCalled();
+    });
+
+    test('letter shortcuts are ignored while editing text', () => {
+        instance.handleKeyDown(makeEvent({key: 'k', target: {tagName: 'INPUT', type: 'text'}}));
+        instance.handleKeyDown(makeEvent({key: 'k', target: {isContentEditable: true, tagName: 'DIV'}}));
+
+        expect(manager.addTimelineKeyframe).not.toHaveBeenCalled();
+    });
+
+    test('shortcuts work from a focused keyframe marker inside the timeline', () => {
+        const marker = {tagName: 'BUTTON'};
+        instance.timelineElement = {contains: target => target === marker};
+
+        instance.handleKeyDown(makeEvent({key: 'k', target: marker}));
+
+        expect(manager.addTimelineKeyframe).toHaveBeenCalled();
+    });
+
+    test('plus, minus and zero control timeline zoom', () => {
+        instance.viewportElement = {
+            clientWidth: 640,
+            getBoundingClientRect: () => ({left: 0, width: 640}),
+            scrollLeft: 0
+        };
+
+        instance.handleKeyDown(makeEvent({key: '+', shiftKey: true}));
+        expect(instance.state.pixelsPerSecond).toBeCloseTo(90);
+
+        instance.handleKeyDown(makeEvent({key: '-'}));
+        instance.handleKeyDown(makeEvent({key: '-'}));
+        expect(instance.state.pixelsPerSecond).toBeCloseTo(57.6);
+
+        instance.handleKeyDown(makeEvent({key: '0'}));
+        expect(instance.state.pixelsPerSecond).toBe(72);
+    });
+
+    test('backslash fits the whole timeline in the viewport', () => {
+        instance.viewportElement = {clientWidth: 502, scrollLeft: 200};
+
+        instance.handleKeyDown(makeEvent({key: '\\'}));
+
+        expect(instance.state.pixelsPerSecond).toBe(50);
+        expect(instance.viewportElement.scrollLeft).toBe(0);
+    });
+
+    test('question mark toggles the keyboard shortcut panel and Escape closes it', () => {
+        instance.handleKeyDown(makeEvent({key: '?', shiftKey: true}));
+        component.update();
+        expect(component.find('[aria-label="Keyboard shortcuts"][role="dialog"]')).toHaveLength(1);
+
+        const escape = makeEvent({key: 'Escape'});
+        instance.handleKeyDown(escape);
+        component.update();
+        expect(escape.preventDefault).toHaveBeenCalled();
+        expect(component.find('[aria-label="Keyboard shortcuts"][role="dialog"]')).toHaveLength(0);
+    });
+
+    test('Ctrl+E toggles rendering settings', () => {
+        const event = makeEvent({ctrlKey: true, key: 'e'});
+
+        instance.handleKeyDown(event);
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(instance.state.settingsOpen).toBe(true);
+    });
+
+    test('Ctrl+Enter in rendering settings starts the export', () => {
+        instance.handleToggleSettings();
+        const event = makeEvent({ctrlKey: true, key: 'Enter', stopPropagation: jest.fn()});
+
+        instance.handleSettingsKeyDown(event);
+
+        expect(manager.renderAndExportTimeline).toHaveBeenCalled();
+    });
+
     test('renders a scrollable ruler instead of a range input', () => {
         expect(component.find('[role="slider"]')).toHaveLength(1);
         expect(component.find('input[type="range"]')).toHaveLength(0);
@@ -217,7 +370,7 @@ describe('Timeline keyboard controls', () => {
         });
 
         expect(component.find('button[aria-label="Keyframe 1, 00:00.00"]').prop('aria-pressed')).toBe(false);
-        expect(component.find('button[title="Delete the selected keyframe"]').prop('disabled')).toBe(true);
+        expect(component.find('button[aria-label="Delete selected keyframe"]').prop('disabled')).toBe(true);
     });
 
     test('keeps fractional ruler labels accurate at high zoom', () => {

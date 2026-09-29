@@ -746,3 +746,75 @@
         transition: none;
     }
 }
+
+.shortcuts-button span {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.settings-panel.shortcuts-panel {
+    position: fixed;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    transform: translate(-50%, -50%);
+}
+
+.shortcut-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+    gap: 0.875rem 1.25rem;
+    margin-top: 0.875rem;
+}
+
+.shortcut-group h3 {
+    margin: 0 0 0.375rem;
+    color: $zone-8;
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+.shortcut-group dl {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+}
+
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+}
+
+.shortcut-row dt {
+    color: $text-primary;
+    line-height: 1.35;
+}
+
+.shortcut-row dd {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.25rem;
+    margin: 0;
+}
+
+.shortcut-row kbd {
+    min-width: 1.25rem;
+    padding: 0.0625rem 0.375rem;
+    border: 1px solid $rule-strong;
+    border-radius: var(--radius-s);
+    background: $zone-4;
+    color: $zone-10;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-align: center;
+}

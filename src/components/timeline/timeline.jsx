@@ -6,6 +6,8 @@ import VM from 'scratch-vm';
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 import formatTimecode from '../../lib/timecode';
 
+import {getShortcutGroups, getShortcutKey, isModifierPressed, withModifier} from './shortcuts';
+
 import {
     CloseIcon,
     GearIcon,
@@ -62,6 +64,7 @@ class Timeline extends React.Component {
             scrollLeft: 0,
             selectedKeyframeTime: null,
             settingsOpen: false,
+            shortcutsOpen: false,
             viewportWidth: 0,
             timeline: {
                 currentTime: 0,
@@ -83,6 +86,8 @@ class Timeline extends React.Component {
         this.handleStop = this.handleStop.bind(this);
         this.handleSettingsKeyDown = this.handleSettingsKeyDown.bind(this);
         this.handleToggleSettings = this.handleToggleSettings.bind(this);
+        this.handleToggleShortcuts = this.handleToggleShortcuts.bind(this);
+        this.handleShortcutsKeyDown = this.handleShortcutsKeyDown.bind(this);
         this.handleDraftChange = this.handleDraftChange.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
         this.handleExport = this.handleExport.bind(this);
@@ -97,6 +102,7 @@ class Timeline extends React.Component {
         this.handleTimelineWheel = this.handleTimelineWheel.bind(this);
         this.handleZoomIn = this.handleZoomIn.bind(this);
         this.handleZoomOut = this.handleZoomOut.bind(this);
+        this.handleZoomToFit = this.handleZoomToFit.bind(this);
         this.measureTimelineViewport = this.measureTimelineViewport.bind(this);
     }
 
@@ -163,18 +169,7 @@ class Timeline extends React.Component {
     }
 
     handleKeyDown (event) {
-        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-
-        const isSpace = event.key === ' ' || event.code === 'Space';
-        const isArrowLeft = event.key === 'ArrowLeft' || event.keyCode === 37;
-        const isArrowRight = event.key === 'ArrowRight' || event.keyCode === 39;
-        const isArrowDown = event.key === 'ArrowDown' || event.keyCode === 40;
-        const isArrowUp = event.key === 'ArrowUp' || event.keyCode === 38;
-        const isHome = event.key === 'Home' || event.keyCode === 36;
-        const isEnd = event.key === 'End' || event.keyCode === 35;
-        if (!isSpace && !isArrowLeft && !isArrowRight && !isArrowDown && !isArrowUp &&
-            !isHome && !isEnd) return;
-
+        const key = getShortcutKey(event);
         const target = event.target;
         const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
         const isTimelineTarget = Boolean(
@@ -183,24 +178,81 @@ class Timeline extends React.Component {
         const isTimelineScrubber = isTimelineTarget && target === this.scrubberElement;
         const isFormControl = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
         const isInteractiveControl = isFormControl || tagName === 'button' || tagName === 'a';
-        const isEditingText = (isFormControl && !isTimelineScrubber) || (target && target.isContentEditable);
+        const isEditingText = (isFormControl && !isTimelineScrubber) || Boolean(target && target.isContentEditable);
 
-        if (isSpace) {
-            if (event.repeat || isEditingText || (isInteractiveControl && !isTimelineScrubber)) return;
+        if (event.altKey) return;
+        if (event.ctrlKey || event.metaKey) {
+            if (!isModifierPressed(event) || event.shiftKey || key !== 'e') return;
             event.preventDefault();
-            this.handlePlayPause();
+            if (!this.state.timeline.recording) this.handleToggleSettings();
             return;
         }
 
-        const hasNoFocusedControl = !target || target === document || target === document.body;
-        if (this.state.timeline.recording || isEditingText ||
-            (!hasNoFocusedControl && !isTimelineScrubber)) return;
-        event.preventDefault();
-        if (isHome || isEnd) {
-            this.manager.seekTimeline(isHome ? 0 : this.state.timeline.duration);
-        } else {
-            this.handleStepFrame(isArrowLeft || isArrowDown ? -1 : 1);
+        if (key === 'Escape') {
+            if (this.state.shortcutsOpen) {
+                event.preventDefault();
+                this.setState({shortcutsOpen: false});
+            }
+            return;
         }
+
+        if (isEditingText) return;
+
+        if (key === 'space') {
+            if (event.repeat || (isInteractiveControl && !isTimelineScrubber)) return;
+            event.preventDefault();
+            if (event.shiftKey) {
+                this.handleStop();
+            } else {
+                this.handlePlayPause();
+            }
+            return;
+        }
+
+        // Other shortcuts apply when nothing is focused, or when focus is on a
+        // non-text control inside the timeline (for example a keyframe marker).
+        const hasNoFocusedControl = !target || target === document || target === document.body;
+        const canUseShortcut = hasNoFocusedControl || isTimelineScrubber ||
+            (isTimelineTarget && !isFormControl);
+        if (!canUseShortcut) return;
+
+        const viewAction = {
+            '?': () => this.handleToggleShortcuts(),
+            '+': () => this.handleZoomIn(),
+            '=': () => this.handleZoomIn(),
+            '-': () => this.handleZoomOut(),
+            '_': () => this.handleZoomOut(),
+            '0': () => this.setZoom(DEFAULT_PIXELS_PER_SECOND),
+            '\\': () => this.handleZoomToFit(),
+            '¥': () => this.handleZoomToFit()
+        }[key];
+        if (viewAction) {
+            event.preventDefault();
+            viewAction();
+            return;
+        }
+
+        const editAction = {
+            ArrowLeft: () => this.handleStepSeconds(event.shiftKey ? -1 : 0, -1),
+            ArrowDown: () => this.handleStepSeconds(event.shiftKey ? -1 : 0, -1),
+            ArrowRight: () => this.handleStepSeconds(event.shiftKey ? 1 : 0, 1),
+            ArrowUp: () => this.handleStepSeconds(event.shiftKey ? 1 : 0, 1),
+            ',': () => this.handleStepFrame(-1),
+            '<': () => this.handleStepFrame(-1),
+            '.': () => this.handleStepFrame(1),
+            '>': () => this.handleStepFrame(1),
+            'Home': () => this.manager.seekTimeline(0),
+            'End': () => this.manager.seekTimeline(this.state.timeline.duration),
+            '[': () => this.handleJumpToKeyframe(-1),
+            '{': () => this.handleJumpToKeyframe(-1),
+            ']': () => this.handleJumpToKeyframe(1),
+            '}': () => this.handleJumpToKeyframe(1),
+            'k': () => (event.shiftKey ? this.handleDeleteKeyframe() : this.handleAddKeyframe())
+        }[key];
+        if (!editAction || this.state.timeline.recording) return;
+        if (key === 'k' && event.repeat) return;
+        event.preventDefault();
+        editAction();
     }
 
     handlePlayPause () {
@@ -217,6 +269,29 @@ class Timeline extends React.Component {
         const currentFrame = Math.round(timeline.currentTime * framerate);
         const nextTime = (currentFrame + direction) / framerate;
         this.manager.seekTimeline(Math.max(0, Math.min(timeline.duration, nextTime)));
+    }
+
+    handleStepSeconds (seconds, frames) {
+        if (!seconds) {
+            this.handleStepFrame(frames);
+            return;
+        }
+        const timeline = this.state.timeline;
+        const framerate = Math.max(1, Number(timeline.framerate) || 1);
+        const nextFrame = Math.round((timeline.currentTime + seconds) * framerate);
+        this.manager.seekTimeline(clamp(nextFrame / framerate, 0, timeline.duration));
+    }
+
+    handleJumpToKeyframe (direction) {
+        const keyframes = Array.isArray(this.state.timeline.keyframes) ? this.state.timeline.keyframes : [];
+        const currentTime = this.state.timeline.currentTime;
+        const epsilon = 1e-6;
+        const time = direction < 0 ?
+            keyframes.filter(keyframe => keyframe < currentTime - epsilon).pop() :
+            keyframes.find(keyframe => keyframe > currentTime + epsilon);
+        if (typeof time !== 'number') return;
+        this.setState({selectedKeyframeTime: time});
+        this.manager.seekTimeline(time);
     }
 
     handleStop () {
@@ -331,6 +406,16 @@ class Timeline extends React.Component {
         this.setZoom(this.state.pixelsPerSecond / ZOOM_FACTOR);
     }
 
+    handleZoomToFit () {
+        if (!this.viewportElement) return;
+        const duration = Math.max(0.001, Number(this.state.timeline.duration) || 0);
+        const available = Math.max(1, this.viewportElement.clientWidth - 2);
+        const pixelsPerSecond = clamp(available / duration, MIN_PIXELS_PER_SECOND, MAX_PIXELS_PER_SECOND);
+        this.setState({pixelsPerSecond}, () => {
+            if (this.viewportElement) this.viewportElement.scrollLeft = 0;
+        });
+    }
+
     keepPlayheadVisible () {
         if (!this.viewportElement) return;
         const playheadX = this.state.timeline.currentTime * this.state.pixelsPerSecond;
@@ -374,9 +459,28 @@ class Timeline extends React.Component {
     }
 
     handleSettingsKeyDown (event) {
+        if (event.key === 'Enter' && isModifierPressed(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!this.state.timeline.recording && !this.state.exporting) this.handleExport();
+            return;
+        }
         if (event.key !== 'Escape') return;
         event.stopPropagation();
         this.setState({settingsOpen: false});
+    }
+
+    handleShortcutsKeyDown (event) {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        this.setState({shortcutsOpen: false});
+    }
+
+    handleToggleShortcuts () {
+        this.setState(state => ({
+            settingsOpen: state.shortcutsOpen ? state.settingsOpen : false,
+            shortcutsOpen: !state.shortcutsOpen
+        }));
     }
 
     handleToggleSettings () {
@@ -384,7 +488,8 @@ class Timeline extends React.Component {
             if (state.settingsOpen) return {settingsOpen: false};
             return {
                 draft: Object.assign({}, state.timeline),
-                settingsOpen: true
+                settingsOpen: true,
+                shortcutsOpen: false
             };
         });
     }
@@ -445,6 +550,57 @@ class Timeline extends React.Component {
             reuseFrames: settings.reuseFrames === true,
             start: singleFrame ? this.state.timeline.currentTime : Number(settings.rangeStart)
         }).then(() => finish(), finish);
+    }
+
+    renderShortcuts () {
+        if (!this.state.shortcutsOpen) return null;
+        return (
+            <div
+                aria-label="Keyboard shortcuts"
+                className={classNames(styles.settingsPanel, styles.shortcutsPanel)}
+                role="dialog"
+                onKeyDown={this.handleShortcutsKeyDown}
+            >
+                <div className={styles.settingsHeading}>
+                    <div>
+                        <strong>{'Keyboard shortcuts'}</strong>
+                        <span>{'Timeline keys work when no text field is focused.'}</span>
+                    </div>
+                    <button
+                        aria-label="Close keyboard shortcuts"
+                        className={styles.closeButton}
+                        type="button"
+                        title="Close (Esc)"
+                        onClick={this.handleToggleShortcuts}
+                    ><CloseIcon /></button>
+                </div>
+                <div className={styles.shortcutGroups}>
+                    {getShortcutGroups().map(group => (
+                        <section
+                            className={styles.shortcutGroup}
+                            key={group.title}
+                        >
+                            <h3>{group.title}</h3>
+                            <dl>
+                                {group.items.map(item => (
+                                    <div
+                                        className={styles.shortcutRow}
+                                        key={`${item.keys.join(' ')} ${item.label}`}
+                                    >
+                                        <dt>{item.label}</dt>
+                                        <dd>
+                                            {item.keys.map(keyLabel => (
+                                                <kbd key={keyLabel}>{keyLabel}</kbd>
+                                            ))}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </section>
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     renderSettings () {
@@ -629,6 +785,7 @@ class Timeline extends React.Component {
                 }}
             >
                 {this.renderSettings()}
+                {this.renderShortcuts()}
                 <div className={styles.header}>
                     <div className={styles.headerLeading}>
                         <div
@@ -647,7 +804,7 @@ class Timeline extends React.Component {
                             <button
                                 aria-label="Stop and return to start"
                                 className={styles.stopButton}
-                                title="Stop and return to start"
+                                title="Stop and return to start (Shift+Space)"
                                 type="button"
                                 onClick={this.handleStop}
                             ><span /></button>
@@ -673,10 +830,20 @@ class Timeline extends React.Component {
                                 [styles.isActive]: this.state.settingsOpen
                             })}
                             disabled={timeline.recording}
-                            title="Rendering settings"
+                            title={`Rendering settings (${withModifier('E')})`}
                             type="button"
                             onClick={this.handleToggleSettings}
                         ><GearIcon /></button>
+                        <button
+                            aria-expanded={this.state.shortcutsOpen}
+                            aria-label="Keyboard shortcuts"
+                            className={classNames(styles.iconButton, styles.shortcutsButton, {
+                                [styles.isActive]: this.state.shortcutsOpen
+                            })}
+                            title="Keyboard shortcuts (?)"
+                            type="button"
+                            onClick={this.handleToggleShortcuts}
+                        ><span aria-hidden="true">{'?'}</span></button>
                     </div>
                 </div>
                 <div className={styles.scrubber}>
@@ -729,7 +896,7 @@ class Timeline extends React.Component {
                                             })}
                                             key={time}
                                             style={{left: `${time * this.state.pixelsPerSecond}px`}}
-                                            title={[label, 'Click to select and seek'].join(' · ')}
+                                            title={[label, 'Click to select and seek', '[ / ] jumps between keyframes'].join(' · ')}
                                             type="button"
                                             value={time}
                                             onClick={this.handleKeyframeClick}
@@ -781,14 +948,14 @@ class Timeline extends React.Component {
                         <button
                             aria-label={`Add keyframe at ${formatTime(timeline.currentTime)}`}
                             disabled={timeline.recording}
-                            title={`Add a keyframe at ${formatTime(timeline.currentTime)}`}
+                            title={`Add a keyframe at ${formatTime(timeline.currentTime)} (K)`}
                             type="button"
                             onClick={this.handleAddKeyframe}
                         ><KeyframeAddIcon /><span>{'Keyframe'}</span></button>
                         <button
                             aria-label="Delete selected keyframe"
                             disabled={timeline.recording || this.state.selectedKeyframeTime === null}
-                            title="Delete the selected keyframe"
+                            title="Delete the selected keyframe (Shift+K)"
                             type="button"
                             onClick={this.handleDeleteKeyframe}
                         ><KeyframeRemoveIcon /></button>
@@ -810,7 +977,7 @@ class Timeline extends React.Component {
                             aria-label="Zoom out timeline"
                             className={styles.zoomButton}
                             disabled={this.state.pixelsPerSecond <= MIN_PIXELS_PER_SECOND}
-                            title="Zoom out"
+                            title="Zoom out (−)"
                             type="button"
                             onClick={this.handleZoomOut}
                         ><ZoomOutIcon /></button>
@@ -818,7 +985,7 @@ class Timeline extends React.Component {
                             aria-label="Zoom in timeline"
                             className={styles.zoomButton}
                             disabled={this.state.pixelsPerSecond >= MAX_PIXELS_PER_SECOND}
-                            title="Zoom in"
+                            title="Zoom in (+)"
                             type="button"
                             onClick={this.handleZoomIn}
                         ><ZoomInIcon /></button>
