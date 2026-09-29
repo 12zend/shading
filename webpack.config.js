@@ -45,15 +45,12 @@ const base = {
                 {from: /^\/editor\/?$/, to: '/index.html'},
                 {from: /^\/player\/?$/, to: '/player.html'},
                 {from: /^\/addons\/?$/, to: '/addons.html'},
-                {from: /^\/p\/[A-Za-z0-9_-]*\/?$/, to: '/index.html'},
-                {from: /^\/[a-z0-9-]{6,48}\/?$/, to: '/index.html'},
-                {from: /^\/[a-z0-9-]{6,48}\/fullscreen\/?$/, to: '/fullscreen.html'},
-                {from: /^\/[a-z0-9-]{6,48}\/player\/?$/, to: '/player.html'}
+                {from: /^\/p\/[A-Za-z0-9_-]*\/?$/, to: '/index.html'}
             ]
         },
         // Share links live at /p/<payload>. The app is built with relative asset URLs, so a page
         // opened there requests /p/js/..., /p/static/... and so on: serve those from the root,
-        // like cloudflare/collaboration-worker.mjs does in production.
+        // like cloudflare/worker.mjs does in production.
         before: app => {
             app.use((req, res, next) => {
                 const match = /^\/p\/([^?]*[/.][^?]*)(\?.*)?$/.exec(req.url);
@@ -227,9 +224,8 @@ module.exports = [
                 'process.env.NODE_ENV': `"${process.env.NODE_ENV}"`,
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
-                'process.env.COLLABORATION_WS_URL': JSON.stringify(process.env.COLLABORATION_WS_URL || ''),
                 'process.env.ROOT': JSON.stringify(root),
-                'process.env.ROUTING_STYLE': JSON.stringify('team'),
+                'process.env.ROUTING_STYLE': JSON.stringify('path'),
                 'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
             }),
             new HtmlWebpackPlugin({

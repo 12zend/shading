@@ -1,7 +1,4 @@
 /* eslint-env browser */
-// Team routes (and their founding claim) are now created on demand by the
-// collaboration panel instead of eagerly for every editor visit. Plain
-// shading.app links stay collaboration-free until a link is generated.
 
 let theme = '';
 let accent = '#ffb020';

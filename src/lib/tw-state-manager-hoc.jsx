@@ -19,7 +19,6 @@ import {
 } from '../reducers/mode';
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
-import {getTeamIdFromPath, getTeamPath} from './team-route';
 import {isSharePath} from './share-link/share-link-url';
 
 /* eslint-disable no-alert */
@@ -244,29 +243,20 @@ class WildcardRouter extends Router {
     }
 }
 
-class TeamRouter extends Router {
-    constructor (callbacks) {
-        super(callbacks);
-        // Collaboration is opt-in: a plain root link keeps its URL until the
-        // user generates a collaboration link in the collaboration panel.
-        this.teamId = getTeamIdFromPath();
-    }
-
+class PathRouter extends Router {
     onhashchange () {
         this.onSetProjectId(defaultProjectId);
         this.parsePageType();
     }
 
     onpathchange () {
-        this.teamId = getTeamIdFromPath() || this.teamId;
         this.onSetProjectId(defaultProjectId);
         this.parsePageType();
     }
 
     parsePageType () {
         const parts = location.pathname.split('/').filter(Boolean);
-        const teamIndex = parts.indexOf(this.teamId);
-        const pageType = teamIndex === -1 ? '' : parts[teamIndex + 1];
+        const pageType = parts[parts.length - 1];
         if (pageType === 'fullscreen') {
             this.onSetIsFullScreen(true);
             this.onSetIsPlayerOnly(false);
@@ -280,23 +270,16 @@ class TeamRouter extends Router {
     }
 
     generateURL ({isPlayerOnly, isFullScreen}) {
-        if (!this.teamId && !isPlayerOnly && !isFullScreen && isSharePath()) {
+        if (!isPlayerOnly && !isFullScreen && isSharePath()) {
             // Keep a share link in the address bar so it can be reloaded or copied again.
             return `${location.pathname}${location.search}${location.hash}`;
         }
-        if (!this.teamId) {
-            const prefix = process.env.ROOT && process.env.ROOT !== '/' ?
-                `/${process.env.ROOT.replace(/^\/+|\/+$/g, '')}` : '';
-            let path = prefix || '/';
-            if (isFullScreen) path += '/fullscreen';
-            else if (isPlayerOnly) path += '/player';
-            return `${path}${location.search}${location.hash}`;
-        }
-        let path = getTeamPath(this.teamId);
+        const prefix = process.env.ROOT && process.env.ROOT !== '/' ?
+            `/${process.env.ROOT.replace(/^\/+|\/+$/g, '')}` : '';
+        let path = prefix || '/';
         if (isFullScreen) path += '/fullscreen';
         else if (isPlayerOnly) path += '/player';
-        getCanonicalLinkElement().href = `${location.origin}${getTeamPath(this.teamId)}`;
-        return `${path}${location.search}${location.hash}`;
+        return `${path.replace(/^\/\//, '/')}${location.search}${location.hash}`;
     }
 }
 
@@ -305,7 +288,7 @@ const routers = {
     hash: HashRouter,
     filehash: FileHashRouter,
     wildcard: WildcardRouter,
-    team: TeamRouter
+    path: PathRouter
 };
 
 /**
@@ -315,7 +298,7 @@ const routers = {
  * @returns {Router} The optimal router for the current environment
  */
 const createRouter = (style, callbacks) => {
-    const supportedStyles = ['none', 'hash', 'team'];
+    const supportedStyles = ['none', 'hash', 'path'];
 
     // FileHashRouter is not supported on non-http(s) protocols.
     const isHTTP = location.protocol === 'http:' || location.protocol === 'https:';
@@ -509,7 +492,7 @@ const TWStateManager = function (WrappedComponent) {
         vm: PropTypes.instanceOf(VM)
     };
     StateManagerComponent.defaultProps = {
-        routingStyle: 'team'
+        routingStyle: 'path'
     };
     const mapStateToProps = state => ({
         isFullScreen: state.scratchGui.mode.isFullScreen,

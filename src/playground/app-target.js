@@ -11,17 +11,10 @@ while (appTarget.firstChild) {
 setAppElement(appTarget);
 
 const render = children => {
-    const renderApp = () => {
-        ReactDOM.render(children, appTarget);
+    ReactDOM.render(children, appTarget);
 
-        if (window.SplashEnd) {
-            window.SplashEnd();
-        }
-    };
-    if (window.ShadingTeamReady && typeof window.ShadingTeamReady.then === 'function') {
-        window.ShadingTeamReady.then(renderApp, renderApp);
-    } else {
-        renderApp();
+    if (window.SplashEnd) {
+        window.SplashEnd();
     }
 };
 
