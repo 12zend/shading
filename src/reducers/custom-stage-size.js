@@ -1,8 +1,8 @@
 const SET_CUSTOM_STAGE_SIZE = 'tw/custom-stage-size/SET';
 
 const defaultStageSize = {
-    width: 480,
-    height: 270
+    width: 640,
+    height: 360
 };
 
 const initialState = defaultStageSize;

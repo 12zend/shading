@@ -34,11 +34,11 @@ const projectJSON = {
 };
 
 describe('storeProjectOptions', () => {
-    test('uses 480x270 as the GUI default', () => {
-        expect(defaultStageSize).toEqual({width: 480, height: 270});
+    test('uses 640x360 as the GUI default', () => {
+        expect(defaultStageSize).toEqual({width: 640, height: 360});
     });
 
-    test('restores 480x360 when the GUI default is 480x270', async () => {
+    test('restores 480x360 when the GUI default is 640x360', async () => {
         const vm = new VM();
         await vm.loadProject(JSON.stringify(projectJSON));
         vm.setStageSize(480, 360);
@@ -70,7 +70,7 @@ describe('storeProjectOptions', () => {
             enabled: false,
             warpTimer: false
         });
-        vm.setStageSize(640, 360);
+        vm.setStageSize(1280, 720);
         storeProjectOptions(vm, defaultStageSize);
         const archive = await vm.saveProjectSb3('arraybuffer');
 
@@ -91,8 +91,8 @@ describe('storeProjectOptions', () => {
             enabled: false,
             warpTimer: false
         });
-        expect(reloadedVM.runtime.stageWidth).toBe(640);
-        expect(reloadedVM.runtime.stageHeight).toBe(360);
+        expect(reloadedVM.runtime.stageWidth).toBe(1280);
+        expect(reloadedVM.runtime.stageHeight).toBe(720);
     });
 
     test('does not store the editor warp timer default', async () => {
