@@ -5,6 +5,7 @@ import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 import formatTimecode from '../../lib/timecode';
+import {getWaveformPath, subscribeTimelineWaveform} from '../../lib/timeline-waveform';
 
 import {getShortcutGroups, getShortcutKey, isModifierPressed, withModifier} from './shortcuts';
 
@@ -66,6 +67,7 @@ class Timeline extends React.Component {
             settingsOpen: false,
             shortcutsOpen: false,
             viewportWidth: 0,
+            waveform: null,
             timeline: {
                 currentTime: 0,
                 duration: 10,
@@ -120,6 +122,9 @@ class Timeline extends React.Component {
         }
         this.measureTimelineViewport();
         this.handleTimelineChanged(this.manager.getTimelineState());
+        this.unsubscribeWaveform = subscribeTimelineWaveform(this.props.vm, waveform => {
+            if (!this.unmounted) this.setState({waveform});
+        });
     }
 
     componentDidUpdate (prevProps, prevState) {
@@ -131,6 +136,7 @@ class Timeline extends React.Component {
 
     componentWillUnmount () {
         this.unmounted = true;
+        if (this.unsubscribeWaveform) this.unsubscribeWaveform();
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
@@ -764,6 +770,36 @@ class Timeline extends React.Component {
         );
     }
 
+    // Volume wave of the sound blocks, drawn only for the visible part of a long timeline.
+    renderWaveform (timelineWidth) {
+        const waveform = this.state.waveform;
+        if (!waveform) return null;
+        const pixelsPerSecond = this.state.pixelsPerSecond;
+        const left = Math.max(0, this.state.scrollLeft);
+        const width = Math.max(0, Math.min(timelineWidth - left, this.state.viewportWidth || timelineWidth));
+        const height = 40;
+        const path = getWaveformPath(waveform, {
+            height,
+            pixelsPerSecond,
+            start: left / pixelsPerSecond,
+            step: 2,
+            width
+        });
+        if (!path) return null;
+        return (
+            <svg
+                aria-hidden="true"
+                className={styles.waveform}
+                height={height}
+                style={{left: `${left}px`}}
+                viewBox={`0 0 ${width} ${height}`}
+                width={width}
+            >
+                <path d={path} />
+            </svg>
+        );
+    }
+
     render () {
         const timeline = this.state.timeline;
         const timelineWidth = Math.max(
@@ -922,6 +958,7 @@ class Timeline extends React.Component {
                                     this.scrubberElement = element;
                                 }}
                             >
+                                {this.renderWaveform(timelineWidth)}
                                 <span
                                     aria-hidden="true"
                                     className={styles.elapsedRange}

@@ -7,40 +7,29 @@ import {
     parseTimeRange
 } from '../../scratch-vm/src/lib/time-range';
 
+import {getWaveformPath, subscribeTimelineWaveform} from './timeline-waveform';
 import styles from './time-field.css';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_DURATION = 10;
-const DEFAULT_FRAMERATE = 30;
 
-// Inline mini timeline drawn inside the shadow block, right of the value.
-const MINI_WIDTH = 36;
-const MINI_HEIGHT = 12;
-const MINI_GAP = 4;
-const MINI_RIGHT_PADDING = 10;
-const MINI_INFINITY_WIDTH = 5;
-
-// Popup editor: a compact zoomable strip (ruler, track, scroll thumb).
-const EDITOR_WIDTH = 288;
-const EDITOR_PADDING = 8;
-const EDITOR_INFINITY_WIDTH = 20;
-const EDITOR_TRACK_WIDTH = EDITOR_WIDTH - (EDITOR_PADDING * 2) - EDITOR_INFINITY_WIDTH;
-const EDITOR_TRACK_RIGHT = EDITOR_PADDING + EDITOR_TRACK_WIDTH;
-const EDITOR_INFINITY_X = EDITOR_TRACK_RIGHT + 4 + ((EDITOR_INFINITY_WIDTH - 4) / 2);
-const EDITOR_LABEL_Y = 8;
-const EDITOR_TICK_Y = 9;
-const EDITOR_TRACK_Y = 14;
-const EDITOR_TRACK_HEIGHT = 16;
-const EDITOR_SCROLL_Y = EDITOR_TRACK_Y + EDITOR_TRACK_HEIGHT + 4;
-const EDITOR_SCROLL_HEIGHT = 3;
-const EDITOR_HEIGHT = EDITOR_SCROLL_Y + EDITOR_SCROLL_HEIGHT + 3;
-const EDITOR_MIN_SPAN = 0.5;
+// The timeline lives inside the shadow block, right of the value, and is edited in place:
+// drag the handles, wheel to scroll, Ctrl/⌘ + wheel (or pinch) to zoom. Clicking the value types it.
+const INLINE_WIDTH = 168;
+const INLINE_INFINITY_WIDTH = 15;
+const INLINE_GAP = 8;
+const INLINE_RIGHT_PADDING = 12;
+const INLINE_HEIGHT = 30;
+const LABEL_Y = 7;
+const TRACK_Y = 9;
+const TRACK_HEIGHT = 17;
+const THUMB_Y = TRACK_Y + TRACK_HEIGHT + 2;
+const MIN_SPAN = 0.5;
 // Timelines up to this length open fully visible; longer ones open zoomed around the value.
 const INITIAL_FIT_SECONDS = 30;
 const INITIAL_MIN_SPAN = 10;
-const SNAP_PIXELS = 6;
-const EDGE_SCROLL_PIXELS = 10;
-let editorClipId = 0;
+const SNAP_PIXELS = 4;
+const EDGE_SCROLL_PIXELS = 6;
 
 const MODE_SINGLE = 'single';
 const MODE_RANGE = 'range';
@@ -62,12 +51,8 @@ const svg = (tagName, attributes = {}, parent = null) => {
     return element;
 };
 
-const html = (tagName, className, parent = null, text = null) => {
-    const element = document.createElement(tagName);
-    if (className) element.className = className;
-    if (text !== null) element.textContent = text;
-    if (parent) parent.appendChild(element);
-    return element;
+const clearChildren = element => {
+    while (element.firstChild) element.removeChild(element.firstChild);
 };
 
 const trimNumber = value => {
@@ -121,19 +106,17 @@ const getTimeline = vm => {
     return {
         currentTime: state ? clamp(Number(state.currentTime) || 0, 0, duration) : 0,
         duration,
-        framerate: state && Number(state.framerate) > 0 ? Number(state.framerate) : DEFAULT_FRAMERATE,
         keyframes: state && Array.isArray(state.keyframes) ?
-            state.keyframes.filter(time => Number.isFinite(time) && time >= 0 && time <= duration) : [],
-        manager
+            state.keyframes.filter(time => Number.isFinite(time) && time >= 0 && time <= duration) : []
     };
 };
 
-const getRulerStep = pixelsPerSecond => {
+const getLabelStep = pixelsPerSecond => {
     const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-    return steps.find(step => step * pixelsPerSecond >= 40) || steps[steps.length - 1];
+    return steps.find(step => step * pixelsPerSecond >= 30) || steps[steps.length - 1];
 };
 
-const formatRulerTime = seconds => {
+const formatLabelTime = seconds => {
     if (seconds >= 60) {
         const minutes = Math.floor(seconds / 60);
         const remaining = Number((seconds - (minutes * 60)).toFixed(1));
@@ -150,11 +133,21 @@ const getDragStep = pixelsPerSecond => {
     return 1;
 };
 
-// Every live time field, so an edited timeline duration redraws the mini timelines.
+// Every live time field, so playhead, keyframe and duration changes redraw the timelines.
 const liveFields = new Set();
 let subscribedManager = null;
 const handleTimelineChanged = () => {
-    for (const field of liveFields) field.updateMiniTimeline_();
+    for (const field of liveFields) field.renderTimeline_();
+};
+let latestWaveform = null;
+let waveformVm = null;
+const subscribeToWaveform = vm => {
+    if (!vm || waveformVm === vm) return;
+    waveformVm = vm;
+    subscribeTimelineWaveform(vm, waveform => {
+        latestWaveform = waveform;
+        for (const field of liveFields) field.renderTimeline_();
+    });
 };
 const subscribeToTimeline = vm => {
     const manager = vm && vm.runtime && vm.runtime.movieAssetManager;
@@ -175,6 +168,7 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
             super(normalized === null ? (isRange ? '0~Infinity' : '0') : normalized);
             this.addArgType('time');
             if (isRange) this.addArgType('timeRange');
+            this.view_ = null;
         }
 
         static fromJson (options) {
@@ -206,410 +200,288 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
             return `${formatSeconds(range.start)} ~ ${formatSeconds(range.end)}`;
         }
 
+        // ---- Layout ----
+
+        trackWidth_ () {
+            return this.allowsInfinity_() ? INLINE_WIDTH - INLINE_INFINITY_WIDTH : INLINE_WIDTH;
+        }
+
         init () {
             if (this.fieldGroup_) return;
             super.init();
             liveFields.add(this);
             subscribeToTimeline(vm);
-            this.miniGroup_ = svg('g', {
-                'class': styles.miniTimeline,
-                'aria-hidden': 'true'
-            }, this.fieldGroup_);
-            this.miniTrack_ = svg('rect', {
-                class: styles.miniTrack,
-                height: 4,
-                rx: 2,
-                width: MINI_WIDTH - MINI_INFINITY_WIDTH,
-                x: 0,
-                y: (MINI_HEIGHT / 2) - 2
-            }, this.miniGroup_);
-            this.miniInfinity_ = svg('rect', {
-                class: styles.miniInfinity,
-                height: 4,
-                rx: 2,
-                width: MINI_INFINITY_WIDTH - 1,
-                x: MINI_WIDTH - MINI_INFINITY_WIDTH + 1,
-                y: (MINI_HEIGHT / 2) - 2
-            }, this.miniGroup_);
-            this.miniRange_ = svg('rect', {
-                class: styles.miniRange,
-                height: 4,
-                rx: 2,
-                y: (MINI_HEIGHT / 2) - 2
-            }, this.miniGroup_);
-            this.miniStart_ = svg('rect', {
-                class: styles.miniMarker,
-                height: MINI_HEIGHT,
-                rx: 1,
-                width: 2,
-                y: 0
-            }, this.miniGroup_);
-            this.miniEnd_ = svg('rect', {
-                class: styles.miniMarker,
-                height: MINI_HEIGHT,
-                rx: 1,
-                width: 2,
-                y: 0
-            }, this.miniGroup_);
-            this.updateMiniTimeline_();
+            subscribeToWaveform(vm);
+            this.timelineGroup_ = svg('g', {class: styles.timeline}, this.fieldGroup_);
+            this.timelineContent_ = svg('g', {}, this.timelineGroup_);
+            // The hit area sits on top so every pointer event lands on the timeline group.
+            svg('title', {}, svg('rect', {
+                class: styles.hitArea,
+                height: INLINE_HEIGHT + 4,
+                width: INLINE_WIDTH + 4,
+                x: -2,
+                y: -2
+            }, this.timelineGroup_)).textContent =
+                'Drag to set the time · Wheel to scroll · Ctrl/⌘ + wheel or pinch to zoom · Shift to skip snapping';
+            this.onPointerDown_ = event => this.handlePointerDown_(event);
+            this.onWheel_ = event => this.handleWheel_(event);
+            this.onBlockedEvent_ = event => {
+                if (this.isInteractive_()) event.stopPropagation();
+            };
+            this.timelineGroup_.addEventListener('pointerdown', this.onPointerDown_);
+            this.timelineGroup_.addEventListener('mousedown', this.onBlockedEvent_);
+            this.timelineGroup_.addEventListener('touchstart', this.onBlockedEvent_, {passive: true});
+            this.timelineGroup_.addEventListener('wheel', this.onWheel_, {passive: false});
+            this.renderTimeline_();
             this.forceRerender();
         }
 
         dispose () {
             liveFields.delete(this);
             this.stopDrag_();
-            this.miniGroup_ = null;
+            this.timelineGroup_ = null;
+            this.timelineContent_ = null;
             super.dispose();
         }
 
-        // Called by Field.updateWidth: reserve room for the mini timeline right of the text.
+        // Called by Field.updateWidth: reserve room for the timeline right of the text.
         positionArrow (x) {
-            if (!this.miniGroup_) return 0;
-            const size = this.size_;
-            const left = this.sourceBlock_ && this.sourceBlock_.RTL ?
-                MINI_RIGHT_PADDING - (ScratchBlocks.BlockSvg.EDITABLE_FIELD_PADDING / 2) :
-                x - (ScratchBlocks.BlockSvg.EDITABLE_FIELD_PADDING / 2) + MINI_GAP;
-            const top = ((size.height - MINI_HEIGHT) / 2) + ScratchBlocks.BlockSvg.FIELD_TOP_PADDING;
-            this.miniGroup_.setAttribute('transform', `translate(${left},${top})`);
-            return MINI_WIDTH + MINI_GAP + MINI_RIGHT_PADDING - (ScratchBlocks.BlockSvg.EDITABLE_FIELD_PADDING / 2);
+            if (!this.timelineGroup_) return 0;
+            const padding = ScratchBlocks.BlockSvg.EDITABLE_FIELD_PADDING / 2;
+            let left = x - padding + INLINE_GAP;
+            // Keep the track still while dragging, even when the value text changes width.
+            if (this.drag_) {
+                this.frozenLeft_ = Math.max(this.frozenLeft_ || 0, left);
+                left = this.frozenLeft_;
+            }
+            if (this.sourceBlock_ && this.sourceBlock_.RTL) left = INLINE_RIGHT_PADDING - padding;
+            const top = ((this.size_.height - INLINE_HEIGHT) / 2) + ScratchBlocks.BlockSvg.FIELD_TOP_PADDING;
+            this.timelineGroup_.setAttribute('transform', `translate(${left},${top})`);
+            return (left - x) + INLINE_WIDTH + INLINE_RIGHT_PADDING;
         }
 
         setText (text) {
             super.setText(text);
-            this.updateMiniTimeline_();
-            this.updateEditor_();
+            this.renderTimeline_();
         }
 
-        timeToMiniX_ (time, duration) {
-            const trackWidth = this.allowsInfinity_() ? MINI_WIDTH - MINI_INFINITY_WIDTH : MINI_WIDTH;
-            if (time === Infinity) return this.allowsInfinity_() ? MINI_WIDTH - 1 : trackWidth - 1;
-            return clamp(time / duration, 0, 1) * (trackWidth - 1);
-        }
+        // ---- View (zoom and scroll) ----
 
-        updateMiniTimeline_ () {
-            if (!this.miniGroup_) return;
-            const parentBlock = this.sourceBlock_ && this.sourceBlock_.getParent();
-            if (parentBlock) this.miniGroup_.style.setProperty('--time-field-accent', parentBlock.getColour());
-            const {duration} = getTimeline(vm);
-            const range = this.getRange_();
-            const start = this.timeToMiniX_(range.start, duration);
-            const end = this.timeToMiniX_(range.end, duration);
-            const left = Math.min(start, end);
-            this.miniRange_.setAttribute('x', left);
-            this.miniRange_.setAttribute('width', Math.max(0, Math.abs(end - start)));
-            this.miniRange_.style.display = isRange ? '' : 'none';
-            this.miniStart_.setAttribute('x', start - 0.5);
-            this.miniEnd_.setAttribute('x', end - 0.5);
-            this.miniEnd_.style.display = isRange ? '' : 'none';
-            const allowsInfinity = this.allowsInfinity_();
-            this.miniTrack_.setAttribute('width', allowsInfinity ? MINI_WIDTH - MINI_INFINITY_WIDTH : MINI_WIDTH);
-            this.miniInfinity_.style.display = allowsInfinity ? '' : 'none';
-            this.miniInfinity_.classList.toggle(styles.miniInfinityActive, isRange && range.end === Infinity);
-        }
-
-        // ---- Popup editor ----
-        // A compact strip: ruler + track + scroll thumb. Ctrl/⌘ + wheel (or pinch) zooms around the
-        // pointer, the wheel scrolls sideways, so long movies stay easy to aim at.
-
-        showEditor_ () {
-            super.showEditor_(this.useTouchInteraction_);
-            ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-            ScratchBlocks.DropDownDiv.clearContent();
-            const parentBlock = this.sourceBlock_.getParent() || this.sourceBlock_;
-            const content = ScratchBlocks.DropDownDiv.getContentDiv();
-            this.buildEditor_(content);
-            ScratchBlocks.DropDownDiv.setColour(parentBlock.getColour(), parentBlock.getColourTertiary());
-            ScratchBlocks.DropDownDiv.setCategory(parentBlock.getCategory());
-            ScratchBlocks.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_, () => {
-                this.stopDrag_();
-                if (this.editor_) this.lastView_ = this.editor_.view;
-                this.editor_ = null;
-            });
-            this.updateEditor_();
-        }
-
-        getInitialView_ (duration) {
-            if (this.lastView_ && this.lastView_.duration === duration) return this.lastView_;
+        getView_ (duration) {
+            if (this.view_ && this.view_.duration === duration) return this.view_;
             const view = {duration, start: 0, span: duration};
-            if (duration <= INITIAL_FIT_SECONDS) return view;
-            // Long movies: open zoomed around the current value instead of squeezing minutes into 260px.
-            const range = this.getRange_();
-            const low = clamp(Math.min(range.start, range.end), 0, duration);
-            const high = Number.isFinite(range.end) && isRange ?
-                clamp(Math.max(range.start, range.end), 0, duration) :
-                low;
-            const span = clamp((high - low) * 1.5, INITIAL_MIN_SPAN, duration);
-            view.span = span;
-            view.start = clamp(((low + high) / 2) - (span / 2), 0, duration - span);
+            if (duration > INITIAL_FIT_SECONDS) {
+                // Long movies: start zoomed around the value instead of squeezing minutes into a few pixels.
+                const range = this.getRange_();
+                const low = clamp(Math.min(range.start, range.end), 0, duration);
+                const high = isRange && Number.isFinite(range.end) ?
+                    clamp(Math.max(range.start, range.end), 0, duration) : low;
+                view.span = clamp((high - low) * 1.5, INITIAL_MIN_SPAN, duration);
+                view.start = clamp(((low + high) / 2) - (view.span / 2), 0, duration - view.span);
+            }
+            this.view_ = view;
             return view;
         }
 
-        buildEditor_ (content) {
-            const timeline = getTimeline(vm);
-            const root = html('div', styles.editor, content);
-            const graph = svg('svg', {
-                class: styles.graph,
-                height: EDITOR_HEIGHT,
-                viewBox: `0 0 ${EDITOR_WIDTH} ${EDITOR_HEIGHT}`,
-                width: EDITOR_WIDTH
-            }, root);
-            svg('title', {}, graph).textContent =
-                'Drag to set the time · Wheel to scroll · Ctrl/⌘ + wheel or pinch to zoom · Shift to skip snapping';
-            const clipId = `timeFieldClip${++editorClipId}`;
-            const clip = svg('clipPath', {id: clipId}, svg('defs', {}, graph));
-            svg('rect', {
-                height: EDITOR_HEIGHT,
-                width: EDITOR_TRACK_WIDTH + 2,
-                x: EDITOR_PADDING - 1,
-                y: 0
-            }, clip);
-            svg('rect', {
-                class: styles.track,
-                height: EDITOR_TRACK_HEIGHT,
-                rx: 3,
-                width: EDITOR_TRACK_WIDTH,
-                x: EDITOR_PADDING,
-                y: EDITOR_TRACK_Y
-            }, graph);
-            let infinityZone = null;
-            if (this.allowsInfinity_()) {
-                infinityZone = svg('g', {class: styles.infinityZone}, graph);
-                svg('rect', {
-                    height: EDITOR_TRACK_HEIGHT,
-                    rx: 3,
-                    width: EDITOR_INFINITY_WIDTH - 4,
-                    x: EDITOR_TRACK_RIGHT + 4,
-                    y: EDITOR_TRACK_Y
-                }, infinityZone);
-                svg('text', {
-                    'text-anchor': 'middle',
-                    'x': EDITOR_INFINITY_X,
-                    'y': EDITOR_TRACK_Y + (EDITOR_TRACK_HEIGHT / 2) + 4
-                }, infinityZone).textContent = '∞';
-            }
-            const scrollTrack = svg('rect', {
-                class: styles.scrollTrack,
-                height: EDITOR_SCROLL_HEIGHT,
-                rx: EDITOR_SCROLL_HEIGHT / 2,
-                width: EDITOR_TRACK_WIDTH,
-                x: EDITOR_PADDING,
-                y: EDITOR_SCROLL_Y
-            }, graph);
-            const scrollThumb = svg('rect', {
-                'class': styles.scrollThumb,
-                'data-scroll': 'thumb',
-                'height': EDITOR_SCROLL_HEIGHT + 4,
-                'rx': (EDITOR_SCROLL_HEIGHT + 4) / 2,
-                'y': EDITOR_SCROLL_Y - 2
-            }, graph);
-            const layer = svg('g', {'clip-path': `url(#${clipId})`}, graph);
-            const handles = svg('g', {}, graph);
-
-            this.editor_ = {
-                duration: timeline.duration,
-                graph,
-                handles,
-                infinityZone,
-                keyframes: timeline.keyframes,
-                layer,
-                playhead: timeline.currentTime,
-                scrollThumb,
-                scrollTrack,
-                snapTimes: [0, timeline.duration, timeline.currentTime].concat(timeline.keyframes),
-                view: this.getInitialView_(timeline.duration)
-            };
-            graph.addEventListener('mousedown', event => this.onGraphMouseDown_(event));
-            graph.addEventListener('touchstart', event => this.onGraphMouseDown_(event), {passive: false});
-            graph.addEventListener('wheel', event => this.onGraphWheel_(event), {passive: false});
+        setView_ (start, span) {
+            const {duration} = getTimeline(vm);
+            const nextSpan = clamp(span, Math.min(MIN_SPAN, duration), duration);
+            this.view_ = {duration, span: nextSpan, start: clamp(start, 0, duration - nextSpan)};
+            this.renderTimeline_();
         }
 
         pixelsPerSecond_ () {
-            return EDITOR_TRACK_WIDTH / this.editor_.view.span;
+            return this.trackWidth_() / this.view_.span;
         }
 
-        setView_ (start, span) {
-            const editor = this.editor_;
-            const nextSpan = clamp(span, Math.min(EDITOR_MIN_SPAN, editor.duration), editor.duration);
-            editor.view = {
-                duration: editor.duration,
-                span: nextSpan,
-                start: clamp(start, 0, editor.duration - nextSpan)
-            };
-            this.updateEditor_();
-        }
-
-        onGraphWheel_ (event) {
-            if (!this.editor_) return;
-            event.preventDefault();
-            event.stopPropagation();
-            const view = this.editor_.view;
-            if (event.ctrlKey || event.metaKey) {
-                // Trackpad pinch arrives as ctrl + wheel with small deltas; mouse wheels give ~100 per notch.
-                const anchor = this.clientXToTime_(event.clientX, false);
-                const span = view.span * Math.exp(clamp(event.deltaY, -100, 100) * 0.01);
-                const ratio = (anchor - view.start) / view.span;
-                const nextSpan = clamp(span, Math.min(EDITOR_MIN_SPAN, this.editor_.duration), this.editor_.duration);
-                this.setView_(anchor - (ratio * nextSpan), nextSpan);
-                return;
+        timeToX_ (time) {
+            if (time === Infinity) {
+                const trackWidth = this.trackWidth_();
+                return this.allowsInfinity_() ? trackWidth + (INLINE_INFINITY_WIDTH / 2) + 1 : trackWidth;
             }
-            const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-            this.setView_(view.start + (delta / this.pixelsPerSecond_()), view.span);
+            return (time - this.view_.start) * this.pixelsPerSecond_();
         }
 
-        timeToEditorX_ (time) {
-            const editor = this.editor_;
-            if (time === Infinity) return EDITOR_INFINITY_X;
-            return EDITOR_PADDING + ((clamp(time, 0, editor.duration) - editor.view.start) * this.pixelsPerSecond_());
-        }
+        // ---- Drawing ----
 
-        renderRuler_ () {
-            const editor = this.editor_;
-            const layer = editor.layer;
-            while (layer.firstChild) layer.removeChild(layer.firstChild);
+        renderTimeline_ () {
+            const content = this.timelineContent_;
+            if (!content) return;
+            const parentBlock = this.sourceBlock_ && this.sourceBlock_.getParent();
+            if (parentBlock) this.timelineGroup_.style.setProperty('--time-field-accent', parentBlock.getColour());
+            const timeline = getTimeline(vm);
+            const view = this.getView_(timeline.duration);
+            const trackWidth = this.trackWidth_();
             const pixelsPerSecond = this.pixelsPerSecond_();
-            const view = editor.view;
-            const step = getRulerStep(pixelsPerSecond);
-            const minor = step / 2;
-            const first = Math.floor(view.start / minor) * minor;
-            for (let time = first; time <= view.start + view.span + 1e-9; time += minor) {
-                if (time < -1e-9) continue;
-                const major = Math.abs((time / step) - Math.round(time / step)) < 1e-6;
-                const x = this.timeToEditorX_(time);
+            const inView = x => x >= -0.5 && x <= trackWidth + 0.5;
+            clearChildren(content);
+
+            svg('rect', {
+                class: styles.track,
+                height: TRACK_HEIGHT,
+                rx: 4,
+                width: trackWidth,
+                y: TRACK_Y
+            }, content);
+            const clipId = this.clipId_ || (this.clipId_ = `timeFieldClip${Math.random().toString(36)
+                .slice(2)}`);
+            const clip = svg('clipPath', {id: clipId}, content);
+            svg('rect', {height: INLINE_HEIGHT, width: trackWidth, y: 0}, clip);
+            const clipped = svg('g', {'clip-path': `url(#${clipId})`}, content);
+
+            // Volume wave of the sound blocks, so timing can follow the audio.
+            const wave = getWaveformPath(latestWaveform, {
+                height: TRACK_HEIGHT - 2,
+                pixelsPerSecond,
+                start: view.start,
+                step: 1,
+                width: trackWidth,
+                y: TRACK_Y + 1
+            });
+            if (wave) svg('path', {class: styles.waveform, d: wave}, clipped);
+
+            // Time labels with a line per label and short ticks in between, like the main timeline.
+            const labelStep = getLabelStep(pixelsPerSecond);
+            const divisions = (labelStep / 5) * pixelsPerSecond >= 5 ? 5 : 2;
+            const tickStep = labelStep / divisions;
+            const firstTick = Math.ceil((view.start - 1e-9) / tickStep);
+            for (let index = firstTick; index * tickStep <= view.start + view.span + 1e-9; index++) {
+                const time = Number((index * tickStep).toFixed(6));
+                const x = this.timeToX_(time);
+                const major = index % divisions === 0;
                 svg('line', {
-                    class: major ? styles.tickMajor : styles.tickMinor,
+                    class: major ? styles.tickMajor : styles.tick,
                     x1: x,
                     x2: x,
-                    y1: major ? EDITOR_TICK_Y : EDITOR_TICK_Y + 3,
-                    y2: EDITOR_TRACK_Y
-                }, layer);
-                if (major) {
+                    y1: major ? TRACK_Y - 1.5 : TRACK_Y,
+                    y2: major ? TRACK_Y + TRACK_HEIGHT : TRACK_Y + 2.5
+                }, clipped);
+                if (major && x <= trackWidth - 8) {
                     svg('text', {
-                        'class': styles.tickLabel,
+                        'class': styles.label,
                         'text-anchor': 'start',
-                        'x': x + 2,
-                        'y': EDITOR_LABEL_Y
-                    }, layer).textContent = formatRulerTime(time);
+                        'x': x + 1.5,
+                        'y': LABEL_Y
+                    }, content).textContent = formatLabelTime(time);
                 }
             }
-            for (const keyframe of editor.keyframes) {
-                const x = this.timeToEditorX_(keyframe);
+
+            const range = this.getRange_();
+            const startX = this.timeToX_(range.start);
+            const endX = this.timeToX_(range.end);
+            if (isRange) {
+                svg('rect', {
+                    class: styles.selection,
+                    height: TRACK_HEIGHT,
+                    width: Math.abs(endX - startX),
+                    x: Math.min(startX, endX),
+                    y: TRACK_Y
+                }, range.end === Infinity ? content : clipped);
+            }
+            for (const keyframe of timeline.keyframes) {
+                const x = this.timeToX_(keyframe);
+                if (!inView(x)) continue;
                 svg('path', {
                     class: styles.keyframe,
-                    d: `M ${x} ${EDITOR_TRACK_Y + EDITOR_TRACK_HEIGHT - 6} l 2.5 2.5 l -2.5 2.5 l -2.5 -2.5 z`
-                }, layer);
+                    d: `M ${x} ${TRACK_Y + TRACK_HEIGHT - 6} l 2.5 2.5 l -2.5 2.5 l -2.5 -2.5 z`
+                }, clipped);
             }
-            const playheadX = this.timeToEditorX_(editor.playhead);
-            svg('line', {
-                class: styles.playhead,
-                x1: playheadX,
-                x2: playheadX,
-                y1: EDITOR_TICK_Y,
-                y2: EDITOR_TRACK_Y + EDITOR_TRACK_HEIGHT
-            }, layer);
-            editor.selection = svg('rect', {
-                class: styles.selection,
-                height: EDITOR_TRACK_HEIGHT,
-                y: EDITOR_TRACK_Y
-            }, layer);
-        }
-
-        renderHandle_ (name, x) {
-            const group = svg('g', {
-                'class': styles.handle,
-                'data-handle': name,
-                'transform': `translate(${x},0)`
-            }, this.editor_.handles);
-            svg('rect', {
-                class: styles.handleHit,
-                height: EDITOR_TRACK_HEIGHT + 8,
-                width: 12,
-                x: -6,
-                y: EDITOR_TRACK_Y - 4
-            }, group);
-            svg('line', {
-                class: styles.handleLine,
-                x1: 0,
-                x2: 0,
-                y1: EDITOR_TRACK_Y - 2,
-                y2: EDITOR_TRACK_Y + EDITOR_TRACK_HEIGHT + 2
-            }, group);
-            svg('rect', {
-                class: styles.handleGrip,
-                height: 8,
-                rx: 2,
-                width: 5,
-                x: -2.5,
-                y: EDITOR_TRACK_Y + (EDITOR_TRACK_HEIGHT / 2) - 4
-            }, group);
-        }
-
-        updateEditor_ () {
-            const editor = this.editor_;
-            if (!editor) return;
-            this.renderRuler_();
-            const range = this.getRange_();
-            const startX = this.timeToEditorX_(range.start);
-            const endX = this.timeToEditorX_(range.end);
-            const handles = editor.handles;
-            while (handles.firstChild) handles.removeChild(handles.firstChild);
-            // Handles scrolled out of view are hidden; the selection band still shows where the range goes.
-            const visible = (time, x) => time === Infinity ||
-                (x >= EDITOR_PADDING - 1 && x <= EDITOR_TRACK_RIGHT + 1);
-            if (visible(range.start, startX)) this.renderHandle_('start', startX);
-            if (isRange && visible(range.end, endX)) this.renderHandle_('end', endX);
-            if (isRange) {
-                const left = Math.min(startX, endX);
-                editor.selection.setAttribute('x', left);
-                editor.selection.setAttribute('width', Math.abs(endX - startX));
-            } else {
-                editor.selection.style.display = 'none';
+            const playheadX = this.timeToX_(timeline.currentTime);
+            if (inView(playheadX)) {
+                svg('line', {
+                    class: styles.playhead,
+                    x1: playheadX,
+                    x2: playheadX,
+                    y1: TRACK_Y - 2,
+                    y2: TRACK_Y + TRACK_HEIGHT + 1
+                }, content);
             }
-            if (editor.infinityZone) {
-                editor.infinityZone.classList.toggle(styles.infinityActive, range.end === Infinity);
+
+            if (this.allowsInfinity_()) {
+                const infinity = svg('g', {
+                    class: range.end === Infinity ? `${styles.infinity} ${styles.infinityActive}` : styles.infinity
+                }, content);
+                svg('rect', {
+                    height: TRACK_HEIGHT,
+                    rx: 4,
+                    width: INLINE_INFINITY_WIDTH - 3,
+                    x: trackWidth + 3,
+                    y: TRACK_Y
+                }, infinity);
+                svg('text', {
+                    'text-anchor': 'middle',
+                    'x': trackWidth + 1.5 + (INLINE_INFINITY_WIDTH / 2),
+                    'y': TRACK_Y + TRACK_HEIGHT - 5
+                }, infinity).textContent = '∞';
             }
-            const fullyVisible = editor.view.span >= editor.duration - 1e-9;
-            editor.scrollTrack.style.display = fullyVisible ? 'none' : '';
-            editor.scrollThumb.style.display = fullyVisible ? 'none' : '';
-            const thumbWidth = Math.max(12, EDITOR_TRACK_WIDTH * (editor.view.span / editor.duration));
-            const travel = EDITOR_TRACK_WIDTH - thumbWidth;
-            const scrollable = editor.duration - editor.view.span;
-            editor.scrollThumb.setAttribute('width', thumbWidth);
-            editor.scrollThumb.setAttribute('x',
-                EDITOR_PADDING + (scrollable > 0 ? travel * (editor.view.start / scrollable) : 0));
+
+            // Handles scrolled out of view are hidden; the selection still shows where the range goes.
+            const handle = x => {
+                svg('rect', {
+                    class: styles.handle,
+                    height: TRACK_HEIGHT + 4,
+                    rx: 1.25,
+                    width: 2.5,
+                    x: x - 1.25,
+                    y: TRACK_Y - 2
+                }, content);
+                svg('rect', {
+                    class: styles.handleGrip,
+                    height: 7,
+                    rx: 1.5,
+                    width: 5,
+                    x: x - 2.5,
+                    y: TRACK_Y + (TRACK_HEIGHT / 2) - 3.5
+                }, content);
+            };
+            if (range.start === Infinity || inView(startX)) handle(startX);
+            if (isRange && (range.end === Infinity || inView(endX))) handle(endX);
+
+            if (view.span < view.duration - 1e-9) {
+                const thumbWidth = Math.max(8, trackWidth * (view.span / view.duration));
+                const scrollable = view.duration - view.span;
+                svg('rect', {
+                    class: styles.scrollThumb,
+                    height: 2,
+                    rx: 1,
+                    width: thumbWidth,
+                    x: scrollable > 0 ? (trackWidth - thumbWidth) * (view.start / scrollable) : 0,
+                    y: THUMB_Y
+                }, content);
+            }
         }
 
-        clientXToGraphX_ (clientX) {
-            const bounds = this.editor_.graph.getBoundingClientRect();
-            const scale = bounds.width / EDITOR_WIDTH || 1;
-            return (clientX - bounds.left) / scale;
+        // ---- Pointer input ----
+
+        isInteractive_ () {
+            const block = this.sourceBlock_;
+            // In the palette the block must stay draggable, so the timeline only edits placed blocks.
+            return Boolean(block && block.isEditable() && block.workspace && !block.workspace.isFlyout &&
+                this.timelineGroup_);
         }
 
-        clientXToTime_ (clientX, clampToTimeline = true) {
-            const editor = this.editor_;
-            const x = this.clientXToGraphX_(clientX);
-            const time = editor.view.start + ((x - EDITOR_PADDING) / this.pixelsPerSecond_());
-            return clampToTimeline ? clamp(time, 0, editor.duration) : time;
+        clientXToLocalX_ (clientX) {
+            const matrix = this.timelineGroup_.getScreenCTM();
+            if (!matrix) return 0;
+            return (clientX - matrix.e) / (matrix.a || 1);
         }
 
-        eventPoint_ (event) {
-            if (event.touches && event.touches.length) return event.touches[0];
-            if (event.changedTouches && event.changedTouches.length) return event.changedTouches[0];
-            return event;
+        localXToTime_ (x) {
+            return this.view_.start + (x / this.pixelsPerSecond_());
         }
 
         eventToTime_ (event, allowInfinity, snap = !event.shiftKey) {
-            const editor = this.editor_;
-            const point = this.eventPoint_(event);
-            if (allowInfinity && this.clientXToGraphX_(point.clientX) > EDITOR_TRACK_RIGHT + 2) return Infinity;
-            let time = this.clientXToTime_(point.clientX);
+            const x = this.clientXToLocalX_(event.clientX);
+            if (allowInfinity && x > this.trackWidth_() + 1) return Infinity;
+            const {duration, currentTime, keyframes} = getTimeline(vm);
+            let time = clamp(this.localXToTime_(x), 0, duration);
             if (snap) {
                 // Snap to landmarks (start/end, playhead, keyframes), otherwise to a readable grid.
                 const pixelsPerSecond = this.pixelsPerSecond_();
-                const snapDistance = SNAP_PIXELS / pixelsPerSecond;
-                const landmark = editor.snapTimes.reduce((best, candidate) => (
+                const landmark = [0, duration, currentTime].concat(keyframes).reduce((best, candidate) => (
                     Math.abs(candidate - time) < Math.abs(best - time) ? candidate : best
                 ), Infinity);
-                if (Math.abs(landmark - time) <= snapDistance) {
+                if (Math.abs(landmark - time) * pixelsPerSecond <= SNAP_PIXELS) {
                     time = landmark;
                 } else {
                     const step = getDragStep(pixelsPerSecond);
@@ -619,96 +491,102 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
             return Number(trimNumber(time));
         }
 
-        onGraphMouseDown_ (event) {
-            if (!this.editor_ || (event.button && event.button !== 0)) return;
+        handlePointerDown_ (event) {
+            if (!this.isInteractive_() || event.button > 0) return;
             event.preventDefault();
             event.stopPropagation();
-            const point = this.eventPoint_(event);
-            const target = event.target && event.target.closest ?
-                event.target.closest('[data-handle],[data-scroll]') : null;
-            if (target && target.getAttribute('data-scroll')) {
-                this.drag_ = {handle: 'scroll', grabX: point.clientX, view: this.editor_.view};
-                this.startDrag_(false);
-                return;
-            }
+            ScratchBlocks.hideChaff();
+            this.getView_(getTimeline(vm).duration);
             const range = this.getRange_();
-            let handle = target ? target.getAttribute('data-handle') : null;
+            const x = this.clientXToLocalX_(event.clientX);
             const time = this.eventToTime_(event, this.allowsInfinity_());
-            if (!handle) {
-                if (!isRange) {
-                    handle = 'start';
+            let handle = 'start';
+            if (isRange) {
+                const startX = this.timeToX_(range.start);
+                const endX = this.timeToX_(range.end);
+                const nearStart = Math.abs(x - startX);
+                const nearEnd = Math.abs(x - endX);
+                if (Math.min(nearStart, nearEnd) <= 5) {
+                    handle = nearStart <= nearEnd ? 'start' : 'end';
                 } else if (time === Infinity) {
                     handle = 'end';
-                } else if (range.end !== Infinity && time > Math.min(range.start, range.end) &&
-                    time < Math.max(range.start, range.end)) {
+                } else if (range.end !== Infinity && x > Math.min(startX, endX) && x < Math.max(startX, endX)) {
                     handle = 'move';
                 } else {
-                    const endTime = range.end === Infinity ? this.editor_.duration + 1 : range.end;
-                    handle = Math.abs(time - range.start) <= Math.abs(time - endTime) ? 'start' : 'end';
+                    handle = nearStart <= nearEnd ? 'start' : 'end';
                 }
             }
-            this.drag_ = {
-                handle,
-                grabTime: this.eventToTime_(event, false, false),
-                range
-            };
+            this.drag_ = {handle, grabTime: this.eventToTime_(event, false, false), range};
+            this.frozenLeft_ = null;
+            ScratchBlocks.Events.setGroup(true);
             if (handle !== 'move') this.applyDrag_(event);
-            this.startDrag_(true);
-        }
-
-        startDrag_ (changesValue) {
-            this.stopDragListeners_();
-            this.handleDragMove_ = event => {
-                if (event.cancelable) event.preventDefault();
-                this.applyDrag_(event);
+            this.onPointerMove_ = moveEvent => {
+                moveEvent.preventDefault();
+                this.applyDrag_(moveEvent);
             };
-            this.handleDragEnd_ = () => this.stopDrag_();
-            document.addEventListener('mousemove', this.handleDragMove_);
-            document.addEventListener('mouseup', this.handleDragEnd_);
-            document.addEventListener('touchmove', this.handleDragMove_, {passive: false});
-            document.addEventListener('touchend', this.handleDragEnd_);
-            this.dragGroup_ = changesValue;
-            if (changesValue) ScratchBlocks.Events.setGroup(true);
-        }
-
-        stopDragListeners_ () {
-            if (!this.handleDragMove_) return;
-            document.removeEventListener('mousemove', this.handleDragMove_);
-            document.removeEventListener('mouseup', this.handleDragEnd_);
-            document.removeEventListener('touchmove', this.handleDragMove_);
-            document.removeEventListener('touchend', this.handleDragEnd_);
-            this.handleDragMove_ = null;
-            this.handleDragEnd_ = null;
+            this.onPointerUp_ = () => this.stopDrag_();
+            document.addEventListener('pointermove', this.onPointerMove_);
+            document.addEventListener('pointerup', this.onPointerUp_);
+            document.addEventListener('pointercancel', this.onPointerUp_);
         }
 
         stopDrag_ () {
-            if (this.handleDragMove_ && this.dragGroup_) ScratchBlocks.Events.setGroup(false);
             this.stopEdgeScroll_();
-            this.stopDragListeners_();
-            this.drag_ = null;
-            this.dragGroup_ = false;
+            if (this.onPointerMove_) {
+                document.removeEventListener('pointermove', this.onPointerMove_);
+                document.removeEventListener('pointerup', this.onPointerUp_);
+                document.removeEventListener('pointercancel', this.onPointerUp_);
+                this.onPointerMove_ = null;
+                this.onPointerUp_ = null;
+                ScratchBlocks.Events.setGroup(false);
+            }
+            if (this.drag_) {
+                this.drag_ = null;
+                this.frozenLeft_ = null;
+                // Let the track settle next to the final value text.
+                if (this.sourceBlock_) this.forceRerender();
+            }
         }
 
-        // Holding a handle near either edge of the track keeps scrolling, so a zoomed-in strip can
-        // still reach any time. (Past the right edge is the ∞ zone, so edge scrolling starts inside.)
+        applyDrag_ (event, fromEdgeScroll = false) {
+            const drag = this.drag_;
+            if (!drag || !this.timelineGroup_) return;
+            if (drag.handle === 'move') {
+                const now = this.eventToTime_(event, false, false);
+                const length = drag.range.end - drag.range.start;
+                const low = Math.min(drag.range.start, drag.range.end);
+                const high = Math.max(drag.range.start, drag.range.end);
+                let delta = clamp(now - drag.grabTime, -low, this.view_.duration - high);
+                if (!event.shiftKey) {
+                    const step = getDragStep(this.pixelsPerSecond_());
+                    delta = Math.round(delta / step) * step;
+                }
+                const start = Number(trimNumber(drag.range.start + delta));
+                this.commitRange_(start, Number(trimNumber(start + length)));
+            } else {
+                const time = this.eventToTime_(event, this.allowsInfinity_() && drag.handle === 'end');
+                this.setBoundary_(drag.handle, time);
+            }
+            if (!fromEdgeScroll) this.updateEdgeScroll_(event);
+        }
+
+        // Holding a handle near either edge of the track keeps scrolling, so a zoomed-in timeline
+        // can still reach any time. (Past the right edge is the ∞ zone, so scrolling starts inside.)
         updateEdgeScroll_ (event) {
-            const x = this.clientXToGraphX_(this.eventPoint_(event).clientX);
-            const pastEnd = x > EDITOR_TRACK_RIGHT + 2 && this.allowsInfinity_() && this.drag_.handle === 'end';
+            const x = this.clientXToLocalX_(event.clientX);
+            const trackWidth = this.trackWidth_();
+            const pastEnd = x > trackWidth + 1 && this.allowsInfinity_() && this.drag_.handle === 'end';
             let direction = 0;
-            if (x < EDITOR_PADDING + EDGE_SCROLL_PIXELS) direction = -1;
-            else if (x > EDITOR_TRACK_RIGHT - EDGE_SCROLL_PIXELS && !pastEnd) direction = 1;
-            this.edgeScroll_ = direction ? {
-                clientX: this.eventPoint_(event).clientX,
-                direction,
-                shiftKey: event.shiftKey
-            } : null;
+            if (x < EDGE_SCROLL_PIXELS) direction = -1;
+            else if (x > trackWidth - EDGE_SCROLL_PIXELS && !pastEnd) direction = 1;
+            if (this.view_.span >= this.view_.duration - 1e-9) direction = 0;
+            this.edgeScroll_ = direction ? {clientX: event.clientX, direction, shiftKey: event.shiftKey} : null;
             if (this.edgeScroll_ && !this.edgeScrollFrame_) {
                 const step = () => {
                     this.edgeScrollFrame_ = null;
                     const scroll = this.edgeScroll_;
-                    if (!scroll || !this.drag_ || !this.editor_) return;
-                    const view = this.editor_.view;
-                    this.setView_(view.start + (scroll.direction * view.span * 0.02), view.span);
+                    if (!scroll || !this.drag_ || !this.view_) return;
+                    this.setView_(this.view_.start + (scroll.direction * this.view_.span * 0.02), this.view_.span);
                     this.applyDrag_({clientX: scroll.clientX, shiftKey: scroll.shiftKey}, true);
                     this.edgeScrollFrame_ = requestAnimationFrame(step);
                 };
@@ -722,34 +600,29 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
             this.edgeScrollFrame_ = null;
         }
 
-        applyDrag_ (event, fromEdgeScroll = false) {
-            const drag = this.drag_;
-            if (!drag || !this.editor_) return;
-            if (drag.handle === 'scroll') {
-                const dx = this.clientXToGraphX_(this.eventPoint_(event).clientX) -
-                    this.clientXToGraphX_(drag.grabX);
-                const secondsPerPixel = this.editor_.duration / EDITOR_TRACK_WIDTH;
-                this.setView_(drag.view.start + (dx * secondsPerPixel), drag.view.span);
+        handleWheel_ (event) {
+            if (!this.isInteractive_()) return;
+            const view = this.getView_(getTimeline(vm).duration);
+            const zooming = event.ctrlKey || event.metaKey;
+            // A fully visible timeline has nothing to scroll: let the workspace scroll instead.
+            if (!zooming && view.span >= view.duration - 1e-9) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (zooming) {
+                // Trackpad pinch arrives as ctrl + wheel with small deltas; mouse wheels give ~100 per notch.
+                const anchor = this.localXToTime_(this.clientXToLocalX_(event.clientX));
+                const span = clamp(view.span * Math.exp(clamp(event.deltaY, -100, 100) * 0.01),
+                    Math.min(MIN_SPAN, view.duration), view.duration);
+                const ratio = (anchor - view.start) / view.span;
+                this.setView_(anchor - (ratio * span), span);
                 return;
             }
-            if (drag.handle === 'move') {
-                const now = this.eventToTime_(event, false, false);
-                const length = drag.range.end - drag.range.start;
-                const low = Math.min(drag.range.start, drag.range.end);
-                const high = Math.max(drag.range.start, drag.range.end);
-                let delta = clamp(now - drag.grabTime, -low, this.editor_.duration - high);
-                if (!event.shiftKey) {
-                    const step = getDragStep(this.pixelsPerSecond_());
-                    delta = Math.round(delta / step) * step;
-                }
-                const start = Number(trimNumber(drag.range.start + delta));
-                this.commitRange_(start, Number(trimNumber(start + length)));
-                return;
-            }
-            const time = this.eventToTime_(event, this.allowsInfinity_() && drag.handle === 'end');
-            this.setBoundary_(drag.handle, time);
-            if (!fromEdgeScroll) this.updateEdgeScroll_(event);
+            const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+            const scale = this.sourceBlock_.workspace.scale || 1;
+            this.setView_(view.start + (delta / scale / this.pixelsPerSecond_()), view.span);
         }
+
+        // ---- Value ----
 
         setBoundary_ (handle, time) {
             if (!isRange) {
@@ -773,17 +646,8 @@ const createTimeFieldClass = (ScratchBlocks, vm, mode) => {
 
         commitText_ (text) {
             const value = this.callValidator(text);
-            if (value === null) return;
-            const htmlInput = ScratchBlocks.FieldTextInput.htmlInput_;
-            if (htmlInput) {
-                htmlInput.value = value;
-                htmlInput.oldValue_ = value;
-            }
+            if (value === null || value === this.getValue()) return;
             this.setValue(value);
-            if (htmlInput) {
-                this.validate_();
-                this.resizeEditor_();
-            }
         }
     }
 

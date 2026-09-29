@@ -360,6 +360,20 @@
     content: "";
 }
 
+/* Volume wave of the timeline's sound blocks. */
+.waveform {
+    position: absolute;
+    top: 50%;
+    margin-top: -20px;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.waveform path {
+    fill: $looks-secondary;
+    fill-opacity: 0.35;
+}
+
 .elapsed-range {
     position: absolute;
     top: 0;
