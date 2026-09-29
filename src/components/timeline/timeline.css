@@ -2,7 +2,7 @@
 @import "../../css/colors.css";
 @import "../../css/z-index.css";
 
-/* The transport and timeline: a monitor's scrub bar, not a card. */
+/* The transport and timeline: one rounded panel, like a macOS inspector group. */
 .timeline {
     position: relative;
     display: flex;
@@ -15,7 +15,7 @@
     color: $zone-9;
     background: $zone-2;
     border: 1px solid $rule;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-l);
     padding: 0.5rem;
     font-family: var(--font-ui);
 }
@@ -80,17 +80,17 @@
 .zoom-controls {
     display: inline-flex;
     align-items: center;
-    height: 1.75rem;
-    border: 1px solid $rule-strong;
+    height: 1.625rem;
     border-radius: var(--radius-m);
-    background: $zone-1;
+    background: $zone-4;
+    overflow: hidden;
 }
 
 .zoom-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.625rem;
+    width: 1.75rem;
     height: 1.625rem;
     border: 0;
     padding: 0;
@@ -99,15 +99,19 @@
     cursor: pointer;
 }
 
+.zoom-button + .zoom-button {
+    border-left: 1px solid $rule;
+}
+
 .zoom-button:hover:not(:disabled) {
-    background: $zone-4;
+    background: $zone-5;
 }
 
 .zoom-button:focus-visible {
     position: relative;
     z-index: 1;
-    outline: 2px solid $looks-secondary;
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--focus-ring);
 }
 
 .zoom-button:disabled {
@@ -118,15 +122,6 @@
 .zoom-button svg {
     width: 1rem;
     height: 1rem;
-}
-
-.zoom-level {
-    min-width: 2.75rem;
-    color: $zone-8;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    font-variant-numeric: tabular-nums;
-    text-align: center;
 }
 
 .addon-controls {
@@ -172,10 +167,10 @@
     align-items: center;
     justify-content: center;
     width: 1.75rem;
-    height: 1.75rem;
+    height: 1.625rem;
     border-radius: var(--radius-m);
-    border: 1px solid $rule-strong;
-    background: $zone-3;
+    border: 0;
+    background: $zone-4;
     color: $zone-9;
     transition: background-color 120ms ease-out, color 120ms ease-out;
 }
@@ -187,17 +182,17 @@
     color: $zone-10;
 }
 
-.icon-button:focus,
-.play-button:focus,
-.stop-button:focus,
-.close-button:focus,
-.primary-button:focus,
-.secondary-button:focus,
+.icon-button:focus-visible,
+.play-button:focus-visible,
+.stop-button:focus-visible,
+.close-button:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
 .settings-grid input:focus,
 .settings-grid select:focus,
 .scrubber input:focus {
-    outline: 1px solid $looks-secondary;
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--focus-ring);
 }
 
 .icon-button.is-active {
@@ -205,7 +200,7 @@
     color: $looks-secondary;
 }
 
-/* Play is the one lit key on the transport. */
+/* Play is the one blue key on the transport. */
 .play-button {
     width: 2.25rem;
     border-color: transparent;
@@ -214,7 +209,7 @@
 }
 
 .play-button:hover {
-    background: $drop-highlight;
+    background: $looks-secondary-dark;
 }
 
 .icon-button svg,
@@ -250,7 +245,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     border: 1px solid $rule;
-    border-radius: 3px;
+    border-radius: var(--radius-m);
     background: $zone-1;
     overscroll-behavior: contain;
 }
@@ -324,8 +319,9 @@
 }
 
 .keyframe-marker:focus-visible {
-    outline: 2px solid $looks-secondary;
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius-s);
 }
 
 .keyframe-marker.at-origin-keyframe {
@@ -344,17 +340,14 @@
     left: 0;
     overflow: hidden;
     border-top: 1px solid $rule;
-    /* Faint lanes, like the graticule behind a scope trace. */
-    background:
-        repeating-linear-gradient(to bottom, transparent 0, transparent 1.25rem, $rule 1.25rem, $rule calc(1.25rem + 1px)),
-        $zone-2;
+    background: $zone-2;
     cursor: pointer;
 }
 
 .timeline-track:focus-visible {
     z-index: 4;
-    outline: 2px solid $looks-secondary;
-    outline-offset: -2px;
+    outline: 3px solid $looks-transparent;
+    outline-offset: -3px;
 }
 
 .timeline-track::after {
@@ -476,18 +469,18 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    height: 1.75rem;
+    height: 1.625rem;
     min-width: 1.75rem;
     justify-content: center;
-    border: 1px solid $rule-strong;
+    border: 0;
     border-radius: var(--radius-m);
-    padding: 0 0.5rem;
-    background: $zone-3;
+    padding: 0 0.625rem;
+    background: $zone-4;
     color: $zone-9;
     cursor: pointer;
     font: inherit;
-    font-size: 0.6875rem;
-    font-weight: 600;
+    font-size: 0.75rem;
+    font-weight: 500;
     white-space: nowrap;
 }
 
@@ -508,8 +501,8 @@
 }
 
 .keyframe-controls button:focus-visible {
-    outline: 2px solid $looks-secondary;
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--focus-ring);
 }
 
 .keyframe-controls button:disabled {
@@ -525,15 +518,21 @@
 }
 
 .status {
+    flex: 1 1 auto;
     margin-left: 0.25rem;
-    font-variant-numeric: tabular-nums;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    letter-spacing: 0;
     white-space: nowrap;
+}
+
+.status:empty {
+    visibility: hidden;
 }
 
 .status.is-recording {
     color: $rec;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-weight: 600;
 }
 
 .status.is-recording::before {
@@ -583,10 +582,6 @@
     margin-left: auto;
 }
 
-.timeline.is-compact .zoom-level {
-    min-width: 2rem;
-}
-
 .settings-panel {
     position: absolute;
     right: 0;
@@ -596,9 +591,9 @@
     box-sizing: border-box;
     padding: 0.875rem;
     border: 1px solid $rule-strong;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-l);
     background: $zone-3;
-    box-shadow: 0 12px 28px -6px $shadow, 0 2px 6px $shadow;
+    box-shadow: 0 12px 32px -8px $shadow, 0 2px 6px $shadow;
 }
 
 .settings-heading span {
@@ -656,20 +651,18 @@
     flex-direction: column;
     gap: 0.25rem;
     color: $zone-8;
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: 0.6875rem;
+    font-weight: 500;
 }
 
 .settings-grid input,
 .settings-grid select {
     width: 100%;
-    height: 1.875rem;
+    height: 1.75rem;
     border: 1px solid $rule-strong;
     border-radius: var(--radius-m);
     padding: 0 0.5rem;
-    background: $zone-1;
+    background: $input-background;
     color: $zone-10;
     font: inherit;
     font-family: var(--font-mono);
@@ -716,11 +709,11 @@
 
 .primary-button,
 .secondary-button {
-    min-height: 1.875rem;
+    min-height: 1.75rem;
     border-radius: var(--radius-m);
-    padding: 0 0.75rem;
-    font-size: 0.75rem;
-    font-weight: 600;
+    padding: 0 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
 }
 
 .primary-button {
@@ -729,11 +722,11 @@
 }
 
 .primary-button:hover:not(:disabled) {
-    background: $drop-highlight;
+    background: $looks-secondary-dark;
 }
 
 .secondary-button {
-    background: $zone-5;
+    background: $zone-4;
     color: $zone-10;
 }
 

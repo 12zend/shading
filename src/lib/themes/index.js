@@ -25,7 +25,7 @@ const ACCENT_MAP = {
     [ACCENT_RAINBOW]: accentRainbow,
     [ACCENT_AMBER]: accentAmber
 };
-const ACCENT_DEFAULT = ACCENT_AMBER;
+const ACCENT_DEFAULT = ACCENT_BLUE;
 
 const GUI_LIGHT = 'light';
 const GUI_DARK = 'dark';

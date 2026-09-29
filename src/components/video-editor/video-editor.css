@@ -382,7 +382,7 @@
 }
 
 .empty-state button:hover {
-    background: $drop-highlight;
+    background: $looks-secondary-dark;
 }
 
 .empty-actions {

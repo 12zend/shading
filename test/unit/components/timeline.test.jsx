@@ -281,7 +281,6 @@ describe('Timeline keyboard controls', () => {
         for (let attempt = 0; attempt < 20; attempt++) instance.handleZoomOut();
 
         expect(instance.state.pixelsPerSecond).toBe(3.6);
-        expect(component.text()).toContain('5%');
         expect(component.find('button[aria-label="Zoom out timeline"]').prop('disabled')).toBe(true);
     });
 

@@ -6,12 +6,14 @@
 :root {
     color-scheme: var(--color-scheme);
 
-    /* Labels: the platform UI face (with Japanese fallbacks). Numbers: tabular mono. */
+    /* Labels: the system face, SF Pro on Apple platforms (with Japanese fallbacks). Numbers: SF Mono. */
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif;
     --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
-    --radius-s: 2px;
-    --radius-m: 4px;
-    --focus-ring: 0 0 0 1px var(--zone-0), 0 0 0 2px var(--looks-secondary);
+    --radius-s: 4px;
+    --radius-m: 6px;
+    --radius-l: 10px;
+    /* macOS focus ring: a soft 3px halo in the accent. */
+    --focus-ring: 0 0 0 3px var(--looks-transparent);
 }
 
 /* Browser surfaces carry the design too. */
@@ -44,8 +46,8 @@
     background-clip: padding-box;
 }
 :global(:focus-visible) {
-    outline: 1px solid $looks-secondary;
-    outline-offset: 1px;
+    outline: 3px solid $looks-transparent;
+    outline-offset: 0;
 }
 
 /* popover is used by gui and paint */
@@ -57,7 +59,8 @@
     color: $text-primary !important;
     background: $popover-background !important;
     border: 1px solid $ui-black-transparent !important;
-    box-shadow: 0px 0px 8px 1px $shadow !important;
+    border-radius: var(--radius-l) !important;
+    box-shadow: 0 10px 30px -8px $shadow, 0 1px 3px $shadow !important;
 }
 :global(.Popover-tipShape) {
     fill: $popover-background !important;

@@ -79,7 +79,7 @@ $project-title-hover: var(--project-title-hover);
 
 $link-color: var(--link-color);
 
-/* Shading monitor tokens (see src/lib/themes/gui/dark.js) */
+/* Shading system tokens (see src/lib/themes/gui/dark.js) */
 $zone-0: var(--zone-0);
 $zone-1: var(--zone-1);
 $zone-2: var(--zone-2);
@@ -96,14 +96,13 @@ $rec-transparent: var(--rec-transparent);
 $rule: var(--rule);
 $rule-strong: var(--rule-strong);
 $accent-foreground: var(--accent-foreground);
-$osd-glass: var(--osd-glass);
-$osd-field: var(--osd-field);
-$osd-hover: var(--osd-hover);
-$osd-rule: var(--osd-rule);
-$osd-ink: var(--osd-ink);
-$osd-ink-dim: var(--osd-ink-dim);
-$osd-ink-quiet: var(--osd-ink-quiet);
-$rail-background: var(--rail-background);
-$rail-hover: var(--rail-hover);
-$rail-ink: var(--rail-ink);
-$rail-ink-strong: var(--rail-ink-strong);
+$toolbar-background: var(--toolbar-background);
+$toolbar-hover: var(--toolbar-hover);
+$sidebar-background: var(--sidebar-background);
+$sidebar-selected: var(--sidebar-selected);
+$sidebar-ink: var(--sidebar-ink);
+$sidebar-ink-strong: var(--sidebar-ink-strong);
+$menu-background: var(--menu-background);
+$menu-rule: var(--menu-rule);
+$menu-edge: var(--menu-edge);
+$segment-selected: var(--segment-selected);

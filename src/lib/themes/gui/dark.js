@@ -1,18 +1,18 @@
-// Shading "monitor" theme.
-// Every grey comes from one 11-step zone ramp (z0 = black glass, z10 = paper white).
-// Amber (accent) marks what is selected; REC red is reserved for running/recording.
+// Shading dark theme: Apple's dark system greys.
+// Every grey comes from one 11-step ramp (z0 = deepest, z10 = emphasis ink).
+// System blue (accent) marks what is selected; system red is reserved for rendering.
 const zone = [
-    '#08090a', // z0  glass
-    '#0e0f11', // z1  page
-    '#141619', // z2  panel
-    '#1b1d21', // z3  raised
-    '#24272c', // z4  control
-    '#30343a', // z5  control hover / strong rule
-    '#464b53', // z6  disabled ink, scrollbar
-    '#6b7079', // z7  quiet ink (non-text / large only)
-    '#9a9ea5', // z8  secondary ink
-    '#c9cbcf', // z9  primary ink
-    '#eceae5' // z10 emphasis ink
+    '#141416', // z0  deepest: stage surround, full screen
+    '#1c1c1e', // z1  page, toolbox, flyout
+    '#232325', // z2  panel: workspace, timeline, modals
+    '#2c2c2e', // z3  raised: popovers, hover, fields
+    '#3a3a3c', // z4  control
+    '#48484a', // z5  control hover, scrollbar
+    '#636366', // z6  disabled ink
+    '#8e8e93', // z7  quiet ink (non-text / large only)
+    '#a1a1a6', // z8  secondary ink
+    '#e0e0e5', // z9  primary ink
+    '#f5f5f7' // z10 emphasis ink
 ];
 
 const guiColors = {
@@ -30,56 +30,63 @@ const guiColors = {
     'zone-9': zone[9],
     'zone-10': zone[10],
 
-    'rail-background': zone[0],
-    'rail-hover': zone[3],
-    'rail-ink': zone[8],
-    'rail-ink-strong': zone[10],
-    'rail-icon-filter': 'grayscale(100%) brightness(1.9) contrast(0.85)',
-    'rail-icon-filter-selected': 'grayscale(100%) brightness(2.4)',
+    'toolbar-background': '#2a2a2c',
+    'toolbar-hover': '#ffffff14',
+    'sidebar-background': '#1f1f21',
+    'sidebar-selected': '#ffffff1a',
+    'sidebar-ink': zone[8],
+    'sidebar-ink-strong': zone[10],
+    'sidebar-icon-filter': 'brightness(0) invert(66%)',
+    'sidebar-icon-filter-selected': 'brightness(0) invert(96%)',
+    'toolbar-icon-filter': 'brightness(0) invert(88%)',
+    'segment-selected': '#636366',
+    'menu-background': '#2c2c2ee6',
+    'menu-rule': '#ffffff1f',
+    'menu-edge': '#000000',
 
-    'rec': '#ff3b30',
-    'rec-transparent': '#ff3b3033',
-    'rule': '#eceae514',
-    'rule-strong': '#eceae526',
+    'rec': '#ff453a',
+    'rec-transparent': '#ff453a33',
+    'rule': '#ffffff1a',
+    'rule-strong': '#ffffff29',
 
     'ui-primary': zone[1],
     'ui-secondary': zone[2],
     'ui-tertiary': zone[3],
 
-    'ui-modal-overlay': '#000000b8',
+    'ui-modal-overlay': '#00000080',
     'ui-modal-background': zone[2],
     'ui-modal-foreground': zone[9],
-    'ui-modal-header-background': zone[1],
+    'ui-modal-header-background': zone[2],
     'ui-modal-header-foreground': zone[10],
 
     'ui-white': zone[2],
-    'ui-white-dim': '#141619bf',
-    'ui-white-transparent': '#eceae50f',
-    'ui-transparent': '#14161900',
+    'ui-white-dim': '#232325bf',
+    'ui-white-transparent': '#ffffff0f',
+    'ui-transparent': '#23232500',
 
-    'ui-black-transparent': '#eceae51a',
+    'ui-black-transparent': '#ffffff1a',
 
     'text-primary': zone[9],
     'text-primary-transparent': zone[8],
 
-    'error-primary': '#ff6a3d',
-    'error-light': '#ff9a7a',
-    'error-transparent': '#ff6a3d40',
+    'error-primary': '#ff9f0a',
+    'error-light': '#ffc166',
+    'error-transparent': '#ff9f0a40',
 
-    'menu-bar-background': zone[0],
+    'menu-bar-background': '#2a2a2c',
     'menu-bar-background-image': 'none',
     'menu-bar-foreground': zone[9],
 
     'assets-background': zone[1],
 
-    'input-background': zone[0],
+    'input-background': zone[3],
 
     'popover-background': zone[3],
 
-    'shadow': '#00000099',
+    'shadow': '#0000008c',
 
-    'badge-background': '#2a2008',
-    'badge-border': '#5a4410',
+    'badge-background': '#0a84ff24',
+    'badge-border': '#0a84ff59',
 
     'fullscreen-background': zone[0],
     'fullscreen-accent': zone[0],
@@ -90,7 +97,7 @@ const guiColors = {
     'project-title-inactive': 'transparent',
     'project-title-hover': zone[3],
 
-    'link-color': '#ffc453',
+    'link-color': '#409cff',
 
     'filter-icon-black': 'invert(92%)',
     'filter-icon-gray': 'grayscale(100%) brightness(1.6)',
@@ -111,7 +118,7 @@ const blockColors = {
     valueReportBorder: zone[5],
     valueReportForeground: zone[10],
     contextMenuBackground: zone[3],
-    contextMenuBorder: '#eceae51a',
+    contextMenuBorder: '#ffffff1f',
     contextMenuForeground: zone[9],
     contextMenuActiveBackground: zone[5],
     contextMenuDisabledForeground: zone[6],

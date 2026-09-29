@@ -7,22 +7,22 @@ related_targets: ["src/components/menu-bar/menu-bar.jsx"]
 
 # Editor shell — surface brief
 
-Scope: the whole Shading editor shell (menu bar, editor tabs, stage, timeline, asset panes, modals, menus) plus the global token layer every component reads. Mode: Operate.
+Scope: the whole Shading editor shell (toolbar, page sidebar, block workspace, stage, timeline, asset panes, modals, menus) plus the global token layer every component reads. Mode: Operate.
 
-Audience/task: creators building animation and video with blocks; they alternate between assembling blocks, scrubbing the timeline, and judging the stage image for long sessions, usually in dim rooms next to other video tools.
+Audience/task: creators building animation and video with blocks; they alternate between assembling blocks, scrubbing the timeline, and judging the stage image for long sessions.
 
-Constraints: keep all editor logic (Blockly, paint, sound, video, 3D, shader, plugins) and every action; keep block category colours; keyboard and focus behaviour intact; light theme remains selectable but dark is default.
+Constraints: keep all editor logic (Blockly, paint, sound, video, 3D, shader, plugins) and every action reachable; keep block category colours; keyboard and focus behaviour intact; dark is default, light stays selectable. User pinned: simpler UI, Apple (macOS standard app) style, system blue accent.
 
 ## Direction contract
 
-THESIS: The editor is an on-set camera monitor. The stage is the picture; everything around it behaves as OSD — measurements and guides laid over black glass. Refuses the rounded, pastel, tabbed-folder Scratch layout and the generic grey-panel NLE.
+THESIS: Shading is a native macOS document app: Keynote/Xcode calm, not an instrument panel. One toolbar, one sidebar, one canvas, one inspector column; nothing is shown twice. Refuses the OSD/monitor costume and TurboWarp's pastel Scratch chrome alike.
 
-OWN-WORLD: An 11-step neutral zone ramp (#08090a → #eceae5) is the only grey. Amber #ffb020 marks the active/selected thing (including play/run state); REC red #ff3b30 is reserved for rendering (REC). Hairline 1px rules, 2–4px radii, corner brackets only on focus/selection (nothing drawn over the stage picture), the platform tabular mono (SF Mono / Menlo / Consolas) for every number, the platform UI face for labels; tracked uppercase only for OSD status words (tally, units). The OSD strip, page rail and menus stay black glass in both themes.
+OWN-WORLD: Apple system greys (#1c1c1e → #f5f5f7 dark ramp; white/#f5f5f7 light), separators at 10% label alpha, system blue #0A84FF as the only accent with white ink, systemRed only for rendering, systemOrange for errors. SF Pro via -apple-system, 13px regular body, 11px captions, SF Mono only for timecode. 6px control radius, 10px panels/popovers/modals, translucent blurred menus with blue-highlighted rows, a 3px soft blue focus ring.
 
-STORY: The creator reads project state (name, timecode, fps, resolution, run state) at a glance from one OSD strip, switches asset work from a vertical rail, and always sees the picture framed like a monitor.
+STORY: The creator sees three menus, the project name and Share in the toolbar; picks a page from the sidebar; builds blocks; plays and scrubs from the timeline, where the only clock lives.
 
-FIRST VIEWPORT: 40px OSD status bar across the top: menus and project title left; block search, save state, then the OSD readout (tally, SMPTE timecode, fps, resolution) anchored right beside Share so it never shifts. Left: 76px vertical page rail (icon + small label, amber corner brackets on the active page). Centre: block workspace. Right: the stage as a plain hairline-framed picture, then the transport (play is the one lit key) and the timeline filling the rest of the column. Run/stop live on the timeline transport, not the top bar.
+FIRST VIEWPORT: 40px unified toolbar (Settings, File, Edit menus; project title with the block search directly right of it; save state; Share as the one blue push button). 72px sidebar of icon-over-label pages, selection as a rounded fill. Block workspace centre. Right column: stage, then timeline card with blue Play, timecode, gear; keyframe and zoom keys below.
 
-FORM: Camera Monitor OSD, position 5 on the grounded list, seed key 97eee675. Raises: every number sits on a fixed-width graticule (from Oscilloscope Bench); greys come only from the 11-step zone ramp (from Exposure Record).
+FORM: Pinned by the user (macOS standard app), overriding roll 621c037e; roll topology honoured as: nothing duplicated, one lit key per region.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

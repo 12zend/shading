@@ -1,16 +1,16 @@
 @import "../../css/colors.css";
 
-/* Unsaved changes: an amber flag in the OSD, like a monitor's "media not saved" warning. */
+/* Unsaved changes: a small blue dot beside "Save now", like a macOS edited-document marker. */
 .save-now {
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 0.4375rem;
-    height: 1.75rem;
+    height: 1.625rem;
     padding: 0 0.625rem;
     border-radius: var(--radius-m);
-    color: $osd-ink;
-    font-weight: 600;
+    color: $text-primary;
+    font-weight: 400;
     transition: background-color 120ms ease-out;
 }
 
@@ -23,5 +23,5 @@
 }
 
 .save-now:hover {
-    background-color: $osd-hover;
+    background-color: $toolbar-hover;
 }

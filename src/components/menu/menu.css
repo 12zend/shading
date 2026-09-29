@@ -1,18 +1,20 @@
 @import "../../css/colors.css";
 @import "../../css/filters.css";
 
-/* Drop-down menus read as an OSD overlay: black glass, hairline edge, tight rows. */
+/* macOS menus: translucent material, a hairline edge, rows highlighted in the accent. */
 .menu {
     position: absolute;
-    border: 1px solid $osd-rule;
-    border-radius: var(--radius-m);
-    background-color: $osd-field;
-    color: $osd-ink;
-    padding: 0.25rem 0;
+    border: 1px solid $menu-rule;
+    border-radius: var(--radius-l);
+    background-color: $menu-background;
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    color: $text-primary;
+    padding: 0.3125rem 0;
     margin: 0;
     min-width: 200px;
     overflow: visible;
-    box-shadow: 0 12px 28px -6px $shadow, 0 2px 6px $shadow;
+    box-shadow: 0 0 0 0.5px $menu-edge, 0 12px 32px -8px $shadow, 0 2px 6px $shadow;
     font-family: var(--font-ui);
 }
 
@@ -26,25 +28,31 @@
 
 .menu-item {
     display: block;
-    line-height: 1.75rem;
+    line-height: 1.5rem;
     white-space: nowrap;
-    padding: 0 0.75rem;
-    margin: 0 0.25rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    font-weight: 500;
+    padding: 0 0.625rem;
+    margin: 0 0.3125rem;
+    border-radius: var(--radius-s);
+    font-size: 0.8125rem;
+    font-weight: 400;
     position: relative;
 }
 
 .menu-item img {
-    filter: $filter-icon-white;
+    filter: var(--toolbar-icon-filter);
 }
 
 .menu-item.active,
 .menu-item:hover,
 .menu-item.expanded {
-    background-color: $osd-hover;
-    color: $osd-ink;
+    background-color: $looks-secondary;
+    color: $accent-foreground;
+}
+
+.menu-item.active img,
+.menu-item:hover img,
+.menu-item.expanded img {
+    filter: brightness(0) invert(100%);
 }
 
 .menu-item.hoverable {
@@ -52,19 +60,25 @@
 }
 
 .menu-section {
-    border-top: 1px solid $osd-rule;
-    margin-top: 0.25rem;
-    padding-top: 0.25rem;
+    border-top: 1px solid $menu-rule;
+    margin-top: 0.3125rem;
+    padding-top: 0.3125rem;
+}
+
+.menu > .menu-section:first-child {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .submenu {
     display: none;
     position: absolute;
-    top: calc(-0.25rem - 1px);
+    top: calc(-0.3125rem - 1px);
     min-width: 200px;
     height: max-content;
     overflow: hidden;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-l);
 }
 
 .submenu.right {

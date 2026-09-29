@@ -13,9 +13,9 @@ can set a width for example or what it should do in a flex box (eg. grow).
     border-radius: var(--radius-m);
     background-color: $project-title-inactive;
     background-clip: padding-box;
-    height: 1.75rem;
+    height: 1.625rem;
     padding: 0 0.5rem;
-    color: $osd-ink;
+    color: $text-primary;
     font-family: var(--font-ui);
     font-weight: 600;
     font-size: 0.8125rem;
@@ -23,19 +23,17 @@ can set a width for example or what it should do in a flex box (eg. grow).
 }
 
 .title-field::placeholder {
-    color: $osd-ink-quiet;
-    font-weight: 500;
+    color: $zone-8;
+    font-weight: 400;
 }
 
 .title-field:hover {
-    background-color: $osd-hover;
-    border-color: $osd-rule;
+    background-color: $toolbar-hover;
 }
 
 .title-field:focus {
     outline: none;
-    border-color: $looks-secondary;
-    box-shadow: none;
-    background-color: $osd-field;
-    color: $osd-ink;
+    box-shadow: var(--focus-ring);
+    background-color: $input-background;
+    color: $text-primary;
 }

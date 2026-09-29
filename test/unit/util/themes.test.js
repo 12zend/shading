@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 import {
-    ACCENT_AMBER,
+    ACCENT_BLUE,
     BLOCKS_CUSTOM,
     BLOCKS_DARK,
     BLOCKS_HIGH_CONTRAST,
@@ -29,7 +29,7 @@ describe('themes', () => {
 
         test('replaces unknown settings with the defaults', () => {
             const theme = new Theme('nope', 'nope', 'nope');
-            expect(theme.accent).toBe(ACCENT_AMBER);
+            expect(theme.accent).toBe(ACCENT_BLUE);
             expect(theme.gui).toBe(GUI_DARK);
             expect(theme.blocks).toBe(BLOCKS_THREE);
         });

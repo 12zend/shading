@@ -46,8 +46,8 @@ export default async function ({ addon, msg, console }) {
     }
 
     createDom(editorRoot) {
-      // Shading: editor tabs are a narrow vertical rail, so the find bar lives in the
-      // top bar, just before the monitor readout.
+      // Shading: editor tabs are a narrow vertical sidebar, so the find bar lives in the
+      // toolbar, directly right of the project title.
       const menu = document.querySelector('[class*="menu-bar_main-menu_"]');
       const tabList = menu ? null : editorRoot.querySelector('[class*="gui_tab-list_"]');
       const root = menu || tabList;
@@ -57,8 +57,8 @@ export default async function ({ addon, msg, console }) {
       this.findBarOuter.className = "sa-find-bar";
       if (!tabList) this.findBarOuter.classList.add("sa-find-bar-menu");
       addon.tab.displayNoneWhileDisabled(this.findBarOuter, { display: "flex" });
-      const osdSlot = menu && menu.querySelector('[class*="menu-bar_osd-slot_"]');
-      if (osdSlot) root.insertBefore(this.findBarOuter, osdSlot);
+      const searchSlot = menu && menu.querySelector('[class*="menu-bar_search-slot_"]');
+      if (searchSlot) root.insertBefore(this.findBarOuter, searchSlot);
       else root.appendChild(this.findBarOuter);
       if (tabList) {
         // Plugins can add editor tabs later; keep the find bar after them.

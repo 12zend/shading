@@ -2,48 +2,47 @@ const guiColors = {
     'color-scheme': 'light',
 
     'zone-0': '#ffffff',
-    'zone-1': '#f5f4f1',
-    'zone-2': '#efeeea',
-    'zone-3': '#e6e5e1',
-    'zone-4': '#dcdad5',
-    'zone-5': '#c9c7c1',
-    'zone-6': '#a3a19b',
-    'zone-7': '#6b7079',
-    'zone-8': '#4f545c',
-    'zone-9': '#24272c',
-    'zone-10': '#0e0f11',
+    'zone-1': '#f5f5f7',
+    'zone-2': '#fbfbfd',
+    'zone-3': '#ececf0',
+    'zone-4': '#e3e3e8',
+    'zone-5': '#d1d1d6',
+    'zone-6': '#aeaeb2',
+    'zone-7': '#8e8e93',
+    'zone-8': '#6e6e73',
+    'zone-9': '#2c2c2e',
+    'zone-10': '#1d1d1f',
 
-    'rec': '#e0281e',
-    'rec-transparent': '#e0281e26',
-    'rule': '#0e0f1114',
-    'rule-strong': '#0e0f1126',
+    'rec': '#ff3b30',
+    'rec-transparent': '#ff3b3026',
+    'rule': '#0000001a',
+    'rule-strong': '#00000026',
 
     'accent-foreground': '#ffffff',
 
-    // The OSD strip and page rail stay black glass in every theme.
-    'osd-glass': '#08090a',
-    'osd-field': '#0e0f11',
-    'osd-hover': '#24272c',
-    'osd-rule': '#eceae51f',
-    'osd-ink': '#eceae5',
-    'osd-ink-dim': '#9a9ea5',
-    'osd-ink-quiet': '#6b7079',
-    'rail-background': '#e6e5e1',
-    'rail-hover': '#dcdad5',
-    'rail-ink': '#4f545c',
-    'rail-ink-strong': '#0e0f11',
-    'rail-icon-filter': 'grayscale(100%) brightness(0.45)',
-    'rail-icon-filter-selected': 'grayscale(100%) brightness(0)',
+    'toolbar-background': '#f6f6f8',
+    'toolbar-hover': '#0000000f',
+    'sidebar-background': '#ededf0',
+    'sidebar-selected': '#00000014',
+    'sidebar-ink': '#6e6e73',
+    'sidebar-ink-strong': '#1d1d1f',
+    'sidebar-icon-filter': 'brightness(0) opacity(0.6)',
+    'sidebar-icon-filter-selected': 'brightness(0) opacity(0.88)',
+    'toolbar-icon-filter': 'brightness(0) opacity(0.75)',
+    'segment-selected': '#ffffff',
+    'menu-background': '#f6f6f8e6',
+    'menu-rule': '#0000001a',
+    'menu-edge': '#00000033',
 
-    'ui-primary': '#e6e5e1',
-    'ui-secondary': '#efeeea',
-    'ui-tertiary': '#dcdad5',
+    'ui-primary': '#f5f5f7',
+    'ui-secondary': '#fbfbfd',
+    'ui-tertiary': '#ececf0',
 
-    'ui-modal-overlay': '#14161999',
+    'ui-modal-overlay': '#00000040',
     'ui-modal-background': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
-    'ui-modal-foreground': '#24272c',
-    'ui-modal-header-background': '#e6e5e1',
-    'ui-modal-header-foreground': '#0e0f11',
+    'ui-modal-foreground': '#2c2c2e',
+    'ui-modal-header-background': 'hsla(0, 100%, 100%, 1)',
+    'ui-modal-header-foreground': '#1d1d1f',
 
     'ui-white': 'hsla(0, 100%, 100%, 1)', /* #FFFFFF */
     'ui-white-dim': 'hsla(0, 100%, 100%, 0.75)', /* 25% transparent version of ui-white */
@@ -52,8 +51,8 @@ const guiColors = {
 
     'ui-black-transparent': 'hsla(0, 0%, 0%, 0.15)', /* 15% transparent version of black */
 
-    'text-primary': '#24272c',
-    'text-primary-transparent': '#4f545c',
+    'text-primary': '#2c2c2e',
+    'text-primary-transparent': '#6e6e73',
 
     'motion-primary': 'hsla(215, 100%, 65%, 1)', /* #4C97FF */
     'motion-primary-transparent': 'hsla(215, 100%, 65%, 0.9)', /* 90% transparent version of motion-primary */
@@ -78,9 +77,9 @@ const guiColors = {
     'pen-transparent': 'hsla(163, 85%, 40%, 0.25)', /* #0FBD8C */
     'pen-tertiary': 'hsla(163, 86%, 30%, 1)', /* #0B8E69 */
 
-    'error-primary': 'hsla(30, 100%, 55%, 1)', /* #FF8C1A */
-    'error-light': 'hsla(30, 100%, 70%, 1)', /* #FFB366 */
-    'error-transparent': 'hsla(30, 100%, 55%, 0.25)', /* #FF8C1A */
+    'error-primary': '#c93400',
+    'error-light': '#ff9500',
+    'error-transparent': '#ff950040',
 
     'extensions-primary': 'hsla(163, 85%, 40%, 1)', /* #0FBD8C */
     'extensions-tertiary': 'hsla(163, 85%, 30%, 1)', /* #0B8E69 */
@@ -89,9 +88,9 @@ const guiColors = {
 
     'drop-highlight': 'hsla(215, 100%, 77%, 1)', /* lighter than motion-primary */
 
-    'menu-bar-background': '#08090a',
+    'menu-bar-background': '#f6f6f8',
     'menu-bar-background-image': 'none',
-    'menu-bar-foreground': '#c9cbcf',
+    'menu-bar-foreground': '#2c2c2e',
 
     'assets-background': '#ffffff',
 
@@ -101,19 +100,19 @@ const guiColors = {
 
     'shadow': 'hsla(0, 0%, 0%, 0.15)',
 
-    'badge-background': '#dbebff',
-    'badge-border': '#b9d6ff',
+    'badge-background': '#e5f0ff',
+    'badge-border': '#b3d4ff',
 
     'fullscreen-background': '#ffffff',
-    'fullscreen-accent': '#e8edf1',
+    'fullscreen-accent': '#f5f5f7',
 
     'page-background': '#ffffff',
-    'page-foreground': '#000000',
+    'page-foreground': '#1d1d1f',
 
     'project-title-inactive': 'transparent',
-    'project-title-hover': '#24272c',
+    'project-title-hover': '#0000000f',
 
-    'link-color': '#2255dd',
+    'link-color': '#0066cc',
 
     'filter-icon-black': 'none',
     'filter-icon-gray': 'grayscale(100%)',

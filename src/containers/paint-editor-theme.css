@@ -111,7 +111,7 @@
     row-gap: 0.25rem;
 }
 
-/* The "More" caret is a tiny accent mark: map its red source onto amber. */
+/* The "More" caret is a plain monochrome chevron, like a macOS pop-up button. */
 .paint-theme [class*="paint-editor_editor-container-top"] [class*="dropdown_dropdown-icon"] {
-    filter: hue-rotate(58deg) saturate(1.4) brightness(1.5) !important;
+    filter: var(--toolbar-icon-filter) !important;
 }

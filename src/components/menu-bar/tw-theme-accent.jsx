@@ -25,7 +25,7 @@ import styles from './settings-menu.css';
 const options = defineMessages({
     [ACCENT_AMBER]: {
         defaultMessage: 'Amber',
-        description: 'Name of the amber color scheme, used by Shading by default.',
+        description: 'Name of the amber color scheme.',
         id: 'movie.accent.amber'
     },
     [ACCENT_RED]: {
@@ -40,7 +40,7 @@ const options = defineMessages({
     },
     [ACCENT_BLUE]: {
         defaultMessage: 'Blue',
-        description: 'Name of the blue color scheme. Matches Scratch before the high contrast update.',
+        description: 'Name of the blue color scheme, used by Shading by default.',
         id: 'tw.accent.blue'
     },
     [ACCENT_RAINBOW]: {

@@ -29,36 +29,11 @@
     background: $zone-3;
 }
 
-/* Selected asset: amber outline plus the monitor's focus brackets. */
+/* Selected asset: a 2px accent ring, as in the Finder icon view. */
 .sprite-selector-item.is-selected {
     border-color: $looks-secondary;
     background: $zone-3;
     box-shadow: 0 0 0 1px $looks-secondary;
-}
-
-.sprite-selector-item.is-selected::before,
-.sprite-selector-item.is-selected::after {
-    content: "";
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    border: 0 solid $looks-secondary;
-    pointer-events: none;
-    z-index: 3;
-}
-
-.sprite-selector-item.is-selected::before {
-    top: -5px;
-    left: -5px;
-    border-top-width: 2px;
-    border-left-width: 2px;
-}
-
-.sprite-selector-item.is-selected::after {
-    right: -5px;
-    bottom: -5px;
-    border-right-width: 2px;
-    border-bottom-width: 2px;
 }
 
 .sprite-selector-item:hover .sprite-image, .is-selected .sprite-image {
@@ -107,8 +82,8 @@
 .sprite-info {
     padding: 0.25rem;
     border-top: 1px solid $rule;
-    border-bottom-left-radius: 3px;
-    border-bottom-right-radius: 3px;
+    border-bottom-left-radius: var(--radius-m);
+    border-bottom-right-radius: var(--radius-m);
 
     font-size: 0.625rem;
     color: $zone-9;

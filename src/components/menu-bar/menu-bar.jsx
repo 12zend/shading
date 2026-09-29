@@ -12,9 +12,7 @@ import VM from 'scratch-vm';
 import Box from '../box/box.jsx';
 import Button from '../button/button.jsx';
 import ShareButton from './share-button.jsx';
-import OsdReadout from './osd-readout.jsx';
 import {ComingSoonTooltip} from '../coming-soon/coming-soon.jsx';
-import Divider from '../divider/divider.jsx';
 import SaveStatus from './save-status.jsx';
 import ProjectWatcher from '../../containers/project-watcher.jsx';
 import MenuBarMenu from './menu-bar-menu.jsx';
@@ -97,11 +95,7 @@ import profileIcon from './icon--profile.png';
 import remixIcon from './icon--remix.svg';
 import dropdownCaret from './dropdown-caret.svg';
 import aboutIcon from './icon--about.svg';
-import fileIcon from './icon--file.svg';
-import editIcon from './icon--edit.svg';
-import addonsIcon from './addons.svg';
 import errorIcon from './tw-error.svg';
-import advancedIcon from './tw-advanced.svg';
 
 import ninetiesLogo from './nineties_logo.svg';
 import catLogo from './cat_logo.svg';
@@ -564,10 +558,17 @@ class MenuBar extends React.Component {
                                 </MenuBarMenu>
                             </MenuLabel>
                         </div>}
-                        {(this.props.canChangeTheme || this.props.canChangeLanguage) && (<SettingsMenu
+                        {(
+                            this.props.canChangeTheme ||
+                            this.props.canChangeLanguage ||
+                            this.props.onClickAddonSettings ||
+                            this.props.onClickSettingsModal
+                        ) && (<SettingsMenu
                             canChangeLanguage={this.props.canChangeLanguage}
                             canChangeTheme={this.props.canChangeTheme}
                             isRtl={this.props.isRtl}
+                            onClickAddonSettings={this.props.onClickAddonSettings}
+                            onClickSettingsModal={this.props.onClickSettingsModal}
                             onClickDesktopSettings={
                                 this.props.onClickDesktopSettings &&
                                 this.handleClickDesktopSettings
@@ -587,25 +588,13 @@ class MenuBar extends React.Component {
                                 onOpen={this.props.onClickFile}
                                 onClose={this.props.onRequestCloseFile}
                             >
-                                <img
-                                    src={fileIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
+                                <span className={styles.menuLabelText}>
                                     <FormattedMessage
                                         defaultMessage="File"
                                         description="Text for file dropdown menu"
                                         id="gui.menuBar.file"
                                     />
                                 </span>
-                                <img
-                                    src={dropdownCaret}
-                                    draggable={false}
-                                    width={8}
-                                    height={5}
-                                />
                                 <MenuBarMenu
                                     className={classNames(styles.menuBarMenu)}
                                     open={this.props.fileMenuOpen}
@@ -759,25 +748,13 @@ class MenuBar extends React.Component {
                             onOpen={this.props.onClickEdit}
                             onClose={this.props.onRequestCloseEdit}
                         >
-                            <img
-                                src={editIcon}
-                                draggable={false}
-                                width={20}
-                                height={20}
-                            />
-                            <span className={styles.collapsibleLabel}>
+                            <span className={styles.menuLabelText}>
                                 <FormattedMessage
                                     defaultMessage="Edit"
                                     description="Text for edit dropdown menu"
                                     id="gui.menuBar.edit"
                                 />
                             </span>
-                            <img
-                                src={dropdownCaret}
-                                draggable={false}
-                                width={8}
-                                height={5}
-                            />
                             <MenuBarMenu
                                 className={classNames(styles.menuBarMenu)}
                                 open={this.props.editMenuOpen}
@@ -930,50 +907,7 @@ class MenuBar extends React.Component {
                                 </MenuBarMenu>
                             </MenuLabel>
                         )}
-
-                        {this.props.onClickAddonSettings && (
-                            <div
-                                className={classNames(styles.menuBarItem, styles.hoverable)}
-                                onClick={this.props.onClickAddonSettings}
-                            >
-                                <img
-                                    src={addonsIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
-                                    <FormattedMessage
-                                        defaultMessage="Addons"
-                                        description="Button to open addon settings"
-                                        id="tw.menuBar.addons"
-                                    />
-                                </span>
-                            </div>
-                        )}
-                        {this.props.onClickSettingsModal && (
-                            <div
-                                className={classNames(styles.menuBarItem, styles.hoverable)}
-                                onClick={this.props.onClickSettingsModal}
-                            >
-                                <img
-                                    src={advancedIcon}
-                                    draggable={false}
-                                    width={20}
-                                    height={20}
-                                />
-                                <span className={styles.collapsibleLabel}>
-                                    <FormattedMessage
-                                        defaultMessage="Advanced"
-                                        description="Button to open advanced settings menu"
-                                        id="tw.menuBar.advanced"
-                                    />
-                                </span>
-                            </div>
-                        )}
                     </div>
-
-                    <Divider className={styles.divider} />
 
                     {this.props.canEditTitle ? (
                         <div className={classNames(styles.menuBarItem, styles.growable)}>
@@ -996,14 +930,12 @@ class MenuBar extends React.Component {
                             username={this.props.authorUsername}
                         />
                     ) : null)}
-                    <div className={styles.spacer} />
+                    {/* The block search (find-bar addon) is inserted here, directly right of the title. */}
+                    <div className={classNames(styles.spacer, styles.searchSlot)} />
                     <div className={styles.accountInfoGroup}>
                         <TWSaveStatus
                             showSaveFilePicker={this.props.showSaveFilePicker}
                         />
-                    </div>
-                    <div className={styles.osdSlot}>
-                        <OsdReadout />
                     </div>
                     {this.props.canShare ? (
                         (this.props.isShowingProject || this.props.isUpdating) && (

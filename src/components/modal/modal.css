@@ -22,8 +22,8 @@
     outline: none;
     border: 1px solid $rule-strong;
     padding: 0;
-    border-radius: var(--radius-m);
-    box-shadow: 0 24px 64px -12px #000000cc, 0 2px 8px $shadow;
+    border-radius: 12px;
+    box-shadow: 0 24px 64px -12px $shadow, 0 2px 8px $shadow;
     user-select: none;
 
     font-family: var(--font-ui);

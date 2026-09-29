@@ -30,7 +30,7 @@ button::-moz-focus-inner {
 }
 
 .button:hover {
-    background: $drop-highlight;
+    background: $looks-secondary-dark;
 }
 
 .button:active {
