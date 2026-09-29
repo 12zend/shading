@@ -33,3 +33,14 @@ npm-*
 /scratch-vm/.nyc_output
 /scratch-vm/coverage
 /scratch-vm/scratch-vm-*.{tar,tgz}
+
+# Development files from the integrated scratch-blocks repository
+/scratch-blocks/.eslintignore
+/scratch-blocks/.eslintrc
+/scratch-blocks/.editorconfig
+/scratch-blocks/.github
+/scratch-blocks/.tx
+/scratch-blocks/node_modules
+/scratch-blocks/tests
+/scratch-blocks/gh-pages
+/scratch-blocks/scratch-blocks-*.{tar,tgz}

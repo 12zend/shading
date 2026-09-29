@@ -12,9 +12,10 @@
   "main": "./dist/scratch-gui.js",
   "scripts": {
     "benchmark:shade": "node scripts/benchmark-shade.cjs",
-    "build": "npm run clean && npm run build:plugins && webpack --colors --bail",
+    "build": "npm run clean && npm run build:plugins && npm run build:blocks && webpack --colors --bail",
+    "build:blocks": "node scripts/build-scratch-blocks.cjs",
     "build:plugins": "node scripts/build-official-plugins.cjs",
-    "prestart": "npm run build:plugins",
+    "prestart": "npm run build:plugins && node scripts/build-scratch-blocks.cjs --if-missing",
     "build:cloudflare": "NODE_ENV=production npm run build",
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
@@ -104,7 +105,7 @@
     "redux": "3.7.2",
     "redux-throttle": "0.1.1",
     "scratch-audio": "github:TurboWarp/scratch-audio#develop",
-    "scratch-blocks": "github:TurboWarp/scratch-blocks#develop-builds",
+    "scratch-blocks": "file:./scratch-blocks",
     "scratch-paint": "github:PenguinMod/PenguinMod-Paint#develop",
     "scratch-render": "file:./scratch-render",
     "scratch-vm": "file:./scratch-vm",
@@ -214,6 +215,7 @@
     },
     "testPathIgnorePatterns": [
       "src/test.js",
+      "<rootDir>/scratch-blocks/",
       "<rootDir>/scratch-render/",
       "<rootDir>/scratch-vm/"
     ],

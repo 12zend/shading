@@ -16,3 +16,6 @@ src/addons/generated
 /scratch-vm/node_modules/*
 /scratch-vm/playground/*
 /scratch-vm/benchmark/*
+
+# Integrated scratch-blocks repository (Closure-based; linted with its own config)
+/scratch-blocks/*
