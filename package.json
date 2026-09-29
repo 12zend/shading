@@ -16,7 +16,7 @@
     "build:blocks": "node scripts/build-scratch-blocks.cjs",
     "build:plugins": "node scripts/build-official-plugins.cjs",
     "prestart": "npm run build:plugins && node scripts/build-scratch-blocks.cjs --if-missing",
-    "build:cloudflare": "NODE_ENV=production npm run build",
+    "build:cloudflare": "ROOT=/ NODE_ENV=production npm run build",
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
     "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc",

@@ -63,6 +63,8 @@ SHADING_PLUGINS_DIR=../shading-plugins npm start
 | `npm run start:cloudflare` | Cloudflare Workers（wrangler）でローカル実行 |
 | `npm run deploy:cloudflare` | Cloudflare へデプロイ（`cloudflare/wrangler.jsonc`） |
 
+Cloudflare 向けビルドは `ROOT=/` を指定し、共有ページ（`/p/...`）でも JavaScript・manifest をサイト直下から読み込みます。shading.app 用には `npm run build:cloudflare` を使用してください。
+
 ### テスト
 
 ```bash
