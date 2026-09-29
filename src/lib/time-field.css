@@ -1,88 +1,135 @@
-/*
- * Timeline drawn inside time shadow blocks and edited in place.
- * The accent colour follows the parent block (--time-field-accent).
- */
-.timeline {
-    cursor: ew-resize;
-    touch-action: none;
-}
-
-.hit-area {
-    fill: transparent;
-}
-
-.track {
-    fill: rgba(128, 128, 128, 0.14);
-}
-
-.label {
-    fill: #575e75;
-    font-size: 9px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+/* Mini timeline drawn inside time shadow blocks. The marker colour follows the parent block. */
+.mini-timeline {
     pointer-events: none;
 }
 
-.tick {
-    stroke: rgba(128, 128, 128, 0.45);
-    stroke-width: 0.75;
+.mini-track {
+    fill: rgba(128, 128, 128, 0.32);
+}
+
+.mini-infinity {
+    fill: rgba(128, 128, 128, 0.18);
+}
+
+.mini-infinity-active {
+    fill: var(--time-field-accent, #4968D4);
+    fill-opacity: 0.45;
+}
+
+.mini-range {
+    fill: var(--time-field-accent, #4968D4);
+    fill-opacity: 0.55;
+}
+
+.mini-marker {
+    fill: var(--time-field-accent, #4968D4);
+}
+
+/* Popup editor: a compact strip in the block-coloured drop-down, like the angle picker. */
+.editor {
+    padding: 0.25rem 0 0.1rem;
+    user-select: none;
+}
+
+.graph {
+    display: block;
+    overflow: visible;
+    cursor: pointer;
+    touch-action: none;
 }
 
 .tick-major {
-    stroke: rgba(128, 128, 128, 0.4);
-    stroke-width: 0.75;
-}
-
-.waveform {
-    fill: var(--time-field-accent, #4968D4);
-    fill-opacity: 0.28;
-}
-
-.selection {
-    fill: var(--time-field-accent, #4968D4);
-    fill-opacity: 0.25;
-}
-
-.keyframe {
-    fill: var(--time-field-accent, #4968D4);
-    fill-opacity: 0.85;
-}
-
-.playhead {
-    stroke: #ffab19;
-    stroke-width: 1.25;
-}
-
-.handle {
-    fill: var(--time-field-accent, #4968D4);
-}
-
-.handle-grip {
-    fill: #ffffff;
-    stroke: var(--time-field-accent, #4968D4);
+    stroke: rgba(255, 255, 255, 0.7);
     stroke-width: 1;
 }
 
-.infinity rect {
-    fill: rgba(128, 128, 128, 0.1);
+.tick-minor {
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-width: 1;
 }
 
-.infinity text {
-    fill: rgba(128, 128, 128, 0.85);
-    font-size: 10px;
+.tick-label {
+    fill: #ffffff;
+    font-size: 9.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.track {
+    fill: rgba(0, 0, 0, 0.2);
+}
+
+.infinity-zone rect {
+    fill: rgba(0, 0, 0, 0.12);
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-dasharray: 2 2;
+}
+
+.infinity-zone text {
+    fill: rgba(255, 255, 255, 0.75);
+    font-size: 11px;
     font-weight: 700;
 }
 
 .infinity-active rect {
-    fill: var(--time-field-accent, #4968D4);
-    fill-opacity: 0.25;
+    fill: rgba(255, 255, 255, 0.35);
+    stroke: #ffffff;
+    stroke-dasharray: none;
 }
 
 .infinity-active text {
-    fill: var(--time-field-accent, #4968D4);
+    fill: #ffffff;
+}
+
+.waveform {
+    fill: rgba(255, 255, 255, 0.4);
+}
+
+.keyframe {
+    fill: rgba(255, 255, 255, 0.85);
+}
+
+.playhead {
+    stroke: #ffbf00;
+    stroke-width: 1.5;
+}
+
+.selection {
+    fill: rgba(255, 255, 255, 0.35);
+    cursor: grab;
+}
+
+.handle {
+    cursor: ew-resize;
+}
+
+.handle-hit {
+    fill: transparent;
+}
+
+.handle-line {
+    stroke: #ffffff;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.handle-grip {
+    fill: #ffffff;
+    stroke: rgba(0, 0, 0, 0.25);
+    stroke-width: 1;
+}
+
+.scroll-track {
+    fill: rgba(0, 0, 0, 0.18);
 }
 
 .scroll-thumb {
-    fill: var(--time-field-accent, #4968D4);
-    fill-opacity: 0.5;
+    fill: rgba(255, 255, 255, 0.55);
+    stroke: transparent;
+    stroke-width: 4;
+    cursor: grab;
+}
+
+.scroll-thumb:hover {
+    fill: rgba(255, 255, 255, 0.8);
 }
