@@ -45,6 +45,7 @@ import TWFontsModal from '../../containers/tw-fonts-modal.jsx';
 import TWUnknownPlatformModal from '../../containers/tw-unknown-platform-modal.jsx';
 import TWInvalidProjectModal from '../../containers/tw-invalid-project-modal.jsx';
 import ShareLinkModal from '../../containers/share-link-modal.jsx';
+import ShadingTutorial from '../../containers/shading-tutorial.jsx';
 import OpenShareLinkModal from '../../containers/open-share-link-modal.jsx';
 
 import {STAGE_SIZE_MODES, FIXED_WIDTH, UNCONSTRAINED_NON_STAGE_WIDTH} from '../../lib/layout-constants';
@@ -374,7 +375,10 @@ const GUIComponent = props => {
                                 onSelect={onActivateTab}
                             >
                                 <TabList className={tabClassNames.tabList}>
-                                    <Tab className={tabClassNames.tab}>
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        data-tutorial-tab="code"
+                                    >
                                         <img
                                             draggable={false}
                                             src={codeIcon()}
@@ -387,6 +391,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="costumes"
                                         onClick={onActivateCostumesTab}
                                     >
                                         <img
@@ -409,6 +414,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="sounds"
                                         onClick={onActivateSoundsTab}
                                     >
                                         <img
@@ -423,6 +429,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="videos"
                                         onClick={onActivateVideosTab}
                                     >
                                         <img
@@ -437,6 +444,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="fonts"
                                         onClick={onActivateFontsTab}
                                     >
                                         <img
@@ -451,6 +459,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="models"
                                         onClick={onActivateModelsTab}
                                     >
                                         <img
@@ -465,6 +474,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="shaders"
                                         onClick={onActivateShadersTab}
                                     >
                                         <img
@@ -479,6 +489,7 @@ const GUIComponent = props => {
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
+                                        data-tutorial-tab="plugins"
                                         onClick={onActivatePluginsTab}
                                     >
                                         <img
@@ -599,6 +610,7 @@ const GUIComponent = props => {
                     </Box>
                 </Box>
                 <DragLayer />
+                <ShadingTutorial />
             </Box>
         );
     }}</MediaQuery>);

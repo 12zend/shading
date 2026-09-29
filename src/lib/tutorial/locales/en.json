@@ -1,0 +1,381 @@
+{
+  "ui": {
+    "label": "Tutorial",
+    "progress": "Step {chapter} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "skip": "Skip tutorial",
+    "skipConfirm": "Skip the tutorial? You can start it again from Edit → Tutorial.",
+    "minimize": "Minimize",
+    "expand": "Show tutorial",
+    "dragHint": "Drag to move",
+    "pluginsChecking": "Checking installed plugins…",
+    "pluginsReady": "✓ The official plugins are installed. You're ready to go.",
+    "pluginsMissing": "The official plugins are not installed yet. The tutorial cannot continue without them.",
+    "pluginsHowTo": [
+      "Open **shading.app/install**. It checks every official plugin and lists what it found (the page is in Japanese).",
+      "Tick the checkbox at the bottom (“I understand the risks and trust the author”), then press the blue **Save all** button (…すべてを保存).",
+      "Come back to this tab and press **Reload editor**. The tutorial continues where you left off."
+    ],
+    "openInstall": "Open shading.app/install",
+    "reload": "Reload editor",
+    "renderOpenHint": "Waiting for the rendering settings to open…",
+    "rendering": "Rendering… The video is downloaded when it's done.",
+    "rendered": "✓ Rendering finished."
+  },
+  "steps": {
+    "welcome": {
+      "title": "Welcome to Shading",
+      "body": [
+        "This tutorial builds a short animation together with you, one step at a time. Blocks are placed for you as you press **Next** — feel free to click them, change numbers and experiment along the way.",
+        "The tutorial uses effect blocks from the official plugins, so they need to be installed first."
+      ]
+    },
+    "renderFrame": {
+      "title": "The render frame block",
+      "body": [
+        "A video is a series of still pictures called frames — 30 every second by default. `render frame` in **Events** runs the script below it once for every frame, from the top, and whatever those blocks draw becomes that frame.",
+        "Instead of moving sprites around, you describe what the picture looks like at the current time. Press **Next** to place the block."
+      ]
+    },
+    "renderFramePlaced": {
+      "title": "Your first script",
+      "body": [
+        "`render frame` is now in the code area. Everything attached below it runs on every frame: while playing, while you scrub the timeline, and when the video is rendered.",
+        "Next, let's draw something."
+      ]
+    },
+    "objects": {
+      "title": "Objects: things to draw",
+      "body": [
+        "The **Objects** category holds the blocks that draw:",
+        {
+          "list": [
+            "`draw` — costumes, text, videos and 3D models",
+            "`shape` — polygons, stars, flowers and other shapes",
+            "`arc` and `circular segment` — rings, pie slices and arcs",
+            "`line` — a line between two points in 3D"
+          ]
+        },
+        "Blocks run from top to bottom, so what is drawn later appears in front."
+      ]
+    },
+    "drawMedia": {
+      "title": "The draw block and media",
+      "body": [
+        "The first menu of `draw` chooses what to draw. It lists the costumes, videos, fonts and 3D models of this project.",
+        "Press **Import** in that menu to load an image, video, font or 3D model straight from your computer — you can also drop or paste files onto it, or put several costumes together into a sequence. Media can also be managed in the tabs on the left.",
+        "For text, the menu chooses the font: Sans Serif, Serif, Monospace, or any font you added. Press **Next** to draw the text “Hello Shading!”."
+      ]
+    },
+    "drawPlaced": {
+      "title": "Hello Shading!",
+      "body": [
+        "The text appears on the stage. These are the values of `draw`:",
+        {
+          "list": [
+            "**text** — the words to draw",
+            "**italic** — slants the letters (0 is upright, negative numbers lean left)",
+            "**position x / y / z** — where it is in 3D: x to the right, y up, z away from the camera. At z = 480, 1 equals one pixel of the stage.",
+            "**rotation x / y / z** — turns it around each axis, in degrees",
+            "**scale x / y / z** — stretches it along each axis (1 is the original size)",
+            "**size** — the overall size in % (50 here)",
+            "**width / height** — stretches the picture sideways / up and down, in %",
+            "**time** — from when to when (in seconds) it is drawn. Infinity means until the end."
+          ]
+        },
+        "Try changing a value — the stage updates right away."
+      ]
+    },
+    "camera": {
+      "title": "The camera",
+      "body": [
+        "Everything you draw is filmed by a virtual camera. The **Camera** category moves and turns it: move the camera and the whole view moves, just like with a real camera.",
+        "Press **Next** to put `set camera to x: y: z:` at the top of the script."
+      ]
+    },
+    "cameraPlaced": {
+      "title": "Setting the camera",
+      "body": [
+        "`set camera to x: 0 y: 0 z: 0` now runs before `draw`, so the text is filmed from this position. Always set the camera before the blocks that draw.",
+        {
+          "list": [
+            "**x** — moves the camera to the right (negative: to the left)",
+            "**y** — moves it up (negative: down)",
+            "**z** — moves it forward. The camera looks toward +z, so the text at z = 480 is 480 in front of it."
+          ]
+        },
+        "Try typing 240 into z: the camera moves closer and the text gets bigger. Set it back to 0 afterwards."
+      ]
+    },
+    "operators": {
+      "title": "Operators",
+      "body": [
+        "**Operators** calculate values: + − × ÷, random numbers, comparisons (> < =), and / or / not, joining text, and math functions such as sin, cos and abs. They fit into any round slot.",
+        "Shading adds `easing`: a number that changes smoothly over time. It is the main way to animate things."
+      ]
+    },
+    "easing": {
+      "title": "The easing block",
+      "body": [
+        "This is `easing`. Let's use it to make the camera fly in.",
+        "Press **Next** to put an easing block into the camera's z."
+      ]
+    },
+    "easingPlaced": {
+      "title": "Easing values",
+      "body": [
+        "The camera's z is now `easing`:",
+        {
+          "list": [
+            "**type** — the shape of the motion. *In* starts slowly, *Out* ends slowly, *InOut* does both; Power, Circ and Expo are different curves. Here: PowerOut.",
+            "**Elastic / Bounce**, **speed** and **strength** — add a wobble on top. Speed 0 turns it off.",
+            "**value 480 ~ 0** — the value at the start and at the end",
+            "**time 0 ~ 1.5** — when the change happens, in seconds. Before 0 s it is 480; after 1.5 s it stays at 0.",
+            "**power 3** — how strong the curve is (larger means sharper)"
+          ]
+        },
+        "The camera now starts right at the text and pulls back in 1.5 seconds. Press ▶ on the timeline to watch it."
+      ]
+    },
+    "timeline": {
+      "title": "The timeline",
+      "body": [
+        "The timeline controls time:",
+        {
+          "list": [
+            "▶ plays and pauses (Space). ■ stops and goes back to 0 s (Shift+Space).",
+            "Click or drag on the ruler to jump to any moment. The frame is rebuilt for that time right away.",
+            "**Keyframe** marks an important time (K). Blocks can read it with `keyframe [1] time`.",
+            "⚙ opens the rendering settings, and **?** lists every keyboard shortcut."
+          ]
+        },
+        "The time shown here is the time that `easing` and `timer` use. Drag the playhead between 0 and 1.5 s to see the camera move frame by frame."
+      ]
+    },
+    "combine": {
+      "title": "Easings are just numbers",
+      "body": [
+        "An easing block is a value, so you can do math with it. Let's add two of them:",
+        {
+          "list": [
+            "PowerIn, value 0 ~ 100, time 0 ~ 1",
+            "PowerOut, value 0 ~ 100, time 1 ~ 2"
+          ]
+        },
+        "The sum goes 0 → 100 during the first second and 100 → 200 during the next — two moves in one value. Press **Next** to put it into the text's position x."
+      ]
+    },
+    "combinePlaced": {
+      "title": "Two moves in one value",
+      "body": [
+        "The text now speeds up to the right and then glides to a stop. Each easing only changes during its own time range and holds its value outside it, so you can add more with + to choreograph longer motions."
+      ]
+    },
+    "variables": {
+      "title": "Variables",
+      "body": [
+        "A variable stores one value under a name.",
+        {
+          "list": [
+            "**Make a Variable** in the **Variables** category creates one. “For all sprites” can be used everywhere; “For this sprite only” belongs to this sprite.",
+            "`set [ ] to` stores a value, `change [ ] by` adds to it, and the round reporter with its name reads it."
+          ]
+        }
+      ]
+    },
+    "lists": {
+      "title": "Lists",
+      "body": [
+        "A list holds many values in order.",
+        {
+          "list": [
+            "**Make a List** creates one.",
+            "`add [ ] to`, `insert [ ] at`, `replace item` and `delete` change it.",
+            "`item ( ) of`, `item # of`, `length of` and `contains` read it.",
+            "`delete all of` empties it."
+          ]
+        },
+        "Lists are handy for data that belongs together, such as a color or a position for each letter."
+      ]
+    },
+    "tmp": {
+      "title": "Variables as temporary values",
+      "body": [
+        "The render frame script starts from the top on every frame, so in Shading variables are mostly used as temporary values (“tmp”): calculate something once near the top, then use it wherever you need it below.",
+        "Lists work the same way: `delete all of` at the top, then `add` what you need for this frame.",
+        "Press **Next** to store our x motion in a variable called tmp."
+      ]
+    },
+    "tmpPlaced": {
+      "title": "Using tmp",
+      "body": [
+        "`set tmp to` now calculates the motion once, and `draw` reads (tmp). Anything else that should move the same way can use (tmp) too.",
+        "Set a temporary variable before the blocks that read it — otherwise they see the value from the previous frame."
+      ]
+    },
+    "grouping": {
+      "title": "Grouping",
+      "body": [
+        "`grouping` turns everything drawn in its top slot into one layer. Effects placed in its bottom slot (**effects**) apply only to that layer.",
+        "Press **Next** to put the text into a grouping and add a red `color overlay` to its effects."
+      ]
+    },
+    "groupingPlaced": {
+      "title": "Effects for one group",
+      "body": [
+        "The text is inside `grouping`, and `color overlay` (red, mix 100%) in the effects slot paints only this group red.",
+        "Click the color to choose another one, or lower mix to blend it with the original colors."
+      ]
+    },
+    "looks": {
+      "title": "Looks: effects",
+      "body": [
+        "The **Looks** category holds the effects that plugins add: blur, glow, color correction, distortion, film looks and more.",
+        {
+          "list": [
+            "Placed directly in the render frame script, an effect applies to the whole picture drawn so far.",
+            "Placed in the effects slot of `grouping`, it applies only to that group — for example, blur the background but keep the title sharp."
+          ]
+        }
+      ]
+    },
+    "costumes": {
+      "title": "The Costumes tab",
+      "body": [
+        "The **Costumes** tab holds images. Paint them in the built-in editor, or upload SVG, PNG, JPG, GIF, WebP, EXR and more.",
+        "Choose a costume in the menu of `draw` to show it. In that menu you can also turn several costumes into a sequence and flip through them with frame."
+      ]
+    },
+    "sounds": {
+      "title": "The Sounds tab",
+      "body": [
+        "The **Sounds** tab holds sounds: upload, record and edit them (WAV, MP3, OGG, FLAC, AAC, M4A).",
+        "To put a sound into the video, use `play sound at [ ] time: [ ] ~ [ ]` from the **Sound** category in the render frame script. It follows the timeline and is included when you render."
+      ]
+    },
+    "videos": {
+      "title": "The Videos tab",
+      "body": [
+        "The **Videos** tab holds video clips (MP4, WebM, OGV, MOV). Draw them with `draw`:",
+        {
+          "list": [
+            "**sequence** — frame chooses the picture (30 frames per second; frame 1 is the start)",
+            "**video** — plays in sync with the timeline, with its own speed and volume"
+          ]
+        }
+      ]
+    },
+    "fonts": {
+      "title": "The Fonts tab",
+      "body": [
+        "The **Fonts** tab adds fonts (TTF, OTF, WOFF, WOFF2) and shows a preview. Added fonts appear in the text choices of `draw`."
+      ]
+    },
+    "models": {
+      "title": "The Models tab",
+      "body": [
+        "The **Models** tab adds 3D models (GLB, PMX, FBX, OBJ + MTL) and motions or poses (VMD, VPD).",
+        "Draw a model with `draw` like any other object; frame plays its motion. Position, rotation and scale work in real 3D."
+      ]
+    },
+    "shader": {
+      "title": "The Shader tab",
+      "body": [
+        "The **Shader** tab is for making your own effects. Write a WebGL fragment shader (GLSL), or upload a .glsl file or shader package.",
+        "Each shader becomes a block in **Looks**, and its uniforms become the block's inputs automatically."
+      ]
+    },
+    "pluginsTab": {
+      "title": "The Plugins tab",
+      "body": [
+        "The **Plugins** tab lists the installed plugins. Turn each one on or off (after a reload), remove it, or add new ones from .zip files — also with the button at the bottom left of the code area.",
+        "Plugins run with the same permissions as the editor, so only install ones you trust. shading.app/install installs every official plugin at once."
+      ]
+    },
+    "blockShapes": {
+      "title": "Block shapes",
+      "body": [
+        "Back to the code. A block's shape tells you where it fits:",
+        {
+          "list": [
+            "**Hat blocks** (rounded top) start a script, like `render frame`.",
+            "**Stack blocks** do something. Their notches snap them together from top to bottom, like `draw`.",
+            "**C blocks** wrap other blocks, like `grouping`, `repeat` and `if`.",
+            "**Round reporters** are values — numbers or text — like `easing` or (tmp). They fit into round slots.",
+            "**Hexagonal booleans** are true or false, like `>` or `time within`. They fit into hexagonal slots such as the one in `if`."
+          ]
+        }
+      ]
+    },
+    "timer": {
+      "title": "timer",
+      "body": [
+        "`timer` in **Sensing** is the current time on the timeline, in seconds — while playing, scrubbing and rendering.",
+        "Multiply it for motion that never stops: (timer × 30) grows by 30 every second, so as an angle it turns 30° per second."
+      ]
+    },
+    "timeWithin": {
+      "title": "time within",
+      "body": [
+        "`time within [ ] to [ ] sec` in **Objects** is true while the current time is inside the range.",
+        "Use it with `if` to show something only during part of the video, or to switch between scenes."
+      ]
+    },
+    "example": {
+      "title": "Let's build an animation",
+      "body": [
+        "Now let's put everything together: the letters of “Hello Shading!” circle around the center, the camera flies in, the ring fades to red and a caption appears.",
+        "Press **Next** to build it. It replaces the tutorial's script."
+      ]
+    },
+    "examplePlaced": {
+      "title": "How it works",
+      "body": [
+        "Press ▶ to watch it. From the top:",
+        {
+          "list": [
+            "`set camera to` flies in with the easing from before.",
+            "`set tmp to` eases the radius of the circle from 0 to 120.",
+            "`set i to 1` and `set angle to (timer × 30)` prepare the loop. The timer makes the ring turn.",
+            "`repeat (length of Hello Shading!)` draws one letter per loop: `letter (i) of` picks it, sin and cos of angle place it on the circle, and rotation z tilts it along the circle.",
+            "`change i by 1` and `change angle by (360 / length)` move on to the next letter.",
+            "`color overlay` in the effects of `grouping` fades the ring to red between 2 and 3 s.",
+            "`if <time within 1.5 to 10 sec>` shows the caption from 1.5 s to the end. It is outside the group, so it does not turn red."
+          ]
+        }
+      ]
+    },
+    "render": {
+      "title": "Rendering",
+      "body": [
+        "When your animation is ready, render it into a video file.",
+        "Open the rendering settings with ⚙ on the timeline (or ⌘E / Ctrl+E)."
+      ]
+    },
+    "renderSettings": {
+      "title": "Rendering settings",
+      "body": [
+        {
+          "list": [
+            "**Render preset** — quick settings: a 720p preview, or a 1080p / 4K final",
+            "**Export format** — MP4 video, transparent WebM, PNG sequence (.zip), the current frame as PNG, or audio only (WAV)",
+            "**Output width / height** — the size of the file. The stage keeps its size; this only changes the detail.",
+            "**Frame rate** — frames per second",
+            "**Max time** — the length of the video. **Range start / end** renders only part of it.",
+            "**Reuse unchanged frames** — keeps finished frames so rendering again is faster"
+          ]
+        },
+        "This animation is 5 seconds long: set **Max time** to 5, then press **Render / export**. The video is downloaded when it's done."
+      ]
+    },
+    "finish": {
+      "title": "You did it!",
+      "body": [
+        "You've finished the tutorial. You now know the basics of Shading: render frame, Objects, the camera, easing, the timeline, variables, grouping and effects, and rendering.",
+        "Keep experimenting with the animation you built. You can open this tutorial again any time from **Edit → Tutorial**."
+      ]
+    }
+  }
+}

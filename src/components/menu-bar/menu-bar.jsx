@@ -106,6 +106,7 @@ import sharedMessages from '../../lib/shared-messages';
 
 import SeeInsideButton from './tw-see-inside.jsx';
 import {notScratchDesktop} from '../../lib/isScratchDesktop.js';
+import {restartTutorial} from '../../lib/tutorial/tutorial-storage';
 
 const ariaMessages = defineMessages({
     tutorials: {
@@ -223,6 +224,7 @@ class MenuBar extends React.Component {
             'handleClickShareLink',
             'handleClickOpenShareLink',
             'handleClickPlugins',
+            'handleClickTutorial',
             'handleClickShare',
             'handleSetMode',
             'handleKeyPress',
@@ -287,6 +289,10 @@ class MenuBar extends React.Component {
     handleClickPlugins () {
         const plugins = this.props.vm.shadingPlugins;
         if (plugins) plugins.openManager();
+        this.props.onRequestCloseEdit();
+    }
+    handleClickTutorial () {
+        restartTutorial();
         this.props.onRequestCloseEdit();
     }
     handleClickRestorePoints () {
@@ -859,6 +865,13 @@ class MenuBar extends React.Component {
                                             defaultMessage="Plugins…"
                                             description="Menu bar item that lists installed plugins"
                                             id="movie.menuBar.plugins"
+                                        />
+                                    </MenuItem>
+                                    <MenuItem onClick={this.handleClickTutorial}>
+                                        <FormattedMessage
+                                            defaultMessage="Tutorial"
+                                            description="Menu bar item that starts the first-run tutorial again"
+                                            id="movie.menuBar.tutorial"
                                         />
                                     </MenuItem>
                                 </MenuSection>

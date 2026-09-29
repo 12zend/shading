@@ -67,6 +67,19 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 - PenSkinと旧スタンプAPIは削除済み。グループ隔離・エフェクト・フレーム公開用のバッファはrendererが管理する。
 - カメラは Draw/Scene ノードにスナップショットされ、同一 frame 中の後続変更で過去の描画結果が変わらない。
 
+### 2.4 初回チュートリアル
+
+エディターを初めて開いたブラウザーでは、チュートリアルを完了するかスキップするまで、プロジェクトの読み込み後にチュートリアルを表示する。
+
+- 進行状況は `localStorage` の `shading:tutorial`（`status`: `active` / `completed` / `skipped`、`step`）に保存し、再読み込み後は同じページから再開する。
+- 「編集」→「チュートリアル」で最初から再開できる。
+- 文言は日本語（`ja`、`ja-Hira`）と英語で、`src/lib/tutorial/locales/` に置く。エディターの言語に合わせて切り替わる。
+- 最初のページでは公式プラグイン（`color-adjust`）が有効かを確認し、無効なら `/install` での導入とエディターの再読み込みを案内する。導入されるまで先に進めない。
+- 各ページはタブ・カテゴリーを切り替え、説明対象（カテゴリー、パレットのブロック、タブ、タイムライン、レンダリング設定など）をリングで示す。
+- チュートリアルのスクリプトは `main` スプライトに、ID が `shadingTutorial_` で始まるブロックとして置く。ページごとの段階（`tutorial-blocks.js` の `TUTORIAL_STAGES`）は累積的で、前後の移動や再開時は段階全体を置き直す。ユーザー自身のブロックは変更せず、チュートリアルのブロックにつないだものは独立したスクリプトとして残す。
+- 完了またはスキップすると、チュートリアルのブロックに通常の ID を付け直してユーザーのスクリプトとして残す。再度チュートリアルを実行すると、新しいスクリプトは既存のスクリプトの下に置く。
+- チュートリアルはブロック・primitive を追加しない。VM への変更は同期的なブロック操作と `emitWorkspaceUpdate` だけで行う。
+
 ## 3. 現在表示されるブロック
 
 ### 3.1 カテゴリ構成
@@ -597,5 +610,6 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | `src/lib/my-blocks-scene-blocks.js` | My Blocks Scene の Blockly 定義、カテゴリ、procedure mutation |
 | `scratch-render/src/model-runtime.js` | Three.js model、camera、light、depth rendering |
 | `electron/main.js`、`electron/file-store.js`、`electron/graphics.js` | デスクトップ起動、保存、GPU backend |
+| `src/lib/tutorial/`、`src/components/shading-tutorial/` | 初回チュートリアルのページ、文言、ブロックの段階、表示 |
 
-関連する検証コードは `test/unit/util/movie-project-roundtrip.test.js`、`test/unit/util/pen-fx-custom-shaders.test.js`、`test/unit/util/object-blocks.test.js`、`test/unit/util/movie-asset-manager.test.js`、`test/unit/components/timeline.test.jsx` にある。
+関連する検証コードは `test/unit/util/tutorial-blocks.test.js`、`test/unit/util/tutorial-steps.test.js`、`test/unit/components/shading-tutorial.test.jsx`、`test/unit/util/movie-project-roundtrip.test.js`、`test/unit/util/pen-fx-custom-shaders.test.js`、`test/unit/util/object-blocks.test.js`、`test/unit/util/movie-asset-manager.test.js`、`test/unit/components/timeline.test.jsx` にある。
