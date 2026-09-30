@@ -1,5 +1,4 @@
 import compilerCompatBlocks from '../compiler/compat-blocks';
-import {TIME_RANGE_INPUT, TIME_RANGE_OPCODES, parseTimeRange} from './time-range';
 
 /**
  * Easing calculations used by Movie's timer-driven easing reporter block.
@@ -213,23 +212,17 @@ const calculateEasingValue = ({
  * @returns {VirtualMachine} The same VM instance.
  */
 const installMovieEasing = vm => {
-    vm.runtime._primitives.operator_easing = (args, util) => {
-        // Current blocks use one TIME_RANGE input; direct calls and old tests still pass T0/T1.
-        const range = Object.prototype.hasOwnProperty.call(args, TIME_RANGE_INPUT) ?
-            parseTimeRange(args[TIME_RANGE_INPUT], TIME_RANGE_OPCODES.operator_easing) :
-            {start: args.T0, end: args.T1};
-        return calculateEasingValue({
-            type: args.TYPE,
-            type2: args.TYPE2,
-            v0: args.V0,
-            v1: args.V1,
-            t0: range.start,
-            t1: range.end,
-            power: args.POWER,
-            speed: args.SPEED,
-            strength: args.STRENGTH
-        }, util.ioQuery('clock', 'projectTimer'));
-    };
+    vm.runtime._primitives.operator_easing = (args, util) => calculateEasingValue({
+        type: args.TYPE,
+        type2: args.TYPE2,
+        v0: args.V0,
+        v1: args.V1,
+        t0: args.T0,
+        t1: args.T1,
+        power: args.POWER,
+        speed: args.SPEED,
+        strength: args.STRENGTH
+    }, util.ioQuery('clock', 'projectTimer'));
 
     if (!compilerCompatBlocks.inputs.includes('operator_easing')) {
         compilerCompatBlocks.inputs.push('operator_easing');

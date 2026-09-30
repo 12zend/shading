@@ -7,7 +7,6 @@ import {
     copyArrayBuffer,
     toNumber
 } from './movie-asset-manager-utils';
-import {TIME_RANGE_OPCODES, withTimeRangeArgs} from './time-range';
 
 const MovieAssetManagerSoundExportMethods = {
     renderAndExportTimeline (options = {}) {
@@ -116,7 +115,6 @@ const MovieAssetManagerSoundExportMethods = {
 
     playSoundAtTime (args, util) {
         if (!util || !util.target) return;
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.sound_playattime);
         // Projects saved before the ranged sound block used TIME as an offset into the source audio.
         if (!Object.prototype.hasOwnProperty.call(args || {}, 'T1') &&
             !Object.prototype.hasOwnProperty.call(args || {}, 'T2')) {

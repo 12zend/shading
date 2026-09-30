@@ -251,12 +251,13 @@ export default function (vm, locale = 'en') {
         init: function () {
             this.jsonInit({
                 message0: translate(
-                    'play sound at %1 time: %2 speed: %3 volume: %4',
-                    '音声 %1 を %2 の間 %3 倍速で %4 の音量で鳴らす'
+                    'play sound at %1 time: %2 ~ %3 speed: %4 volume: %5',
+                    '音声 %1 を %2 から %3 まで %4 倍速で %5 の音量で鳴らす'
                 ),
                 args0: [
                     {type: 'input_value', name: 'SOUND_MENU'},
-                    {type: 'input_value', name: 'TIME_RANGE'},
+                    {type: 'input_value', name: 'T1'},
+                    {type: 'input_value', name: 'T2'},
                     {type: 'input_value', name: 'SPEED'},
                     {type: 'input_value', name: 'VOLUME'}
                 ],
@@ -316,13 +317,14 @@ export default function (vm, locale = 'en') {
     ScratchBlocks.Blocks.operator_easing = {
         init: function () {
             this.jsonInit(operatorReporter(
-                'easing type: %1 %2 value: %3 ~ %4 time: %5 power: %6 speed: %7 strength: %8',
+                'easing type: %1 %2 value: %3 ~ %4 time: %5 ~ %6 power: %7 speed: %8 strength: %9',
                 [
                     {type: 'field_dropdown', name: 'TYPE', options: easingTypeOptions},
                     {type: 'field_dropdown', name: 'TYPE2', options: easingType2Options},
                     numberInput('V0'),
                     numberInput('V1'),
-                    numberInput('TIME_RANGE'),
+                    numberInput('T0'),
+                    numberInput('T1'),
                     numberInput('POWER'),
                     numberInput('SPEED'),
                     numberInput('STRENGTH')

@@ -39,7 +39,7 @@ const shadow = (id, parent, fieldName, value) => ({
     id, parent, opcode: 'shadow', inputs: {}, fields: {[fieldName]: {name: fieldName, value}}, shadow: true
 });
 
-const soundScript = (range, {hat = 'event_renderframe', speed = '1', volume = '100'} = {}) => [
+const soundScript = (start, end, {hat = 'event_renderframe', speed = '1', volume = '100'} = {}) => [
     {id: 'hat', opcode: hat, parent: null, inputs: {}, fields: {}},
     {
         id: 'play',
@@ -48,20 +48,22 @@ const soundScript = (range, {hat = 'event_renderframe', speed = '1', volume = '1
         fields: {},
         inputs: {
             SOUND_MENU: {block: 'menu', shadow: 'menu'},
-            TIME_RANGE: {block: 'range', shadow: 'range'},
+            T1: {block: 'start', shadow: 'start'},
+            T2: {block: 'end', shadow: 'end'},
             SPEED: {block: 'speed', shadow: 'speed'},
             VOLUME: {block: 'volume', shadow: 'volume'}
         }
     },
     shadow('menu', 'play', 'SOUND_MENU', 'Beat'),
-    shadow('range', 'play', 'RANGE', range),
+    shadow('start', 'play', 'NUM', start),
+    shadow('end', 'play', 'NUM', end),
     shadow('speed', 'play', 'NUM', speed),
     shadow('volume', 'play', 'NUM', volume)
 ];
 
 describe('timeline volume wave', () => {
     test('places sound blocks from render-frame scripts on the timeline', () => {
-        const vm = {runtime: {targets: [makeTarget(soundScript('1.5~4', {speed: '2', volume: '50'}))]}};
+        const vm = {runtime: {targets: [makeTarget(soundScript('1.5', '4', {speed: '2', volume: '50'}))]}};
         const events = collectSoundEvents(vm, 30);
         expect(events).toHaveLength(1);
         expect(events[0]).toEqual(expect.objectContaining({start: 1.5, end: 4, speed: 2, volume: 0.5}));
@@ -69,10 +71,10 @@ describe('timeline volume wave', () => {
 
     test('ignores sound blocks outside render-frame scripts or driven by reporters', () => {
         expect(collectSoundEvents({runtime: {targets: [
-            makeTarget(soundScript('1~2', {hat: 'event_whenflagclicked'}))
+            makeTarget(soundScript('1', '2', {hat: 'event_whenflagclicked'}))
         ]}}, 30)).toEqual([]);
-        const reporterBlocks = soundScript('1~2');
-        reporterBlocks[1].inputs.TIME_RANGE = {block: 'reporter', shadow: 'range'};
+        const reporterBlocks = soundScript('1', '2');
+        reporterBlocks[1].inputs.T1 = {block: 'reporter', shadow: 'start'};
         expect(collectSoundEvents({runtime: {targets: [makeTarget(reporterBlocks)]}}, 30)).toEqual([]);
     });
 

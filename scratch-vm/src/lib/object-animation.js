@@ -269,7 +269,7 @@ const calculateWiggleValue = (frequency, amount, seed, time) => {
 };
 
 const isTimeWithin = (time, start, end) => {
-    // Time range inputs can be open-ended ("1.5~Infinity").
+    // Imported time fields may have unbounded endpoints; number inputs preserve them.
     const boundary = value => (Math.abs(Number(value)) === Infinity ? Number(value) : finiteNumber(value));
     const first = boundary(start);
     const second = boundary(end);

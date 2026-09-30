@@ -83,6 +83,14 @@ describe('Objects animation values', () => {
         expect(posterizeTime(10, 0)).toBe(0);
     });
 
+    test('preserves unbounded endpoints restored from retired time fields', () => {
+        expect(isTimeWithin(99, 100, 'Infinity')).toBe(false);
+        expect(isTimeWithin(100, 100, 'Infinity')).toBe(true);
+        expect(isTimeWithin(120, 100, 'Infinity')).toBe(true);
+        expect(isTimeWithin(120, 'Infinity', 100)).toBe(true);
+        expect(isTimeWithin(-10, '-Infinity', 0)).toBe(true);
+    });
+
     test('interpolates colors and chooses the shortest angle path', () => {
         expect(interpolateColor('#000000', '#ffffff', 0.5)).toBe('#808080');
         expect(interpolateColor('#f00', '#00f', 0.5)).toBe('#800080');

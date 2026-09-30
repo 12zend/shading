@@ -6,11 +6,6 @@ const categorySeparator = '<sep gap="36"/>';
 
 const blockSeparator = '<sep gap="36"/>'; // At default scale, about 28px
 
-const timeRange = (start, end) => (
-    `<value name="TIME_RANGE"><shadow type="math_time_range">` +
-    `<field name="RANGE">${start}~${end}</field></shadow></value>`
-);
-
 const translate = (id, english) => {
     if (LazyScratchBlocks.isLoaded()) {
         return LazyScratchBlocks.get().ScratchMsgs.translate(id, english);
@@ -378,9 +373,14 @@ const sound = function (soundName, colors) {
                     <field name="SOUND_MENU">${soundName}</field>
                 </shadow>
             </value>
-            <value name="TIME_RANGE">
-                <shadow type="math_time_range">
-                    <field name="RANGE">0~Infinity</field>
+            <value name="T1">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+            <value name="T2">
+                <shadow type="math_number">
+                    <field name="NUM">Infinity</field>
                 </shadow>
             </value>
             <value name="SPEED">
@@ -562,7 +562,8 @@ const operators = function (isInitialSetup, isStage, targetId, colors) {
         <block type="operator_easing">
             <value name="V0"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="V1"><shadow type="math_number"><field name="NUM">100</field></shadow></value>
-            ${timeRange(0, 1)}
+            <value name="T0"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
+            <value name="T1"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
             <value name="POWER"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
             <value name="SPEED"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="STRENGTH"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
@@ -718,7 +719,7 @@ const proceduralShapeBlocks = function () {
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
     const appearance = (timeStart = 0, timeEnd = 'Infinity') => (`
-        ${timeRange(timeStart, timeEnd)}
+        ${number('T1', timeStart)}${number('T2', timeEnd)}
         <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#ffffff</field></shadow></value>
         ${number('OPACITY', 100)}
     `);
@@ -791,7 +792,7 @@ const objects = function (costumeName, locale) {
             ${number('SX', 1)}${number('SY', 1)}${number('SZ', 1)}
             ${number('SIZE', 100)}
             ${number('WIDTH', 100)}${number('HEIGHT', 100)}
-            ${timeRange(0, 'Infinity')}
+            ${number('T1', 0)}${number('T2', 'Infinity')}
         </block>
         ${proceduralShapeBlocks().join('\n')}
         <block type="objects_grouping"/>
@@ -804,7 +805,7 @@ const objects = function (costumeName, locale) {
         <block type="objects_composite">
             ${number('OPACITY', 100)}<field name="BLEND">normal</field>
         </block>
-        <block type="objects_timeWithin">${timeRange(0, 1)}</block>
+        <block type="objects_timeWithin">${number('T1', 0)}${number('T2', 1)}</block>
         <block type="objects_keyframeTime">${number('ID', 1)}</block>
         <block type="objects_pass">
             ${text('POINTS', '')}

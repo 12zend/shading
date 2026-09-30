@@ -1208,28 +1208,6 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.startRangedSoundPlayback).toHaveBeenCalled();
     });
 
-    test('the ranged sound primitive reads a merged TIME_RANGE argument', () => {
-        const manager = makeTimelineManager();
-        const target = {id: 'main', sprite: {sounds: [{name: 'Beat', soundId: 'beat'}]}};
-        manager.installPrimitives();
-        manager.timeline.playing = true;
-        manager.timeline.currentTime = 0;
-        manager.playRangedSound = jest.fn();
-
-        const result = manager.runtime._primitives.sound_playattime({
-            SOUND_MENU: 'Beat',
-            TIME_RANGE: '1~Infinity',
-            SPEED: 1,
-            VOLUME: 100
-        }, {target, thread: {peekStack: () => 'ranged-sound'}});
-
-        expect(result).toBeUndefined();
-        expect(manager.playRangedSound).toHaveBeenCalledWith(
-            expect.objectContaining({T1: 1, T2: Infinity}),
-            expect.anything()
-        );
-    });
-
     test('records frame-based sounds for deterministic export without playing them', () => {
         const manager = makeTimelineManager();
         const playSound = jest.fn();

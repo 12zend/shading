@@ -174,11 +174,6 @@ exports.activate = shading => {
 };
 ```
 
-時間を受け取る引数には `ArgumentType.TIME`（秒、例 `defaultValue: 1.5`）と
-`ArgumentType.TIME_RANGE`（`"開始~終了"` の文字列、例 `defaultValue: '0~Infinity'`）が使えます。
-どちらもミニタイムライン付きの入力欄になります。範囲は `args.X` に `"1.5~10"` のような文字列で届くので、
-`scratch-vm/src/lib/time-range` の `parseTimeRange` と同じ規則（`~` がなければ「その時刻以降」）で解釈してください。
-
 ## プロジェクトとの互換性
 
 - プロジェクトを保存すると、使用しているプラグイン（ブロック・独自カテゴリ・保存データの提供元）が

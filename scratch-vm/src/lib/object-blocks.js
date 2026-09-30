@@ -26,11 +26,6 @@ import {
     posterizeTime
 } from './object-animation';
 import {localize, resolveLocale} from './movie-block-l10n';
-import {
-    TIME_RANGE_OPCODES,
-    formatTimeRange,
-    withTimeRangeArgs
-} from './time-range';
 
 const EXTENSION_ID = 'objects';
 const PRIMARY = '#4968D4';
@@ -53,7 +48,6 @@ const OBJECT_REPORTER_OPCODES = new Set([
     'objects_pingPongValue',
     'objects_wiggle',
     'objects_timeWithin',
-    'objects_timeRangeValue',
     'objects_posterizeTime',
     'objects_interpolateColor',
     'objects_interpolateAngle',
@@ -573,11 +567,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     getInfo () {
         const numberArgument = defaultValue => ({type: ArgumentType.NUMBER, defaultValue});
-        const timeArgument = defaultValue => ({type: ArgumentType.TIME, defaultValue});
-        const timeRangeArgument = (start, end) => ({
-            type: ArgumentType.TIME_RANGE,
-            defaultValue: formatTimeRange(start, end)
-        });
         const translate = (english, japanese) => localize(resolveLocale(null, vm), english, japanese);
         return {
             id: EXTENSION_ID,
@@ -621,7 +610,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         SIZE: numberArgument(100),
                         WIDTH: numberArgument(100),
                         HEIGHT: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, Infinity)
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -630,11 +620,11 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     text: translate(
                         `shape [SHAPE] n: [N] ratio: [RATIO] position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
-                            'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [TIME_RANGE] ' +
+                            'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2] ' +
                             'color: [COLOR] opacity: [OPACITY] %',
                         `形状 [SHAPE] n: [N] ratio: [RATIO] position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
-                            'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [TIME_RANGE] ' +
+                            'radius: [INNER] [OUTER] width: [WIDTH] height: [HEIGHT] time: [T1] ~ [T2] ' +
                             'color: [COLOR] opacity: [OPACITY] %'
                     ),
                     arguments: {
@@ -656,7 +646,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         HEIGHT: numberArgument(100),
                         COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
                         OPACITY: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, Infinity)
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -666,11 +657,11 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         `arc position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
                             'radius: [INNER] [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
-                            'time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %',
+                            'time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %',
                         `円弧 position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
                             'radius: [INNER] [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
-                            'time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %'
+                            'time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %'
                     ),
                     arguments: {
                         PX: numberArgument(0),
@@ -690,7 +681,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         HEIGHT: numberArgument(100),
                         COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
                         OPACITY: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, Infinity)
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -700,11 +692,11 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         `circular segment position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
                             'size: [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
-                            'time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %',
+                            'time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %',
                         `弓形 position x: [PX] y: [PY] z: [PZ] ` +
                             'rotation x: [RX] y: [RY] z: [RZ] scale x: [SX] y: [SY] z: [SZ] ' +
                             'size: [OUTER] angle: [START] [END] width: [WIDTH] height: [HEIGHT] ' +
-                            'time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %'
+                            'time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %'
                     ),
                     arguments: {
                         PX: numberArgument(0),
@@ -723,7 +715,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         HEIGHT: numberArgument(100),
                         COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
                         OPACITY: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, Infinity)
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -731,7 +724,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     blockType: BlockType.COMMAND,
                     text: 'line position1 x: [P1X] y: [P1Y] z: [P1Z] ' +
                         'position2 x: [P2X] y: [P2Y] z: [P2Z] thickness: [THICKNESS] ' +
-                        'time: [TIME_RANGE] color: [COLOR] opacity: [OPACITY] %',
+                        'time: [T1] ~ [T2] color: [COLOR] opacity: [OPACITY] %',
                     arguments: {
                         P1X: numberArgument(0),
                         P1Y: numberArgument(0),
@@ -742,7 +735,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         THICKNESS: numberArgument(5),
                         COLOR: {type: ArgumentType.COLOR, defaultValue: '#ffffff'},
                         OPACITY: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, Infinity)
+                        T1: numberArgument(0),
+                        T2: numberArgument(Infinity)
                     }
                 },
                 {
@@ -854,7 +848,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     arguments: {
                         COUNT: numberArgument(12),
                         ANGLE: numberArgument(30),
-                        TIME: timeArgument(0.05)
+                        TIME: numberArgument(0.05)
                     }
                 },
                 {
@@ -863,7 +857,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     branchCount: 1,
                     text: 'time offset [TIME] sec',
                     arguments: {
-                        TIME: timeArgument(0)
+                        TIME: numberArgument(0)
                     }
                 },
                 {
@@ -901,7 +895,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     branchCount: 1,
                     text: 'freeze time at [TIME] sec',
                     arguments: {
-                        TIME: timeArgument(0)
+                        TIME: numberArgument(0)
                     }
                 },
                 {
@@ -947,11 +941,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'animate',
                     blockType: BlockType.REPORTER,
-                    text: 'animate [A] to [B] time: [TIME_RANGE] easing [EASING]',
+                    text: 'animate [A] to [B] from [T1] sec to [T2] sec easing [EASING]',
                     arguments: {
                         A: numberArgument(0),
                         B: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(1, 2),
+                        T1: numberArgument(1),
+                        T2: numberArgument(2),
                         EASING: {type: ArgumentType.STRING, menu: 'easing', defaultValue: 'ExpoOut'}
                     }
                 },
@@ -988,18 +983,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'timeWithin',
                     blockType: BlockType.BOOLEAN,
-                    text: translate('time within [TIME_RANGE]', '[TIME_RANGE] の間'),
+                    text: translate('time within [T1] to [T2] sec', '[T1] から [T2] まで'),
                     arguments: {
-                        TIME_RANGE: timeRangeArgument(0, 1)
-                    }
-                },
-                {
-                    opcode: 'timeRangeValue',
-                    blockType: BlockType.REPORTER,
-                    text: '[T1] ~ [T2]',
-                    arguments: {
-                        T1: timeArgument(0),
-                        T2: timeArgument(1)
+                        T1: numberArgument(0),
+                        T2: numberArgument(1)
                     }
                 },
                 {
@@ -1013,22 +1000,24 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'interpolateColor',
                     blockType: BlockType.REPORTER,
-                    text: 'interpolate color [A] to [B] time: [TIME_RANGE] easing [EASING]',
+                    text: 'interpolate color [A] to [B] from [T1] sec to [T2] sec easing [EASING]',
                     arguments: {
                         A: {type: ArgumentType.COLOR, defaultValue: '#ff3366'},
                         B: {type: ArgumentType.COLOR, defaultValue: '#3366ff'},
-                        TIME_RANGE: timeRangeArgument(0, 1),
+                        T1: numberArgument(0),
+                        T2: numberArgument(1),
                         EASING: {type: ArgumentType.STRING, menu: 'easing', defaultValue: 'Linear'}
                     }
                 },
                 {
                     opcode: 'interpolateAngle',
                     blockType: BlockType.REPORTER,
-                    text: 'interpolate angle [A] to [B] time: [TIME_RANGE] easing [EASING]',
+                    text: 'interpolate angle [A] to [B] from [T1] sec to [T2] sec easing [EASING]',
                     arguments: {
                         A: numberArgument(0),
                         B: numberArgument(360),
-                        TIME_RANGE: timeRangeArgument(0, 1),
+                        T1: numberArgument(0),
+                        T2: numberArgument(1),
                         EASING: {type: ArgumentType.STRING, menu: 'easing', defaultValue: 'Linear'}
                     }
                 },
@@ -1036,7 +1025,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     opcode: 'interpolateVector',
                     blockType: BlockType.REPORTER,
                     text: 'interpolate vector [COMPONENT] from x: [X1] y: [Y1] z: [Z1] ' +
-                        'to x: [X2] y: [Y2] z: [Z2] time: [TIME_RANGE] easing [EASING]',
+                        'to x: [X2] y: [Y2] z: [Z2] from [T1] sec to [T2] sec easing [EASING]',
                     arguments: {
                         COMPONENT: {type: ArgumentType.STRING, menu: 'vectorComponent', defaultValue: 'x'},
                         X1: numberArgument(0),
@@ -1045,7 +1034,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                         X2: numberArgument(100),
                         Y2: numberArgument(100),
                         Z2: numberArgument(100),
-                        TIME_RANGE: timeRangeArgument(0, 1),
+                        T1: numberArgument(0),
+                        T2: numberArgument(1),
                         EASING: {type: ArgumentType.STRING, menu: 'easing', defaultValue: 'Linear'}
                     }
                 },
@@ -1150,7 +1140,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     draw (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_draw);
         const selection = decodeDrawAsset(args.ASSET, args.SOURCE);
         const context = applyThreadComposition({
             asset: selection.asset,
@@ -1185,7 +1174,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     shape (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_shape);
         const context = applyThreadComposition({
             height: args.HEIGHT,
             n: args.N,
@@ -1216,7 +1204,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     drawProceduralShape (shape, args, util, configuration = {}) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_arc);
         const context = applyThreadComposition(Object.assign({
             playbackId: getObjectPlaybackId(util),
             shape,
@@ -1557,7 +1544,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     animate (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_animate);
         return calculateAnimationValue({
             from: args.A,
             to: args.B,
@@ -1585,12 +1571,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     timeWithin (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_timeWithin);
         return isTimeWithin(getObjectTime(this.runtime, util), args.T1, args.T2);
-    }
-
-    timeRangeValue (args) {
-        return formatTimeRange(args.T1, args.T2);
     }
 
     posterizeTime (args, util) {
@@ -1598,7 +1579,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     interpolateColor (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_interpolateColor);
         const progress = getAnimationProgress({
             start: args.T1,
             end: args.T2,
@@ -1608,7 +1588,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     interpolateAngle (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_interpolateAngle);
         const progress = getAnimationProgress({
             start: args.T1,
             end: args.T2,
@@ -1618,7 +1597,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     interpolateVector (args, util) {
-        args = withTimeRangeArgs(args, TIME_RANGE_OPCODES.objects_interpolateVector);
         const component = normalizeVectorComponent(args.COMPONENT);
         const suffix = component.toUpperCase();
         return calculateAnimationValue({

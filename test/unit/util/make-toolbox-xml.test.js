@@ -38,14 +38,8 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="RZ">');
         expect(toolbox).toContain('<value name="SZ">');
         expect(toolbox).toContain('<value name="HEIGHT">');
-        expect(toolbox).toContain(
-            '<value name="TIME_RANGE"><shadow type="math_time_range"><field name="RANGE">0~Infinity</field>'
-        );
-        expect(toolbox).toContain(
-            '<block type="objects_timeWithin"><value name="TIME_RANGE"><shadow type="math_time_range">' +
-            '<field name="RANGE">0~1</field>'
-        );
-        expect(toolbox).not.toContain('<value name="T2">');
+        expect(toolbox).toContain('<value name="T1"><shadow type="math_number"><field name="NUM">0</field>');
+        expect(toolbox).toContain('<value name="T2"><shadow type="math_number"><field name="NUM">Infinity</field>');
         expect(toolbox).toContain('<block type="objects_arc">');
         expect(toolbox).toContain('<block type="objects_circularSegment">');
         expect(toolbox).toContain('<block type="objects_line">');
@@ -156,8 +150,9 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('<block type="event_renderframe">');
         expect(toolbox).toContain('type="sound_playattime"');
         expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
-        expect(toolbox).toContain('<value name="TIME_RANGE">');
-        expect(toolbox).toContain('<field name="RANGE">0~Infinity</field>');
+        expect(toolbox).toContain('<value name="T1">');
+        expect(toolbox).toContain('<value name="T2">');
+        expect(toolbox).toContain('<field name="NUM">Infinity</field>');
         expect(toolbox).toContain('<value name="SPEED">');
         expect(toolbox).toContain('<value name="VOLUME">');
         expect(toolbox).not.toContain('type="sound_play"');

@@ -7,8 +7,6 @@
  * offset (time - start) × speed. Blocks whose values come from reporters cannot be placed statically
  * and are left out.
  */
-import {parseTimeRange} from '../../scratch-vm/src/lib/time-range';
-
 const SOURCE_PEAKS_PER_SECOND = 200;
 const MAX_TIMELINE_BUCKETS = 20000;
 const MAX_BUCKETS_PER_SECOND = 100;
@@ -80,12 +78,12 @@ const collectSoundEvents = (vm, framerate) => {
                 const frame = literalNumber(blocks, block.inputs.FRAME, null);
                 if (frame === null) continue;
                 start = Math.max(0, frame) / framerate;
-            } else if (block.inputs.TIME_RANGE) {
-                const range = readLiteral(blocks, block.inputs.TIME_RANGE);
-                if (range === null) continue;
-                const parsed = parseTimeRange(range);
-                start = Math.max(0, parsed.start);
-                end = Number.isNaN(parsed.end) ? Infinity : Math.max(start, parsed.end);
+            } else if (block.inputs.T1 || block.inputs.T2) {
+                start = literalNumber(blocks, block.inputs.T1, 0);
+                end = literalNumber(blocks, block.inputs.T2, Infinity);
+                if (start === null || end === null) continue;
+                start = Math.max(0, start);
+                end = Math.max(start, end);
                 speed = literalNumber(blocks, block.inputs.SPEED, 1);
                 volume = literalNumber(blocks, block.inputs.VOLUME, 100);
                 if (speed === null || volume === null) continue;

@@ -63,7 +63,6 @@ const MOVIE_ASSET_BLOCKS = [
     'objects_simulation',
     'objects_timeOffset',
     'objects_timeRange',
-    'objects_timeRangeValue',
     'objects_timeScale',
     'objects_timeLoop',
     'objects_timeFreeze',
