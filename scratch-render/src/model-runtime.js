@@ -29,6 +29,7 @@ export {
     bindAnimationToMesh,
     convertModelToGLB,
     disableFullyTransparentMaterials,
+    disableModelLighting,
     loadGLBObject,
     restoreMMDBoneHierarchy,
     resampleAnimationClip

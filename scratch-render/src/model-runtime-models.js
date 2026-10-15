@@ -102,6 +102,47 @@ const disableFullyTransparentMaterials = object => {
     return object;
 };
 
+// Imported 3D models are displayed with their authored colors and textures. Lights only affect Movie
+// primitives, so a model's appearance stays the same regardless of the scene's light blocks.
+const makeUnlitMaterial = material => {
+    if (!material || material.isMeshBasicMaterial || !material.isMaterial ||
+        material.isShaderMaterial || material.isRawShaderMaterial) return material;
+    const unlit = new THREE.MeshBasicMaterial({
+        alphaMap: material.alphaMap || null,
+        alphaTest: material.alphaTest,
+        blending: material.blending,
+        color: material.color && material.color.isColor ? material.color.clone() : new THREE.Color(0xffffff),
+        depthTest: material.depthTest,
+        depthWrite: material.depthWrite,
+        map: material.map || null,
+        opacity: material.opacity,
+        side: material.side,
+        transparent: material.transparent,
+        vertexColors: material.vertexColors,
+        visible: material.visible,
+        wireframe: Boolean(material.wireframe)
+    });
+    unlit.name = material.name;
+    unlit.userData = {...material.userData};
+    return unlit;
+};
+
+const disableModelLighting = object => {
+    const converted = new Map();
+    const convert = material => {
+        if (!converted.has(material)) converted.set(material, makeUnlitMaterial(material));
+        return converted.get(material);
+    };
+    object.traverse(child => {
+        if (!child.isMesh || !child.material) return;
+        child.material = Array.isArray(child.material) ? child.material.map(convert) : convert(child.material);
+    });
+    converted.forEach((unlit, material) => {
+        if (unlit !== material) material.dispose();
+    });
+    return object;
+};
+
 const exportGLB = async (object, animations) => {
     const {GLTFExporter} = await loadLoaderModules();
     const exporter = new GLTFExporter();
@@ -341,6 +382,7 @@ const loadGLBObject = async data => {
     const gltf = await parseWithCallback(new GLTFLoader(), toArrayBuffer(data));
     gltf.scene.animations = gltf.animations || [];
     restoreMMDBoneHierarchy(gltf.scene);
+    disableModelLighting(gltf.scene);
     disableFullyTransparentMaterials(gltf.scene);
     return gltf.scene;
 };
@@ -428,6 +470,7 @@ export {
     cloneRenderableObject,
     convertModelToGLB,
     disableFullyTransparentMaterials,
+    disableModelLighting,
     findSkinnedMesh,
     getMMDAnimationHelperClass,
     loadGLBObject,

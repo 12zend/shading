@@ -8,6 +8,7 @@ import {
     createBuildingPrimitive,
     createImagePlane,
     disableFullyTransparentMaterials,
+    disableModelLighting,
     focalLengthFromFOV,
     fovFromFocalLength,
     moviePositionToThree,
@@ -361,6 +362,39 @@ describe('Movie 3D projection', () => {
 
         expect(hiddenMaterial.visible).toBe(false);
         expect(visibleMaterial.visible).toBe(true);
+    });
+
+    test('renders imported model materials without lighting', () => {
+        const texture = new THREE.Texture();
+        const shared = new THREE.MeshStandardMaterial({
+            alphaTest: 0.5,
+            color: 0x336699,
+            map: texture,
+            opacity: 0.75,
+            side: THREE.DoubleSide,
+            transparent: true
+        });
+        shared.name = 'skin';
+        const phong = new THREE.MeshPhongMaterial({color: 0xff0000});
+        const root = new THREE.Group();
+        const first = new THREE.Mesh(new THREE.BufferGeometry(), shared);
+        const second = new THREE.Mesh(new THREE.BufferGeometry(), [phong, shared]);
+        root.add(first, second);
+
+        expect(disableModelLighting(root)).toBe(root);
+
+        expect(first.material.isMeshBasicMaterial).toBe(true);
+        expect(first.material.name).toBe('skin');
+        expect(first.material.map).toBe(texture);
+        expect(first.material.color.getHex()).toBe(0x336699);
+        expect(first.material.opacity).toBe(0.75);
+        expect(first.material.transparent).toBe(true);
+        expect(first.material.alphaTest).toBe(0.5);
+        expect(first.material.side).toBe(THREE.DoubleSide);
+        expect(second.material[0].isMeshBasicMaterial).toBe(true);
+        expect(second.material[0].color.getHex()).toBe(0xff0000);
+        // Materials shared by several meshes stay shared after conversion.
+        expect(second.material[1]).toBe(first.material);
     });
 
     test('binds MMD bone tracks to the skinned mesh before GLB export', () => {
