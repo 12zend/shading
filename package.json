@@ -24,6 +24,7 @@
     "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc",
     "prepublish": "node scripts/prepublish.mjs",
     "prune": "./prune-gh-pages.sh",
+    "release:engine": "node scripts/release-engine.cjs",
     "i18n:push": "tx-push-src scratch-editor interface translations/en.json",
     "i18n:src": "rimraf ./translations/messages/src && babel src > tmp.js && rimraf tmp.js && build-i18n-src ./translations/messages/src ./translations/",
     "start": "webpack-dev-server",
