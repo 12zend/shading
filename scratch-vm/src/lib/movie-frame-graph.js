@@ -96,6 +96,13 @@ const applyObjectTransforms = (configuration, stack) => {
     return result;
 };
 
+// A baked layer is drawn like a draw block left at its default position, rotation and scale.
+const getBakedLayerPlane = stack => applyObjectTransforms({
+    position: {x: 0, y: 0, z: 480},
+    rotation: {x: 0, y: 0, z: 0},
+    scale: {x: 1, y: 1, z: 1}
+}, stack);
+
 const executeSequence = (items, execute) => {
     if (!items) return;
     let index = 0;
@@ -227,6 +234,7 @@ export {
     applyObjectTransforms,
     applyTransformScope,
     executeSequence,
+    getBakedLayerPlane,
     rotatePoint,
     transformPoint,
     installMovieFrameGraphRenderer as default

@@ -17,6 +17,7 @@ import {
 } from './movie-asset-manager-utils';
 
 const MAX_OBJECT_IMAGE_PLANES = 256;
+const BAKED_LAYER_DEPTH = 480;
 
 const getSvgViewBoxOrigin = costume => {
     const asset = costume && costume.asset;
@@ -464,6 +465,47 @@ const MovieAssetManagerObjectMethods = {
         state.penOnly = true;
         renderer.updateDrawableVisible(target.drawableID, false);
         if (source !== 'model') this.publishFlatZBuffer(target, camera);
+    },
+
+    /**
+     * Draw a finished PenFX layer as one plane, the way a draw block draws an image.
+     * The layer already holds what the camera saw, so the plane is seen from the camera's lens at the origin.
+     * At position (0, 0, 480) with no rotation and scale 1 it covers the stage and lands where it was drawn.
+     * @param {object} layer Layer returned by PenFX endLayer.
+     * @param {object} configuration Plane position, rotation and scale.
+     * @param {?object} requestedCamera Camera whose focal length the layer was drawn with.
+     */
+    drawBakedLayer (layer, configuration = {}, requestedCamera = null) {
+        const renderer = this.runtime.renderer;
+        if (!renderer || !layer || !layer.texture || typeof renderer.drawMovieTexture !== 'function') return;
+        const bufferId = renderer.getMovieBufferId();
+        if (bufferId < 0) return;
+        const [width, height] = this.getStageSize();
+        const camera = requestedCamera || this.camera || {};
+        const focalLength = toNumber(camera.focalLength, BAKED_LAYER_DEPTH) || BAKED_LAYER_DEPTH;
+        // World units at the default draw depth match the stage only when the focal length is 480.
+        const planeScale = BAKED_LAYER_DEPTH / focalLength;
+        const position = configuration.position || {};
+        const rotation = configuration.rotation || {};
+        const scale = configuration.scale || {};
+        const matrix = spritePlaneMatrix({
+            position: {x: toNumber(position.x), y: toNumber(position.y), z: toNumber(position.z, BAKED_LAYER_DEPTH)},
+            rotation: {x: toNumber(rotation.x), y: toNumber(rotation.y), z: toNumber(rotation.z)},
+            rotationOrder: 'XYZ',
+            scale: {x: toNumber(scale.x, 1), y: toNumber(scale.y, 1), z: toNumber(scale.z, 1)}
+        }, {
+            focalLength,
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        }, [width * planeScale, height * planeScale], [width * planeScale / 2, height * planeScale / 2], [100, 100]);
+        // The layer texture is a pooled render target, so submit it immediately rather than in a batch.
+        renderer.drawMovieTexture(bufferId, {
+            dynamic: true,
+            size: [width, height],
+            texture: layer.texture
+        }, {u_modelMatrix: matrix});
+        this.runtime.requestRedraw();
     },
 
     getVideoFrameNumber (video, requestedFrame) {

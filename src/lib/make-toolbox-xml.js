@@ -801,6 +801,7 @@ const objects = function (costumeName, locale) {
         ${proceduralShapeBlocks().join('\n')}
         <block type="objects_grouping"/>
         <block type="objects_scene"/>
+        <block type="objects_bake"/>
         <block type="objects_transform">
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
             ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}

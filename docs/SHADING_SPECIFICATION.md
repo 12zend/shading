@@ -114,6 +114,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | `objects_circularSegment` | 円弧セグメントを描画。`objects_draw` の直下に表示 |
 | `objects_line` | 3D 座標間の線分を描画。`objects_draw` の直下に表示 |
 | `objects_grouping` | サブスタックを 1 つの grouping/effects 単位として評価 |
+| `objects_bake` | サブスタックを 1 枚のレイヤーに描画し、そのレイヤーを 1 つの Draw として描く |
 | `objects_transform` | 位置、アンカー、回転、XYZ スケールをサブスタックへ適用 |
 | `objects_composite` | 不透明度とブレンドモードをサブスタックへ適用 |
 | `objects_scene` | 子 Objects を同一 3D シーン・深度バッファで評価 |
@@ -153,6 +154,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 - `objects_composite` の不透明度は 0〜100 % を 0〜1 に変換する。
 - ブレンドモードは `normal`、`add`、`mul`、`screen`、`overlay`、`darken`、`lighten`、`color dodge`。
 - `objects_scene` は Objects の子描画を Three.js シーンへ集約し、同じ深度バッファで前後関係を決める。
+- `objects_bake` の子は、外側の `objects_transform` を適用せずに透明な独立レイヤーへ描画する。子のエフェクト（ピクセルストレッチの中心など画面座標を使うものを含む）もこのレイヤーにだけ掛かり、`expanded` なエフェクトでもレイヤーの下の frame は参照しない。完成したレイヤーは、位置 `0, 0, 480`・回転 `0`・スケール `1` のステージサイズの Draw として描かれ、外側の transform はこの Draw に掛かる。したがって transform が無ければ bake の有無で見た目は変わらない。子はその時点の Camera で描画され、レイヤー自体は既定の Camera から見た位置に置く。bake の中では `objects_scene` を使える。bake を囲む `objects_scene` では bake がオフスクリーンパスになるため共有深度バッファは使えず、通常の順序描画に戻る。
 - Scene 外の通常 Draw はMovieの直接テクスチャ描画経路で描画する。
 
 ### 3.3 Camera

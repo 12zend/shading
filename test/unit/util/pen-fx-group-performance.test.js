@@ -92,4 +92,41 @@ describe('Objects grouping GPU resource scaling', () => {
         expect(engine.groupBufferPool).toHaveLength(0);
         expect(engine.renderPasses.get('saved').texture).toBe('texture-1');
     });
+
+    test('returns a baked layer without compositing it and pools it once released', () => {
+        const {engine, skin} = makeEngine();
+        expect(engine.beginLayer()).toBe(true);
+        expect(skin._texture).toBe('texture-1');
+        expect(skin.getTexture()).toBe('baseline');
+        engine.noteDrawBounds(skin, 0, 0, 10, 10);
+        const layer = engine.endLayer();
+
+        expect(layer).toEqual(expect.objectContaining({height: 360, texture: 'texture-1', width: 480}));
+        expect(skin._texture).toBe('baseline');
+        expect(Object.prototype.hasOwnProperty.call(skin, 'getTexture')).toBe(false);
+        expect(engine._render).not.toHaveBeenCalled();
+        expect(engine.groupBufferPool || []).toHaveLength(0);
+        engine.releaseLayer(layer);
+        expect(engine.groupBufferPool).toHaveLength(1);
+    });
+
+    test('skips an empty layer and does not end an enclosing group', () => {
+        const {engine, skin} = makeEngine();
+        engine.beginLayer();
+        expect(engine.endLayer()).toBeNull();
+        expect(engine.groupBufferPool).toHaveLength(1);
+        engine.beginGroup();
+        expect(engine.endLayer()).toBeNull();
+        expect(engine.groupStack).toHaveLength(1);
+        expect(skin._texture).toBe('texture-1');
+    });
+
+    test('keeps expanded effects inside a layer from sampling the frame below it', () => {
+        const {engine, skin} = makeEngine();
+        engine.beginLayer();
+        engine.groupEffectScope = 'expanded';
+        expect(engine._getGroupEffectSource(skin)).toBe('texture-1');
+        engine._markExpandedGroupOutput(skin);
+        expect(engine.groupStack[0].expandedOutput).toBeUndefined();
+    });
 });

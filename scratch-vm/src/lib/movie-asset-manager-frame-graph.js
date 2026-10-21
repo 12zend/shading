@@ -5,7 +5,8 @@ import {createDepthOwner} from './movie-depth-resource';
 import installMovieFrameGraphRenderer, {
     applyObjectTransforms,
     FRAME_GRAPH_NODE_TYPES,
-    executeSequence
+    executeSequence,
+    getBakedLayerPlane
 } from './movie-frame-graph';
 import {cloneCamera} from './movie-asset-manager-utils';
 
@@ -49,7 +50,8 @@ const MovieAssetManagerFrameGraphMethods = {
         if (!this.frameGraphRenderer || !this.frameGraphRenderer.collecting) return null;
         const collectionParent = parent ||
             this.frameGraphCollectionParents[this.frameGraphCollectionParents.length - 1];
-        const capturesCamera = type === FRAME_GRAPH_NODE_TYPES.DRAW || type === FRAME_GRAPH_NODE_TYPES.SCENE;
+        const capturesCamera = type === FRAME_GRAPH_NODE_TYPES.DRAW || type === FRAME_GRAPH_NODE_TYPES.SCENE ||
+            properties.operation === 'bake';
         const nodeProperties = capturesCamera ? {
             camera: this.getFrameGraphCameraSnapshot(),
             cameraVersion: this.cameraVersion,
@@ -357,6 +359,7 @@ const MovieAssetManagerFrameGraphMethods = {
             if (penFX && typeof penFX.clearRenderPass === 'function') penFX.clearRenderPass(node.passName);
             return;
         }
+        if (node.operation === 'bake') return this.executeFrameGraphBake(node, context);
         if (node.operation === 'matte') {
             const source = node.children[0];
             const mask = node.children[1];
@@ -409,6 +412,29 @@ const MovieAssetManagerFrameGraphMethods = {
             if (node.operation !== 'render-pass') this.setFrameGraphDepthResource(context, null);
         };
         return this.finishFrameGraphScope(pending, finish, context.generation);
+    },
+
+    executeFrameGraphBake (node, context) {
+        const penFX = this.penFX || this.runtime.penFX;
+        if (!penFX || typeof penFX.beginLayer !== 'function' || penFX.beginLayer() === false) {
+            const passContext = this.createFrameGraphPassContext(context, node);
+            const pendingChildren = this.executeFrameGraphChildren(node, passContext);
+            return this.finishFrameGraphScope(pendingChildren, () => {
+                this.setFrameGraphDepthResource(context, null);
+            }, context.generation);
+        }
+        // Children draw in the layer's own space. The transforms around the bake move the finished layer instead,
+        // so screen-space effects inside it (a pixel stretch centre, for example) move with the drawing.
+        const layerContext = {...this.createFrameGraphPassContext(context, node), transforms: []};
+        const pending = this.executeFrameGraphChildren(node, layerContext);
+        return this.finishFrameGraphScope(pending, () => {
+            const layer = penFX.endLayer();
+            if (layer) {
+                this.drawBakedLayer(layer, getBakedLayerPlane(context.transforms), node.camera);
+                penFX.releaseLayer(layer);
+            }
+            this.setFrameGraphDepthResource(context, null);
+        }, context.generation);
     },
 
     executeFrameGraphScene (node, context) {

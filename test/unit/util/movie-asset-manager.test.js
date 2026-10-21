@@ -332,6 +332,91 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.penFX.endGroup).toHaveBeenCalledTimes(1);
     });
 
+    test('bakes children in their own space and draws the layer once with the surrounding transform', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const layer = {texture: 'layer-texture'};
+        const events = [];
+        manager.penFX = {
+            beginLayer: jest.fn(() => {
+                events.push('begin');
+                return true;
+            }),
+            endLayer: jest.fn(() => {
+                events.push('end');
+                return layer;
+            }),
+            releaseLayer: jest.fn(released => events.push(['release', released]))
+        };
+        manager.drawObjectImmediately = jest.fn((drawTarget, configuration) => {
+            events.push(['draw', configuration.position]);
+        });
+        manager.drawBakedLayer = jest.fn((bakedLayer, plane, camera) => {
+            events.push(['layer', bakedLayer, plane, camera && camera.focalLength]);
+        });
+        manager.camera = {focalLength: 640, position: {x: 0, y: 0, z: 0}, rotation: {x: 0, y: 0, z: 0}};
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+        const transform = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {
+            transform: {position: {x: 100, y: 0, z: 0}, rotation: {x: 0, y: 0, z: 90}}
+        });
+        const bake = manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {operation: 'bake'}, transform);
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.DRAW, {
+            configuration: {position: {x: 10, y: 20, z: 480}},
+            drawKind: 'object',
+            target
+        }, bake);
+
+        expect(manager.flushFrameGraph()).toBeUndefined();
+
+        expect(events).toEqual([
+            'begin',
+            ['draw', {x: 10, y: 20, z: 480}],
+            'end',
+            ['layer', layer, expect.objectContaining({
+                position: {x: 100, y: 0, z: 480},
+                rotation: {x: 0, y: 0, z: 90},
+                scale: {x: 1, y: 1, z: 1}
+            }), 640],
+            ['release', layer]
+        ]);
+    });
+
+    test('draws a baked layer as a stage-sized plane at its untransformed place', () => {
+        const manager = makeManager();
+        manager.runtime.renderer.getNativeSize = () => [480, 360];
+        const corners = matrix => [[-0.5, -0.5], [0.5, 0.5]].map(([x, y]) => {
+            const w = (matrix[3] * x) + (matrix[7] * y) + matrix[15];
+            return [
+                ((matrix[0] * x) + (matrix[4] * y) + matrix[12]) / w,
+                ((matrix[1] * x) + (matrix[5] * y) + matrix[13]) / w
+            ];
+        });
+
+        manager.drawBakedLayer({texture: 'layer-texture'}, {position: {x: 0, y: 0, z: 480}});
+        manager.drawBakedLayer({texture: 'layer-texture'}, {position: {x: 100, y: -20, z: 480}});
+        // A wider stage lengthens the focal length, so a world unit at the default depth covers more pixels.
+        manager.drawBakedLayer({texture: 'layer-texture'}, {position: {x: 100, y: 0, z: 480}}, {focalLength: 640});
+
+        const [
+            [bufferId, source, uniforms],
+            [, , movedUniforms],
+            [, , wideUniforms]
+        ] = manager.runtime.renderer.drawMovieTexture.mock.calls;
+        expect(bufferId).toBe(0);
+        expect(source).toEqual({dynamic: true, size: [480, 360], texture: 'layer-texture'});
+        corners(uniforms.u_modelMatrix).flat().forEach((value, index) => {
+            expect(Math.abs(value)).toBeCloseTo(index % 2 ? 180 : 240);
+        });
+        const [first, second] = corners(movedUniforms.u_modelMatrix);
+        expect((first[0] + second[0]) / 2).toBeCloseTo(100);
+        expect((first[1] + second[1]) / 2).toBeCloseTo(-20);
+        const [wideFirst, wideSecond] = corners(wideUniforms.u_modelMatrix);
+        expect(Math.abs(wideSecond[0] - wideFirst[0])).toBeCloseTo(480);
+        expect((wideFirst[0] + wideSecond[0]) / 2).toBeCloseTo(100 * 640 / 480);
+        expect(manager.runtime.requestRedraw).toHaveBeenCalledTimes(3);
+    });
+
     test('waits for asynchronous scene depth before executing a following effect without blocking the draw block', async () => {
         const manager = makeManager();
         const target = makeTarget();

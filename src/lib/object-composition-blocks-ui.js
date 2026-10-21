@@ -72,6 +72,13 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
         extensions: ['shape_statement']
     });
 
+    installObjectBlock('objects_bake', {
+        message0: localize(locale, 'bake', 'ベイク'),
+        message1: '%1',
+        args1: [statementInput],
+        extensions: ['shape_statement']
+    });
+
     installObjectBlock('objects_composite', {
         message0: localize(locale, 'composite opacity: %1 %% blend mode: %2', '合成 不透明度: %1 %% ブレンド: %2'),
         args0: [

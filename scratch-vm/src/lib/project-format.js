@@ -37,6 +37,7 @@ const MOVIE_ASSET_BLOCKS = [
     'looks_switchmodelto',
     'looks_switchvideoto',
     'objects_animate',
+    'objects_bake',
     'objects_composite',
     'objects_renderPass',
     'objects_drawPass',

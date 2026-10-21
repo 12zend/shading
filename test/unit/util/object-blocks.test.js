@@ -612,7 +612,7 @@ describe('Objects blocks', () => {
         expect(info.blocks.find(blockInfo => blockInfo.opcode === 'draw').text).toBe('draw [ASSET]');
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
-            'clear', 'drawSprite', 'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene',
+            'clear', 'drawSprite', 'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene', 'bake',
             'group', 'simulation', 'transform', 'composite', 'matte', 'renderPass', 'drawPass', 'clearPass',
             'repeat', 'timeOffset',
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
@@ -987,6 +987,148 @@ describe('Objects blocks', () => {
         expect(penFX.endGroup).toHaveBeenCalledWith({blendMode: 'screen', opacity: 0.8});
     });
 
+    test('bake draws its substack untransformed into a layer, then moves the layer without yielding', async () => {
+        let resolveDraw;
+        const pendingDraw = new Promise(resolve => {
+            resolveDraw = resolve;
+        });
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'bake' && branch === 1 ? 'bake-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const layer = {texture: 'layer-texture'};
+        const manager = {
+            drawBakedLayer: jest.fn(),
+            drawObject: jest.fn(() => pendingDraw),
+            runWithoutWaiting: jest.fn()
+        };
+        const penFX = {
+            beginLayer: jest.fn(() => true),
+            endLayer: jest.fn(() => layer),
+            releaseLayer: jest.fn()
+        };
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            penFX,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    objectBlocks.draw({
+                        ASSET: 'costume:Logo', SOURCE: 'costume', PX: 20, PY: 10, PZ: 480,
+                        RX: 0, RY: 0, RZ: 0, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const sceneCapture = {targetId: 'sprite'};
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                objectSceneCapture: sceneCapture,
+                objectTransformStack: [{position: {x: 100, y: 50, z: 0}, rotation: {x: 0, y: 0, z: 30}}],
+                peekStack: jest.fn(() => 'bake'),
+                target
+            }
+        };
+
+        expect(objectBlocks.bake({}, util)).toBeUndefined();
+        expect(penFX.beginLayer).toHaveBeenCalledTimes(1);
+        const drawn = manager.drawObject.mock.calls[0][1];
+        expect(drawn.position).toEqual({x: 20, y: 10, z: 480});
+        expect(drawn.rotation).toEqual({x: 0, y: 0, z: 0});
+        expect(drawn).not.toHaveProperty('sceneCapture');
+        expect(penFX.endLayer).not.toHaveBeenCalled();
+
+        const completion = manager.runWithoutWaiting.mock.calls[manager.runWithoutWaiting.mock.calls.length - 1][0];
+        resolveDraw();
+        await completion;
+        expect(manager.drawBakedLayer).toHaveBeenCalledWith(layer, {
+            position: {x: 100, y: 50, z: 480},
+            rotation: {x: 0, y: 0, z: 30},
+            scale: {x: 1, y: 1, z: 1}
+        });
+        expect(penFX.releaseLayer).toHaveBeenCalledWith(layer);
+        expect(util.thread.objectTransformStack).toHaveLength(1);
+    });
+
+    test('records a bake node around local child draws while collecting a frame graph', () => {
+        const blocksContainer = {
+            getBranch: jest.fn((blockId, branch) => (
+                blockId === 'bake' && branch === 1 ? 'bake-branch' : null
+            ))
+        };
+        const target = {id: 'sprite', blocks: blocksContainer};
+        const frameGraph = new MovieFrameGraphRenderer({}, jest.fn());
+        const parents = [];
+        const manager = {
+            createFrameGraphNode: (type, properties, parent) => frameGraph.append(
+                type,
+                properties,
+                parent || parents[parents.length - 1]
+            ),
+            drawObject: (drawTarget, configuration, parent) => frameGraph.append(
+                FRAME_GRAPH_NODE_TYPES.DRAW,
+                {configuration, drawKind: 'object', target: drawTarget},
+                parent || parents[parents.length - 1]
+            ),
+            isCollectingFrameGraph: () => frameGraph.collecting,
+            runWithoutWaiting: jest.fn(),
+            withFrameGraphParent: (parent, callback) => {
+                parents.push(parent);
+                try {
+                    return callback();
+                } finally {
+                    parents.pop();
+                }
+            }
+        };
+        const penFX = {beginLayer: jest.fn(), endLayer: jest.fn()};
+        let objectBlocks;
+        const runtime = {
+            movieAssetManager: manager,
+            penFX,
+            sequencer: {
+                activeThread: null,
+                stepThread: jest.fn(thread => {
+                    objectBlocks.draw({
+                        ASSET: 'costume:Logo', SOURCE: 'costume', PX: 20, PY: 10, PZ: 480,
+                        RX: 0, RY: 0, RZ: 0, SX: 1, SY: 1, SZ: 1,
+                        SIZE: 100, WIDTH: 100, HEIGHT: 100
+                    }, {target, thread});
+                })
+            }
+        };
+        const ObjectBlocks = createObjectBlocksClass({runtime});
+        objectBlocks = new ObjectBlocks();
+        const util = {
+            target,
+            thread: {
+                blockContainer: blocksContainer,
+                peekStack: jest.fn(() => 'bake'),
+                target
+            }
+        };
+
+        frameGraph.beginFrame();
+        expect(objectBlocks.bake({}, util)).toBeUndefined();
+
+        const [bake] = frameGraph.currentFrame.children;
+        expect(bake).toEqual(expect.objectContaining({operation: 'bake', type: FRAME_GRAPH_NODE_TYPES.COMPOSITE}));
+        expect(bake.children).toEqual([expect.objectContaining({
+            configuration: expect.objectContaining({position: {x: 20, y: 10, z: 480}}),
+            type: FRAME_GRAPH_NODE_TYPES.DRAW
+        })]);
+        expect(penFX.beginLayer).not.toHaveBeenCalled();
+        expect(manager.runWithoutWaiting).not.toHaveBeenCalled();
+    });
+
     test('matte evaluates source then mask and composites only after both asynchronous branches finish', async () => {
         let resolveSource;
         let resolveMask;
@@ -1059,6 +1201,7 @@ describe('Objects blocks', () => {
         expect(blocks.group({}, util)).toBeUndefined();
         expect(blocks.simulation({}, util)).toBeUndefined();
         expect(blocks.transform({}, util)).toBeUndefined();
+        expect(blocks.bake({}, util)).toBeUndefined();
         expect(blocks.composite({}, util)).toBeUndefined();
         expect(blocks.matte({}, util)).toBeUndefined();
         expect(blocks.renderPass({}, util)).toBeUndefined();

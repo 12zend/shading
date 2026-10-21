@@ -240,6 +240,34 @@ const createPenFXClass = vm => {
             this._safe(engine => engine.clearRenderPasses());
         }
 
+        // Layers run immediately even inside an effect capture: they hold drawing, not an effect.
+        beginLayer() {
+            try {
+                return this._getEngine().beginLayer();
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return false;
+            }
+        }
+
+        endLayer() {
+            try {
+                return this._getEngine().endLayer();
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return null;
+            }
+        }
+
+        releaseLayer(layer) {
+            if (!this.engine || !layer) return;
+            try {
+                this.engine.releaseLayer(layer);
+            } catch (error) {
+                console.error('[Pen FX]', error);
+            }
+        }
+
         beginMatte() {
             try {
                 return this._getEngine().beginMatte();

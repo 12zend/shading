@@ -5,7 +5,8 @@ import Thread from '../engine/thread';
 import {ANIMATION_EASING_TYPES} from './movie-easing';
 import {
     FRAME_GRAPH_NODE_TYPES,
-    applyObjectTransforms
+    applyObjectTransforms,
+    getBakedLayerPlane
 } from './movie-frame-graph';
 import {
     calculateAnimationValue,
@@ -752,6 +753,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     text: translate('scene', 'シーン')
                 },
                 {
+                    opcode: 'bake',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: translate('bake', 'ベイク')
+                },
+                {
                     opcode: 'group',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
@@ -1292,6 +1299,47 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (node) context.objectFrameGraphParent = node;
         const branchThread = runGroupingBranch(this.runtime, context, 1);
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+    }
+
+    bake (args, util) {
+        const context = getGroupingContext(util);
+        const outerTransforms = Array.isArray(context.objectTransformStack) ? context.objectTransformStack : [];
+        // The substack draws into one layer in its own space; transforms around the bake then move that layer as a
+        // single draw, so effects applied inside the bake move with what they were applied to.
+        const layerContext = {...context, objectSceneCapture: null, objectTransformStack: []};
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.COMPOSITE, {operation: 'bake'}, context);
+        if (node) {
+            layerContext.objectFrameGraphParent = node;
+            runGroupingBranch(this.runtime, layerContext, 1);
+            return;
+        }
+        const generation = this.groupingGeneration;
+        const plane = getBakedLayerPlane(outerTransforms);
+        const runBake = () => {
+            if (generation !== this.groupingGeneration) return null;
+            const manager = this.runtime.movieAssetManager;
+            const penFX = this.runtime.penFX;
+            if (!manager || typeof manager.drawBakedLayer !== 'function' ||
+                !penFX || typeof penFX.beginLayer !== 'function' || penFX.beginLayer() === false) {
+                const branchThread = runGroupingBranch(this.runtime, context, 1);
+                propagatePendingDraws(branchThread, util, manager);
+                return null;
+            }
+            const branchThread = runGroupingBranch(this.runtime, layerContext, 1);
+            const pendingDraws = branchThread && Array.isArray(branchThread.objectPendingDraws) ?
+                branchThread.objectPendingDraws.slice() : [];
+            const finish = () => {
+                if (generation !== this.groupingGeneration) return;
+                const layer = penFX.endLayer();
+                if (!layer) return;
+                manager.drawBakedLayer(layer, plane);
+                penFX.releaseLayer(layer);
+            };
+            if (pendingDraws.length) return Promise.all(pendingDraws).finally(finish);
+            finish();
+            return null;
+        };
+        this.queueGroupingWork(runBake, util);
     }
 
     queueGroupingWork (runGrouping, util) {

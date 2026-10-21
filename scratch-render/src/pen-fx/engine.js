@@ -361,7 +361,7 @@ const createPenFXEngine = (gl, renderer) => {
 
         _getGroupEffectSource (skin) {
             const entry = this.groupStack[this.groupStack.length - 1];
-            if (this.groupEffectScope !== 'expanded' || !entry || entry.skin !== skin ||
+            if (this.groupEffectScope !== 'expanded' || !entry || entry.isolated || entry.skin !== skin ||
                 skin._texture !== entry.texture) return skin._texture;
             if (!entry.effectSource) entry.effectSource = this._acquireGroupBuffer();
             // Build the expanded input lazily. The group remains isolated while objects are drawn, and only an
@@ -417,7 +417,7 @@ const createPenFXEngine = (gl, renderer) => {
 
         _markExpandedGroupOutput (skin) {
             const entry = this.groupStack[this.groupStack.length - 1];
-            if (this.groupEffectScope === 'expanded' && entry && entry.skin === skin &&
+            if (this.groupEffectScope === 'expanded' && entry && !entry.isolated && entry.skin === skin &&
                 skin._texture === entry.texture) {
                 entry.expandedOutput = true;
             }
@@ -693,6 +693,40 @@ const createPenFXEngine = (gl, renderer) => {
             if (entry.effectSource) {
                 this._releaseGroupBuffer(entry.effectSource);
             }
+        }
+
+        // A layer is a group that is returned instead of composited, so the caller can draw it as one object.
+        // It starts transparent and stays isolated: expanded effects inside it never sample the frame below.
+        beginLayer () {
+            const depth = this.groupStack.length;
+            this.beginGroup();
+            if (this.groupStack.length === depth) return false;
+            this.groupStack[depth].isolated = true;
+            return true;
+        }
+
+        endLayer () {
+            const entry = this.groupStack[this.groupStack.length - 1];
+            if (!entry || !entry.isolated) return null;
+            this.groupStack.pop();
+            const skin = entry.skin;
+            const stillStaged = Boolean(skin) && skin._texture === entry.texture;
+            if (entry.effectSource) this._releaseGroupBuffer(entry.effectSource);
+            if (stillStaged) {
+                skin._texture = entry.baselineTexture;
+                skin._framebuffer = entry.baselineFramebuffer;
+                this._restoreTextureGetter(skin, entry.hadOwnGetTexture, entry.originalGetTexture);
+            }
+            // Match endGroup: a layer nothing was drawn into has nothing to show.
+            if (!stillStaged || (entry.bounds && !entry.bounds.length)) {
+                this._releaseGroupBuffer(entry.buffer);
+                return null;
+            }
+            return {buffer: entry.buffer, height: this.height, texture: entry.texture, width: this.width};
+        }
+
+        releaseLayer (layer) {
+            if (layer && layer.buffer) this._releaseGroupBuffer(layer.buffer);
         }
 
         drawRenderPass (name, options = {}) {
