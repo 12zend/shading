@@ -6,7 +6,20 @@ import {mountWithIntl, shallowWithIntl} from '../../helpers/intl-helpers.jsx';
 import {LoadingState} from '../../../src/reducers/project-state';
 import VM from 'scratch-vm';
 
+import JSZip from '@turbowarp/jszip';
 import SBFileUploaderHOC from '../../../src/lib/sb-file-uploader-hoc.jsx';
+import {findEngineForVersion} from '../../../src/lib/engine-versions';
+import {openInEngine} from '../../../src/lib/engine-handoff';
+
+jest.mock('../../../src/lib/engine-versions', () => Object.assign(
+    {}, jest.requireActual('../../../src/lib/engine-versions'), {findEngineForVersion: jest.fn()}
+));
+jest.mock('../../../src/lib/engine-handoff', () => ({openInEngine: jest.fn(() => Promise.resolve())}));
+
+const shadeFile = version => new JSZip()
+    .file('project.json', JSON.stringify({targets: [], shading: {version}}))
+    .generateAsync({type: 'arraybuffer'});
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('SBFileUploaderHOC', () => {
     const mockStore = configureStore();
@@ -48,6 +61,9 @@ describe('SBFileUploaderHOC', () => {
     };
 
     beforeEach(() => {
+        findEngineForVersion.mockReset();
+        findEngineForVersion.mockResolvedValue(null);
+        openInEngine.mockClear();
         global.FileReader = jest.fn(() => ({}));
         vm = new VM();
         store = mockStore({
@@ -99,6 +115,51 @@ describe('SBFileUploaderHOC', () => {
             reason: 'legacy-format'
         }));
         expect(onLoadingFinished).toHaveBeenCalledWith(expect.anything(), false);
+    });
+
+    test('opens a file saved by another engine version in that engine when the user agrees', async () => {
+        const engine = {version: '0.9.0', name: 'Shading 0.9.0', url: '/engines/0.9.0/'};
+        findEngineForVersion.mockResolvedValue(engine);
+        global.confirm = jest.fn(() => true);
+        const onLoadingFinished = jest.fn();
+        const loadProject = jest.spyOn(vm, 'loadProject');
+        const instance = unwrappedInstance({onLoadingFinished, onLoadingStarted: jest.fn()});
+        const data = await shadeFile('0.9.0');
+        const fileHandle = {name: 'movie.shade'};
+        instance.fileReader = {result: data};
+        instance.fileToUpload = {name: 'movie.shade'};
+        instance.fileHandle = fileHandle;
+
+        instance.onload();
+        for (let i = 0; i < 5; i++) await flush();
+
+        expect(findEngineForVersion).toHaveBeenCalledWith('0.9.0');
+        expect(openInEngine).toHaveBeenCalledWith('/engines/0.9.0/', {data, fileName: 'movie.shade', fileHandle});
+        expect(loadProject).not.toHaveBeenCalled();
+        // The loading screen stays until the other engine's page replaces this one.
+        expect(onLoadingFinished).not.toHaveBeenCalled();
+        delete global.confirm;
+    });
+
+    test('opens a file from another engine version here when the user declines', async () => {
+        findEngineForVersion.mockResolvedValue({version: '0.9.0', name: 'Shading 0.9.0', url: '/engines/0.9.0/'});
+        global.confirm = jest.fn(() => false);
+        const loadProject = jest.spyOn(vm, 'loadProject').mockResolvedValue();
+        const instance = unwrappedInstance({
+            onLoadingFailed: jest.fn(),
+            onLoadingStarted: jest.fn(),
+            onSetProjectTitle: jest.fn()
+        });
+        const data = await shadeFile('0.9.0');
+        instance.fileReader = {result: data};
+        instance.fileToUpload = {name: 'movie.shade'};
+
+        instance.onload();
+        for (let i = 0; i < 5; i++) await flush();
+
+        expect(openInEngine).not.toHaveBeenCalled();
+        expect(loadProject).toHaveBeenCalledWith(data);
+        delete global.confirm;
     });
 
     test('does not filter shade out of the native file picker', () => {

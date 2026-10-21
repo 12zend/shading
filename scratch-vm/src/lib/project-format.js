@@ -4,6 +4,8 @@ const MOVIE_PROJECT_FORMAT_VERSION = 1;
 // Every saved .shade file records the file format version here. Files saved before the version was written carry
 // only the mb3 feature marker and are version 1.0.0. Plain Scratch projects (.sb3, .sb2, .sb) have neither.
 const SHADING_PROJECT_KEY = 'shading';
+// Always the "current" version of engine-versions.json (checked by the GUI's unit tests): a file records the engine
+// version that saved it, and opens in that engine when it is still listed.
 const SHADING_PROJECT_VERSION = '1.0.0';
 const LEGACY_SHADING_PROJECT_VERSION = '1.0.0';
 

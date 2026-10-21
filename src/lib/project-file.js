@@ -1,8 +1,10 @@
+import JSZip from '@turbowarp/jszip';
 import {
     MOVIE_PROJECT_EXTENSION,
     SHADING_PROJECT_KEY,
     SHADING_PROJECT_VERSION,
-    assertSupportedProjectFormat
+    assertSupportedProjectFormat,
+    getShadingProjectVersion
 } from './project-format';
 
 // A saved .shade file carries the editor's browser data next to the project: every localStorage value (addon
@@ -163,6 +165,23 @@ const saveProjectFile = (vm, type) => vm.saveProjectSb3(type, getProjectFileOpti
  */
 const saveProjectFileStream = (vm, type) => vm.saveProjectSb3Stream(type, getProjectFileOptions(vm));
 
+/**
+ * Read the format version of a project file without loading it.
+ * @param {ArrayBuffer|Uint8Array} data The file.
+ * @returns {Promise<?string>} The .shade version, or null when the file is not a readable .shade project.
+ */
+const readProjectFileVersion = async data => {
+    try {
+        const zip = await JSZip.loadAsync(data);
+        // Like the VM's loader, accept a project.json inside a single folder.
+        const file = zip.file('project.json') || zip.file(/(^|\/)project\.json$/)[0];
+        if (!file) return null;
+        return getShadingProjectVersion(JSON.parse(await file.async('string')));
+    } catch (error) {
+        return null;
+    }
+};
+
 const createZipFile = (bytes, name) => (typeof File === 'function' ?
     new File([bytes], name, {type: 'application/zip'}) :
     Object.assign(new Blob([bytes], {type: 'application/zip'}), {name}));
@@ -232,6 +251,7 @@ export {
     getProjectTitleFromFileName,
     installProjectFileHooks,
     isProjectFileName,
+    readProjectFileVersion,
     restoreLocalStorage,
     saveProjectFile,
     saveProjectFileStream

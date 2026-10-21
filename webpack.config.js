@@ -19,6 +19,12 @@ const root = process.env.ROOT || '';
 if (root.length > 0 && !root.endsWith('/')) {
     throw new Error('If ROOT is defined, it must have a trailing slash.');
 }
+// Where the latest engine lives. scripts/build-engines.cjs builds older engines into engines/<version>/ with their
+// own ROOT, and points them back here so they find newer versions.
+const siteRoot = process.env.SHADING_SITE_ROOT || root;
+if (siteRoot.length > 0 && !siteRoot.endsWith('/')) {
+    throw new Error('If SHADING_SITE_ROOT is defined, it must have a trailing slash.');
+}
 
 const htmlWebpackPluginCommon = {
     root: root,
@@ -228,6 +234,7 @@ const makeExtensionConfig = () => {
                 'process.env.DEBUG': false,
                 'process.env.ENABLE_SERVICE_WORKER': '""',
                 'process.env.ROOT': '""',
+                'process.env.SHADING_SITE_ROOT': '""',
                 'process.env.ROUTING_STYLE': '"none"',
                 'process.env.ENABLE_WINDCHIMES': '""',
                 'process.env.SHADING_EXTENSION': true
@@ -288,6 +295,7 @@ module.exports = process.env.BUILD_MODE === 'extension' ? [makeExtensionConfig()
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
                 'process.env.ROOT': JSON.stringify(root),
+                'process.env.SHADING_SITE_ROOT': JSON.stringify(siteRoot),
                 'process.env.ROUTING_STYLE': JSON.stringify('path'),
                 'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || ''),
                 'process.env.SHADING_EXTENSION': false
@@ -348,6 +356,11 @@ module.exports = process.env.BUILD_MODE === 'extension' ? [makeExtensionConfig()
                 patterns: [
                     {
                         from: 'static',
+                        to: ''
+                    },
+                    {
+                        // Older engines read this from the site root to find newer versions.
+                        from: 'engine-versions.json',
                         to: ''
                     }
                 ]

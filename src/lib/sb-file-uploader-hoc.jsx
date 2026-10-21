@@ -6,8 +6,19 @@ import {connect} from 'react-redux';
 import log from '../lib/log';
 import sharedMessages from './shared-messages';
 import {setFileHandle, setProjectError} from '../reducers/tw';
-import {getProjectTitleFromFileName, isProjectFileName, PROJECT_FILE_EXTENSION} from './project-file';
+import {
+    getProjectTitleFromFileName,
+    isProjectFileName,
+    PROJECT_FILE_EXTENSION,
+    readProjectFileVersion
+} from './project-file';
 import {UnsupportedProjectFormatError} from './project-format';
+import {CURRENT_ENGINE_VERSION, findEngineForVersion} from './engine-versions';
+import {openInEngine} from './engine-handoff';
+import {localize} from './movie-block-l10n';
+
+// Resolved by openInMatchingEngine() when the file went to another engine and this page is navigating away.
+const OPENED_IN_OTHER_ENGINE = 'opened-in-other-engine';
 
 import {
     LoadingStates,
@@ -48,6 +59,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 'handleStartSelectingFileUpload',
                 'handleChange',
                 'onload',
+                'openInMatchingEngine',
                 'removeFileObjects'
             ]);
             // tw: We have multiple instances of this HOC alive at a time. This flag fixes issues that arise from that.
@@ -137,12 +149,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 if (uploadAllowed) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
+                    this.fileHandle = handle && isProjectFileName(this.fileToUpload.name) ? handle : null;
                     if (handle) {
-                        if (isProjectFileName(this.fileToUpload.name)) {
-                            this.props.onSetFileHandle(handle);
-                        } else {
-                            this.props.onSetFileHandle(null);
-                        }
+                        this.props.onSetFileHandle(this.fileHandle);
                     }
 
                     // cues step 4
@@ -174,24 +183,53 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         getProjectTitleFromFilename (fileInputFilename) {
             return getProjectTitleFromFileName(fileInputFilename);
         }
+        /**
+         * A file saved by another engine version opens in that engine when the user agrees.
+         * @param {ArrayBuffer} data The file.
+         * @param {string} fileName The file name.
+         * @param {?FileSystemFileHandle} fileHandle Handle for saving back to the file.
+         * @returns {Promise<boolean>} True when the file went to another engine.
+         */
+        async openInMatchingEngine (data, fileName, fileHandle) {
+            const engine = await findEngineForVersion(await readProjectFileVersion(data));
+            if (!engine) return false;
+            const locale = this.props.intl.locale;
+            // eslint-disable-next-line no-alert
+            const switchEngine = confirm(localize(locale,
+                `This project was saved with ${engine.name}. Open it in that version of the editor?\n\n` +
+                `Choose Cancel to open it in this editor (${CURRENT_ENGINE_VERSION}).`,
+                `このプロジェクトは ${engine.name} で保存されています。そのバージョンのエディターで開きますか？\n\n` +
+                `キャンセルを選ぶと、このエディター（${CURRENT_ENGINE_VERSION}）で開きます。`));
+            if (!switchEngine) return false;
+            await openInEngine(engine.url, {data, fileName, fileHandle});
+            return true;
+        }
         // step 6: attached as a handler on our FileReader object; called when
         // file upload raw data is available in the reader
         onload () {
             if (this.fileReader) {
                 this.props.onLoadingStarted();
                 const filename = this.fileToUpload && this.fileToUpload.name;
+                const data = this.fileReader.result;
                 let loadingSuccess = false;
+                let leavingPage = false;
                 // tw: stop when loading new project
                 this.props.vm.quit();
                 // Only .shade files open; .sb3, .sb2, .sb and the old .mb3 extension are refused unread.
                 const loadPromise = isProjectFileName(filename) ?
-                    this.props.vm.loadProject(this.fileReader.result) :
+                    this.openInMatchingEngine(data, filename, this.fileHandle)
+                        .then(opened => (opened ? OPENED_IN_OTHER_ENGINE : this.props.vm.loadProject(data))) :
                     Promise.reject(new UnsupportedProjectFormatError(
                         'legacy-format',
                         `Only .shade project files can be opened: ${filename}`
                     ));
                 loadPromise
-                    .then(() => {
+                    .then(result => {
+                        if (result === OPENED_IN_OTHER_ENGINE) {
+                            // Keep the loading screen until the other engine's page replaces this one.
+                            leavingPage = true;
+                            return;
+                        }
                         if (filename) {
                             const uploadedProjectTitle = this.getProjectTitleFromFilename(filename);
                             this.props.onSetProjectTitle(uploadedProjectTitle);
@@ -204,6 +242,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         this.props.onLoadingFailed(error);
                     })
                     .then(() => {
+                        if (leavingPage) return;
                         this.props.onLoadingFinished(this.props.loadingState, loadingSuccess);
                         // go back to step 7: whether project loading succeeded
                         // or failed, reset file objects
@@ -221,6 +260,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             this.inputElement = null;
             this.fileReader = null;
             this.fileToUpload = null;
+            this.fileHandle = null;
         }
         render () {
             const {

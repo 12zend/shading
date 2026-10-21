@@ -6,6 +6,7 @@ import {connect} from 'react-redux';
 
 import {setProjectUnchanged} from '../reducers/project-changed';
 import {setProjectTitle} from '../reducers/project-title';
+import {setFileHandle} from '../reducers/tw';
 import {
     LoadingStates,
     getIsCreatingNew,
@@ -33,6 +34,8 @@ import {
     isSharePath,
     takePendingSharePayload
 } from './share-link/share-link-url';
+import {takeHandoff, takePendingHandoffId} from './engine-handoff';
+import {getProjectTitleFromFileName} from './project-file';
 
 const replaceURL = path => {
     try {
@@ -81,10 +84,12 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             super(props);
             bindAll(this, [
                 'fetchProject',
+                'fetchHandoffProject',
                 'fetchSharedProject'
             ]);
             this.sharedProjectTitle = null;
             this.sharedPlugins = null;
+            this.handoffFileHandle = null;
             storage.setProjectHost(props.projectHost);
             storage.setProjectToken(props.projectToken);
             storage.setAssetHost(props.assetHost);
@@ -121,6 +126,11 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                     if (this.sharedProjectTitle) this.props.onSetProjectTitle(this.sharedProjectTitle);
                     this.sharedProjectTitle = null;
                 }
+                // A file handed over by another engine keeps saving to the file it came from.
+                if (this.handoffFileHandle) {
+                    this.props.onSetFileHandle(this.handoffFileHandle);
+                    this.handoffFileHandle = null;
+                }
                 // The project is open (plugin blocks show as placeholders); now offer its embedded plugins.
                 if (this.sharedPlugins) {
                     const manager = this.props.vm.shadingPlugins;
@@ -142,7 +152,10 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             this.props.vm.quit();
             this.sharedProjectTitle = null;
             this.sharedPlugins = null;
+            this.handoffFileHandle = null;
 
+            const handoffId = takePendingHandoffId();
+            if (handoffId) return this.fetchHandoffProject(handoffId, loadingState);
             const sharePayload = takePendingSharePayload();
             if (sharePayload) return this.fetchSharedProject(sharePayload, loadingState);
             if (isHTTP() && isSharePath()) {
@@ -203,6 +216,28 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                     log.error(err);
                 });
         }
+        // Another engine version opened this page to load a project file the user chose there.
+        fetchHandoffProject (id, loadingState) {
+            return takeHandoff(id)
+                .catch(error => {
+                    log.error(error);
+                    return null;
+                })
+                .then(file => {
+                    if (!file) {
+                        // Already taken (an old link) or storage is unavailable: start normally instead.
+                        log.warn('The project file opened in another version of the editor was not found.');
+                        return this.fetchProject(this.props.reduxProjectId, loadingState);
+                    }
+                    this.sharedProjectTitle = getProjectTitleFromFileName(file.fileName);
+                    this.handoffFileHandle = file.fileHandle;
+                    this.props.onFetchedProjectData(file.data, loadingState);
+                })
+                .catch(err => {
+                    this.props.onError(err);
+                    log.error(err);
+                });
+        }
         fetchSharedProject (payload, loadingState) {
             // Loaded lazily: the codec and its Brotli WebAssembly are only needed for share links.
             return import(/* webpackChunkName: "share-link" */ './share-link/share-link')
@@ -232,6 +267,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                 onError: onErrorProp,
                 onFetchedProjectData: onFetchedProjectDataProp,
                 onProjectUnchanged,
+                onSetFileHandle,
                 onSetProjectTitle,
                 projectHost,
                 projectId,
@@ -262,6 +298,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
         onError: PropTypes.func,
         onFetchedProjectData: PropTypes.func,
         onProjectUnchanged: PropTypes.func,
+        onSetFileHandle: PropTypes.func,
         onSetProjectTitle: PropTypes.func,
         projectHost: PropTypes.string,
         projectToken: PropTypes.string,
@@ -291,6 +328,7 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             dispatch(onFetchedProjectData(projectData, loadingState)),
         setProjectId: projectId => dispatch(setProjectId(projectId)),
         onProjectUnchanged: () => dispatch(setProjectUnchanged()),
+        onSetFileHandle: fileHandle => dispatch(setFileHandle(fileHandle)),
         onSetProjectTitle: title => dispatch(setProjectTitle(title))
     });
     // Allow incoming props to override redux-provided props. Used to mock in tests.

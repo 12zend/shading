@@ -9,6 +9,7 @@ import {
     getProjectTitleFromFileName,
     installProjectFileHooks,
     isProjectFileName,
+    readProjectFileVersion,
     saveProjectFile
 } from '../../../src/lib/project-file';
 
@@ -103,6 +104,16 @@ describe('.shade project files', () => {
             expect(getProjectTitleFromFileName(name)).toBe('');
         }
         expect(getProjectTitleFromFileName('my movie is great.shade')).toBe('my movie is great');
+    });
+
+    test('reads the version of a file without loading it', async () => {
+        const zip = version => new JSZip().file('project.json', JSON.stringify(Object.assign(stageProject(), version)))
+            .generateAsync({type: 'arraybuffer'});
+
+        await expect(readProjectFileVersion(await zip({shading: {version: '1.0.0'}}))).resolves.toBe('1.0.0');
+        await expect(readProjectFileVersion(await zip({mb3: {version: 1}}))).resolves.toBe('1.0.0');
+        await expect(readProjectFileVersion(await zip({}))).resolves.toBeNull();
+        await expect(readProjectFileVersion(new Uint8Array([1, 2, 3]))).resolves.toBeNull();
     });
 
     test('saves the version, browser settings and installed plugins into the file', async () => {
