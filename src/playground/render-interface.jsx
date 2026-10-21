@@ -29,7 +29,8 @@ import runAddons from '../addons/entry';
 
 import styles from './interface.css';
 
-const isInvalidEmbed = window.parent !== window;
+// The TurboWarp extension build always runs inside an iframe that it created itself.
+const isInvalidEmbed = !process.env.SHADING_EXTENSION && window.parent !== window;
 const handleClickAddonSettings = addonId => {
     const path = process.env.ROUTING_STYLE === 'wildcard' ? 'addons' : 'addons.html';
     const url = `${process.env.ROOT}${path}${typeof addonId === 'string' ? `#${addonId}` : ''}`;

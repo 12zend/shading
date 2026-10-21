@@ -89,6 +89,16 @@ class Router {
     }
 }
 
+// Loads the default project once and never changes the URL. For pages whose URL cannot change,
+// like the TurboWarp extension build's blob: pages.
+class StaticRouter extends Router {
+    onhashchange () {
+        if (this.loaded) return;
+        this.loaded = true;
+        this.onSetProjectId(defaultProjectId);
+    }
+}
+
 class HashRouter extends Router {
     onhashchange () {
         this.onSetProjectId(readHashProjectId() || defaultProjectId);
@@ -285,6 +295,7 @@ class PathRouter extends Router {
 
 const routers = {
     none: Router,
+    static: StaticRouter,
     hash: HashRouter,
     filehash: FileHashRouter,
     wildcard: WildcardRouter,
@@ -298,7 +309,7 @@ const routers = {
  * @returns {Router} The optimal router for the current environment
  */
 const createRouter = (style, callbacks) => {
-    const supportedStyles = ['none', 'hash', 'path'];
+    const supportedStyles = ['none', 'static', 'hash', 'path'];
 
     // FileHashRouter is not supported on non-http(s) protocols.
     const isHTTP = location.protocol === 'http:' || location.protocol === 'https:';

@@ -12,6 +12,7 @@ npm-*
 # Build
 /dist
 /build
+/build-extension
 /.opt-in
 /cloudflare/.wrangler
 

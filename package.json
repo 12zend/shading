@@ -14,6 +14,7 @@
     "benchmark:shade": "node scripts/benchmark-shade.cjs",
     "build": "npm run clean && npm run build:plugins && npm run build:blocks && webpack --colors --bail",
     "build:blocks": "node scripts/build-scratch-blocks.cjs",
+    "build:extension": "node scripts/build-extension.cjs",
     "build:plugins": "node scripts/build-official-plugins.cjs",
     "prestart": "npm run build:plugins && node scripts/build-scratch-blocks.cjs --if-missing",
     "build:cloudflare": "ROOT=/ NODE_ENV=production npm run build",

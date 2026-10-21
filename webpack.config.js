@@ -176,7 +176,70 @@ if (!process.env.CI) {
     base.plugins.push(new webpack.ProgressPlugin());
 }
 
-module.exports = [
+// BUILD_MODE=extension: one self-contained script for scripts/build-extension.cjs to wrap as a
+// TurboWarp extension. Everything the pages import is inlined and there are no extra chunks or
+// worker files, because the pages run from blob: URLs that cannot resolve relative paths.
+const makeExtensionConfig = () => {
+    const extensionPage = (template, filename, title) => new HtmlWebpackPlugin({
+        inject: false,
+        template,
+        filename,
+        title,
+        ...htmlWebpackPluginCommon,
+        root: ''
+    });
+    return Object.assign({}, base, {
+        mode: 'production',
+        devtool: false,
+        entry: {
+            'shading-app': './src/playground/extension.jsx'
+        },
+        output: {
+            path: path.resolve(__dirname, 'build-extension', 'webpack'),
+            filename: '[name].js',
+            publicPath: ''
+        },
+        module: {
+            rules: base.module.rules.map(rule => (
+                String(rule.test) === String(/brotli_wasm_bg\.wasm$/) ? {
+                    test: rule.test,
+                    type: rule.type,
+                    loader: 'url-loader',
+                    options: {limit: true, mimetype: 'application/wasm', esModule: false}
+                } : rule
+            )).concat([{
+                test: /\.(svg|png|wav|mp3|gif|jpg|woff2|hex)$/,
+                loader: 'url-loader',
+                options: {limit: true, esModule: false}
+            }])
+        },
+        optimization: {
+            splitChunks: false,
+            runtimeChunk: false
+        },
+        plugins: base.plugins.concat([
+            new webpack.optimize.LimitChunkCountPlugin({maxChunks: 1}),
+            new webpack.NormalModuleReplacementPlugin(/^worker-loader\?/, resource => {
+                resource.request = resource.request
+                    .replace(/^worker-loader\?[^!]*/, 'worker-loader?inline=true&fallback=false');
+            }),
+            new webpack.DefinePlugin({
+                'process.env.NODE_ENV': '"production"',
+                'process.env.DEBUG': false,
+                'process.env.ENABLE_SERVICE_WORKER': '""',
+                'process.env.ROOT': '""',
+                'process.env.ROUTING_STYLE': '"none"',
+                'process.env.ENABLE_WINDCHIMES': '""',
+                'process.env.SHADING_EXTENSION': true
+            }),
+            extensionPage('src/playground/index.ejs', 'editor.html', APP_NAME),
+            extensionPage('src/playground/simple.ejs', 'install.html', `${APP_NAME} Plugins`),
+            extensionPage('src/playground/simple.ejs', 'addons.html', `Addon Settings - ${APP_NAME}`)
+        ])
+    });
+};
+
+module.exports = process.env.BUILD_MODE === 'extension' ? [makeExtensionConfig()] : [
     // to run editor examples
     defaultsDeep({}, base, {
         entry: {
@@ -226,7 +289,8 @@ module.exports = [
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
                 'process.env.ROOT': JSON.stringify(root),
                 'process.env.ROUTING_STYLE': JSON.stringify('path'),
-                'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
+                'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || ''),
+                'process.env.SHADING_EXTENSION': false
             }),
             new HtmlWebpackPlugin({
                 chunks: ['editor'],

@@ -21,4 +21,5 @@ import React from 'react';
 import Interface from './render-interface.jsx';
 import render from './app-target';
 
-render(<Interface />);
+// The TurboWarp extension build runs from a blob: URL, which has no paths to route.
+render(<Interface routingStyle={process.env.SHADING_EXTENSION ? 'static' : 'path'} />);
