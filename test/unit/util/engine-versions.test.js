@@ -9,10 +9,10 @@ import {
 } from '../../../src/lib/engine-versions';
 
 const deployedList = {
-    current: '1.1.0',
+    current: '99.0.0',
     versions: [
         {version: '1.0.0', name: 'Shading 1.0.0', commit: 'd537729b05c8f122c1941b22082f8a31176b7ad5'},
-        {version: '1.1.0', name: 'Shading 1.1.0', commit: '0123456789abcdef0123456789abcdef01234567'}
+        {version: '99.0.0', name: 'Shading 99.0.0', commit: '0123456789abcdef0123456789abcdef01234567'}
     ]
 };
 
@@ -77,7 +77,7 @@ describe('engine lookup', () => {
     test('serves the current version at the site root and older ones under engines/', () => {
         const list = validateEngineVersions(deployedList);
 
-        expect(getEngineURL(list, '1.1.0')).toBe('/');
+        expect(getEngineURL(list, '99.0.0')).toBe('/');
         expect(getEngineURL(list, '1.0.0')).toBe('/engines/1.0.0/');
         expect(getEngineURL(list, '0.9.0')).toBeNull();
     });
@@ -86,9 +86,9 @@ describe('engine lookup', () => {
         global.location = {protocol: 'https:', href: 'https://shading.app/'};
         global.fetch = jest.fn(() => Promise.resolve({ok: true, json: () => Promise.resolve(deployedList)}));
 
-        await expect(findEngineForVersion('1.1.0')).resolves.toEqual({
-            version: '1.1.0',
-            name: 'Shading 1.1.0',
+        await expect(findEngineForVersion('99.0.0')).resolves.toEqual({
+            version: '99.0.0',
+            name: 'Shading 99.0.0',
             url: '/'
         });
         expect(global.fetch).toHaveBeenCalledWith('/engine-versions.json', {cache: 'no-cache'});
@@ -101,14 +101,14 @@ describe('engine lookup', () => {
         global.location = {protocol: 'https:', href: 'https://shading.app/'};
         global.fetch = jest.fn(() => Promise.reject(new Error('offline')));
 
-        await expect(findEngineForVersion('1.1.0')).resolves.toBeNull();
+        await expect(findEngineForVersion('99.0.0')).resolves.toBeNull();
     });
 
     test('never switches outside a hosted site', async () => {
         global.location = {protocol: 'file:', href: 'file:///shading/index.html'};
         global.fetch = jest.fn();
 
-        await expect(findEngineForVersion('1.1.0')).resolves.toBeNull();
+        await expect(findEngineForVersion('99.0.0')).resolves.toBeNull();
         expect(global.fetch).not.toHaveBeenCalled();
     });
 });
