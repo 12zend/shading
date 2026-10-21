@@ -3,61 +3,44 @@
 Guidelines for coding agents working on this repository.
 
 > [!IMPORTANT]
-> **Record every new feature in `./engine-versions.json`.**
-> Whenever you add a feature, add a new entry with its **version**, **version name** and **commit hash**, and update `current`. A feature is not finished until this entry is committed. See [Engine Version Records](#engine-version-records-required) below.
+> **Every new feature gets a new engine version in `./engine-versions.json`.**
+> After committing a feature, record its **version**, **version name** and **commit** with `npm run release:engine` and commit the result. A feature is not finished until that release commit exists. See [Engine Version Records](#engine-version-records-required).
 
 ## Engine Version Records (REQUIRED)
 
-`./engine-versions.json` is the version history of the engine. Keep it in sync with the features you add.
+`./engine-versions.json` lists every release of the editor (the "engine"). It is not only a changelog:
 
-### When to add an entry
-- Every time a new feature is added (a `feat` commit), add a new version entry.
-- Use [Semantic Versioning](https://semver.org/) based on the latest entry:
-  - New feature → bump **minor** (`1.0.0` → `1.1.0`).
-  - Change that breaks saved projects or existing behaviour → bump **major** (`1.1.0` → `2.0.0`), and only with explicit user approval.
-- If one task adds several closely related features, a single entry for that task is acceptable; list them in the final report.
+- `current` is the version this build writes into saved `.shade` files. It must equal `SHADING_PROJECT_VERSION` in `scratch-vm/src/lib/project-format.js` (checked by `test/unit/util/engine-versions.test.js`).
+- Every other entry is an archived engine that `npm run build:engines` checks out from its `commit` and deploys under `engines/<version>/`, so `.shade` files open in the engine that saved them. That commit must be engine `<version>` (its own list has that `current`) and must contain `src/lib/engine-handoff.js`, or the deploy fails.
 
-### Entry format
-Append the new entry to the **end** of the `versions` array (oldest first) and set `current` to the new version:
+See `docs/ENGINE_VERSIONS.md` for engine switching.
 
-```json
-{
-  "current": "1.1.0",
-  "versions": [
-    {
-      "version": "1.0.0",
-      "name": "Shading 1.0.0",
-      "commit": "222616e9b099060f4821502516b5fe26bf36c9a3",
-      "date": "2026-10-21"
-    },
-    {
-      "version": "1.1.0",
-      "name": "Shading 1.1.0",
-      "commit": "<full 40-character hash of the feature commit>",
-      "date": "YYYY-MM-DD"
-    }
-  ]
-}
-```
+### When to release a version
+- Any task that adds a feature (a `feat` commit) ends with a new version. Bug fixes, refactors, tests and docs alone do not.
+- Bump the **minor** version (`1.0.0` → `1.1.0`). A **major** bump (`2.0.0`) is only for changes older engines cannot read, and only with explicit user approval: older engines refuse files with a newer major version.
+- Release once per task, after its last feature commit, even when the task adds several features; list them in the final report. Each version adds one archived engine build to every deploy.
 
-- `version`: `MAJOR.MINOR.PATCH`, higher than every existing entry.
-- `name`: `Shading <version>` (e.g. `Shading 1.1.0`).
-- `commit`: the **full 40-character** hash of the commit that introduced the feature (not a short hash).
-- `date`: that commit's date in `YYYY-MM-DD` format.
-- `current`: must equal the `version` of the last entry.
+### How to release
+1. Commit the features as `feat(...)` commits with passing checks.
+2. Preview with `npm run release:engine -- --dry-run`, then run `npm run release:engine`. Pass a version for an approved major bump (`npm run release:engine -- 2.0.0`) and `--name=<name>` for a name other than `Shading <version>`.
+3. Run `npx jest test/unit/util/engine-versions`.
+4. Commit only `engine-versions.json` and `scratch-vm/src/lib/project-format.js` as `chore(engine): release Shading X.Y.Z`.
 
-### How to record it
-A commit cannot contain its own hash, so record the version in a separate follow-up commit:
-1. Commit the feature (e.g. `feat(movie): add ...`).
-2. Get its hash and date: `git rev-parse HEAD` and `git log -1 --format=%cs HEAD`.
-3. Add the entry to `./engine-versions.json` and update `current`.
-4. Check that the file is valid JSON (e.g. `node -e "JSON.parse(require('fs').readFileSync('engine-versions.json','utf8'))"`).
-5. Commit only that file: `chore(version): record Shading X.Y.Z`.
+The script makes these edits (follow the same rules if you ever edit by hand):
+
+| Field | Value |
+| --- | --- |
+| Outgoing entry's `commit` | The last commit of that version: the parent of the oldest `feat` commit since the list last changed (`--base` to override). This is the only change ever made to an existing entry. |
+| New entry `version` | `MAJOR.MINOR.PATCH`, higher than every listed version, appended to the end of `versions` (oldest first). |
+| New entry `name` | `Shading <version>`, shown in the engine-switch dialog. |
+| New entry `commit` | Full 40-character hash of the newest `feat` commit of the release (`--commit` to override). |
+| New entry `date` | That commit's date, `YYYY-MM-DD`. |
+| `current`, `SHADING_PROJECT_VERSION` | The new version. |
 
 ### Rules
-- Never edit, reorder or delete existing entries.
-- Never record a hash that does not exist in the repository, and never guess a hash.
-- Include the new version, name and commit hash in the final report.
+- Never change the `version`, `name` or `date` of existing entries, or reorder or delete them.
+- Never guess a hash or use a short hash. If the script refuses a commit, report why instead of forcing it.
+- Include the new version, name and commit in the final report.
 
 ## Block Execution Must Not Add Delay
 
@@ -87,8 +70,9 @@ Existing blocks with deliberately documented atomic behavior are compatibility e
 3. Implement one milestone at a time. Keep changes focused and avoid unrelated refactoring.
 4. At each milestone, run the relevant checks (format, lint, typecheck, tests, build, or a targeted manual check). Fix failures caused by the changes before committing.
 5. Review `git diff` and `git status`. Stage **only files related to that milestone**, then create a commit with a descriptive message.
-6. If the milestone added a feature, record it in `./engine-versions.json` as described in [Engine Version Records](#engine-version-records-required).
-7. Continue to the next milestone and repeat. At the end, report the changes, checks performed, commit hashes, and any remaining issues.
+6. Continue to the next milestone and repeat.
+7. If the task added features, release a new engine version after the last feature commit, as described in [Engine Version Records](#engine-version-records-required).
+8. Report the changes, checks performed, commit hashes, and any remaining issues.
 
 ## When to commit
 Commit at a natural boundary, such as:
@@ -124,6 +108,6 @@ Commit at a natural boundary, such as:
 ## Final report
 Provide a concise summary including:
 - Completed milestones and corresponding commit hashes/messages.
-- New engine version entries added to `./engine-versions.json` (version, name, commit).
+- The engine version released, if any (version, name, commit).
 - Tests/builds/checks executed and their results.
 - Uncommitted changes (if any), blockers, and recommended next steps.

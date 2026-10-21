@@ -34,9 +34,16 @@ shading.app のエディター（エンジン）のリリースは、リポジ�
 
 ## 新しいバージョンを出すとき
 
-1. 今のバージョン（例: 1.0.0）の最後のコミット ID を、`versions` の 1.0.0 の `commit` に書きます。
-2. `versions` に新しいバージョン（例: 1.1.0）を追加し、`current` と `SHADING_PROJECT_VERSION` を 1.1.0 にします。
-   新しいバージョンの `commit` は、そのバージョンを出したコミットにしておき、次のリリースのときに最後のコミットに更新します。
+機能（`feat` コミット）を追加した作業の最後に、新しいバージョンを出します（バグ修正だけのときは出しません）。
+
+1. 機能を `feat(...)` としてコミットしたあと、`npm run release:engine` を実行します（`-- --dry-run` で書き込まずに確認できます）。
+   - 今のバージョン（例: 1.0.0）の `commit` を、そのバージョンの最後のコミット（一覧が最後に変わってから最初の `feat` コミットの親）にします。
+   - `versions` の末尾に新しいバージョン（既定は次のマイナー、例: 1.1.0）を、最新の `feat` コミットとその日付で追加します。
+   - `current` と `SHADING_PROJECT_VERSION` を新しいバージョンにします。
+   - バージョンは `npm run release:engine -- 2.0.0`、表示名は `--name=...`、コミットは `--base=` / `--commit=` で指定できます。
+   - そのバージョンのエンジンとしてビルドできないコミット（`current` が違う、`src/lib/engine-handoff.js` がない）は拒否します。
+2. `engine-versions.json` と `scratch-vm/src/lib/project-format.js` だけを `chore(engine): release Shading 1.1.0` としてコミットします。
+   新しいバージョンの `commit` は、次のリリースのときにそのバージョンの最後のコミットに更新されます。
 3. `npm run build` のあとに同じ `ROOT` で `npm run build:engines` を実行すると、古いバージョンがそれぞれのコミットから
    `build/engines/<version>/` にビルドされます（`npm run build:cloudflare` と GitHub Pages のデプロイは自動で実行します）。
    - コミットは `.engine-cache/<commit>/` に git worktree として取り出し、`npm ci` してビルドします（2 回目からは再利用）。
