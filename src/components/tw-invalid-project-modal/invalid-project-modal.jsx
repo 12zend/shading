@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import Modal from '../../containers/modal.jsx';
 import styles from './invalid-project-modal.css';
+import {localize} from '../../lib/movie-block-l10n';
 
 const messages = defineMessages({
     title: {
@@ -30,6 +31,22 @@ const isZipCorruptionWithSignatureIntact = error => (
 
 const isJSONValidationError = error => errorMatches(error, /validationError/);
 
+const unsupportedFormatMessage = (error, locale) => {
+    if (!error || error.name !== 'UnsupportedProjectFormatError') return null;
+    if (error.reason === 'newer-version') {
+        return localize(locale,
+            `This project was saved by a newer version of Shading (.shade format ${error.version}). ` +
+            'Update the editor to open it.',
+            `このプロジェクトは新しいバージョンの Shading で保存されています（.shade 形式 ${error.version}）。` +
+            '開くにはエディターを更新してください。');
+    }
+    return localize(locale,
+        'Only .shade project files can be opened. Scratch projects (.sb3, .sb2, .sb) and .mb3 files ' +
+        'are no longer supported.',
+        '開けるのは .shade プロジェクトファイルだけです。Scratch のプロジェクト（.sb3 / .sb2 / .sb）と .mb3 ファイルは' +
+        '読み込めなくなりました。');
+};
+
 const InvalidProjectModal = props => (
     <Modal
         className={styles.modalContent}
@@ -55,7 +72,9 @@ const InvalidProjectModal = props => (
                 value={formatError(props.error)}
             />
 
-            {isZipCorruptionWithSignatureIntact(props.error) ? (
+            {unsupportedFormatMessage(props.error, props.intl.locale) ? (
+                <p>{unsupportedFormatMessage(props.error, props.intl.locale)}</p>
+            ) : isZipCorruptionWithSignatureIntact(props.error) ? (
                 <p>
                     <FormattedMessage
                         // eslint-disable-next-line max-len

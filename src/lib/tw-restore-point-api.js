@@ -1,7 +1,6 @@
 import JSZip from '@turbowarp/jszip';
 import {base64ToArrayBuffer} from './tw-base64-utils';
-import {isMovieProject, MOVIE_PROJECT_EXTENSION, SCRATCH_PROJECT_EXTENSION} from './project-format';
-import {TextDecoder} from './tw-text-encoder';
+import {MOVIE_PROJECT_EXTENSION} from './project-format';
 
 const TYPE_AUTOMATIC = 0;
 const TYPE_MANUAL = 1;
@@ -528,8 +527,7 @@ const exportRestorePoint = async id => {
     const metadata = await getMetadata();
     const projectJSON = await getProjectJSON();
     const assets = await getAssets(Object.keys(metadata.assets));
-    const parsedProjectJSON = JSON.parse(new TextDecoder().decode(projectJSON));
-    const extension = isMovieProject(parsedProjectJSON) ? MOVIE_PROJECT_EXTENSION : SCRATCH_PROJECT_EXTENSION;
+    const extension = MOVIE_PROJECT_EXTENSION;
 
     const zip = new JSZip();
     zip.file('project.json', projectJSON);

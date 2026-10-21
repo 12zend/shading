@@ -1,7 +1,11 @@
 const MOVIE_PROJECT_EXTENSION = 'shade';
-const SCRATCH_PROJECT_EXTENSION = 'sb3';
 const MOVIE_PROJECT_FORMAT_KEY = 'mb3';
 const MOVIE_PROJECT_FORMAT_VERSION = 1;
+// Every saved .shade file records the file format version here. Files saved before the version was written carry
+// only the mb3 feature marker and are version 1.0.0. Plain Scratch projects (.sb3, .sb2, .sb) have neither.
+const SHADING_PROJECT_KEY = 'shading';
+const SHADING_PROJECT_VERSION = '1.0.0';
+const LEGACY_SHADING_PROJECT_VERSION = '1.0.0';
 
 const MOVIE_ASSET_BLOCKS = [
     'event_initialize',
@@ -293,6 +297,15 @@ const getRuntimeMovieProjectFeatures = runtime => {
 };
 
 const markMovieProject = projectJSON => {
+    // Sprites (sprite3) are a single target and are not project files.
+    if (projectJSON && Array.isArray(projectJSON.targets)) {
+        const previous = projectJSON[SHADING_PROJECT_KEY];
+        projectJSON[SHADING_PROJECT_KEY] = Object.assign(
+            {},
+            previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {},
+            {version: SHADING_PROJECT_VERSION}
+        );
+    }
     const features = getMovieProjectFeatures(projectJSON);
     if (features.length > 0) {
         projectJSON[MOVIE_PROJECT_FORMAT_KEY] = {
@@ -314,11 +327,68 @@ const isMovieProject = projectJSON => Boolean(
     )
 );
 
-const getProjectExtension = runtime => (
-    getRuntimeMovieProjectFeatures(runtime).length > 0 ?
-        MOVIE_PROJECT_EXTENSION :
-        SCRATCH_PROJECT_EXTENSION
-);
+const parseVersion = version => {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(version));
+    return match ? match.slice(1).map(Number) : null;
+};
+
+/**
+ * @param {object} projectJSON Parsed project.json.
+ * @returns {?string} The .shade format version, or null for projects that are not .shade files.
+ */
+const getShadingProjectVersion = projectJSON => {
+    if (!projectJSON || typeof projectJSON !== 'object') return null;
+    const format = projectJSON[SHADING_PROJECT_KEY];
+    if (format && typeof format === 'object' && typeof format.version === 'string') return format.version;
+    const legacy = projectJSON[MOVIE_PROJECT_FORMAT_KEY];
+    if (legacy && typeof legacy === 'object') return LEGACY_SHADING_PROJECT_VERSION;
+    return null;
+};
+
+class UnsupportedProjectFormatError extends Error {
+    /**
+     * @param {string} reason 'legacy-format' (sb3, sb2, sb, mb3), 'newer-version' or 'invalid-version'.
+     * @param {string} message Error message.
+     * @param {?string} version The project's format version, if it has one.
+     */
+    constructor (reason, message, version = null) {
+        super(message);
+        this.name = 'UnsupportedProjectFormatError';
+        this.reason = reason;
+        this.version = version;
+    }
+}
+
+/**
+ * Only .shade projects open. Scratch formats (.sb3, .sb2, .sb) and files written by a newer major format version
+ * are rejected before anything is deserialized.
+ * @param {object} projectJSON Parsed project.json.
+ * @returns {string} The project's format version.
+ */
+const assertSupportedProjectFormat = projectJSON => {
+    const version = getShadingProjectVersion(projectJSON);
+    if (version === null) {
+        throw new UnsupportedProjectFormatError(
+            'legacy-format',
+            `Only .shade project files can be opened. Scratch projects (.sb3, .sb2, .sb) and .mb3 files are no ` +
+            `longer supported.`
+        );
+    }
+    const parsed = parseVersion(version);
+    if (!parsed) {
+        throw new UnsupportedProjectFormatError('invalid-version', `Invalid .shade format version: ${version}`,
+            version);
+    }
+    if (parsed[0] > parseVersion(SHADING_PROJECT_VERSION)[0]) {
+        throw new UnsupportedProjectFormatError(
+            'newer-version',
+            `This project was saved in .shade format ${version}, which is newer than this editor supports ` +
+            `(${SHADING_PROJECT_VERSION}).`,
+            version
+        );
+    }
+    return version;
+};
 
 export {
     ADVANCED_GRAPHIC_BLOCKS,
@@ -330,10 +400,13 @@ export {
     MOVIE_PROJECT_EXTENSION,
     MOVIE_PROJECT_FORMAT_KEY,
     MOVIE_PROJECT_FORMAT_VERSION,
-    SCRATCH_PROJECT_EXTENSION,
+    SHADING_PROJECT_KEY,
+    SHADING_PROJECT_VERSION,
+    UnsupportedProjectFormatError,
+    assertSupportedProjectFormat,
     getMovieProjectFeatures,
-    getProjectExtension,
     getRuntimeMovieProjectFeatures,
+    getShadingProjectVersion,
     isMovieProject,
     isMovieBlockOpcode,
     markMovieProject

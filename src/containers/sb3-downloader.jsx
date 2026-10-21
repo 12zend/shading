@@ -9,17 +9,13 @@ import {showStandardAlert, showAlertWithTimeout} from '../reducers/alerts';
 import {setFileHandle} from '../reducers/tw';
 import {getIsShowingProject} from '../reducers/project-state';
 import log from '../lib/log';
-import {getProjectExtension, MOVIE_PROJECT_EXTENSION} from '../lib/project-format';
-
-// from sb-file-uploader-hoc.jsx
-const getProjectTitleFromFilename = fileInputFilename => {
-    if (!fileInputFilename) return '';
-    // only parse title with valid scratch project extensions
-    // (.sb, .sb2, .sb3, Movie's .shade, and legacy .mb3)
-    const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade|mb3)$/i);
-    if (!matches) return '';
-    return matches[1].substring(0, 100); // truncate project title to max 100 chars
-};
+import {MOVIE_PROJECT_EXTENSION} from '../lib/project-format';
+import {
+    getProjectTitleFromFileName,
+    PROJECT_FILE_EXTENSION,
+    saveProjectFile,
+    saveProjectFileStream
+} from '../lib/project-file';
 
 /**
  * @param {Uint8Array[]} arrays List of byte arrays
@@ -97,16 +93,13 @@ class SB3Downloader extends React.Component {
             return;
         }
         try {
-            const extension = this.props.projectFilename.split('.').pop()
-                .toLowerCase();
-            const isMovieProject = extension === MOVIE_PROJECT_EXTENSION;
             const handle = await this.props.showSaveFilePicker({
                 suggestedName: this.props.projectFilename,
                 types: [
                     {
-                        description: isMovieProject ? 'Movie 3 Project' : 'Scratch 3 Project',
+                        description: 'Shading Project',
                         accept: {
-                            'application/octet-stream': [`.${extension}`]
+                            'application/octet-stream': [PROJECT_FILE_EXTENSION]
                         }
                     }
                 ],
@@ -114,7 +107,7 @@ class SB3Downloader extends React.Component {
             });
             await this.saveToHandle(handle);
             this.props.onSetFileHandle(handle);
-            const title = getProjectTitleFromFilename(handle.name);
+            const title = getProjectTitleFromFileName(handle.name);
             if (title) {
                 this.props.onSetProjectTitle(title);
             }
@@ -313,13 +306,13 @@ SB3Downloader.defaultProps = {
 
 const mapStateToProps = state => ({
     fileHandle: state.scratchGui.tw.fileHandle,
-    saveProjectSb3: state.scratchGui.vm.saveProjectSb3.bind(state.scratchGui.vm),
-    saveProjectSb3Stream: state.scratchGui.vm.saveProjectSb3Stream.bind(state.scratchGui.vm),
+    saveProjectSb3: type => saveProjectFile(state.scratchGui.vm, type),
+    saveProjectSb3Stream: type => saveProjectFileStream(state.scratchGui.vm, type),
     canSaveProject: getIsShowingProject(state.scratchGui.projectState.loadingState),
     projectFilename: getProjectFilename(
         state.scratchGui.projectTitle,
         projectTitleInitialState,
-        getProjectExtension(state.scratchGui.vm.runtime)
+        MOVIE_PROJECT_EXTENSION
     )
 });
 

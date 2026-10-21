@@ -9,6 +9,11 @@ import {injectIntl, intlShape} from 'react-intl';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import installShadingFeatures from '../lib/shading-features';
 import installPluginManager from '../lib/plugins/manager';
+import {installProjectFileHooks, SETTINGS_RESTORED_EVENT} from '../lib/project-file';
+import {LANGUAGE_KEY} from '../lib/detect-locale';
+import {detectTheme} from '../lib/themes/themePersistance';
+import {setTheme} from '../reducers/theme';
+import {selectLocale} from '../reducers/locales';
 import ReactDOM from 'react-dom';
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
 import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
@@ -79,6 +84,22 @@ class GUI extends React.Component {
             const plugins = this.props.vm.shadingPlugins;
             if (plugins) plugins.openImportPicker();
         };
+        // A .shade file restored the theme or language saved with it; show them without reloading the page.
+        this.handleSettingsRestored = keys => {
+            if (keys.includes('tw:theme')) this.props.onRestoreTheme(detectTheme());
+            if (keys.includes(LANGUAGE_KEY)) {
+                let locale = null;
+                try {
+                    locale = localStorage.getItem(LANGUAGE_KEY);
+                } catch (e) {
+                    // ignore
+                }
+                if (locale && this.props.messagesByLocale &&
+                    Object.prototype.hasOwnProperty.call(this.props.messagesByLocale, locale)) {
+                    this.props.onRestoreLocale(locale);
+                }
+            }
+        };
     }
     componentDidMount () {
         this.props.onStorageInit(storage);
@@ -97,6 +118,9 @@ class GUI extends React.Component {
             this.pluginManager.on('tabsChanged', this.handlePluginTabsChanged);
             this.handlePluginTabsChanged(this.pluginManager.getTabs());
         }
+        // Installed last so its .shade format check runs before every other load hook.
+        installProjectFileHooks(this.props.vm);
+        this.props.vm.on(SETTINGS_RESTORED_EVENT, this.handleSettingsRestored);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
     }
@@ -115,6 +139,7 @@ class GUI extends React.Component {
     }
     componentWillUnmount () {
         if (this.pluginManager) this.pluginManager.removeListener('tabsChanged', this.handlePluginTabsChanged);
+        this.props.vm.removeListener(SETTINGS_RESTORED_EVENT, this.handleSettingsRestored);
     }
     render () {
         if (this.props.isError) {
@@ -127,7 +152,10 @@ class GUI extends React.Component {
             error,
             isError,
             isShowingProject,
+            messagesByLocale,
             onProjectLoaded,
+            onRestoreLocale,
+            onRestoreTheme,
             onStorageInit,
             onUpdateProjectId,
             onVmInit,
@@ -168,7 +196,10 @@ GUI.propTypes = {
     isShowingProject: PropTypes.bool,
     isTotallyNormal: PropTypes.bool,
     loadingStateVisible: PropTypes.bool,
+    messagesByLocale: PropTypes.object,
     onProjectLoaded: PropTypes.func,
+    onRestoreLocale: PropTypes.func,
+    onRestoreTheme: PropTypes.func,
     onSeeCommunity: PropTypes.func,
     onStorageInit: PropTypes.func,
     onUpdateProjectId: PropTypes.func,
@@ -185,6 +216,8 @@ GUI.defaultProps = {
     onStorageInit: storageInstance => storageInstance.addOfficialScratchWebStores(),
     onProjectLoaded: () => {},
     onUpdateProjectId: () => {},
+    onRestoreLocale: () => {},
+    onRestoreTheme: () => {},
     onVmInit: (/* vm */) => {}
 };
 
@@ -192,6 +225,7 @@ const mapStateToProps = state => {
     const loadingState = state.scratchGui.projectState.loadingState;
     return {
         activeTabIndex: state.scratchGui.editorTab.activeTabIndex,
+        messagesByLocale: state.locales.messagesByLocale,
         alertsVisible: state.scratchGui.alerts.visible,
         backdropLibraryVisible: state.scratchGui.modals.backdropLibrary,
         blocksTabVisible: state.scratchGui.editorTab.activeTabIndex === BLOCKS_TAB_INDEX,
@@ -242,7 +276,9 @@ const mapDispatchToProps = dispatch => ({
     onActivatePluginsTab: () => dispatch(activateTab(PLUGINS_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
-    onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())
+    onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal()),
+    onRestoreLocale: locale => dispatch(selectLocale(locale)),
+    onRestoreTheme: theme => dispatch(setTheme(theme))
 });
 
 const ConnectedGUI = injectIntl(connect(

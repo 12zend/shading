@@ -17,7 +17,7 @@ const PROJECT_KEY = 'shadingPlugins';
 // Project keys that belong to shading.app itself and can never be claimed by plugin data.
 const RESERVED_PROJECT_KEYS = new Set([
     'targets', 'monitors', 'extensions', 'extensionURLs', 'extensionStorage', 'meta', 'customFonts',
-    PROJECT_KEY, 'penFXShaders', 'movie', 'movieAssets', 'movieTimeline', 'timeline'
+    PROJECT_KEY, 'penFXShaders', 'movie', 'movieAssets', 'movieTimeline', 'timeline', 'shading', 'mb3'
 ]);
 
 const LEGACY_OPCODE_OWNERS = new Map();

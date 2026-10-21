@@ -423,6 +423,19 @@ class SettingsStore extends EventTargetShim {
         }
     }
 
+    /**
+     * Apply settings that were written to localStorage by something else (a .shade file restoring them),
+     * notifying running addons like a change from the settings page.
+     */
+    reloadFromLocalStorage () {
+        const current = this.store;
+        this.store = this.createEmptyStore();
+        this.readLocalStorage();
+        const stored = this.store;
+        this.store = current;
+        this.setStore(stored);
+    }
+
     setStoreWithVersionCheck ({version, store}) {
         if (version !== upstreamMeta.commit) {
             return;

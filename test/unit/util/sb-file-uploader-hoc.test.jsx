@@ -67,9 +67,9 @@ describe('SBFileUploaderHOC', () => {
         delete global.FileReader;
     });
 
-    test('correctly sets title with .sb3 filename', () => {
+    test('does not take a title from Scratch .sb3 files', () => {
         const projectName = unwrappedInstance().getProjectTitleFromFilename('my project is great.sb3');
-        expect(projectName).toBe('my project is great');
+        expect(projectName).toBe('');
     });
 
     test('correctly sets title with .shade filename', () => {
@@ -77,9 +77,28 @@ describe('SBFileUploaderHOC', () => {
         expect(projectName).toBe('my movie is great');
     });
 
-    test('correctly sets title with legacy .mb3 filename', () => {
+    test('does not take a title from legacy .mb3 files', () => {
         const projectName = unwrappedInstance().getProjectTitleFromFilename('my movie is great.mb3');
-        expect(projectName).toBe('my movie is great');
+        expect(projectName).toBe('');
+    });
+
+    test('refuses files that are not .shade without loading them', async () => {
+        const onLoadingFailed = jest.fn();
+        const onLoadingFinished = jest.fn();
+        const loadProject = jest.spyOn(vm, 'loadProject');
+        const instance = unwrappedInstance({onLoadingFailed, onLoadingFinished, onLoadingStarted: jest.fn()});
+        instance.fileReader = {result: new ArrayBuffer(0)};
+        instance.fileToUpload = {name: 'old movie.mb3'};
+
+        instance.onload();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(loadProject).not.toHaveBeenCalled();
+        expect(onLoadingFailed).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'UnsupportedProjectFormatError',
+            reason: 'legacy-format'
+        }));
+        expect(onLoadingFinished).toHaveBeenCalledWith(expect.anything(), false);
     });
 
     test('does not filter shade out of the native file picker', () => {
@@ -91,14 +110,9 @@ describe('SBFileUploaderHOC', () => {
         expect(showOpenFilePicker).toHaveBeenCalledWith({multiple: false});
     });
 
-    test('correctly sets title with .sb2 filename', () => {
-        const projectName = unwrappedInstance().getProjectTitleFromFilename('my project is great.sb2');
-        expect(projectName).toBe('my project is great');
-    });
-
-    test('correctly sets title with .sb filename', () => {
-        const projectName = unwrappedInstance().getProjectTitleFromFilename('my project is great.sb');
-        expect(projectName).toBe('my project is great');
+    test('does not take a title from .sb2 or .sb files', () => {
+        expect(unwrappedInstance().getProjectTitleFromFilename('my project is great.sb2')).toBe('');
+        expect(unwrappedInstance().getProjectTitleFromFilename('my project is great.sb')).toBe('');
     });
 
     test('sets blank title with filename with no extension', () => {

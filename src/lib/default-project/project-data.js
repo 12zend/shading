@@ -1,5 +1,6 @@
 import {defineMessages} from 'react-intl';
 import sharedMessages from '../shared-messages';
+import {SHADING_PROJECT_KEY, SHADING_PROJECT_VERSION} from '../project-format';
 
 let messages = defineMessages({
     variable: {
@@ -84,6 +85,9 @@ const projectData = translateFunction => {
             semver: '3.0.0',
             vm: '0.1.0',
             agent: ''
+        },
+        [SHADING_PROJECT_KEY]: {
+            version: SHADING_PROJECT_VERSION
         }
     });
 };

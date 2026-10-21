@@ -80,7 +80,7 @@ const addSVGText = (codePoints, bytes) => {
 
 // project.json data that is never drawn on the stage: shader sources, editor comments and settings.
 const NON_DISPLAY_PROJECT_KEYS = new Set(['customFonts', 'extensions', 'extensionURLs', 'mb3', 'meta', 'movieCamera',
-    'penFXShaders']);
+    'penFXShaders', 'shading']);
 const NON_DISPLAY_TARGET_KEYS = new Set(['comments']);
 
 /**

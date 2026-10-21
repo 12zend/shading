@@ -23,6 +23,7 @@ import '../lib/tw-fix-history-api';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
 import {getIsLoading} from '../reducers/project-state.js';
+import {SETTINGS_RESTORED_EVENT} from '../lib/project-file';
 import GUI from './render-gui.jsx';
 import {loadServiceWorker} from './load-service-worker';
 import runAddons from '../addons/entry';
@@ -53,10 +54,24 @@ class Interface extends React.Component {
     constructor (props) {
         super(props);
         this.handleUpdateProjectTitle = this.handleUpdateProjectTitle.bind(this);
+        this.handleSettingsRestored = this.handleSettingsRestored.bind(this);
+    }
+
+    componentDidMount () {
+        if (this.props.vm) this.props.vm.on(SETTINGS_RESTORED_EVENT, this.handleSettingsRestored);
     }
 
     componentDidUpdate (prevProps) {
         if (prevProps.isLoading && !this.props.isLoading) loadServiceWorker();
+    }
+
+    componentWillUnmount () {
+        if (this.props.vm) this.props.vm.removeListener(SETTINGS_RESTORED_EVENT, this.handleSettingsRestored);
+    }
+
+    // A .shade file restored the addon settings saved with it: apply them to the running addons.
+    handleSettingsRestored (keys) {
+        if (keys.includes('tw:addons')) SettingsStore.reloadFromLocalStorage();
     }
 
     handleUpdateProjectTitle (title, isDefault) {
@@ -75,6 +90,7 @@ class Interface extends React.Component {
             isLoading,
             isPlayerOnly,
             isRtl,
+            vm,
             /* eslint-enable no-unused-vars */
             ...props
         } = this.props;
@@ -113,14 +129,19 @@ Interface.propTypes = {
     intl: intlShape,
     isLoading: PropTypes.bool,
     isPlayerOnly: PropTypes.bool,
-    isRtl: PropTypes.bool
+    isRtl: PropTypes.bool,
+    vm: PropTypes.shape({
+        on: PropTypes.func,
+        removeListener: PropTypes.func
+    })
 };
 
 const mapStateToProps = state => ({
     customStageSize: state.scratchGui.customStageSize,
     isLoading: getIsLoading(state.scratchGui.projectState.loadingState),
     isPlayerOnly: state.scratchGui.mode.isPlayerOnly,
-    isRtl: state.locales.isRtl
+    isRtl: state.locales.isRtl,
+    vm: state.scratchGui.vm
 });
 
 const ConnectedInterface = injectIntl(connect(mapStateToProps)(Interface));

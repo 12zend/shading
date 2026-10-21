@@ -1,6 +1,10 @@
 import {
+    SHADING_PROJECT_VERSION,
+    UnsupportedProjectFormatError,
+    assertSupportedProjectFormat,
     getMovieProjectFeatures,
-    getProjectExtension,
+    getRuntimeMovieProjectFeatures,
+    getShadingProjectVersion,
     isMovieProject,
     markMovieProject
 } from '../../../src/lib/project-format';
@@ -39,9 +43,9 @@ describe('Movie project format', () => {
         const json = project({easing: block('operator_easing')});
 
         expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
-        expect(getProjectExtension({
+        expect(getRuntimeMovieProjectFeatures({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('shade');
+        })).toEqual(['movie-blocks']);
     });
 
     test('marks the timer offset command as a Movie block', () => {
@@ -68,9 +72,9 @@ describe('Movie project format', () => {
         const json = project({contrast: block('penfx_contrast')});
 
         expect(getMovieProjectFeatures(json)).toEqual(['pen-fx']);
-        expect(getProjectExtension({
+        expect(getRuntimeMovieProjectFeatures({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('shade');
+        })).toEqual(['pen-fx']);
     });
 
     test('round-trips custom opcodes and inputs through project.json block serialization', () => {
@@ -184,9 +188,9 @@ describe('Movie project format', () => {
         const json = project({export: block('looks_exportrenderingmp4')});
 
         expect(getMovieProjectFeatures(json)).toEqual(['movie-blocks']);
-        expect(getProjectExtension({
+        expect(getRuntimeMovieProjectFeatures({
             targets: [{blocks: {_blocks: json.targets[0].blocks}}]
-        })).toBe('shade');
+        })).toEqual(['movie-blocks']);
     });
 
     test('marks the initialize and render frame hats as Movie project data', () => {
@@ -214,22 +218,67 @@ describe('Movie project format', () => {
         expect(getMovieProjectFeatures(json)).toEqual(['3d-engine']);
     });
 
-    test('keeps plain Scratch projects as sb3', () => {
-        const runtime = {
-            targets: [{blocks: {_blocks: {move: block('motion_movesteps')}}}]
-        };
+    test('writes the .shade format version even without Movie features', () => {
+        const json = markMovieProject(project({move: block('motion_movesteps')}));
 
-        expect(getProjectExtension(runtime)).toBe('sb3');
-        expect(markMovieProject(project({move: block('motion_movesteps')})).mb3).toBeUndefined();
+        expect(json.mb3).toBeUndefined();
+        expect(json.shading).toEqual({version: '1.0.0'});
+        expect(SHADING_PROJECT_VERSION).toBe('1.0.0');
     });
 
-    test('uses shade for hydrated custom blocks in the runtime', () => {
+    test('keeps other format data when writing the version', () => {
+        const json = project({});
+        json.shading = {version: '0.0.1', settings: {localStorage: {}}};
+
+        expect(markMovieProject(json).shading).toEqual({version: '1.0.0', settings: {localStorage: {}}});
+    });
+
+    test('does not write a project version into sprites', () => {
+        const sprite = {blocks: {}, costumes: []};
+
+        expect(markMovieProject(sprite).shading).toBeUndefined();
+    });
+
+    test('detects hydrated custom blocks in the runtime', () => {
         const runtime = {
             targets: [{blocks: {_blocks: {
                 text: block('looks_settextfont')
             }}}]
         };
 
-        expect(getProjectExtension(runtime)).toBe('shade');
+        expect(getRuntimeMovieProjectFeatures(runtime)).toEqual(['movie-blocks']);
+    });
+});
+
+describe('.shade format version', () => {
+    test('reads the written version', () => {
+        expect(getShadingProjectVersion({shading: {version: '1.0.0'}})).toBe('1.0.0');
+        expect(assertSupportedProjectFormat({shading: {version: '1.2.3'}})).toBe('1.2.3');
+    });
+
+    test('treats .shade files saved before the version was written as 1.0.0', () => {
+        const json = {targets: [], mb3: {version: 1, features: ['timeline']}};
+
+        expect(getShadingProjectVersion(json)).toBe('1.0.0');
+        expect(assertSupportedProjectFormat(json)).toBe('1.0.0');
+    });
+
+    test('rejects Scratch projects', () => {
+        const scratch3 = project({move: block('motion_movesteps')});
+        const scratch2 = {objName: 'Stage', children: [], projectVersion: 2};
+
+        for (const json of [scratch3, scratch2]) {
+            expect(getShadingProjectVersion(json)).toBeNull();
+            expect(() => assertSupportedProjectFormat(json)).toThrow(UnsupportedProjectFormatError);
+            expect(() => assertSupportedProjectFormat(json))
+                .toThrow(expect.objectContaining({reason: 'legacy-format'}));
+        }
+    });
+
+    test('rejects a newer major version and invalid versions', () => {
+        expect(() => assertSupportedProjectFormat({shading: {version: '2.0.0'}}))
+            .toThrow(expect.objectContaining({reason: 'newer-version', version: '2.0.0'}));
+        expect(() => assertSupportedProjectFormat({shading: {version: 'latest'}}))
+            .toThrow(expect.objectContaining({reason: 'invalid-version'}));
     });
 });

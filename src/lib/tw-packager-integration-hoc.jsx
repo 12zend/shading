@@ -3,7 +3,8 @@ import {connect} from 'react-redux';
 import PropTypes from 'prop-types';
 import log from './log';
 import {getIsShowingProject} from '../reducers/project-state';
-import {getProjectExtension} from './project-format';
+import {MOVIE_PROJECT_EXTENSION} from './project-format';
+import {saveProjectFile} from './project-file';
 
 const PACKAGER_URL = 'https://packager.turbowarp.org';
 const PACKAGER_ORIGIN = PACKAGER_URL;
@@ -47,10 +48,9 @@ const PackagerIntegrationHOC = function (WrappedComponent) {
                 }
             }, e.origin);
 
-            this.props.vm.saveProjectSb3('arraybuffer')
+            saveProjectFile(this.props.vm, 'arraybuffer')
                 .then(buffer => {
-                    const extension = getProjectExtension(this.props.vm.runtime);
-                    const name = `${this.props.reduxProjectTitle}.${extension}`;
+                    const name = `${this.props.reduxProjectTitle}.${MOVIE_PROJECT_EXTENSION}`;
                     e.source.postMessage({
                         p4: {
                             type: 'finish-import',

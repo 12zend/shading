@@ -6,6 +6,8 @@ import {connect} from 'react-redux';
 import log from '../lib/log';
 import sharedMessages from './shared-messages';
 import {setFileHandle, setProjectError} from '../reducers/tw';
+import {getProjectTitleFromFileName, isProjectFileName, PROJECT_FILE_EXTENSION} from './project-file';
+import {UnsupportedProjectFormatError} from './project-format';
 
 import {
     LoadingStates,
@@ -25,7 +27,6 @@ import {
     closeFileMenu
 } from '../reducers/menus';
 
-const PROJECT_FILE_EXTENSIONS = ['.shade', '.mb3', '.sb3', '.sb2', '.sb'];
 
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
@@ -100,7 +101,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             } else {
                 // create <input> element and add it to DOM
                 this.inputElement = document.createElement('input');
-                this.inputElement.accept = PROJECT_FILE_EXTENSIONS.join(',');
+                this.inputElement.accept = PROJECT_FILE_EXTENSION;
                 this.inputElement.style = 'display: none;';
                 this.inputElement.type = 'file';
                 this.inputElement.onchange = this.handleChange; // connects to step 3
@@ -137,7 +138,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
                     if (handle) {
-                        if (/\.(?:sb3|shade|mb3)$/i.test(this.fileToUpload.name)) {
+                        if (isProjectFileName(this.fileToUpload.name)) {
                             this.props.onSetFileHandle(handle);
                         } else {
                             this.props.onSetFileHandle(null);
@@ -171,12 +172,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         }
         // used in step 6 below
         getProjectTitleFromFilename (fileInputFilename) {
-            if (!fileInputFilename) return '';
-            // only parse title with valid scratch project extensions
-            // (.sb, .sb2, .sb3, Movie's .shade, and legacy .mb3)
-            const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|shade|mb3)$/i);
-            if (!matches) return '';
-            return matches[1].substring(0, 100); // truncate project title to max 100 chars
+            return getProjectTitleFromFileName(fileInputFilename);
         }
         // step 6: attached as a handler on our FileReader object; called when
         // file upload raw data is available in the reader
@@ -187,7 +183,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 let loadingSuccess = false;
                 // tw: stop when loading new project
                 this.props.vm.quit();
-                this.props.vm.loadProject(this.fileReader.result)
+                // Only .shade files open; .sb3, .sb2, .sb and the old .mb3 extension are refused unread.
+                const loadPromise = isProjectFileName(filename) ?
+                    this.props.vm.loadProject(this.fileReader.result) :
+                    Promise.reject(new UnsupportedProjectFormatError(
+                        'legacy-format',
+                        `Only .shade project files can be opened: ${filename}`
+                    ));
+                loadPromise
                     .then(() => {
                         if (filename) {
                             const uploadedProjectTitle = this.getProjectTitleFromFilename(filename);

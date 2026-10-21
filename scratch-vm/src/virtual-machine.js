@@ -538,10 +538,16 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
+     * @param {object} [options] Options for data that only belongs in a saved project file.
+     * @param {function(object): object} [options.extendProjectJSON] Adds file-only data to the parsed project.json.
+     * @param {Array<{fileName: string, fileContent: Uint8Array}>} [options.extraFiles] Files saved next to the assets.
      * @returns {JSZip} JSZip zip object representing the sb3.
      */
-    _saveProjectZip () {
-        const projectJson = this.toJSON();
+    _saveProjectZip (options = {}) {
+        let projectJson = this.toJSON();
+        if (typeof options.extendProjectJSON === 'function') {
+            projectJson = StringUtil.stringify(options.extendProjectJSON(JSON.parse(projectJson)));
+        }
 
         // TODO want to eventually move zip creation out of here, and perhaps
         // into scratch-storage
@@ -549,7 +555,7 @@ class VirtualMachine extends EventEmitter {
 
         // Put everything in a zip file
         zip.file('project.json', projectJson);
-        this._addFileDescsToZip(this.serializeAssets(), zip);
+        this._addFileDescsToZip(this.serializeAssets().concat(options.extraFiles || []), zip);
 
         // Use a fixed modification date for the files in the zip instead of letting JSZip use the
         // current time to avoid a very small metadata leak and make zipping deterministic. The magic
@@ -581,10 +587,11 @@ class VirtualMachine extends EventEmitter {
 
     /**
      * @param {JSZip.OutputType} [type] JSZip output type. Defaults to 'blob' for Scratch compatibility.
+     * @param {object} [options] See _saveProjectZip().
      * @returns {Promise<unknown>} Compressed sb3 file in a type determined by the type argument.
      */
-    saveProjectSb3 (type) {
-        return this._saveProjectZip().generateAsync({
+    saveProjectSb3 (type, options) {
+        return this._saveProjectZip(options).generateAsync({
             // Don't configure compression here. _saveProjectZip() will set it for each file.
             type: type || 'blob',
             mimeType: 'application/x.scratch.sb3'
@@ -593,11 +600,12 @@ class VirtualMachine extends EventEmitter {
 
     /**
      * @param {JSZip.OutputType} [type] JSZip output type. Defaults to 'arraybuffer'.
+     * @param {object} [options] See _saveProjectZip().
      * @returns {StreamHelper} JSZip StreamHelper object generating the compressed sb3.
      * See: https://stuk.github.io/jszip/documentation/api_streamhelper.html
      */
-    saveProjectSb3Stream (type) {
-        return this._saveProjectZip().generateInternalStream({
+    saveProjectSb3Stream (type, options) {
+        return this._saveProjectZip(options).generateInternalStream({
             type: type || 'arraybuffer',
             mimeType: 'application/x.scratch.sb3',
             compression: 'DEFLATE'
