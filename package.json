@@ -14,10 +14,11 @@
     "benchmark:shade": "node scripts/benchmark-shade.cjs",
     "build": "npm run clean && npm run build:plugins && npm run build:blocks && webpack --colors --bail",
     "build:blocks": "node scripts/build-scratch-blocks.cjs",
+    "build:engines": "node scripts/build-engines.cjs",
     "build:extension": "node scripts/build-extension.cjs",
     "build:plugins": "node scripts/build-official-plugins.cjs",
     "prestart": "npm run build:plugins && node scripts/build-scratch-blocks.cjs --if-missing",
-    "build:cloudflare": "ROOT=/ NODE_ENV=production npm run build",
+    "build:cloudflare": "ROOT=/ NODE_ENV=production npm run build && ROOT=/ NODE_ENV=production npm run build:engines",
     "clean": "rimraf ./build && mkdirp build && rimraf ./dist && mkdirp dist",
     "deploy": "touch build/.nojekyll && gh-pages -t -d build -m \"[skip ci] Build for $(git log --pretty=format:%H -n1)\"",
     "deploy:cloudflare": "npm run build:cloudflare && npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc",
@@ -172,9 +173,13 @@
     },
     "testPathIgnorePatterns": [
       "src/test.js",
+      "<rootDir>/.engine-cache/",
       "<rootDir>/scratch-blocks/",
       "<rootDir>/scratch-render/",
       "<rootDir>/scratch-vm/"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.engine-cache/"
     ],
     "moduleNameMapper": {
       "^scratch-render/src/(.*)$": "<rootDir>/scratch-render/src/$1",

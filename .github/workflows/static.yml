@@ -24,6 +24,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+          # Older engines are built from their commits (engine-versions.json).
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,6 +41,12 @@ jobs:
           NODE_ENV: production
           ROOT: /shading/
         run: npm run build
+
+      - name: Build older engines
+        env:
+          NODE_ENV: production
+          ROOT: /shading/
+        run: npm run build:engines
 
       - name: Add .nojekyll
         run: touch build/.nojekyll

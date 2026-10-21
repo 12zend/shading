@@ -20,3 +20,4 @@ src/addons/generated
 
 # Integrated scratch-blocks repository (Closure-based; linted with its own config)
 /scratch-blocks/*
+.engine-cache/
