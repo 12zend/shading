@@ -139,7 +139,8 @@ describe('tutorial block stages', () => {
         const grouping = target.blocks.getBlock(id('grouping'));
         expect(grouping.parent).toBe(id('setTmp'));
         expect(grouping.inputs.SUBSTACK.block).toBe(id('draw'));
-        expect(grouping.inputs.SUBSTACK2.block).toBe(id('colorOverlay'));
+        expect(grouping.inputs).not.toHaveProperty('SUBSTACK2');
+        expect(target.blocks.getBlock(id('draw')).next).toBe(id('colorOverlay'));
         expect(shadowValue(target, id('colorOverlay'), 'COLOR')).toBe('#ff0000');
 
         applyTutorialStage(vm, 'example');

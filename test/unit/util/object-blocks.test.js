@@ -43,7 +43,7 @@ const makeGroupingHarness = onStep => {
     const blocks = {
         getBranch: jest.fn((blockId, branch) => {
             if (blockId !== 'grouping') return null;
-            return branch === 1 ? 'objects-branch' : 'effects-branch';
+            return branch === 1 ? 'objects-branch' : null;
         })
     };
     const target = {id: 'sprite', blocks};
@@ -104,9 +104,11 @@ describe('Objects blocks', () => {
         ScratchBlocks.Blocks.objects_grouping.init.call(groupingBlock);
         expect(groupingBlock.jsonInit).toHaveBeenCalledWith(expect.objectContaining({
             message0: 'グループ化',
-            message2: 'エフェクト',
+            args1: [{type: 'input_statement', name: 'SUBSTACK'}],
             category: 'レイヤー'
         }));
+        // grouping is a C-block: effects go into its one substack below what they apply to.
+        expect(groupingBlock.jsonInit.mock.calls[0][0]).not.toHaveProperty('message2');
     });
 
     test('shows the shape ratio input only for star, curved star, and flower', () => {
@@ -610,6 +612,10 @@ describe('Objects blocks', () => {
 
         expect(info.name).toBe('Objects');
         expect(info.blocks.find(blockInfo => blockInfo.opcode === 'draw').text).toBe('draw [ASSET]');
+        expect(info.blocks.find(blockInfo => blockInfo.opcode === 'grouping')).toEqual(expect.objectContaining({
+            branchCount: 1,
+            text: 'grouping'
+        }));
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
             'clear', 'drawSprite', 'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene', 'bake',
@@ -1402,7 +1408,7 @@ describe('Objects blocks', () => {
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
     });
 
-    test('runs both grouping branches atomically on the current thread', () => {
+    test('runs the grouping substack atomically on the current thread', () => {
         const penFX = {beginGroup: jest.fn(), endGroup: jest.fn()};
         const harness = makeGroupingHarness();
         harness.runtime.penFX = penFX;
@@ -1414,13 +1420,12 @@ describe('Objects blocks', () => {
         expect(blocks.grouping({}, util)).toBeUndefined();
         expect(penFX.beginGroup).toHaveBeenCalledTimes(1);
         expect(penFX.endGroup).not.toHaveBeenCalled();
-        expect(util.startBranch).toHaveBeenNthCalledWith(1, 1, true, true);
+        expect(util.startBranch).toHaveBeenCalledTimes(1);
+        expect(util.startBranch).toHaveBeenCalledWith(1, true, true);
         expect(harness.sequencer.stepThread).not.toHaveBeenCalled();
 
         blocks.grouping({}, util);
-        expect(util.startBranch).toHaveBeenNthCalledWith(2, 2, true, true);
-
-        blocks.grouping({}, util);
+        expect(util.startBranch).toHaveBeenCalledTimes(1);
         expect(penFX.endGroup).toHaveBeenCalledTimes(1);
         expect(harness.sequencer.activeThread).toBe(harness.originalActiveThread);
     });
@@ -1457,7 +1462,6 @@ describe('Objects blocks', () => {
 
         objectBlocks.grouping({}, util);
         objectBlocks.draw({ASSET: 'costume:Logo', SOURCE: 'costume'}, util);
-        objectBlocks.grouping({}, util);
         objectBlocks.grouping({}, util);
 
         const groupingNode = frameGraph.currentFrame.children[0];
@@ -1684,8 +1688,7 @@ describe('Objects blocks', () => {
             id: 'grouping',
             opcode: 'objects_grouping',
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'objects-branch', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: 'effects-branch', shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'objects-branch', shadow: null}
             },
             fields: {},
             next: 'after-grouping',
@@ -1693,17 +1696,17 @@ describe('Objects blocks', () => {
             shadow: false,
             topLevel: true
         });
-        for (const [id, parent] of [
-            ['objects-branch', 'grouping'],
-            ['effects-branch', 'grouping'],
-            ['after-grouping', 'grouping']
+        for (const [id, parent, next] of [
+            ['objects-branch', 'grouping', 'effects-in-branch'],
+            ['effects-in-branch', 'objects-branch', null],
+            ['after-grouping', 'grouping', null]
         ]) {
             target.blocks.createBlock({
                 id,
                 opcode: 'control_incr_counter',
                 inputs: {},
                 fields: {},
-                next: null,
+                next,
                 parent,
                 shadow: false,
                 topLevel: false
@@ -1744,8 +1747,7 @@ describe('Objects blocks', () => {
             id: 'grouping',
             opcode: 'objects_grouping',
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'objects-branch', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: 'effects-branch', shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'objects-branch', shadow: null}
             },
             fields: {},
             next: 'after-grouping',
@@ -1753,17 +1755,17 @@ describe('Objects blocks', () => {
             shadow: false,
             topLevel: true
         });
-        for (const [id, parent] of [
-            ['objects-branch', 'grouping'],
-            ['effects-branch', 'grouping'],
-            ['after-grouping', 'grouping']
+        for (const [id, parent, next] of [
+            ['objects-branch', 'grouping', 'effects-in-branch'],
+            ['effects-in-branch', 'objects-branch', null],
+            ['after-grouping', 'grouping', null]
         ]) {
             target.blocks.createBlock({
                 id,
                 opcode: 'control_incr_counter',
                 inputs: {},
                 fields: {},
-                next: null,
+                next,
                 parent,
                 shadow: false,
                 topLevel: false
@@ -1821,8 +1823,7 @@ describe('Objects blocks', () => {
         });
         createBlock('grouping', 'objects_grouping', {
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null}
             },
             parent: 'definition'
         });
@@ -1893,15 +1894,13 @@ describe('Objects blocks', () => {
         });
         createBlock('outer', 'objects_grouping', {
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'inner', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'inner', shadow: null}
             },
             parent: 'definition'
         });
         createBlock('inner', 'objects_grouping', {
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null}
             },
             parent: 'outer'
         });
@@ -1974,8 +1973,7 @@ describe('Objects blocks', () => {
         });
         createBlock('grouping', 'objects_grouping', {
             inputs: {
-                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null},
-                SUBSTACK2: {name: 'SUBSTACK2', block: null, shadow: null}
+                SUBSTACK: {name: 'SUBSTACK', block: 'draw', shadow: null}
             },
             parent: 'definition'
         });
@@ -2050,7 +2048,7 @@ describe('Objects blocks', () => {
         }));
     });
 
-    test('finishes an asynchronous grouped draw before applying captured effects', async () => {
+    test('holds effects that follow an asynchronous grouped draw until it lands', async () => {
         let resolveDraw;
         const pendingDraw = new Promise(resolve => {
             resolveDraw = resolve;
@@ -2067,9 +2065,7 @@ describe('Objects blocks', () => {
             drawObject: jest.fn(() => pendingDraw),
             runWithoutWaiting: jest.fn()
         };
-        const harness = makeGroupingHarness(thread => {
-            if (thread.topBlock === 'objects-branch') thread.objectPendingDraws = [pendingDraw];
-        });
+        const harness = makeGroupingHarness();
         Object.assign(harness.runtime, {movieAssetManager: manager, penFX});
         const vm = {runtime: harness.runtime};
         const ObjectBlocks = createObjectBlocksClass(vm);
@@ -2077,10 +2073,13 @@ describe('Objects blocks', () => {
         const util = harness.util;
 
         expect(blocks.grouping({}, util)).toBeUndefined();
+        // Effects above the first pending draw apply at once to what is already drawn.
+        expect(penFX.beginEffectCapture).not.toHaveBeenCalled();
         blocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, util);
-        blocks.grouping({}, util);
-        blocks.grouping({}, util);
         expect(penFX.beginEffectCapture).toHaveBeenCalledTimes(1);
+        blocks.grouping({}, util);
+        expect(util.startBranch).toHaveBeenCalledTimes(1);
+        expect(penFX.endEffectCapture).toHaveBeenCalledTimes(1);
         expect(penFX.applyCapturedEffects).not.toHaveBeenCalled();
         expect(harness.sequencer.stepThread).not.toHaveBeenCalled();
         const finishGroup = manager.runWithoutWaiting.mock.calls[1][0];
@@ -2096,16 +2095,20 @@ describe('Objects blocks', () => {
         const pendingVideo = new Promise(resolve => {
             resolveVideo = resolve;
         });
-        const effects = [{callback: jest.fn()}];
+        const events = [];
         const manager = {
             drawObject: jest.fn(() => pendingVideo),
             runWithoutWaiting: jest.fn()
         };
+        let capture = 0;
         const penFX = {
-            applyCapturedEffects: jest.fn(),
-            beginEffectCapture: jest.fn(),
+            applyCapturedEffects: jest.fn(effects => events.push(`apply ${effects[0]}`)),
+            beginEffectCapture: jest.fn(() => events.push(`begin capture ${++capture}`)),
             beginGroup: jest.fn(),
-            endEffectCapture: jest.fn(() => effects),
+            endEffectCapture: jest.fn(() => {
+                events.push(`end capture ${capture}`);
+                return [capture === 1 ? 'inner effects' : 'outer effects'];
+            }),
             endGroup: jest.fn()
         };
         const blocksContainer = {};
@@ -2133,19 +2136,22 @@ describe('Objects blocks', () => {
         objectBlocks.grouping({}, util);
         objectBlocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, util);
         objectBlocks.grouping({}, util);
-        objectBlocks.grouping({}, util);
 
         util.stackFrame = outerFrame;
         thread.peekStack.mockReturnValue('outer');
-        objectBlocks.grouping({}, util);
         objectBlocks.grouping({}, util);
 
         expect(runtime.sequencer.stepThread).not.toHaveBeenCalled();
         expect(util.startBranch.mock.calls).toEqual([
             [1, true, true],
-            [1, true, true],
-            [2, true, true],
-            [2, true, true]
+            [1, true, true]
+        ]);
+        // The inner grouping captures first; the outer one starts capturing only once the inner one is closed.
+        expect(events).toEqual([
+            'begin capture 1',
+            'end capture 1',
+            'begin capture 2',
+            'end capture 2'
         ]);
         expect(manager.runWithoutWaiting).toHaveBeenCalledTimes(3);
         expect(penFX.endGroup).not.toHaveBeenCalled();
@@ -2153,7 +2159,7 @@ describe('Objects blocks', () => {
         resolveVideo();
         await Promise.all(manager.runWithoutWaiting.mock.calls.slice(1).map(call => call[0]));
 
-        expect(penFX.applyCapturedEffects).toHaveBeenCalledTimes(2);
+        expect(events.slice(4)).toEqual(['apply inner effects', 'apply outer effects']);
         expect(penFX.endGroup).toHaveBeenCalledTimes(2);
     });
 
@@ -2166,8 +2172,8 @@ describe('Objects blocks', () => {
         const blocksContainer = {
             getBranch: jest.fn((blockId, branch) => {
                 const branches = {
-                    outer: ['outer-objects', 'outer-effects'],
-                    inner: ['inner-objects', 'inner-effects']
+                    outer: ['outer-objects'],
+                    inner: ['inner-objects']
                 };
                 const branchIds = branches[blockId];
                 return branchIds ? branchIds[branch - 1] : null;
@@ -2202,12 +2208,14 @@ describe('Objects blocks', () => {
                         thread
                     });
                     thread.peekStack = originalPeekStack;
+                    events.push('outer effects');
                 }
                 if (thread.topBlock === 'inner-objects') {
                     blocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, {
                         target,
                         thread
                     });
+                    events.push('inner effects');
                 }
             })
         };
@@ -2227,23 +2235,15 @@ describe('Objects blocks', () => {
             'begin group',
             'inner-objects',
             'begin effects',
-            'inner-effects',
+            'inner effects',
             'begin effects',
-            'outer-effects'
+            'outer effects'
         ]);
 
         resolveVideo();
         await Promise.all(manager.runWithoutWaiting.mock.calls.map(call => call[0]));
 
-        expect(events).toEqual([
-            'begin group',
-            'outer-objects',
-            'begin group',
-            'inner-objects',
-            'begin effects',
-            'inner-effects',
-            'begin effects',
-            'outer-effects',
+        expect(events.slice(8)).toEqual([
             'apply effects',
             'end group',
             'apply effects',
@@ -2265,7 +2265,9 @@ describe('Objects blocks', () => {
             activeThread: null,
             stepThread: jest.fn(thread => {
                 events.push(thread.topBlock);
-                if (thread.topBlock === 'first-branch-1') thread.objectPendingDraws = [firstDraw];
+                if (thread.topBlock === 'first-branch-1') {
+                    objectBlocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, {target, thread});
+                }
             })
         };
         const penFX = {
@@ -2275,7 +2277,7 @@ describe('Objects blocks', () => {
             endEffectCapture: jest.fn(() => [{}]),
             endGroup: jest.fn(() => events.push('end group'))
         };
-        const manager = {runWithoutWaiting: jest.fn()};
+        const manager = {drawObject: jest.fn(() => firstDraw), runWithoutWaiting: jest.fn()};
         const runtime = {movieAssetManager: manager, penFX, sequencer};
         const ObjectBlocks = createObjectBlocksClass({runtime});
         const objectBlocks = new ObjectBlocks();
@@ -2292,23 +2294,20 @@ describe('Objects blocks', () => {
         expect(objectBlocks.grouping({}, makeGroupingUtil('second'))).toBeUndefined();
         expect(events).toEqual([
             'begin group',
-            'first-branch-1',
-            'first-branch-2'
+            'first-branch-1'
         ]);
 
-        const secondGroup = manager.runWithoutWaiting.mock.calls[1][0];
+        const secondGroup = manager.runWithoutWaiting.mock.calls[2][0];
         resolveFirstDraw();
         await secondGroup;
 
         expect(events).toEqual([
             'begin group',
             'first-branch-1',
-            'first-branch-2',
             'apply first effects',
             'end group',
             'begin group',
             'second-branch-1',
-            'second-branch-2',
             'end group'
         ]);
         expect(penFX.beginGroup).toHaveBeenCalledTimes(2);
@@ -2329,7 +2328,9 @@ describe('Objects blocks', () => {
             activeThread: null,
             stepThread: jest.fn(thread => {
                 events.push(thread.topBlock);
-                if (thread.topBlock === 'first-branch-1') thread.objectPendingDraws = [firstDraw];
+                if (thread.topBlock === 'first-branch-1') {
+                    objectBlocks.draw({ASSET: 'video:clip', SOURCE: 'video'}, {target, thread});
+                }
             })
         };
         const penFX = {
@@ -2340,7 +2341,7 @@ describe('Objects blocks', () => {
             endEffectCapture: jest.fn(() => [{}]),
             endGroup: jest.fn(() => events.push('end group'))
         };
-        const manager = {runWithoutWaiting: jest.fn()};
+        const manager = {drawObject: jest.fn(() => firstDraw), runWithoutWaiting: jest.fn()};
         const runtime = {movieAssetManager: manager, penFX, sequencer, on: jest.fn()};
         const ObjectBlocks = createObjectBlocksClass({runtime});
         const objectBlocks = new ObjectBlocks();
@@ -2361,16 +2362,14 @@ describe('Objects blocks', () => {
         expect(events).toEqual([
             'begin group',
             'first-branch-1',
-            'first-branch-2',
             'cancel groups',
             'begin group',
             'second-branch-1',
-            'second-branch-2',
             'end group'
         ]);
 
         resolveFirstDraw();
-        await manager.runWithoutWaiting.mock.calls[0][0];
+        await manager.runWithoutWaiting.mock.calls[1][0];
 
         expect(penFX.applyCapturedEffects).not.toHaveBeenCalled();
         expect(penFX.endGroup).toHaveBeenCalledTimes(1);

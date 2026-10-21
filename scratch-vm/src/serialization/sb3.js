@@ -19,6 +19,7 @@ const VariableUtil = require('../util/variable-util');
 const compress = require('./tw-compress-sb3');
 const {restoreNumberTimeInputs} = require('../lib/time-input-compatibility');
 const {restoreDrawMediaInputs} = require('../lib/draw-media-input-compatibility');
+const {mergeGroupingEffects} = require('../lib/grouping-effects-compatibility');
 
 const {loadCostume} = require('../import/load-costume.js');
 const {loadSound} = require('../import/load-sound.js');
@@ -379,7 +380,8 @@ const serializeBlocks = function (blocks) {
 };
 
 /**
- * Restore retired time inputs and draw media fields in backpack/shared blocks, keeping the root first.
+ * Restore retired time inputs, draw media fields and grouping effects in backpack/shared blocks, keeping the root
+ * first.
  * @param {Block[]} blocks Imported deserialized blocks.
  * @returns {Block[]} Restored blocks.
  */
@@ -391,7 +393,8 @@ const restoreStandaloneInputs = blocks => {
     }
     const restoredTime = restoreNumberTimeInputs(blockMap, uid);
     const restoredDrawMedia = restoreDrawMediaInputs(blockMap, uid);
-    if (!restoredTime && !restoredDrawMedia) return blocks;
+    const mergedGroupingEffects = mergeGroupingEffects(blockMap);
+    if (!restoredTime && !restoredDrawMedia && !mergedGroupingEffects) return blocks;
     const ordered = blocks.filter(block => block && blockMap[block.id] === block);
     const known = new Set(ordered);
     for (const block of Object.values(blockMap)) {
@@ -1217,6 +1220,7 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
         deserializeBlocks(object.blocks);
         restoreNumberTimeInputs(object.blocks, uid);
         restoreDrawMediaInputs(object.blocks, uid);
+        mergeGroupingEffects(object.blocks);
         // Take a second pass to create objects and add extensions
         for (const blockId in object.blocks) {
             if (!Object.prototype.hasOwnProperty.call(object.blocks, blockId)) continue;

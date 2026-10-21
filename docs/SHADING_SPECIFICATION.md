@@ -113,7 +113,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | `objects_arc` | 円弧を描画。`objects_draw` の直下に表示 |
 | `objects_circularSegment` | 円弧セグメントを描画。`objects_draw` の直下に表示 |
 | `objects_line` | 3D 座標間の線分を描画。`objects_draw` の直下に表示 |
-| `objects_grouping` | サブスタックを 1 つの grouping/effects 単位として評価 |
+| `objects_grouping` | サブスタックを 1 つのグループ（独立した描画レイヤー）として評価する C ブロック |
 | `objects_bake` | サブスタックを 1 枚のレイヤーに描画し、そのレイヤーを 1 つの Draw として描く |
 | `objects_transform` | 位置、アンカー、回転、XYZ スケールをサブスタックへ適用 |
 | `objects_composite` | 不透明度とブレンドモードをサブスタックへ適用 |
@@ -149,7 +149,8 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 
 #### Objects の合成規則
 
-- `objects_grouping` の子ブロックは、現在の frame の 1 つのグループとして収集する。
+- `objects_grouping` の子ブロックは、現在の frame の 1 つのグループとして収集する。サブスタック内のエフェクトは、それより上で同じグループに描いた内容にだけ掛かる。描画が非同期で待機中の場合、以降のエフェクトはグループ内の描画がすべて終わってから適用する。
+- `objects_grouping` は以前、2 つ目のサブスタック（`SUBSTACK2`、エフェクト）を持つ E 字型だった。古いプロジェクトやバックパックを読み込むと、`SUBSTACK2` のスタックを `SUBSTACK` の末尾へ連結する。
 - `objects_transform` は位置、アンカー、回転、スケールを親から子へ累積する。
 - `objects_composite` の不透明度は 0〜100 % を 0〜1 に変換する。
 - ブレンドモードは `normal`、`add`、`mul`、`screen`、`overlay`、`darken`、`lighten`、`color dodge`。

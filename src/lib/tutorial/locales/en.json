@@ -218,14 +218,14 @@
     "grouping": {
       "title": "Grouping",
       "body": [
-        "`grouping` turns everything drawn in its top slot into one layer. Effects placed in its bottom slot (**effects**) apply only to that layer.",
-        "Press **Next** to put the text into a grouping and add a red `color overlay` to its effects."
+        "`grouping` turns everything drawn inside it into one layer. Effects placed inside it, below the drawing, apply only to that layer.",
+        "Press **Next** to put the text into a grouping and add a red `color overlay` below it."
       ]
     },
     "groupingPlaced": {
       "title": "Effects for one group",
       "body": [
-        "The text is inside `grouping`, and `color overlay` (red, mix 100%) in the effects slot paints only this group red.",
+        "The text is inside `grouping`, and `color overlay` (red, mix 100%) below it paints only this group red.",
         "Click the color to choose another one, or lower mix to blend it with the original colors."
       ]
     },
@@ -236,7 +236,7 @@
         {
           "list": [
             "Placed directly in the render frame script, an effect applies to the whole picture drawn so far.",
-            "Placed in the effects slot of `grouping`, it applies only to that group — for example, blur the background but keep the title sharp."
+            "Placed inside `grouping`, it applies only to what that group has drawn — for example, blur the background but keep the title sharp."
           ]
         }
       ]
@@ -341,7 +341,7 @@
             "`set i to 1` and `set angle to (timer × 30)` prepare the loop. The timer makes the ring turn.",
             "`repeat (length of Hello Shading!)` draws one letter per loop: `letter (i) of` picks it, sin and cos of angle place it on the circle, and rotation z tilts it along the circle.",
             "`change i by 1` and `change angle by (360 / length)` move on to the next letter.",
-            "`color overlay` in the effects of `grouping` fades the ring to red between 2 and 3 s.",
+            "`color overlay` at the end of `grouping` fades the ring to red between 2 and 3 s.",
             "`if <time within 1.5 to 10 sec>` shows the caption from 1.5 s to the end. It is outside the group, so it does not turn red."
           ]
         }

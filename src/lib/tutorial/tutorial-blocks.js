@@ -213,7 +213,7 @@ const exampleScript = variables => stack(
     ))),
     node('grouping', 'objects_grouping', {
         inputs: {
-            SUBSTACK: node('repeat', 'control_repeat', {
+            SUBSTACK: stack(node('repeat', 'control_repeat', {
                 inputs: {
                     TIMES: whole(14, letterCount('letterCount')),
                     SUBSTACK: stack(
@@ -250,8 +250,7 @@ const exampleScript = variables => stack(
                         )))
                     )
                 }
-            }),
-            SUBSTACK2: colorOverlay('colorOverlay', num('', easing('overlayEasing', 'PowerInOut', 0, 100, 2, 3, 2)))
+            }), colorOverlay('colorOverlay', num('', easing('overlayEasing', 'PowerInOut', 0, 100, 2, 3, 2))))
         }
     }),
     node('ifCaption', 'control_if', {
@@ -288,8 +287,7 @@ const buildStageScript = (stage, variables = {}) => {
     const body = index >= stageIndex('grouping') ?
         node('grouping', 'objects_grouping', {
             inputs: {
-                SUBSTACK: draw,
-                SUBSTACK2: colorOverlay('colorOverlay')
+                SUBSTACK: stack(draw, colorOverlay('colorOverlay'))
             }
         }) :
         draw;

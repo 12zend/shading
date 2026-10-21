@@ -260,8 +260,10 @@ const installProcedureParameterContext = () => {
     Thread.prototype[PROCEDURE_PARAMETER_CONTEXT_PATCH] = true;
 };
 
+// Effects inside a grouping apply to what is already drawn in it. Once a draw in the grouping is still pending,
+// later effects are held and applied after every pending draw lands. A frame graph node keeps effects in order itself.
 const beginGroupingEffectCapture = state => {
-    if (!state || state.effectCapture || state.phase !== 2) return;
+    if (!state || state.effectCapture || state.node) return;
     const penFX = state.penFX;
     if (penFX && typeof penFX.beginEffectCapture === 'function' &&
         typeof penFX.endEffectCapture === 'function') {
@@ -282,8 +284,10 @@ const trackPendingDraw = (pendingDraw, util, manager) => {
     for (let grouping = thread[GROUPING_STACK]; grouping; grouping = grouping.parentGrouping) {
         if (!grouping.pendingDraws) grouping.pendingDraws = [];
         if (!grouping.pendingDraws.includes(pendingDraw)) grouping.pendingDraws.push(pendingDraw);
-        if (grouping.phase === 2) beginGroupingEffectCapture(grouping);
     }
+    // Only the innermost grouping captures: PenFX captures nest, and an outer grouping starts its own capture when
+    // the inner grouping hands it its pending completion.
+    beginGroupingEffectCapture(thread[GROUPING_STACK]);
     const removePending = () => {
         const index = thread.objectPendingDraws.indexOf(pendingDraw);
         if (index >= 0) thread.objectPendingDraws.splice(index, 1);
@@ -350,6 +354,7 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
         branchThread.peekStackFrame().params = {...context.procedureParams};
         installProcedureParameterFallback(branchThread, context.procedureParams);
     }
+    if (context.groupingState) pushGroupingState(branchThread, context.groupingState);
     if (context.objectInstancePath) branchThread.objectInstancePath = context.objectInstancePath;
     if (context.objectFrameGraphParent) branchThread.objectFrameGraphParent = context.objectFrameGraphParent;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
@@ -454,10 +459,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const pendingDraws = state.pendingDraws ? state.pendingDraws.slice() : [];
         let effects = null;
 
-        if (state.effectCapture) {
-            effects = penFX.endEffectCapture();
-            if (state.node) state.node.effects = effects;
-        }
+        if (state.effectCapture) effects = penFX.endEffectCapture();
 
         removeGroupingState(state.thread, state);
         if (state.frameGraphParentPushed && manager && Array.isArray(manager.frameGraphCollectionParents)) {
@@ -533,7 +535,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 hadFrameGraphParent,
                 node,
                 pendingDraws: null,
-                phase: 1,
                 penFX,
                 previousFrameGraphParent,
                 thread
@@ -552,13 +553,6 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             }
 
             util.startBranch(1, true, true);
-            return true;
-        }
-
-        if (state.phase === 1) {
-            state.phase = 2;
-            if (state.node || state.pendingDraws) beginGroupingEffectCapture(state);
-            util.startBranch(2, true, true);
             return true;
         }
 
@@ -743,8 +737,8 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'grouping',
                     blockType: BlockType.CONDITIONAL,
-                    branchCount: 2,
-                    text: [translate('grouping', 'グループ化'), translate('effects', 'エフェクト')]
+                    branchCount: 1,
+                    text: translate('grouping', 'グループ化')
                 },
                 {
                     opcode: 'scene',
@@ -1696,44 +1690,33 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         if (node) {
             context.objectFrameGraphParent = node;
             runGroupingBranch(this.runtime, context, 1);
-            const penFX = this.runtime.penFX;
-            if (penFX && typeof penFX.beginEffectCapture === 'function' &&
-                typeof penFX.endEffectCapture === 'function') {
-                penFX.beginEffectCapture();
-                runGroupingBranch(this.runtime, context, 2);
-                node.effects = penFX.endEffectCapture();
-            } else {
-                runGroupingBranch(this.runtime, context, 2);
-            }
             return;
         }
         const runGrouping = () => {
             if (generation !== this.groupingGeneration) return null;
             const penFX = this.runtime.penFX;
             if (penFX && typeof penFX.beginGroup === 'function') penFX.beginGroup();
-            const objectThread = runGroupingBranch(this.runtime, context, 1);
+            const state = {effectCapture: false, node: null, pendingDraws: null, penFX};
+            const objectThread = runGroupingBranch(this.runtime, {...context, groupingState: state}, 1);
             const pendingDraws = objectThread && Array.isArray(objectThread.objectPendingDraws) ?
                 objectThread.objectPendingDraws.slice() : [];
-            if (pendingDraws.length && penFX && typeof penFX.beginEffectCapture === 'function') {
-                penFX.beginEffectCapture();
-            }
-            runGroupingBranch(this.runtime, context, 2);
-            if (pendingDraws.length && penFX && typeof penFX.endEffectCapture === 'function') {
-                const effects = penFX.endEffectCapture();
+            const effects = state.effectCapture ? penFX.endEffectCapture() : null;
+            const applyEffects = () => {
+                if (effects && generation === this.groupingGeneration &&
+                    typeof penFX.applyCapturedEffects === 'function') penFX.applyCapturedEffects(effects);
+            };
+            const endGroup = () => {
+                if (generation === this.groupingGeneration && penFX && typeof penFX.endGroup === 'function') {
+                    penFX.endGroup();
+                }
+            };
+            if (pendingDraws.length) {
                 return Promise.all(pendingDraws)
-                    .then(() => {
-                        if (generation !== this.groupingGeneration) return;
-                        if (typeof penFX.applyCapturedEffects === 'function') penFX.applyCapturedEffects(effects);
-                    })
-                    .finally(() => {
-                        if (generation === this.groupingGeneration && typeof penFX.endGroup === 'function') {
-                            penFX.endGroup();
-                        }
-                    });
+                    .then(applyEffects)
+                    .finally(endGroup);
             }
-            if (generation === this.groupingGeneration && penFX && typeof penFX.endGroup === 'function') {
-                penFX.endGroup();
-            }
+            applyEffects();
+            endGroup();
             return null;
         };
         // Propagate nested grouping completion to the branch that owns this grouping. Without this, an outer
