@@ -32,6 +32,23 @@ describe('engine-versions.json', () => {
         }
         expect(validateEngineVersions(engineVersions)).not.toBeNull();
     });
+
+    test('lists versions oldest first and ends with the current one', () => {
+        const parse = version => version.split('.').map(Number);
+        const isNewer = (a, b) => {
+            const [left, right] = [parse(a), parse(b)];
+            const index = left.findIndex((part, position) => part !== right[position]);
+            return index !== -1 && left[index] > right[index];
+        };
+        engineVersions.versions.slice(1).forEach((entry, index) => {
+            expect(isNewer(entry.version, engineVersions.versions[index].version)).toBe(true);
+        });
+        expect(engineVersions.versions[engineVersions.versions.length - 1].version).toBe(engineVersions.current);
+        for (const entry of engineVersions.versions) {
+            expect(entry.name.trim()).not.toBe('');
+            expect(entry.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        }
+    });
 });
 
 describe('engine lookup', () => {
