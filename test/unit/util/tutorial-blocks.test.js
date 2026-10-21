@@ -109,7 +109,9 @@ describe('tutorial block stages', () => {
         const draw = target.blocks.getBlock(id('draw'));
         expect(draw.opcode).toBe('objects_draw');
         expect(draw.parent).toBe(id('hat'));
-        expect(draw.fields.ASSET.value).toBe('text:sans-serif');
+        expect(draw.fields.ASSET).toBeUndefined();
+        expect(target.blocks.getBlock(draw.inputs.ASSET.shadow).opcode).toBe('objects_menu_media');
+        expect(shadowValue(target, id('draw'), 'ASSET')).toBe('text:sans-serif');
         expect(draw.mutation.source).toBe('text');
         expect(shadowValue(target, id('draw'), 'TEXT')).toBe('Hello Shading!');
 

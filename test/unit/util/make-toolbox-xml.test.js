@@ -48,7 +48,9 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<value name="START"><shadow type="math_number"><field name="NUM">0</field>');
         expect(toolbox).toContain('<value name="END"><shadow type="math_number"><field name="NUM">360</field>');
         expect(toolbox).not.toContain('<value name="START"><shadow type="math_angle">');
-        expect(toolbox).toContain('<field name="ASSET">costume1</field>');
+        expect(toolbox).toContain('<value name="ASSET">');
+        expect(toolbox).toContain('<shadow type="objects_menu_media">');
+        expect(toolbox).toContain('<field name="ASSET">costume:costume1</field>');
         expect(toolbox).toContain('<block type="objects_grouping"/>');
         expect(toolbox).not.toContain('<block type="objects_scene"/>');
         expect(toolbox).not.toContain('<block type="objects_timelineTime"/>');

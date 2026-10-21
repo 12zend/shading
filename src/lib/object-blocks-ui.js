@@ -16,6 +16,8 @@ import {localize, resolveLocale} from './movie-block-l10n';
 import styles from './object-blocks-ui.css';
 
 const IMPORT_VALUE = '__movie_import__';
+// The draw block's media is a reporter-accepting menu input, so variables and other reporters can choose it.
+const DRAW_MEDIA_MENU = 'objects_menu_media';
 const SOURCE_LABELS = {
     costume: 'Costume',
     [COSTUME_GROUP_SOURCE]: 'Costume group',
@@ -58,6 +60,19 @@ const createSvgIcon = (path, className) => {
 const getFieldSourceBlock = field => {
     if (field && typeof field.getSourceBlock === 'function') return field.getSourceBlock();
     return field && field.sourceBlock_;
+};
+
+const getDrawBlock = block => {
+    if (block && block.type === DRAW_MEDIA_MENU && typeof block.getParent === 'function') {
+        return block.getParent() || block;
+    }
+    return block;
+};
+
+const getDrawAssetValue = block => {
+    if (!block) return '';
+    if (typeof block.getDrawAssetValue_ === 'function') return block.getDrawAssetValue_();
+    return block.getFieldValue('ASSET');
 };
 
 const getAssetItems = vm => {
@@ -283,9 +298,10 @@ const persistDrawAsset = (vm, block, source, asset) => {
             name: 'SOURCE',
             value: source
         });
+        const mediaInput = storedBlock.inputs && storedBlock.inputs.ASSET;
         blocks.changeBlock({
             element: 'field',
-            id: block.id,
+            id: (mediaInput && mediaInput.shadow) || block.id,
             name: 'ASSET',
             value
         });
@@ -320,7 +336,7 @@ const importDrawFiles = (vm, block, ScratchBlocks, files) => {
     if (!importedFiles.length) return;
 
     const selection = decodeDrawAsset(
-        block.getFieldValue('ASSET'),
+        getDrawAssetValue(block),
         block.getFieldValue('SOURCE') || block.objectDrawSource_
     );
     // Importing an asset refreshes Blockly before this promise resolves. Keep
@@ -412,6 +428,10 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             }
         }
 
+        getDrawBlock_ () {
+            return getDrawBlock(getLiveBlock(this.sourceBlock_));
+        }
+
         refreshDisplay_ () {
             const selectedOption = this.getOptions().find(option => option[1] === this.getValue());
             if (selectedOption) this.setText(selectedOption[0]);
@@ -468,7 +488,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             importButton.appendChild(document.createTextNode('Import'));
             importButton.addEventListener('click', () => {
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks);
+                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks);
             });
             const headerActions = document.createElement('div');
             headerActions.className = styles.mediaActions;
@@ -485,7 +505,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             header.appendChild(headerActions);
             picker.appendChild(header);
 
-            const sourceBlock = getLiveBlock(this.sourceBlock_);
+            const sourceBlock = this.getDrawBlock_();
             if (sourceBlock && typeof sourceBlock.setWarningText === 'function') sourceBlock.setWarningText(null);
             if (sourceBlock && sourceBlock.objectDrawImportError_) {
                 const importError = document.createElement('div');
@@ -649,7 +669,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 selectItem(groupItem);
                 persistDrawAsset(
                     vm,
-                    getLiveBlock(this.sourceBlock_),
+                    this.getDrawBlock_(),
                     COSTUME_GROUP_SOURCE,
                     group.name
                 );
@@ -870,7 +890,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                                     const selection = decodeDrawAsset(fallback.value, fallback.source);
                                     persistDrawAsset(
                                         vm,
-                                        getLiveBlock(this.sourceBlock_),
+                                        this.getDrawBlock_(),
                                         selection.source,
                                         selection.asset
                                     );
@@ -928,7 +948,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 event.preventDefault();
                 event.stopPropagation();
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
+                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks, files);
             });
             let fileDragDepth = 0;
             const showDropOverlay = show => {
@@ -962,7 +982,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 showDropOverlay(false);
                 if (!files.length) return;
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, getLiveBlock(this.sourceBlock_), ScratchBlocks, files);
+                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks, files);
             });
             updateCostumeSelectionControls();
             renderGrid();
@@ -1154,7 +1174,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
         }
     };
 
-    ScratchBlocks.Blocks.objects_draw = {
+    ScratchBlocks.Blocks[DRAW_MEDIA_MENU] = {
         init: function () {
             const assetOptions = function () {
                 // ScratchBlocks binds dropdown callbacks to the field instance.
@@ -1164,15 +1184,28 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             const assetValidator = function (value) {
                 // ScratchBlocks binds dropdown callbacks to the field instance.
                 // eslint-disable-next-line no-invalid-this
-                const block = getFieldSourceBlock(this);
+                const menu = getFieldSourceBlock(this);
+                const block = getDrawBlock(menu);
+                const drawBlock = block && block !== menu ? block : null;
                 if (value === IMPORT_VALUE) {
-                    openImportPicker(vm, block, ScratchBlocks);
-                    return (block && block.getFieldValue('ASSET')) || IMPORT_VALUE;
+                    if (drawBlock) openImportPicker(vm, drawBlock, ScratchBlocks);
+                    return (menu && menu.getFieldValue('ASSET')) || IMPORT_VALUE;
                 }
-                if (block) block.updateDrawSelection_(value);
+                if (drawBlock && typeof drawBlock.updateDrawSelection_ === 'function') {
+                    drawBlock.updateDrawSelection_(value);
+                }
                 return value;
             };
             const MediaField = createMediaField(ScratchBlocks, vm, assetOptions, assetValidator);
+            this.appendDummyInput().appendField(new MediaField(), 'ASSET');
+            this.setColour(PRIMARY, SECONDARY, TERTIARY);
+            this.setOutput(true, 'String');
+            this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_ROUND);
+        }
+    };
+
+    ScratchBlocks.Blocks.objects_draw = {
+        init: function () {
             const videoModeValidator = function (value) {
                 // ScratchBlocks binds dropdown callbacks to the field instance.
                 // eslint-disable-next-line no-invalid-this
@@ -1186,8 +1219,8 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             };
             const SourceField = ScratchBlocks.FieldLabelSerializable || ScratchBlocks.FieldLabel;
             this.appendDummyInput('DRAW')
-                .appendField(translate('draw', '描画'))
-                .appendField(new MediaField(), 'ASSET');
+                .appendField(translate('draw', '描画'));
+            this.appendValueInput('ASSET');
             this.appendDummyInput('VIDEO_MODE_INPUT')
                 .appendField(new ScratchBlocks.FieldDropdown([
                     ['sequence', 'sequence'],
@@ -1225,19 +1258,42 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
                 // eslint-disable-next-line no-invalid-this
                 const block = this;
                 block.syncDrawOptionalInputs_();
-                const value = block.getFieldValue('ASSET');
+                const menu = block.getDrawMediaMenu_();
+                const value = menu && menu.getFieldValue('ASSET');
                 if (value && value !== IMPORT_VALUE) {
                     const selection = decodeDrawAsset(
                         value,
                         block.getFieldValue('SOURCE') || block.objectDrawSource_ || 'costume'
                     );
                     const normalized = encodeDrawAsset(selection.source, selection.asset);
-                    if (value !== normalized) block.getField('ASSET').setValue(normalized);
+                    if (value !== normalized) menu.getField('ASSET').setValue(normalized);
+                    // Loading, undo and removing a reporter change the menu without its validator.
+                    if (selection.source !== block.objectDrawSource_ || selection.asset !== block.objectDrawAsset_) {
+                        block.updateDrawSelection_(normalized);
+                    }
                 }
             });
             this.objectDrawSource_ = this.getFieldValue('SOURCE') || 'costume';
             this.objectDrawVideoMode_ = normalizeVideoMode(this.getFieldValue('VIDEO_MODE'));
-            this.updateDrawSelection_(this.getFieldValue('ASSET') || IMPORT_VALUE);
+            this.updateDrawSelection_(IMPORT_VALUE);
+        },
+        getDrawMediaBlock_: function () {
+            const input = this.getInput('ASSET');
+            return (input && input.connection && input.connection.targetBlock()) || null;
+        },
+        getDrawMediaMenu_: function () {
+            const media = this.getDrawMediaBlock_();
+            return media && media.isShadow() && media.type === DRAW_MEDIA_MENU ? media : null;
+        },
+        // A reporter in the media input can name any kind of media, so every media option stays visible.
+        usesDrawMediaReporter_: function () {
+            const media = this.getDrawMediaBlock_();
+            return Boolean(media && !media.isShadow());
+        },
+        getDrawAssetValue_: function () {
+            const menu = this.getDrawMediaMenu_();
+            if (menu) return menu.getFieldValue('ASSET');
+            return encodeDrawAsset(this.objectDrawSource_ || 'costume', this.objectDrawAsset_ || '');
         },
         updateDrawSelection_: function (requestedValue) {
             const oldMutation = this.objectDrawSource_ && ScratchBlocks.Events.isEnabled() ?
@@ -1262,7 +1318,8 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
         },
         setDrawAsset_: function (source, asset) {
             this.updateDrawSelection_(encodeDrawAsset(source, asset));
-            const assetField = this.getField('ASSET');
+            const menu = this.getDrawMediaMenu_();
+            const assetField = menu && menu.getField('ASSET');
             if (assetField) {
                 assetField.setValue(encodeDrawAsset(source, asset));
                 if (typeof assetField.refreshDisplay_ === 'function') assetField.refreshDisplay_();
@@ -1270,9 +1327,11 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             if (this.rendered) this.render();
         },
         syncDrawOptionalInputs_: function () {
+            let visibilityChanged = false;
             const syncVisibility = (inputName, visible) => {
                 const input = this.getInput(inputName);
                 if (!input) return;
+                if (input.isVisible() !== visible) visibilityChanged = true;
                 const renderList = input.setVisible(visible);
                 if (!visible && input.connection) {
                     input.connection.hideAll();
@@ -1289,7 +1348,13 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
                 this.getFieldValue('VIDEO_MODE') || this.objectDrawVideoMode_
             );
             this.objectDrawVideoMode_ = videoMode;
-            const visibility = getDrawInputVisibility(
+            const visibility = this.usesDrawMediaReporter_() ? {
+                frame: true,
+                speed: true,
+                text: true,
+                videoMode: true,
+                volume: true
+            } : getDrawInputVisibility(
                 vm,
                 this.objectDrawSource_,
                 this.objectDrawAsset_,
@@ -1301,11 +1366,14 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             syncVisibility('FRAME', visibility.frame);
             syncVisibility('SPEED', visibility.speed);
             syncVisibility('VOLUME', visibility.volume);
+            // Connecting or removing a media reporter is rendered before this change handler runs.
+            if (visibilityChanged && this.rendered) this.render();
         },
         mutationToDom: function () {
             const mutation = document.createElement('mutation');
+            const menu = this.getDrawMediaMenu_();
             const fieldSelection = decodeDrawAsset(
-                this.getFieldValue('ASSET'),
+                menu ? menu.getFieldValue('ASSET') : '',
                 this.objectDrawSource_ || this.getFieldValue('SOURCE') || 'costume'
             );
             const selection = {
@@ -1515,6 +1583,9 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
 };
 
 export {
+    DRAW_MEDIA_MENU,
+    getDrawAssetValue,
+    getDrawBlock,
     getFieldSourceBlock,
     getLiveBlock,
     IMPORT_VALUE,

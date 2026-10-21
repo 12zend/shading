@@ -782,7 +782,11 @@ const objects = function (costumeName, locale) {
         <block type="objects_drawSprite"/>
         <block type="objects_draw">
             <field name="SOURCE">costume</field>
-            <field name="ASSET">${costumeName}</field>
+            <value name="ASSET">
+                <shadow type="objects_menu_media">
+                    <field name="ASSET">${costumeName ? `costume:${costumeName}` : ''}</field>
+                </shadow>
+            </value>
             <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
             ${number('ITALIC', 0)}
             ${number('FRAME', 1)}

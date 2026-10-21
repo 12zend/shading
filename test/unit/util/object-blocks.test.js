@@ -28,7 +28,8 @@ import installObjectBlockDefinitions, {
     getFieldSourceBlock,
     modelHasFrames,
     normalizeVideoMode,
-    openImportPicker
+    openImportPicker,
+    persistDrawAsset
 } from '../../../src/lib/object-blocks-ui';
 
 const makeUtil = () => ({
@@ -218,6 +219,7 @@ describe('Objects blocks', () => {
                 },
                 getInput: name => ({
                     connection: null,
+                    isVisible: () => visibility[name] !== false,
                     setVisible: value => {
                         visibility[name] = value;
                         return [];
@@ -246,6 +248,106 @@ describe('Objects blocks', () => {
         } finally {
             global.document = originalDocument;
         }
+    });
+
+    test('chooses draw media with a reporter-accepting menu', () => {
+        class FieldDropdown {
+            constructor (options, validator) {
+                this.validator_ = validator;
+            }
+        }
+        const ScratchBlocks = {
+            Blocks: {},
+            Events: {isEnabled: () => false},
+            FieldDropdown,
+            FieldLabel: class {},
+            OUTPUT_SHAPE_ROUND: 2,
+            Xml: {domToText: element => element.outerHTML}
+        };
+        installObjectBlockDefinitions(ScratchBlocks, {runtime: {}});
+
+        let mediaField;
+        const menu = Object.assign({
+            appendDummyInput: () => ({
+                appendField: (field, name) => {
+                    if (name === 'ASSET') mediaField = field;
+                }
+            }),
+            getFieldValue: () => 'video:clip',
+            isShadow: () => true,
+            setColour: jest.fn(),
+            setOutput: jest.fn(),
+            setOutputShape: jest.fn(),
+            type: 'objects_menu_media'
+        }, ScratchBlocks.Blocks.objects_menu_media);
+        menu.init();
+        expect(menu.setOutput).toHaveBeenCalledWith(true, 'String');
+        expect(menu.setOutputShape).toHaveBeenCalledWith(ScratchBlocks.OUTPUT_SHAPE_ROUND);
+
+        const visibility = {};
+        let media = menu;
+        const draw = Object.assign({
+            getFieldValue: name => (name === 'VIDEO_MODE' ? 'video' : ''),
+            getInput: name => ({
+                connection: name === 'ASSET' ? {targetBlock: () => media} : null,
+                isVisible: () => visibility[name] !== false,
+                setVisible: value => {
+                    visibility[name] = value;
+                    return [];
+                }
+            }),
+            objectDrawAsset_: 'clip',
+            objectDrawSource_: 'video',
+            render: jest.fn(),
+            rendered: true
+        }, ScratchBlocks.Blocks.objects_draw);
+        draw.updateDrawSelection_ = jest.fn();
+        menu.getParent = () => draw;
+
+        mediaField.sourceBlock_ = menu;
+        expect(mediaField.validator_.call(mediaField, 'costume:Logo')).toBe('costume:Logo');
+        expect(draw.updateDrawSelection_).toHaveBeenCalledWith('costume:Logo');
+        expect(draw.getDrawAssetValue_()).toBe('video:clip');
+
+        draw.syncDrawOptionalInputs_();
+        expect(visibility).toMatchObject({
+            FRAME: false, ITALIC: false, SPEED: true, TEXT: false, VIDEO_MODE_INPUT: true, VOLUME: true
+        });
+
+        media = {isShadow: () => false, type: 'data_variable'};
+        expect(draw.getDrawMediaMenu_()).toBeNull();
+        expect(draw.getDrawAssetValue_()).toBe('video:clip');
+        draw.render.mockClear();
+        draw.syncDrawOptionalInputs_();
+        expect(visibility).toMatchObject({
+            FRAME: true, ITALIC: true, SPEED: true, TEXT: true, VIDEO_MODE_INPUT: true, VOLUME: true
+        });
+        expect(draw.render).toHaveBeenCalledTimes(1);
+        draw.syncDrawOptionalInputs_();
+        expect(draw.render).toHaveBeenCalledTimes(1);
+    });
+
+    test('stores picked media on the draw block menu shadow', () => {
+        const storedBlock = {
+            fields: {SOURCE: {value: 'costume'}},
+            inputs: {ASSET: {block: 'variable', shadow: 'menu'}}
+        };
+        const blocks = {
+            changeBlock: jest.fn(),
+            getBlock: jest.fn(() => storedBlock)
+        };
+        const liveBlock = {id: 'draw', setDrawAsset_: jest.fn()};
+        const vm = {editingTarget: {blocks}};
+
+        persistDrawAsset(vm, liveBlock, 'model', 'Hero');
+
+        expect(blocks.changeBlock).toHaveBeenCalledWith({
+            element: 'field', id: 'draw', name: 'SOURCE', value: 'model'
+        });
+        expect(blocks.changeBlock).toHaveBeenCalledWith({
+            element: 'field', id: 'menu', name: 'ASSET', value: 'model:Hero'
+        });
+        expect(liveBlock.setDrawAsset_).toHaveBeenCalledWith('model', 'Hero');
     });
 
     test('supports the legacy ScratchBlocks field source API', () => {

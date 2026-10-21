@@ -131,7 +131,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 #### `objects_draw` の入力
 
 - `SOURCE`: `costume`、`costume-group`、`video`、`text`、`model`
-- `ASSET`: 資産名または Objects UI が生成する資産選択値
+- `ASSET`: レポーターを受け付ける入力。既定ではメディア選択メニュー（`objects_menu_media`）が入り、`種類:名前` 形式（例: `costume:コスチューム1`、`text:serif`）の値を返す。`種類:` の付かない値は `SOURCE` の種類で解釈する。レポーターを入れている間は種類が決まらないため、`TEXT`・`VIDEO_MODE`・`FRAME` などの入力をすべて表示する。旧形式の `ASSET` フィールドは読み込み時にこのメニューへ移行する
 - `TEXT`: テキスト描画時の文字列
 - `VIDEO_MODE`: ビデオのフレーム列再生またはタイムライン連動再生
 - `FRAME`: ビデオまたはモデルのフレーム番号

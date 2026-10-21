@@ -157,7 +157,8 @@ const ADVANCED_GRAPHIC_BLOCKS = [
 const MOVIE_MENU_BLOCKS = [
     'looks_font',
     'looks_model',
-    'looks_video'
+    'looks_video',
+    'objects_menu_media'
 ];
 
 const ADVANCED_GRAPHIC_EFFECTS = [

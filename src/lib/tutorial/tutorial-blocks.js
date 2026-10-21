@@ -118,12 +118,12 @@ const flatten = (script, parentId, out) => {
 
 const drawText = (key, options = {}) => node(key, 'objects_draw', {
     fields: {
-        ASSET: `text:${TEXT_FONT_ASSET}`,
         SOURCE: 'text',
         VIDEO_MODE: 'sequence'
     },
     mutation: {'source': 'text', 'asset': TEXT_FONT_ASSET, 'video-mode': 'sequence'},
     inputs: {
+        ASSET: shadow('objects_menu_media', 'ASSET')(`text:${TEXT_FONT_ASSET}`),
         TEXT: options.text || text(HELLO_TEXT),
         ITALIC: num(0),
         FRAME: num(1),

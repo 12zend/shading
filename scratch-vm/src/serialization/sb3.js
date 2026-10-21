@@ -18,6 +18,7 @@ const StringUtil = require('../util/string-util');
 const VariableUtil = require('../util/variable-util');
 const compress = require('./tw-compress-sb3');
 const {restoreNumberTimeInputs} = require('../lib/time-input-compatibility');
+const {restoreDrawMediaInputs} = require('../lib/draw-media-input-compatibility');
 
 const {loadCostume} = require('../import/load-costume.js');
 const {loadSound} = require('../import/load-sound.js');
@@ -378,17 +379,19 @@ const serializeBlocks = function (blocks) {
 };
 
 /**
- * Restore retired time inputs in backpack/shared blocks, keeping the root first.
+ * Restore retired time inputs and draw media fields in backpack/shared blocks, keeping the root first.
  * @param {Block[]} blocks Imported deserialized blocks.
  * @returns {Block[]} Restored blocks.
  */
-const restoreStandaloneTimeInputs = blocks => {
+const restoreStandaloneInputs = blocks => {
     if (!Array.isArray(blocks)) return blocks;
     const blockMap = {};
     for (const block of blocks) {
         if (block && block.id) blockMap[block.id] = block;
     }
-    if (!restoreNumberTimeInputs(blockMap, uid)) return blocks;
+    const restoredTime = restoreNumberTimeInputs(blockMap, uid);
+    const restoredDrawMedia = restoreDrawMediaInputs(blockMap, uid);
+    if (!restoredTime && !restoredDrawMedia) return blocks;
     const ordered = blocks.filter(block => block && blockMap[block.id] === block);
     const known = new Set(ordered);
     for (const block of Object.values(blockMap)) {
@@ -411,14 +414,14 @@ const deserializeStandaloneBlocks = blocks => {
             extensionURLs.set(id, url);
         }
         return {
-            blocks: restoreStandaloneTimeInputs(blocks.blocks),
+            blocks: restoreStandaloneInputs(blocks.blocks),
             extensionURLs
         };
     }
 
     // Vanilla Scratch format is just a list of block objects
     return {
-        blocks: restoreStandaloneTimeInputs(blocks),
+        blocks: restoreStandaloneInputs(blocks),
         extensionURLs: new Map()
     };
 };
@@ -1213,6 +1216,7 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     if (Object.prototype.hasOwnProperty.call(object, 'blocks')) {
         deserializeBlocks(object.blocks);
         restoreNumberTimeInputs(object.blocks, uid);
+        restoreDrawMediaInputs(object.blocks, uid);
         // Take a second pass to create objects and add extensions
         for (const blockId in object.blocks) {
             if (!Object.prototype.hasOwnProperty.call(object.blocks, blockId)) continue;
