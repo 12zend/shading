@@ -222,15 +222,17 @@ describe('Movie project format', () => {
         const json = markMovieProject(project({move: block('motion_movesteps')}));
 
         expect(json.mb3).toBeUndefined();
-        expect(json.shading).toEqual({version: '1.0.0'});
-        expect(SHADING_PROJECT_VERSION).toBe('1.0.0');
+        expect(json.shading).toEqual({version: SHADING_PROJECT_VERSION});
     });
 
     test('keeps other format data when writing the version', () => {
         const json = project({});
         json.shading = {version: '0.0.1', settings: {localStorage: {}}};
 
-        expect(markMovieProject(json).shading).toEqual({version: '1.0.0', settings: {localStorage: {}}});
+        expect(markMovieProject(json).shading).toEqual({
+            version: SHADING_PROJECT_VERSION,
+            settings: {localStorage: {}}
+        });
     });
 
     test('does not write a project version into sprites', () => {
