@@ -4,6 +4,7 @@ import JSZip from '@turbowarp/jszip';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../../src/lib/movie-asset-manager';
+import {SHADING_PROJECT_VERSION} from '../../../src/lib/project-format';
 import {
     SETTINGS_RESTORED_EVENT,
     getProjectTitleFromFileName,
@@ -130,7 +131,7 @@ describe('.shade project files', () => {
         const zip = await JSZip.loadAsync(archive);
         const saved = JSON.parse(await zip.file('project.json').async('string'));
 
-        expect(saved.shading.version).toBe('1.0.0');
+        expect(saved.shading.version).toBe(SHADING_PROJECT_VERSION);
         expect(saved.shading.settings.localStorage).toEqual({
             'tw:addons': '{"_":5,"onion-skinning":{"enabled":true}}',
             'tw:theme': '{"gui":"light"}'
