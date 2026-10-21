@@ -800,6 +800,7 @@ const objects = function (costumeName, locale) {
         </block>
         ${proceduralShapeBlocks().join('\n')}
         <block type="objects_grouping"/>
+        <block type="objects_scene"/>
         <block type="objects_transform">
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 0)}
             ${number('AX', 0)}${number('AY', 0)}${number('AZ', 0)}
@@ -815,7 +816,7 @@ const objects = function (costumeName, locale) {
             ${text('POINTS', '')}
             <field name="COMPONENT">x</field>${number('TIME', 0)}
         </block>
-        <!-- objects_scene, objects_timelineTime, objects_leftKeyframeTime, objects_posterizeTime,
+        <!-- objects_timelineTime, objects_leftKeyframeTime, objects_posterizeTime,
              objects_interpolateColor, looks_clearlight, looks_addpointlight, looks_addlight are
              hidden from the toolbox but remain loadable for project compatibility. -->
         <sep gap="36"/>

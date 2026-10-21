@@ -749,7 +749,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     opcode: 'scene',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
-                    text: 'scene'
+                    text: translate('scene', 'シーン')
                 },
                 {
                     opcode: 'group',

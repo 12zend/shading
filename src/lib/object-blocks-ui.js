@@ -1567,7 +1567,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
     ScratchBlocks.Blocks.objects_scene = {
         init: function () {
             this.jsonInit({
-                message0: 'scene',
+                message0: translate('scene', 'シーン'),
                 message1: '%1',
                 args1: [{type: 'input_statement', name: 'SUBSTACK'}],
                 category: translate('Objects', 'レイヤー'),
