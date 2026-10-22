@@ -1,5 +1,6 @@
 const BITMAP_RESOLUTION = 2;
-const TEXT_BITMAP_RESOLUTION = 4;
+// 2x supersampling over the 3 bitmap pixels per stage unit a 640x360 stage needs at 1920x1080.
+const TEXT_BITMAP_RESOLUTION = 6;
 const MAX_TEXT_CANVAS_CACHE = 1024;
 const MAX_TEXT_CANVAS_PIXELS = 16 * 1024 * 1024;
 const TEXT_FONT_SIZE = 96;

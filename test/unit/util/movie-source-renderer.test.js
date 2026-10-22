@@ -98,13 +98,13 @@ describe('renderer-owned Movie sources', () => {
             const reverse = textSource.createTextCanvas(font, 'Hi', null, -0.25);
 
             expect(contexts[0].setTransform).not.toHaveBeenCalled();
-            // Line height is 96 * 1.2 at a 2x render scale, so the slant adds 0.25 * 230 pixels.
-            expect(italic.width - upright.width).toBe(58);
+            // Line height is 96 * 1.2 at a 3x render scale, so the slant adds 0.25 * 345 pixels.
+            expect(italic.width - upright.width).toBe(87);
             expect(reverse.width).toBe(italic.width);
-            const padding = 32;
-            const textBottom = padding + 230;
+            const padding = 48;
+            const textBottom = padding + 345;
             expect(contexts[1].setTransform).toHaveBeenCalledWith(1, 0, -0.25, 1, 0.25 * textBottom, 0);
-            expect(contexts[2].setTransform).toHaveBeenCalledWith(1, 0, 0.25, 1, 57.5 - (0.25 * textBottom), 0);
+            expect(contexts[2].setTransform).toHaveBeenCalledWith(1, 0, 0.25, 1, 86.25 - (0.25 * textBottom), 0);
             expect(textSource.createTextCanvas(font, 'Hi', null, 0.25)).toBe(italic);
             expect(MovieTextSource.getTextCacheKey(font, 'Hi')).toBe('sans\0sans-serif\0Hi');
             expect(MovieTextSource.getTextCacheKey(font, 'Hi', 0.25)).not.toBe(MovieTextSource.getTextCacheKey(font, 'Hi'));

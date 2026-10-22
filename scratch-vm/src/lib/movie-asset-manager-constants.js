@@ -1,9 +1,9 @@
 const VIDEO_FRAME_RATE = 30;
 const BITMAP_RESOLUTION = 2;
-// Text uses 2x supersampling over base bitmaps (retina-crisp) instead of the previous 8x.
-// 8x produced 16x more pixels (64x vs base) for rasterization, GPU upload and stamping
-// with no visible gain at the logical text size, dominating Draw text cost.
-const TEXT_BITMAP_RESOLUTION = BITMAP_RESOLUTION * 2;
+// Text uses 6 bitmap pixels per stage unit: 2x supersampling over the 3 a 640x360 stage needs at 1920x1080.
+// The previous 8x per base pixel (16 per unit) produced far more pixels for rasterization, GPU upload and
+// stamping with no visible gain at the logical text size, dominating Draw text cost.
+const TEXT_BITMAP_RESOLUTION = BITMAP_RESOLUTION * 3;
 const RENDERING_DEFAULT_FRAME_RATE = 30;
 const RENDERING_MAX_FRAME_RATE = 120;
 const RENDERING_FILE_NAME = 'rendering.mp4';

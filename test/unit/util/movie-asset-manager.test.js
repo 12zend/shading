@@ -2908,9 +2908,9 @@ describe('MovieAssetManager rendering performance', () => {
             global.document = originalDocument;
         }
 
-        expect(canvas.width).toBe(240);
-        expect(canvas.height).toBe(160);
-        expect(canvas.movieBitmapResolution).toBe(2);
+        expect(canvas.width).toBe(360);
+        expect(canvas.height).toBe(240);
+        expect(canvas.movieBitmapResolution).toBe(3);
         expect(context.beginPath).toHaveBeenCalledTimes(1);
         const pointCount = shape === 'flower' ? 60 :
             shape === 'star' || shape === 'curved star' ? 10 : 5;
@@ -2919,10 +2919,10 @@ describe('MovieAssetManager rendering performance', () => {
             expect(context.lineTo).not.toHaveBeenCalled();
             expect(context.quadraticCurveTo).toHaveBeenCalledTimes(10);
             const firstInnerCurve = context.quadraticCurveTo.mock.calls[5];
-            expect(firstInnerCurve[0]).toBeCloseTo(120 + (12.5 * Math.cos(1.3 * Math.PI)));
-            expect(firstInnerCurve[1]).toBeCloseTo(80 + (12.5 * Math.sin(1.3 * Math.PI)));
-            expect(firstInnerCurve[2]).toBeCloseTo(120 + (25 * Math.cos(1.1 * Math.PI)));
-            expect(firstInnerCurve[3]).toBeCloseTo(80 + (25 * Math.sin(1.1 * Math.PI)));
+            expect(firstInnerCurve[0]).toBeCloseTo(180 + (18.75 * Math.cos(1.3 * Math.PI)));
+            expect(firstInnerCurve[1]).toBeCloseTo(120 + (18.75 * Math.sin(1.3 * Math.PI)));
+            expect(firstInnerCurve[2]).toBeCloseTo(180 + (37.5 * Math.cos(1.1 * Math.PI)));
+            expect(firstInnerCurve[3]).toBeCloseTo(120 + (37.5 * Math.sin(1.1 * Math.PI)));
         } else {
             expect(context.lineTo).toHaveBeenCalledTimes((pointCount - 1) * 2);
             expect(context.quadraticCurveTo).not.toHaveBeenCalled();
@@ -2968,8 +2968,8 @@ describe('MovieAssetManager rendering performance', () => {
             global.document = originalDocument;
         }
 
-        expect(canvas.width).toBe(300);
-        expect(canvas.height).toBe(300);
+        expect(canvas.width).toBe(450);
+        expect(canvas.height).toBe(450);
         expect(context.moveTo).toHaveBeenCalledTimes(2);
         expect(context.closePath).toHaveBeenCalledTimes(2);
         expect(context.fill).toHaveBeenCalledWith('evenodd');
@@ -3100,12 +3100,47 @@ describe('MovieAssetManager rendering performance', () => {
                 global.document = originalDocument;
             }
 
-            expect(canvas.width).toBe(1024);
-            expect(canvas.height).toBe(1024);
-            expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledWith(canvas, 0.25);
+            expect(canvas.width).toBe(2048);
+            expect(canvas.height).toBe(2048);
+            expect(manager.runtime.renderer.uploadMoviePixels).toHaveBeenCalledWith(canvas, 0.5);
             expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalledTimes(1);
         }
     );
+
+    test('samples shape and text textures smoothly and model frames with nearest-neighbor', () => {
+        const manager = makeManager();
+        const context = {
+            beginPath: jest.fn(),
+            clearRect: jest.fn(),
+            closePath: jest.fn(),
+            fill: jest.fn(),
+            fillText: jest.fn(),
+            lineTo: jest.fn(),
+            measureText: jest.fn(() => ({width: 100})),
+            moveTo: jest.fn(),
+            stroke: jest.fn()
+        };
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => ({getContext: () => context}))};
+        const renderer = manager.runtime.renderer;
+        const source = MovieSourceRenderer.forRenderer(renderer);
+        source.model = {renderWorldScene: jest.fn(() => ({width: 40, height: 30}))};
+
+        try {
+            expect(renderer.prepareMovieSource({kind: 'shape', configuration: {shape: 'polygon'}}).nearest)
+                .toBe(false);
+            expect(renderer.prepareMovieSource({kind: 'shape', configuration: {
+                shape: 'line', position1: {x: 0, y: 0}, position2: {x: 10, y: 10}
+            }}).nearest).toBe(false);
+            expect(renderer.prepareMovieSource({
+                kind: 'text', font: {name: 'sans', family: 'sans-serif'}, text: 'smooth'
+            }).nearest).toBe(false);
+            expect(renderer.prepareMovieSource({kind: 'model', arguments: [], owner: 'target'}).nearest)
+                .toBe(true);
+        } finally {
+            global.document = originalDocument;
+        }
+    });
 
     test('renders a line between its two positions with the requested thickness', () => {
         const manager = makeManager();
@@ -3139,12 +3174,13 @@ describe('MovieAssetManager rendering performance', () => {
             global.document = originalDocument;
         }
 
-        expect(canvas.width).toBe(106);
-        expect(canvas.height).toBe(66);
-        expect(context.moveTo).toHaveBeenCalledWith(3, 63);
-        expect(context.lineTo).toHaveBeenCalledWith(103, 3);
+        expect(canvas.width).toBe(318);
+        expect(canvas.height).toBe(198);
+        expect(canvas.movieBitmapResolution).toBe(3);
+        expect(context.moveTo).toHaveBeenCalledWith(9, 189);
+        expect(context.lineTo).toHaveBeenCalledWith(309, 9);
         expect(context.stroke).toHaveBeenCalledTimes(1);
-        expect(context.lineWidth).toBe(6);
+        expect(context.lineWidth).toBe(18);
         expect(manager.runtime.graphicEffectsManager.setScale).not.toHaveBeenCalled();
         expect(manager.runtime.renderer.drawMovieTexture).toHaveBeenCalled();
         expect(manager.runtime._primitives.pen_stamp).not.toHaveBeenCalled();
@@ -3956,7 +3992,7 @@ describe('MovieAssetManager rendering performance', () => {
         expect(manager.getTargetState(target).textRenderPromise).toBeNull();
     });
 
-    test('renders text canvases at 2x resolution without changing their logical size', () => {
+    test('renders text canvases at 6x resolution without changing their logical size', () => {
         const manager = makeManager();
         let context;
         context = {
@@ -3978,13 +4014,13 @@ describe('MovieAssetManager rendering performance', () => {
                 'hello'
             );
 
-            expect(rendered.width).toBe(264);
-            expect(rendered.height).toBe(294);
+            expect(rendered.width).toBe(396);
+            expect(rendered.height).toBe(441);
             expect(rendered.movieBitmapResolution).toBe(TEXT_BITMAP_RESOLUTION);
             expect(rendered.width / rendered.movieBitmapResolution).toBe(66);
             expect(rendered.height / rendered.movieBitmapResolution).toBe(73.5);
-            expect(context.font).toBe('192px sans-serif');
-            expect(context.fillText).toHaveBeenCalledWith('hello', 32, 32);
+            expect(context.font).toBe('288px sans-serif');
+            expect(context.fillText).toHaveBeenCalledWith('hello', 48, 48);
         } finally {
             global.document = originalDocument;
         }

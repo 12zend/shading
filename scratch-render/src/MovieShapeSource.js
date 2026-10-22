@@ -1,12 +1,15 @@
 // Procedural source generation belongs to the renderer, including scene-plane sources.
-const BITMAP_RESOLUTION = 2;
+// Bitmap pixels per stage unit. A 640x360 stage shown at 1920x1080 needs three, so shapes and lines stay sharp
+// full screen instead of being magnified from a smaller texture.
+const SHAPE_BITMAP_RESOLUTION = 3;
 const toNumber = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const SHAPE_TYPES = ['polygon', 'star', 'curved star', 'flower'];
 const PROCEDURAL_SHAPE_TYPES = SHAPE_TYPES.concat(['arc', 'circular segment', 'line']);
 const MAX_SHAPE_SIZE = 4096;
-const MAX_SHAPE_BITMAP_PIXELS = 1024 * 1024;
+// Large enough for a shape covering a 1920x1080 frame at full resolution.
+const MAX_SHAPE_BITMAP_PIXELS = 2048 * 2048;
 const SHAPE_RADIUS_SCALE = 0.5;
 const DEFAULT_SHAPE_RATIO = 0.5;
 const MAX_CACHED_SHAPE_SKINS = 256;
@@ -18,6 +21,17 @@ const normalizeShapeType = value => {
 };
 
 const normalizeShapeRatio = value => clamp(toNumber(value, DEFAULT_SHAPE_RATIO), 0, 1);
+
+// Very large canvases are disproportionately expensive to clear, rasterize and upload to WebGL. Render the
+// same geometry into a bounded texture and lower its bitmap resolution so Scratch Render keeps the original
+// logical size. Using one uniform factor preserves circles and the shape's aspect ratio; limiting area instead
+// of each axis also keeps thin shapes sharp without allocating unnecessary pixels.
+const getShapeBitmapResolution = (logicalWidth, logicalHeight) => SHAPE_BITMAP_RESOLUTION * Math.min(
+    1,
+    Math.sqrt(MAX_SHAPE_BITMAP_PIXELS / (
+        logicalWidth * logicalHeight * SHAPE_BITMAP_RESOLUTION * SHAPE_BITMAP_RESOLUTION
+    ))
+);
 
 const getShapeBitmapCacheKey = configuration => {
     const shape = normalizeShapeType(configuration.shape);
@@ -75,33 +89,31 @@ const createLineBitmap = configuration => {
     const point2 = configuration.position2 || {};
     const thickness = Math.max(0.001, Math.abs(toNumber(configuration.thickness, 5)));
     const padding = thickness / 2;
-    const width = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(
-        Math.abs(toNumber(point2.x) - toNumber(point1.x)) + (padding * 2)
-    )));
-    const height = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(
-        Math.abs(toNumber(point2.y) - toNumber(point1.y)) + (padding * 2)
-    )));
+    const deltaX = toNumber(point2.x) - toNumber(point1.x);
+    const deltaY = toNumber(point2.y) - toNumber(point1.y);
+    const logicalWidth = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(Math.abs(deltaX) + (padding * 2))));
+    const logicalHeight = Math.max(2, Math.min(MAX_SHAPE_SIZE, Math.ceil(Math.abs(deltaY) + (padding * 2))));
     const canvas = document.createElement('canvas');
     const context = canvas.getContext && canvas.getContext('2d');
     if (!context) return null;
+    const bitmapResolution = getShapeBitmapResolution(logicalWidth, logicalHeight);
+    const width = Math.max(2, Math.round(logicalWidth * bitmapResolution));
+    const height = Math.max(2, Math.round(logicalHeight * bitmapResolution));
     canvas.width = width;
     canvas.height = height;
-    const deltaX = toNumber(point2.x) - toNumber(point1.x);
-    const deltaY = toNumber(point2.y) - toNumber(point1.y);
     context.clearRect(0, 0, width, height);
     context.beginPath();
     // Scratch's world coordinates grow upward while a canvas bitmap's pixel coordinates grow downward.
     // Flip only the local bitmap Y coordinate so the scene transform can keep using Scratch coordinates.
     // Center around the endpoint midpoint, including any extra pixels from rounding the canvas size.
-    context.moveTo((width - deltaX) / 2, (height + deltaY) / 2);
-    context.lineTo((width + deltaX) / 2, (height - deltaY) / 2);
-    context.lineWidth = thickness;
+    context.moveTo((width - (deltaX * bitmapResolution)) / 2, (height + (deltaY * bitmapResolution)) / 2);
+    context.lineTo((width + (deltaX * bitmapResolution)) / 2, (height - (deltaY * bitmapResolution)) / 2);
+    context.lineWidth = thickness * bitmapResolution;
     context.strokeStyle = typeof configuration.color === 'string' && configuration.color ?
         configuration.color : '#ffffff';
     context.globalAlpha = clamp(toNumber(configuration.opacity, 100), 0, 100) / 100;
     context.stroke();
-    // Line geometry is already measured in Scratch units, unlike 2x costume bitmaps.
-    canvas.movieBitmapResolution = 1;
+    canvas.movieBitmapResolution = bitmapResolution;
     canvas.reusable = false;
     return canvas;
 };
@@ -142,17 +154,7 @@ const createShapeBitmap = configuration => {
     const diameter = Math.max(2, Math.ceil(outerRadius * scale * 2));
     const logicalBitmapWidth = Math.max(requestedWidth, diameter);
     const logicalBitmapHeight = Math.max(requestedHeight, diameter);
-    // Very large canvases are disproportionately expensive to clear, rasterize and upload to WebGL. Render the
-    // same geometry into a bounded texture and lower its bitmap resolution so Scratch Render keeps the original
-    // logical size. Using one uniform factor preserves circles and the shape's aspect ratio; limiting area instead
-    // of each axis also keeps thin shapes sharp without allocating unnecessary pixels.
-    const bitmapScale = Math.min(
-        1,
-        Math.sqrt(MAX_SHAPE_BITMAP_PIXELS / (
-            logicalBitmapWidth * logicalBitmapHeight * BITMAP_RESOLUTION * BITMAP_RESOLUTION
-        ))
-    );
-    const bitmapResolution = BITMAP_RESOLUTION * bitmapScale;
+    const bitmapResolution = getShapeBitmapResolution(logicalBitmapWidth, logicalBitmapHeight);
     const width = Math.max(2, Math.round(logicalBitmapWidth * bitmapResolution));
     const height = Math.max(2, Math.round(logicalBitmapHeight * bitmapResolution));
     canvas.width = width;

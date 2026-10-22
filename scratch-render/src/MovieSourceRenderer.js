@@ -101,6 +101,9 @@ class MovieSourceRenderer {
         const resource = key ? new MovieTexture(this.renderer) :
             (this.dynamicImages.get(request.owner) || new MovieTexture(this.renderer));
         resource.dynamic = !key;
+        // Shapes and text are rasterized above the stage resolution and drawn at any scale. Nearest-neighbor
+        // sampling would drop their anti-aliased edges, so filter them smoothly.
+        resource.nearest = !(kind === 'shape' || kind === 'line' || kind === 'text');
         resource.update(bitmap, resolution, request.rotationCenter);
         if (key) {
             this.images.set(key, resource);
