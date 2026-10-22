@@ -588,7 +588,7 @@ class ShadingPluginManager extends EventEmitter {
     }
 
     /**
-     * Offer the plugins embedded in a project opened from a share link. The editor lists them for the user;
+     * Offer the plugins embedded in an opened project file. The editor lists them for the user;
      * installing any of them still goes through requestReview().
      * @param {Array<{id: string, name: string, version: string, file: Blob}>} plugins Embedded plugins.
      */

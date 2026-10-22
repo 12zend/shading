@@ -16,8 +16,6 @@ const MODAL_RESTORE_POINTS = 'restorePointModal';
 const MODAL_FONTS = 'fontsModal';
 const MODAL_UNKNOWN_PLATFORM = 'unknownPlatformModal';
 const MODAL_INVALID_PROJECT = 'invalidProjectModal';
-const MODAL_SHARE_LINK = 'shareLinkModal';
-const MODAL_OPEN_SHARE_LINK = 'openShareLinkModal';
 
 const initialState = {
     [MODAL_BACKDROP_LIBRARY]: false,
@@ -34,9 +32,7 @@ const initialState = {
     [MODAL_RESTORE_POINTS]: false,
     [MODAL_FONTS]: false,
     [MODAL_UNKNOWN_PLATFORM]: false,
-    [MODAL_INVALID_PROJECT]: false,
-    [MODAL_SHARE_LINK]: false,
-    [MODAL_OPEN_SHARE_LINK]: false
+    [MODAL_INVALID_PROJECT]: false
 };
 
 const reducer = function (state, action) {
@@ -111,12 +107,6 @@ const openUnknownPlatformModal = function () {
 const openInvalidProjectModal = function () {
     return openModal(MODAL_INVALID_PROJECT);
 };
-const openShareLinkModal = function () {
-    return openModal(MODAL_SHARE_LINK);
-};
-const openOpenShareLinkModal = function () {
-    return openModal(MODAL_OPEN_SHARE_LINK);
-};
 const closeBackdropLibrary = function () {
     return closeModal(MODAL_BACKDROP_LIBRARY);
 };
@@ -162,12 +152,6 @@ const closeUnknownPlatformModal = function () {
 const closeInvalidProjectModal = function () {
     return closeModal(MODAL_INVALID_PROJECT);
 };
-const closeShareLinkModal = function () {
-    return closeModal(MODAL_SHARE_LINK);
-};
-const closeOpenShareLinkModal = function () {
-    return closeModal(MODAL_OPEN_SHARE_LINK);
-};
 export {
     reducer as default,
     initialState as modalsInitialState,
@@ -186,8 +170,6 @@ export {
     openFontsModal,
     openUnknownPlatformModal,
     openInvalidProjectModal,
-    openShareLinkModal,
-    openOpenShareLinkModal,
     closeBackdropLibrary,
     closeCostumeLibrary,
     closeLoadingProject,
@@ -202,7 +184,5 @@ export {
     closeRestorePointModal,
     closeFontsModal,
     closeUnknownPlatformModal,
-    closeInvalidProjectModal,
-    closeShareLinkModal,
-    closeOpenShareLinkModal
+    closeInvalidProjectModal
 };

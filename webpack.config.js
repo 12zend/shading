@@ -50,19 +50,8 @@ const base = {
                 {from: /^\/install\/?$/, to: '/install.html'},
                 {from: /^\/editor\/?$/, to: '/index.html'},
                 {from: /^\/player\/?$/, to: '/player.html'},
-                {from: /^\/addons\/?$/, to: '/addons.html'},
-                {from: /^\/p\/[A-Za-z0-9_-]*\/?$/, to: '/index.html'}
+                {from: /^\/addons\/?$/, to: '/addons.html'}
             ]
-        },
-        // Share links live at /p/<payload>. The app is built with relative asset URLs, so a page
-        // opened there requests /p/js/..., /p/static/... and so on: serve those from the root,
-        // like cloudflare/worker.mjs does in production.
-        before: app => {
-            app.use((req, res, next) => {
-                const match = /^\/p\/([^?]*[/.][^?]*)(\?.*)?$/.exec(req.url);
-                if (match) req.url = `/${match[1]}${match[2] || ''}`;
-                next();
-            });
         }
     },
     output: {
@@ -90,19 +79,6 @@ const base = {
     },
     module: {
         rules: [{
-            test: /node_modules[\\/]brotli-wasm[\\/]pkg\.web[\\/]brotli_wasm\.js$/,
-            loader: path.resolve(__dirname, 'scripts/brotli-wasm-loader.js')
-        }, {
-            // Share links load this module at runtime; emit it as a plain file instead of
-            // webpack 4's experimental WebAssembly modules.
-            test: /brotli_wasm_bg\.wasm$/,
-            type: 'javascript/auto',
-            loader: 'file-loader',
-            options: {
-                name: 'static/assets/[name].[contenthash:8].[ext]',
-                esModule: false
-            }
-        }, {
             test: /node_modules[\\/]scratch-paint[\\/]src[\\/].*\.(jsx?|svg)$/,
             enforce: 'pre',
             loader: path.resolve(__dirname, 'scripts/penguinmod-paint-theme-loader.js')
@@ -206,14 +182,7 @@ const makeExtensionConfig = () => {
             publicPath: ''
         },
         module: {
-            rules: base.module.rules.map(rule => (
-                String(rule.test) === String(/brotli_wasm_bg\.wasm$/) ? {
-                    test: rule.test,
-                    type: rule.type,
-                    loader: 'url-loader',
-                    options: {limit: true, mimetype: 'application/wasm', esModule: false}
-                } : rule
-            )).concat([{
+            rules: base.module.rules.concat([{
                 test: /\.(svg|png|wav|mp3|gif|jpg|woff2|hex)$/,
                 loader: 'url-loader',
                 options: {limit: true, esModule: false}

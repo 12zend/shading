@@ -1,5 +1,3 @@
-import {resolveSharePath} from './share-route.js';
-
 // Script paths are content-hashed and cached as immutable, so the single-page-application
 // fallback (index.html) must never be served for them: a cache would keep that HTML for a year
 // and the chunk (e.g. addons) would never load again.
@@ -21,11 +19,10 @@ const fetchAsset = async (request, env, url) => {
 export default {
     fetch (request, env) {
         const url = new URL(request.url);
-        const sharePath = resolveSharePath(url.pathname);
-        if (sharePath) {
-            const assetURL = new URL(url);
-            assetURL.pathname = sharePath;
-            return fetchAsset(new Request(assetURL, request), env, assetURL);
+        if (url.pathname === '/p' || url.pathname.startsWith('/p/')) {
+            // Share links (/p/<payload>) were removed. Send old links to the editor instead of a broken page;
+            // the empty fragment drops a payload after "#" so it is not read as a project id.
+            return Response.redirect(new URL('/#', url).href, 302);
         }
         return fetchAsset(request, env, url);
     }

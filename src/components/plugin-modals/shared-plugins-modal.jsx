@@ -5,7 +5,7 @@ import Modal from '../../containers/modal.jsx';
 import {localize} from '../../lib/movie-block-l10n';
 import styles from './plugin-modals.css';
 
-// Shown after a project opened from a share link that carries plugins. It lists every plugin the project uses
+// Shown after opening a project file that carries plugins. It lists every plugin the project uses
 // and whether this editor already has it. Nothing is installed here: the chosen plugins go on to the regular
 // install review (security scan and signature check) before any of their code runs.
 

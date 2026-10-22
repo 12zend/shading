@@ -28,26 +28,8 @@ import {ProjectUnsharedError, ProjectFetchError} from './tw-load-project-error';
 
 import VM from 'scratch-vm';
 import {fetchProjectMeta} from './tw-project-meta-fetcher-hoc.jsx';
-import {
-    buildSharePath,
-    getRootPath,
-    isSharePath,
-    takePendingSharePayload
-} from './share-link/share-link-url';
 import {takeHandoff, takePendingHandoffId} from './engine-handoff';
 import {getProjectTitleFromFileName} from './project-file';
-
-const replaceURL = path => {
-    try {
-        history.replaceState(null, '', path);
-    } catch (error) {
-        // Browsers refuse URLs past their length limit; the project is loaded either way.
-        log.warn('Could not update the URL', error);
-    }
-};
-
-const isHTTP = () => typeof location !== 'undefined' &&
-    (location.protocol === 'http:' || location.protocol === 'https:');
 
 // TW: Temporary hack for project tokens
 const fetchProjectToken = async projectId => {
@@ -84,11 +66,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             super(props);
             bindAll(this, [
                 'fetchProject',
-                'fetchHandoffProject',
-                'fetchSharedProject'
+                'fetchHandoffProject'
             ]);
-            this.sharedProjectTitle = null;
-            this.sharedPlugins = null;
+            this.pendingProjectTitle = null;
             this.handoffFileHandle = null;
             storage.setProjectHost(props.projectHost);
             storage.setProjectToken(props.projectToken);
@@ -122,22 +102,14 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             if (this.props.isShowingProject && !prevProps.isShowingProject) {
                 this.props.onProjectUnchanged();
                 // Runs after TitledHOC (a child) has reset the title of the new project.
-                if (this.sharedProjectTitle !== null) {
-                    if (this.sharedProjectTitle) this.props.onSetProjectTitle(this.sharedProjectTitle);
-                    this.sharedProjectTitle = null;
+                if (this.pendingProjectTitle !== null) {
+                    if (this.pendingProjectTitle) this.props.onSetProjectTitle(this.pendingProjectTitle);
+                    this.pendingProjectTitle = null;
                 }
                 // A file handed over by another engine keeps saving to the file it came from.
                 if (this.handoffFileHandle) {
                     this.props.onSetFileHandle(this.handoffFileHandle);
                     this.handoffFileHandle = null;
-                }
-                // The project is open (plugin blocks show as placeholders); now offer its embedded plugins.
-                if (this.sharedPlugins) {
-                    const manager = this.props.vm.shadingPlugins;
-                    if (manager && typeof manager.offerSharedPlugins === 'function') {
-                        manager.offerSharedPlugins(this.sharedPlugins);
-                    }
-                    this.sharedPlugins = null;
                 }
             }
             if (this.props.isShowingProject && (prevProps.isLoadingProject || prevProps.isCreatingNew)) {
@@ -150,18 +122,11 @@ const ProjectFetcherHOC = function (WrappedComponent) {
             // the project shouldn't be running while fetching the new project
             this.props.vm.clear();
             this.props.vm.quit();
-            this.sharedProjectTitle = null;
-            this.sharedPlugins = null;
+            this.pendingProjectTitle = null;
             this.handoffFileHandle = null;
 
             const handoffId = takePendingHandoffId();
             if (handoffId) return this.fetchHandoffProject(handoffId, loadingState);
-            const sharePayload = takePendingSharePayload();
-            if (sharePayload) return this.fetchSharedProject(sharePayload, loadingState);
-            if (isHTTP() && isSharePath()) {
-                // Leaving a shared project (e.g. File > New): drop its link from the address bar.
-                replaceURL(`${getRootPath()}${location.search}`);
-            }
 
             let assetPromise;
             // In case running in node...
@@ -229,27 +194,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
                         log.warn('The project file opened in another version of the editor was not found.');
                         return this.fetchProject(this.props.reduxProjectId, loadingState);
                     }
-                    this.sharedProjectTitle = getProjectTitleFromFileName(file.fileName);
+                    this.pendingProjectTitle = getProjectTitleFromFileName(file.fileName);
                     this.handoffFileHandle = file.fileHandle;
                     this.props.onFetchedProjectData(file.data, loadingState);
-                })
-                .catch(err => {
-                    this.props.onError(err);
-                    log.error(err);
-                });
-        }
-        fetchSharedProject (payload, loadingState) {
-            // Loaded lazily: the codec and its Brotli WebAssembly are only needed for share links.
-            return import(/* webpackChunkName: "share-link" */ './share-link/share-link')
-                .then(shareLink => shareLink.decodeShareLink(payload))
-                .then(({title, projectData, plugins}) => {
-                    this.sharedProjectTitle = title;
-                    this.sharedPlugins = plugins.length ? plugins : null;
-                    if (isHTTP()) {
-                        const sharePath = buildSharePath(payload);
-                        if (`${location.pathname}${location.hash}` !== sharePath) replaceURL(sharePath);
-                    }
-                    this.props.onFetchedProjectData(projectData, loadingState);
                 })
                 .catch(err => {
                     this.props.onError(err);

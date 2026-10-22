@@ -32,13 +32,7 @@ import CloudVariablesToggler from '../../containers/tw-cloud-toggler.jsx';
 import TWSaveStatus from './tw-save-status.jsx';
 import TWNews from './tw-news.jsx';
 
-import {
-    openTipsLibrary,
-    openSettingsModal,
-    openRestorePointModal,
-    openShareLinkModal,
-    openOpenShareLinkModal
-} from '../../reducers/modals';
+import {openTipsLibrary, openSettingsModal, openRestorePointModal} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -218,8 +212,6 @@ class MenuBar extends React.Component {
             'handleClickSaveAsCopy',
             'handleClickPackager',
             'handleClickRestorePoints',
-            'handleClickShareLink',
-            'handleClickOpenShareLink',
             'handleClickPlugins',
             'handleClickTutorial',
             'handleClickShare',
@@ -278,14 +270,6 @@ class MenuBar extends React.Component {
     }
     handleClickRestorePoints () {
         this.props.onClickRestorePoints();
-        this.props.onRequestCloseFile();
-    }
-    handleClickShareLink () {
-        this.props.onClickShareLink();
-        this.props.onRequestCloseFile();
-    }
-    handleClickOpenShareLink () {
-        this.props.onClickOpenShareLink();
         this.props.onRequestCloseFile();
     }
     handleClickShare (waitForUpdate) {
@@ -668,23 +652,6 @@ class MenuBar extends React.Component {
                                             )}
                                         </SB3Downloader>
                                     </MenuSection>
-                                    <MenuSection>
-                                        <MenuItem onClick={this.handleClickShareLink}>
-                                            <FormattedMessage
-                                                defaultMessage="Create share link…"
-                                                // eslint-disable-next-line max-len
-                                                description="Menu bar item that compresses the whole project into a link"
-                                                id="movie.menuBar.createShareLink"
-                                            />
-                                        </MenuItem>
-                                        <MenuItem onClick={this.handleClickOpenShareLink}>
-                                            <FormattedMessage
-                                                defaultMessage="Open share link…"
-                                                description="Menu bar item that opens a pasted share link"
-                                                id="movie.menuBar.openShareLink"
-                                            />
-                                        </MenuItem>
-                                    </MenuSection>
                                     {this.props.onClickPackager && (
                                         <MenuSection>
                                             <MenuItem
@@ -938,14 +905,7 @@ class MenuBar extends React.Component {
                                 <ShareButton className={styles.menuBarButton} />
                             </MenuBarItemTooltip>
                         </div>
-                    ) : (this.props.canUseShareLinks && (
-                        <div className={classNames(styles.menuBarItem)}>
-                            <ShareButton
-                                className={styles.menuBarButton}
-                                onClick={this.handleClickShareLink}
-                            />
-                        </div>
-                    ))}
+                    ) : null}
                     {this.props.canRemix && (
                         <div className={classNames(styles.menuBarItem)}>
                             {remixButton}
@@ -992,7 +952,6 @@ MenuBar.propTypes = {
     canRemix: PropTypes.bool,
     canSave: PropTypes.bool,
     canShare: PropTypes.bool,
-    canUseShareLinks: PropTypes.bool,
     className: PropTypes.string,
     errors: PropTypes.arrayOf(PropTypes.shape({
         sprite: PropTypes.string,
@@ -1036,8 +995,6 @@ MenuBar.propTypes = {
     onClickAddonSettings: PropTypes.func,
     onClickPackager: PropTypes.func,
     onClickRestorePoints: PropTypes.func,
-    onClickShareLink: PropTypes.func,
-    onClickOpenShareLink: PropTypes.func,
     onClickEdit: PropTypes.func,
     onClickFile: PropTypes.func,
     onClickLogin: PropTypes.func,
@@ -1099,7 +1056,6 @@ const mapStateToProps = (state, ownProps) => {
         isRtl: state.locales.isRtl,
         isUpdating: getIsUpdating(loadingState),
         isShowingProject: getIsShowingProject(loadingState),
-        canUseShareLinks: getIsShowingProject(loadingState),
         locale: state.locales.locale,
         loginMenuOpen: loginMenuOpen(state),
         modeMenuOpen: modeMenuOpen(state),
@@ -1137,8 +1093,6 @@ const mapDispatchToProps = dispatch => ({
     onRequestOpenAbout: () => dispatch(openAboutMenu()),
     onRequestCloseAbout: () => dispatch(closeAboutMenu()),
     onClickRestorePoints: () => dispatch(openRestorePointModal()),
-    onClickShareLink: () => dispatch(openShareLinkModal()),
-    onClickOpenShareLink: () => dispatch(openOpenShareLinkModal()),
     onClickSettings: () => dispatch(openSettingsMenu()),
     onClickSettingsModal: () => {
         dispatch(closeEditMenu());

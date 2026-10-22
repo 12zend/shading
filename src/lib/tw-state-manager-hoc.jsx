@@ -19,7 +19,6 @@ import {
 } from '../reducers/mode';
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
-import {isSharePath} from './share-link/share-link-url';
 
 /* eslint-disable no-alert */
 
@@ -280,10 +279,6 @@ class PathRouter extends Router {
     }
 
     generateURL ({isPlayerOnly, isFullScreen}) {
-        if (!isPlayerOnly && !isFullScreen && isSharePath()) {
-            // Keep a share link in the address bar so it can be reloaded or copied again.
-            return `${location.pathname}${location.search}${location.hash}`;
-        }
         const prefix = process.env.ROOT && process.env.ROOT !== '/' ?
             `/${process.env.ROOT.replace(/^\/+|\/+$/g, '')}` : '';
         let path = prefix || '/';

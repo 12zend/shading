@@ -55,7 +55,6 @@
     "balance-text": "3.3.1",
     "base64-loader": "1.0.0",
     "bowser": "1.9.4",
-    "brotli-wasm": "^3.0.1",
     "classnames": "2.2.6",
     "computed-style-to-inline-style": "3.0.0",
     "cookie": "0.5.0",
