@@ -160,6 +160,17 @@ const _persistentReadImage = async asset => {
 const readImage = new AsyncLimiter(_persistentReadImage, 25);
 
 /**
+ * Bitmap resolution a loaded costume keeps. Resolution 1 bitmaps are scaled up to 2, the standard for Scratch 3;
+ * higher resolutions are kept so that large images keep their pixels while fitting the stage.
+ * @param {*} bitmapResolution Resolution stored with the costume.
+ * @returns {number} Resolution of the loaded costume, at least 2.
+ */
+const getLoadedBitmapResolution = bitmapResolution => {
+    const resolution = Number(bitmapResolution);
+    return Number.isFinite(resolution) && resolution > 2 ? resolution : 2;
+};
+
+/**
  * Return a promise to fetch a bitmap from storage and return it as a canvas
  * If the costume has bitmapResolution 1, it will be converted to bitmapResolution 2 here (the standard for Scratch 3)
  * If the costume has a text layer asset, which is a text part from Scratch 1.4, then this function
@@ -236,7 +247,7 @@ const fetchBitmapCanvas_ = function (costume, runtime, rotationCenter) {
                 costume.rotationCenterX = rotationCenter[0];
                 costume.rotationCenterY = rotationCenter[1];
             }
-            costume.bitmapResolution = 2;
+            costume.bitmapResolution = getLoadedBitmapResolution(costume.bitmapResolution);
 
             // Clean up the costume object
             delete costume.textLayerMD5;
@@ -308,28 +319,26 @@ const loadBitmap_ = function (costume, runtime, _rotationCenter) {
         .then(({image, rotationCenter}) => {
             // createBitmapSkin does the right thing if costume.rotationCenter is undefined.
             // That will be the case if you upload a bitmap asset or create one by taking a photo.
+            // fetchBitmapCanvas has set the costume's final bitmap resolution (2 or higher) and scaled its
+            // rotation center to match.
+            const resolution = costume.bitmapResolution;
             let center;
             if (rotationCenter) {
-                // fetchBitmapCanvas will ensure that the costume's bitmap resolution is 2 and its rotation center is
-                // scaled to match, so it's okay to always divide by 2.
                 center = [
-                    rotationCenter[0] / 2,
-                    rotationCenter[1] / 2
+                    rotationCenter[0] / resolution,
+                    rotationCenter[1] / resolution
                 ];
             }
 
-            // TODO: costume.bitmapResolution will always be 2 at this point because of fetchBitmapCanvas_, so we don't
-            // need to pass it in here.
-            costume.skinId = runtime.renderer.createBitmapSkin(image, costume.bitmapResolution, center);
+            costume.skinId = runtime.renderer.createBitmapSkin(image, resolution, center);
             const renderSize = runtime.renderer.getSkinSize(costume.skinId);
-            costume.size = [renderSize[0] * 2, renderSize[1] * 2]; // Actual size, since all bitmaps are resolution 2
+            costume.size = [renderSize[0] * resolution, renderSize[1] * resolution]; // Actual size in pixels
 
             if (!rotationCenter) {
                 rotationCenter = runtime.renderer.getSkinRotationCenter(costume.skinId);
-                // Actual rotation center, since all bitmaps are resolution 2
-                costume.rotationCenterX = rotationCenter[0] * 2;
-                costume.rotationCenterY = rotationCenter[1] * 2;
-                costume.bitmapResolution = 2;
+                // Actual rotation center in pixels
+                costume.rotationCenterX = rotationCenter[0] * resolution;
+                costume.rotationCenterY = rotationCenter[1] * resolution;
             }
 
             if (runtime.isPackaged) {
@@ -405,7 +414,7 @@ const loadCostumeFromAsset = function (costume, runtime, optVersion) {
     const AssetType = runtime.storage.AssetType;
     let rotationCenter;
     // Use provided rotation center and resolution if they are defined. Bitmap resolution
-    // should only ever be 1 or 2.
+    // is 1, 2, or higher for large images (see getLoadedBitmapResolution).
     if (typeof costume.rotationCenterX === 'number' && !isNaN(costume.rotationCenterX) &&
             typeof costume.rotationCenterY === 'number' && !isNaN(costume.rotationCenterY)) {
         rotationCenter = [costume.rotationCenterX, costume.rotationCenterY];

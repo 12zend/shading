@@ -90,6 +90,66 @@ const createVMAsset = function (storage, assetType, dataFormat, data) {
     };
 };
 
+// Longest edge kept for an uploaded bitmap. Larger images are scaled down smoothly to it, which is still well
+// above the 1920x1080 a stage is shown at full screen.
+const MAX_BITMAP_COSTUME_EDGE = 4096;
+
+const loadImage = function (dataURI) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        // eslint-disable-next-line prefer-promise-reject-errors
+        image.onerror = () => reject('Image load failed');
+        image.src = dataURI;
+    });
+};
+
+/**
+ * Prepare an uploaded bitmap for a costume. Scratch shrinks bitmaps larger than twice the stage until they fit
+ * it, resampling with nearest-neighbor, so a high-resolution image is blurred down to the stage size. Keep the
+ * pixels of such images instead and raise the costume's bitmap resolution: the costume still fits the stage
+ * but stays sharp when the stage is shown larger.
+ * @param {BitmapAdapter} bitmapAdapter Adapter that handles images up to twice the stage size.
+ * @param {ArrayBuffer | string} fileData The image data, or a data URI.
+ * @param {string} fileType The MIME type of this file.
+ * @param {number} stageWidth Stage width.
+ * @param {number} stageHeight Stage height.
+ * @returns {Promise<{data: Uint8Array, bitmapResolution: number, isPNG: boolean}>} The costume's image data,
+ *     its bitmap resolution and whether the data was re-encoded as a PNG.
+ */
+const importBitmapCostume = function (bitmapAdapter, fileData, fileType, stageWidth, stageHeight) {
+    const dataURI = fileData instanceof ArrayBuffer ?
+        bitmapAdapter.convertBinaryToDataURI(fileData, fileType) : fileData;
+    return loadImage(dataURI).then(image => {
+        const fitResolution = Math.max(image.width / stageWidth, image.height / stageHeight);
+        const scale = Math.min(1, MAX_BITMAP_COSTUME_EDGE / Math.max(image.width, image.height));
+        if (!(fitResolution * scale > 2)) {
+            return bitmapAdapter.importBitmap(fileData, fileType)
+                .then(data => ({data, bitmapResolution: 2, isPNG: true}));
+        }
+        if (scale === 1) {
+            return {
+                data: fileData instanceof ArrayBuffer ?
+                    new Uint8Array(fileData) : bitmapAdapter.convertDataURIToBinary(fileData),
+                bitmapResolution: fitResolution,
+                isPNG: fileType === 'image/png'
+            };
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        return {
+            data: bitmapAdapter.convertDataURIToBinary(canvas.toDataURL()),
+            bitmapResolution: fitResolution * (canvas.width / image.width),
+            isPNG: true
+        };
+    });
+};
+
 /**
  * Handles loading a costume or a backdrop using the provided, context-relevant information.
  * @param {ArrayBuffer | string} fileData The costume data to load (this can be a base64 string
@@ -183,13 +243,14 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
         const height = vm.runtime.stageHeight;
         bitmapAdapter.setStageSize(width, height);
     }
-    const addCostumeFromBuffer = function (dataBuffer) {
+    const addCostumeFromBuffer = function (dataBuffer, bitmapResolution) {
         const vmCostume = createVMAsset(
             storage,
             assetType,
             costumeFormat,
             dataBuffer
         );
+        if (bitmapResolution) vmCostume.bitmapResolution = bitmapResolution;
         handleCostume([vmCostume]);
     };
 
@@ -201,7 +262,12 @@ const costumeUpload = function (fileData, fileType, vm, handleCostume, handleErr
         addCostumeFromBuffer(new Uint8Array(fileData));
     } else {
         // otherwise it's a bitmap
-        bitmapAdapter.importBitmap(fileData, fileType).then(addCostumeFromBuffer)
+        importBitmapCostume(bitmapAdapter, fileData, fileType, vm.runtime.stageWidth, vm.runtime.stageHeight)
+            .then(({data, bitmapResolution, isPNG}) => {
+                // A JPEG kept as uploaded stays a JPEG; one that had to be scaled is stored as a PNG.
+                if (bitmapResolution > 2 && isPNG) costumeFormat = storage.DataFormat.PNG;
+                addCostumeFromBuffer(data, bitmapResolution > 2 ? bitmapResolution : null);
+            })
             .catch(handleError);
     }
 };
@@ -307,6 +373,7 @@ const spriteUpload = function (fileData, fileType, spriteName, vm, handleSprite,
 export {
     handleFileUpload,
     costumeUpload,
+    importBitmapCostume,
     soundUpload,
     spriteUpload
 };
