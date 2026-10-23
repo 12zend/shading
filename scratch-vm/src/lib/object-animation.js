@@ -1,4 +1,5 @@
 import {calculateEasingProgress, normalizeEasingType} from './movie-easing';
+import {getTimeRangeProgress, isTimeInRange} from './time-range';
 
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
@@ -215,13 +216,9 @@ const getObjectTime = (runtime, util, configuration = null) => {
 const calculateAnimationValue = ({from, to, start, end, easing, power = 2}, time) => {
     const startValue = finiteNumber(from);
     const endValue = finiteNumber(to);
-    const startTime = finiteNumber(start);
-    const endTime = finiteNumber(end);
-    const currentTime = finiteNumber(time);
-    if (endTime <= startTime) return currentTime < startTime ? startValue : endValue;
-    if (currentTime <= startTime) return startValue;
-    if (currentTime >= endTime) return endValue;
-    const progress = (currentTime - startTime) / (endTime - startTime);
+    const progress = getTimeRangeProgress(finiteNumber(time), finiteNumber(start), finiteNumber(end));
+    if (progress <= 0) return startValue;
+    if (progress >= 1) return endValue;
     const eased = calculateEasingProgress(normalizeEasingType(easing), progress, power);
     return startValue + ((endValue - startValue) * eased);
 };
@@ -271,12 +268,7 @@ const calculateWiggleValue = (frequency, amount, seed, time) => {
 const isTimeWithin = (time, start, end) => {
     // Imported time fields may have unbounded endpoints; number inputs preserve them.
     const boundary = value => (Math.abs(Number(value)) === Infinity ? Number(value) : finiteNumber(value));
-    const first = boundary(start);
-    const second = boundary(end);
-    const minimum = Math.min(first, second);
-    const maximum = Math.max(first, second);
-    const current = finiteNumber(time);
-    return current >= minimum && current <= maximum;
+    return isTimeInRange(finiteNumber(time), boundary(start), boundary(end));
 };
 
 const posterizeTime = (time, framerate) => {

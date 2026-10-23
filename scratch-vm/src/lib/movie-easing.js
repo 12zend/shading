@@ -1,4 +1,5 @@
 import compilerCompatBlocks from '../compiler/compat-blocks';
+import {getTimeRangeProgress} from './time-range';
 
 /**
  * Easing calculations used by Movie's timer-driven easing reporter block.
@@ -185,13 +186,10 @@ const calculateEasingValue = ({
     const endTime = finiteNumber(t1);
     const currentTime = finiteNumber(timer);
 
-    if (endTime <= startTime) {
-        return currentTime < startTime ? startValue : endValue;
-    }
-    if (currentTime <= startTime) return startValue;
-    if (currentTime >= endTime) return endValue;
+    const progress = getTimeRangeProgress(currentTime, startTime, endTime);
+    if (progress <= 0) return startValue;
+    if (progress >= 1) return endValue;
 
-    const progress = clamp01((currentTime - startTime) / (endTime - startTime));
     const easingType = EASING_TYPES.includes(type) ? type : 'PowerIn';
     const easedProgress = calculateEasingProgress(easingType, progress, power);
     const angularSpeed = finiteNumber(speed);

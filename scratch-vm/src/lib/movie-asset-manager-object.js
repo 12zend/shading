@@ -15,6 +15,7 @@ import {
     once,
     toNumber
 } from './movie-asset-manager-utils';
+import {isTimeInRange} from './time-range';
 
 const MAX_OBJECT_IMAGE_PLANES = 256;
 const BAKED_LAYER_DEPTH = 480;
@@ -534,7 +535,8 @@ const MovieAssetManagerObjectMethods = {
         const end = Math.min(requestedEnd, mediaEnd);
         const mediaTime = Math.max(0, (currentTime - start) * speed);
         return {
-            active: currentTime >= start && currentTime < end,
+            // The requested range uses the shared draw-range formula; the clip itself is over at its end.
+            active: isTimeInRange(currentTime, start, requestedEnd) && currentTime < mediaEnd,
             end,
             frame: this.getVideoFrameNumber(video, (mediaTime * video.frameRate) + 1),
             mediaTime,

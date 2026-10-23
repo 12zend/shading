@@ -27,6 +27,7 @@ import {
     posterizeTime
 } from './object-animation';
 import {localize, resolveLocale} from './movie-block-l10n';
+import {isTimeInRange} from './time-range';
 
 const EXTENSION_ID = 'objects';
 const PRIMARY = '#4968D4';
@@ -1544,8 +1545,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         const end = finiteNumber(args.END);
         const minimum = Math.min(start, end);
         const maximum = Math.max(start, end);
-        const parentTime = getObjectTime(this.runtime, util);
-        if (parentTime < minimum || parentTime > maximum) return;
+        if (!isTimeInRange(getObjectTime(this.runtime, util), minimum, maximum)) return;
         this.runTimeScope({type: 'range', start: minimum, end: maximum}, util);
     }
 

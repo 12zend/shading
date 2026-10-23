@@ -5,6 +5,7 @@ import {
     TIMELINE_DEFAULT_DURATION
 } from './movie-asset-manager-constants';
 import {ROTATION_ORDERS} from 'scratch-render/src/model-runtime';
+import {isTimeInRange} from './time-range';
 
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -176,9 +177,11 @@ const normalizeRotationOrder = value => {
 // Shared time-window gate for object and shape draws. Missing bounds stay unbounded.
 const isWithinTimeWindow = (timeWindow, currentTime) => {
     if (!timeWindow) return true;
-    const startTime = toNumber(timeWindow.start, Number.NEGATIVE_INFINITY);
-    const endTime = toNumber(timeWindow.end, Number.POSITIVE_INFINITY);
-    return currentTime >= startTime && currentTime <= endTime;
+    return isTimeInRange(
+        currentTime,
+        toNumber(timeWindow.start, Number.NEGATIVE_INFINITY),
+        toNumber(timeWindow.end, Number.POSITIVE_INFINITY)
+    );
 };
 
 const normalizeScale = (value, fallback = 1) => Math.max(0, toNumber(value, fallback));
