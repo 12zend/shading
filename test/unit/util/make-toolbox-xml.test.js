@@ -1,11 +1,12 @@
 import makeToolboxXML from '../../../src/lib/make-toolbox-xml';
 
 describe('Movie toolbox categories', () => {
-    test('exposes secondary easing controls', () => {
+    test('exposes the elastic speed control without the retired secondary easing inputs', () => {
         const toolbox = makeToolboxXML(false, false, 'target', []);
 
         expect(toolbox).toContain('<block type="operator_easing">');
-        expect(toolbox).toContain('<value name="STRENGTH"><shadow type="math_number"><field name="NUM">1</field>');
+        expect(toolbox).toContain('<value name="SPEED"><shadow type="math_number"><field name="NUM">0</field>');
+        expect(toolbox).not.toContain('<value name="STRENGTH">');
     });
 
     test('offers procedural shape blocks directly below Draw in Objects', () => {

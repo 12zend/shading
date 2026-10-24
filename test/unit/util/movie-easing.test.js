@@ -1,7 +1,6 @@
 import VM from 'scratch-vm';
 
 import installMovieEasing, {
-    EASING_SECONDARY_TYPES,
     EASING_TYPES,
     calculateEasingValue
 } from '../../../src/lib/movie-easing';
@@ -14,7 +13,6 @@ const calculate = (overrides = {}, timer = 0.5) => calculateEasingValue({
     t1: 1,
     power: 2,
     speed: 0,
-    strength: 1,
     ...overrides
 }, timer);
 
@@ -31,10 +29,6 @@ describe('Movie easing', () => {
             'ExpoOut',
             'ExpoInOut'
         ]);
-    });
-
-    test('provides the secondary easing types', () => {
-        expect(EASING_SECONDARY_TYPES).toEqual(['Elastic', 'Bounce']);
     });
 
     test('uses the timer to interpolate between values', () => {
@@ -70,24 +64,13 @@ describe('Movie easing', () => {
     test('speed applies elastic oscillation using elapsed seconds', () => {
         const timer = 0.25;
         const speed = Math.PI / timer;
-        expect(calculate({type: 'PowerIn', type2: 'Elastic', speed}, timer)).toBeCloseTo(193.75);
+        expect(calculate({type: 'PowerIn', speed}, timer)).toBeCloseTo(193.75);
     });
 
-    test('strength scales the secondary easing independently from power', () => {
-        const timer = 0.25;
-        const speed = Math.PI / timer;
-        expect(calculate({type: 'PowerIn', type2: 'Elastic', speed, strength: 0}, timer))
-            .toBeCloseTo(6.25);
-        expect(calculate({type: 'PowerIn', type2: 'Elastic', speed, strength: 0.5}, timer))
-            .toBeCloseTo(100);
-    });
-
-    test('supports the Bounce secondary easing and preserves endpoints', () => {
+    test('elastic oscillation preserves both endpoints', () => {
         const speed = Math.PI * 2;
-        expect(calculate({type2: 'Bounce', speed, strength: 1}, 0.25)).toBeGreaterThan(25);
-        expect(calculate({type2: 'Bounce', speed, strength: 0}, 0.25)).toBeCloseTo(6.25);
-        expect(calculate({type2: 'Bounce', speed, strength: 1}, 0)).toBe(0);
-        expect(calculate({type2: 'Bounce', speed, strength: 1}, 1)).toBe(100);
+        expect(calculate({speed}, 0)).toBe(0);
+        expect(calculate({speed}, 1)).toBe(100);
     });
 
     test('supports descending value ranges', () => {
@@ -108,17 +91,26 @@ describe('Movie easing', () => {
 
         const result = vm.runtime._primitives.operator_easing({
             TYPE: 'PowerIn',
-            TYPE2: 'Bounce',
             V0: 0,
             V1: 100,
             T0: 0,
             T1: 1,
             POWER: 2,
-            SPEED: 0,
-            STRENGTH: 0
+            SPEED: 0
         }, util);
 
         expect(util.ioQuery).toHaveBeenCalledWith('clock', 'projectTimer');
         expect(result).toBe(25);
+    });
+
+    test('ignores the retired Bounce and strength arguments of saved blocks', () => {
+        const vm = new VM();
+        installMovieEasing(vm);
+        const util = {ioQuery: () => 0.25};
+        const args = {TYPE: 'PowerIn', V0: 0, V1: 100, T0: 0, T1: 1, POWER: 2, SPEED: Math.PI / 0.25};
+
+        expect(vm.runtime._primitives.operator_easing({...args, TYPE2: 'Bounce', STRENGTH: 0}, util))
+            .toBeCloseTo(vm.runtime._primitives.operator_easing(args, util));
+        expect(vm.runtime._primitives.operator_easing(args, util)).toBeCloseTo(193.75);
     });
 });

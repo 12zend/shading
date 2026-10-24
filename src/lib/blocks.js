@@ -309,25 +309,19 @@ export default function (vm, locale = 'en') {
         'ExpoOut',
         'ExpoInOut'
     ].map(type => [type, type]);
-    const easingType2Options = [
-        ['Elastic', 'Elastic'],
-        ['Bounce', 'Bounce']
-    ];
 
     ScratchBlocks.Blocks.operator_easing = {
         init: function () {
             this.jsonInit(operatorReporter(
-                'easing type: %1 %2 value: %3 ~ %4 time: %5 ~ %6 power: %7 speed: %8 strength: %9',
+                'easing type: %1 value: %2 ~ %3 time: %4 ~ %5 power: %6 speed: %7',
                 [
                     {type: 'field_dropdown', name: 'TYPE', options: easingTypeOptions},
-                    {type: 'field_dropdown', name: 'TYPE2', options: easingType2Options},
                     numberInput('V0'),
                     numberInput('V1'),
                     numberInput('T0'),
                     numberInput('T1'),
                     numberInput('POWER'),
-                    numberInput('SPEED'),
-                    numberInput('STRENGTH')
+                    numberInput('SPEED')
                 ]
             ));
         }

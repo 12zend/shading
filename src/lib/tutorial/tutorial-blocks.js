@@ -147,15 +147,14 @@ const drawText = (key, options = {}) => node(key, 'objects_draw', {
 });
 
 const easing = (key, type, v0, v1, t0, t1, power) => node(key, 'operator_easing', {
-    fields: {TYPE: type, TYPE2: 'Elastic'},
+    fields: {TYPE: type},
     inputs: {
         V0: num(v0),
         V1: num(v1),
         T0: num(t0),
         T1: num(t1),
         POWER: num(power),
-        SPEED: num(0),
-        STRENGTH: num(1)
+        SPEED: num(0)
     }
 });
 

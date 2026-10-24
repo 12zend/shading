@@ -130,7 +130,7 @@
         {
           "list": [
             "**type** — the shape of the motion. *In* starts slowly, *Out* ends slowly, *InOut* does both; Power, Circ and Expo are different curves. Here: PowerOut.",
-            "**Elastic / Bounce**, **speed** and **strength** — add a wobble on top. Speed 0 turns it off.",
+            "**speed** — adds an elastic wobble on top. Speed 0 turns it off.",
             "**value 480 ~ 0** — the value at the start and at the end",
             "**time 0 ~ 1.5** — when the change happens, in seconds. Before 0 s it is 480; after 1.5 s it stays at 0.",
             "**power 3** — how strong the curve is (larger means sharper)"
