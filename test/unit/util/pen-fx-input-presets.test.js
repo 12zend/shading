@@ -5,6 +5,7 @@ import {
     normalizePackage
 } from '../../../src/lib/pen-fx/custom-shaders';
 import {PRESET_FIELD_NAME, installInputPresetFields, setBlockInputs} from '../../../src/lib/plugins/ui/input-presets';
+import {createPenFXClass} from '../../helpers/official-plugins';
 
 const presetPackage = (presets, inputs) => ({
     format: CUSTOM_SHADER_FORMAT,
@@ -93,6 +94,33 @@ describe('PenFX input presets', () => {
         expect(penFX.warmGlow).toHaveBeenCalledWith({RADIUS: 3}, expect.anything());
         penFX.shader_preset_pack_warm_glow({}, {target, thread: {peekStack: () => 'other'}});
         expect(queued).toHaveLength(1);
+    });
+});
+
+describe('official plugin presets', () => {
+    const vm = {runtime: {renderer: {}}, getLocale: () => 'ja'};
+    const customShaders = new (createPenFXClass(vm))().customShaders;
+    const opcodes = customShaders.getPresetOpcodes();
+
+    test('the main effect blocks offer presets', () => {
+        for (const opcode of ['bloom', 'deepGlow', 'gaussianBlur', 'lensBlur', 'vignette', 'filmGrain', 'colorGrade',
+            'edgeDetection', 'wavy', 'paletteSwap', 'pixelSort']) {
+            expect(opcodes).toContain(opcode);
+        }
+    });
+
+    test.each(opcodes)('%s presets have Japanese names and keep the mix', opcode => {
+        const english = customShaders.getInputPresets(opcode, 'en');
+        const japanese = customShaders.getInputPresets(opcode, 'ja');
+        const owner = Array.from(customShaders.packages.values()).find(descriptor => descriptor.blocks
+            .some(block => block.opcode === opcode && block.presets));
+        const block = owner.blocks.find(candidate => candidate.opcode === opcode);
+        const names = owner.translations.ja[block.id].presets;
+        for (const preset of english.presets) {
+            expect(names[preset.id]).toEqual(expect.any(String));
+            expect(preset.values).not.toHaveProperty('MIX');
+        }
+        expect(japanese.presets.map(preset => preset.name)).toEqual(english.presets.map(preset => names[preset.id]));
     });
 });
 

@@ -4,6 +4,7 @@ import {getOwnerBlockId} from '../../../src/lib/plugins/ui/preset-picker';
 // Color grading is provided by the official plugin shading-plugins/color-grading.
 const {CATEGORIES, PRESETS, findPreset} = requirePluginModule('color-grading', 'lib/presets.js');
 const {colorGradingUniforms} = requirePluginModule('color-grading', 'lib/uniforms.js');
+const {LOOK_INPUTS, lookInputValues} = requirePluginModule('color-grading', 'lib/look-inputs.js');
 
 const createPenFX = (runtime = {}) => {
     const PenFX = createPenFXClass({runtime: Object.assign({renderer: {}}, runtime)}, ['color-grading']);
@@ -101,6 +102,61 @@ describe('Easy color grading', () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+
+    test('shows the look\'s primary corrections as inputs, filled from the first look', () => {
+        const block = createPenFX().getInfo().blocks.find(entry => entry.opcode === 'easyColorGrading');
+        expect(block.text).toBe('color grading [PRESET] temp: [TEMP] tint: [TINT] exposure: [EXPOSURE] ' +
+            'contrast: [CONTRAST] highlights: [HIGHLIGHTS] shadows: [SHADOWS] saturation: [SATURATION] ' +
+            'vibrance: [VIBRANCE] mix: [MIX] %');
+        expect(Object.keys(block.arguments)).toEqual(['PRESET'].concat(LOOK_INPUTS.map(input => input.id), 'MIX'));
+        expect(block.arguments.TEMP.defaultValue).toBe(4);
+        expect(block.arguments.CONTRAST.defaultValue).toBe(15);
+        expect(block.arguments.HIGHLIGHTS.defaultValue).toBe(0);
+        expect(lookInputValues(findPreset('golden-hour'))).toEqual({
+            TEMP: 35, TINT: 5, EXPOSURE: 0.15, CONTRAST: 0, HIGHLIGHTS: -10, SHADOWS: 10, SATURATION: 0, VIBRANCE: 20
+        });
+    });
+
+    test('grades with the inputs in place of the look\'s primary values and keeps the look for blank inputs', () => {
+        const penFX = createPenFX();
+        penFX.engine = {colorGrading: jest.fn()};
+        const golden = findPreset('golden-hour');
+        const lookArgs = Object.assign({PRESET: 'golden-hour', MIX: 100}, lookInputValues(golden));
+
+        penFX.easyColorGrading(lookArgs, {target: {}});
+        penFX.easyColorGrading(Object.assign({}, lookArgs, {TEMP: -20, SATURATION: '30'}), {target: {}});
+        penFX.easyColorGrading({PRESET: 'golden-hour', MIX: 100, TEMP: '', TINT: ' '}, {target: {}});
+
+        const calls = penFX.engine.colorGrading.mock.calls;
+        expect(calls[0][0]).toEqual(colorGradingUniforms(golden));
+        expect(calls[1][0]).toEqual(colorGradingUniforms(Object.assign({}, golden, {
+            primary: Object.assign({}, golden.primary, {temperature: -20, saturation: 30})
+        })));
+        expect(calls[2][0]).toEqual(colorGradingUniforms(golden));
+    });
+
+    test('fills the inputs of look blocks saved before they existed', () => {
+        const vm = {runtime: {renderer: {}}};
+        new (createPenFXClass(vm, ['color-grading']))(); // eslint-disable-line no-new
+        const project = {targets: [{blocks: {
+            look: {opcode: 'penfx_easyColorGrading', inputs: {PRESET: [1, 'menu'], MIX: [1, [4, '100']]}},
+            menu: {opcode: 'penfx_menu_colorGradingPresets', shadow: true, fields: {colorGradingPresets: ['vivid', null]}},
+            dynamic: {opcode: 'penfx_easyColorGrading', inputs: {PRESET: [3, 'reporter', 'menu2']}},
+            current: {opcode: 'penfx_easyColorGrading', inputs: {PRESET: [1, 'menu'], TEMP: [1, [4, '7']]}},
+            variable: [12, 'my variable', 'id', 0, 0]
+        }}]};
+        for (const listener of vm.shadingPlugins.loadListeners) listener(project);
+
+        const {blocks} = project.targets[0];
+        const vivid = lookInputValues(findPreset('vivid'));
+        for (const input of LOOK_INPUTS) {
+            expect(blocks.look.inputs[input.id]).toEqual([1, [4, String(vivid[input.id])]]);
+            // A reporter chooses the look at run time, so blank inputs keep whichever look it picks.
+            expect(blocks.dynamic.inputs[input.id]).toEqual([1, [4, '']]);
+        }
+        expect(blocks.current.inputs.TEMP).toEqual([1, [4, '7']]);
+        expect(blocks.current.inputs.TINT).toEqual([1, [4, String(vivid.TINT)]]);
     });
 
     test('previews the command block that owns the menu shadow', () => {
