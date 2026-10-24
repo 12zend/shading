@@ -190,6 +190,38 @@ class FontManager extends EventEmitter {
 
     /**
      * @param {number} index Corresponds to index from getFonts()
+     * @param {string} family Untrusted font name input
+     * @returns {string} The font's name after renaming, or '' if there is no font at index
+     */
+    renameFont (index, family) {
+        const font = this.fonts[index];
+        if (!font) {
+            return '';
+        }
+        const requested = removeInvalidCharacters(family).trim();
+        if (!requested) {
+            return font.family;
+        }
+        const otherFamilies = this.fonts
+            .filter(i => i !== font)
+            .map(i => i.family);
+        const newFamily = StringUtil.caseInsensitiveUnusedName(
+            requested,
+            font.system ? otherFamilies : [...otherFamilies, ...this.restrictedFonts]
+        );
+        if (newFamily === font.family) {
+            return newFamily;
+        }
+        font.family = newFamily;
+        if (!font.system) {
+            this.updateRenderer();
+        }
+        this.changed();
+        return newFamily;
+    }
+
+    /**
+     * @param {number} index Corresponds to index from getFonts()
      */
     deleteFont (index) {
         const [removed] = this.fonts.splice(index, 1);

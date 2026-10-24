@@ -30,6 +30,7 @@
     background: $ui-tertiary;
 }
 
+.name-label,
 .preview-input-label,
 .size-control {
     display: flex;
@@ -56,6 +57,18 @@
     font: inherit;
 }
 
+.name-input {
+    width: 12rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $input-background;
+    color: $text-primary;
+    font: inherit;
+}
+
+.name-input:focus,
 .preview-input:focus {
     outline: 3px solid $looks-transparent;
     border-color: $looks-secondary;

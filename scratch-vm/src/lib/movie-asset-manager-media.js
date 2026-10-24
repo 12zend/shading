@@ -221,6 +221,45 @@ const MovieAssetManagerMediaMethods = {
         this.vm.refreshWorkspace();
     },
 
+    renameFont (index, requestedName) {
+        const fontManager = this.runtime.fontManager;
+        const font = fontManager.fonts[index];
+        if (!font) return '';
+        const oldName = font.family;
+        const newName = fontManager.renameFont(index, requestedName);
+        if (newName === oldName) return newName;
+        this.renameFontReferences(oldName, newName);
+        this.runtime.emitProjectChanged();
+        this.vm.refreshWorkspace();
+        return newName;
+    },
+
+    renameFontReferences (oldName, newName) {
+        const lowerOldName = oldName.toLowerCase();
+        const lowerOldDrawAsset = `text:${lowerOldName}`;
+        for (const target of this.runtime.targets || []) {
+            if (!target.isOriginal || !target.blocks) continue;
+            const blocks = target.blocks._blocks;
+            for (const id in blocks) {
+                const block = blocks[id];
+                const fields = block.fields || {};
+                if (block.opcode === 'looks_font' && fields.FONT &&
+                    String(fields.FONT.value).toLowerCase() === lowerOldName) {
+                    fields.FONT.value = newName;
+                }
+                if (fields.ASSET && String(fields.ASSET.value).toLowerCase() === lowerOldDrawAsset) {
+                    fields.ASSET.value = `text:${newName}`;
+                }
+                const mutation = block.mutation;
+                if (block.opcode === 'objects_draw' && mutation && mutation.source === 'text' &&
+                    String(mutation.asset).toLowerCase() === lowerOldName) {
+                    mutation.asset = newName;
+                }
+            }
+            target.blocks.resetCache();
+        }
+    },
+
     reorderFont (oldIndex, newIndex) {
         const fonts = this.runtime.fontManager.fonts;
         if (!fonts[oldIndex]) return;

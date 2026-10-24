@@ -29,6 +29,11 @@ const messages = defineMessages({
         description: 'Description shown when a project has no custom fonts',
         id: 'movie.font.emptyDescription'
     },
+    name: {
+        defaultMessage: 'Font name',
+        description: 'Label for the font name input',
+        id: 'movie.font.name'
+    },
     previewText: {
         defaultMessage: 'The quick brown fox jumps over the lazy dog. 文字のプレビュー 123',
         description: 'Default text shown in the font preview',
@@ -54,6 +59,8 @@ class FontTab extends React.Component {
             'handleDrop',
             'handleExport',
             'handleFontsChanged',
+            'handleNameChange',
+            'handleNameKeyDown',
             'handlePreviewTextChange',
             'handleSelect',
             'handleSizeChange',
@@ -109,6 +116,15 @@ class FontTab extends React.Component {
         const font = this.getFonts()[index];
         if (!font || !font.data) return;
         downloadBlob(`${font.name}.${font.format}`, new Blob([font.data], {type: `font/${font.format}`}));
+    }
+
+    handleNameChange (event) {
+        const name = this.manager.renameFont(this.state.selectedFontIndex, event.target.value);
+        if (name && event.target.value !== name) event.target.value = name;
+    }
+
+    handleNameKeyDown (event) {
+        if (event.key === 'Enter') event.target.blur();
     }
 
     handlePreviewTextChange (event) {
@@ -185,6 +201,16 @@ class FontTab extends React.Component {
                 {selectedFont ? (
                     <div className={styles.editor}>
                         <div className={styles.toolbar}>
+                            <label className={styles.nameLabel}>
+                                <span>{this.props.intl.formatMessage(messages.name)}</span>
+                                <input
+                                    className={styles.nameInput}
+                                    defaultValue={selectedFont.name}
+                                    key={`${this.state.selectedFontIndex}:${selectedFont.name}`}
+                                    onBlur={this.handleNameChange}
+                                    onKeyDown={this.handleNameKeyDown}
+                                />
+                            </label>
                             <label className={styles.previewInputLabel}>
                                 <span>{this.props.intl.formatMessage(messages.previewLabel)}</span>
                                 <input

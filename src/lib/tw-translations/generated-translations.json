@@ -1794,6 +1794,7 @@
     "ja": {
         "movie.font.emptyDescription": "TTF、OTF、WOFF、WOFF2ファイルを読み込み、プレビューや見た目ブロックで使用できます。",
         "movie.font.emptyTitle": "このプロジェクトにフォントを追加",
+        "movie.font.name": "フォント名",
         "movie.font.previewLabel": "プレビューテキスト",
         "movie.font.previewText": "素早い茶色の狐は怠けた犬を飛び越える。文字のプレビュー 123",
         "movie.font.sizeLabel": "サイズ",
