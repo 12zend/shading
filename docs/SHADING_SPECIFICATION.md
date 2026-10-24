@@ -270,6 +270,7 @@ PenFX は `penfx` extension として登録され、ツールボックス上で�
 - version 2 adapter は既定 PenFX が公開する implementation opcode に限る。
 - compile/link に失敗した package は登録しない。
 - package のソースは `.shade` プロジェクト内の `penFXShaders` に保存できる。組み込み package は重複保存しない。
+- Shader タブで編集する shader と manifest のない GLSL は、uniform 宣言から入力欄を作る。宣言行末尾のコメントの `@color`（`vec3`/`vec4`）、`@menu`（`int`/`float`）、`@default` で色・メニュー・初期値を指定でき、Shader タブの引数一覧からも注釈を書き込める。
 
 ## 5. タイムライン
 

@@ -16,7 +16,7 @@ Custom Shaders とブレンド（`use [TYPE] blending mode`）だけです。
 
 ## 最小構成
 
-manifest を使わない場合、zip 内のすべての `.glsl` が引数なしのコマンドブロックになります。ファイル名がブロック名になります。
+manifest を使わない場合、zip 内のすべての `.glsl` がコマンドブロックになります。ファイル名がブロック名になり、GLSL の uniform 宣言から入力欄が自動で作られます（[uniform 注釈](#uniform-注釈)）。
 
 ```text
 my-shaders.zip
@@ -24,7 +24,33 @@ my-shaders.zip
 └── distort.glsl
 ```
 
-この方式では GLSL から uniform の型や初期値を推測しません。ブロックに入力欄を追加する場合は manifest を使ってください。
+## uniform 注釈
+
+Shader タブで編集した shader、単体の `.glsl`、manifest のない zip では、予約名以外の uniform がそのまま Looks ブロックの入力欄になります。
+`float` は数値、`int` は整数、`bool` は真偽値、`vec2`〜`vec4` は成分ごとの数値になります。
+
+uniform 宣言と同じ行の末尾コメントに注釈を書くと、入力欄の種類と初期値を変えられます。
+
+```glsl
+uniform vec3 u_tint;    // @color #6b56d9
+uniform vec4 u_glow;    // @color #ffffff
+uniform int u_mode;     // @menu soft, hard, glow @default hard
+uniform float u_amount; // @default 8
+uniform vec2 u_offset;  // @default 0.5, 0
+```
+
+| 注釈 | 使える uniform | ブロック UI | GLSL へ渡す値 |
+| --- | --- | --- | --- |
+| `@color [#rrggbb]` | `vec3`、`vec4` | カラーピッカー（初期値は省略時 `#ffffff`。`#rgb` も可） | RGB を 0〜1 に正規化。`vec4` の alpha は `1` |
+| `@menu A, B, ...` | `int`、`float` | メニュー（1〜32 項目、カンマ区切り、重複不可） | 選んだ項目の 0 始まり index |
+| `@default 値` | すべて | 初期値。`@menu` では項目名、`@color` では色、ベクトルでは 1 個または成分数のカンマ区切り | — |
+
+- 注釈は宣言の `;` の後ろ、同じ行のコメント（`//` または `/* */`）だけから読みます。前の行のコメントや、`;` の後ろに別のコードがある行の注釈は使いません。
+- `uniform vec3 u_a, u_b; // @color` のように 1 文で複数宣言した場合は、すべての uniform に同じ注釈が付きます。
+- 対応しない注釈（`@todo` など）は無視します。型に合わない注釈や不正な値はコンパイルエラーとして表示され、ブロックは更新されません。
+- Shader タブ下部の `Block arguments` の入力名を押すと、種類（数値・色・メニュー）、色、メニュー項目を選べます。選んだ内容は上の注釈として GLSL に書き込まれます。
+
+manifest を使う package では注釈を読みません。manifest の `inputs` で型を指定してください。
 
 ## 推奨構成
 

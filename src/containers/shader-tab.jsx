@@ -4,6 +4,7 @@ import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+import ShaderArguments from '../components/shader-editor/shader-arguments.jsx';
 import ShaderCodeEditor from '../components/shader-editor/shader-code-editor.jsx';
 import blankShaderIcon from '../components/asset-panel/icon--add-blank-costume.svg';
 import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
@@ -33,7 +34,8 @@ const messages = defineMessages({
     },
     emptyDescription: {
         defaultMessage: 'Write a WebGL 1 fragment shader or upload a .glsl file. ' +
-            'Uniforms become PenFX block arguments automatically.',
+            'Uniforms become PenFX block arguments automatically; ' +
+            'end a uniform line with // @color or // @menu a, b for a color picker or a menu.',
         description: 'Description shown when a project has no editable shaders',
         id: 'movie.shader.emptyDescription'
     },
@@ -71,16 +73,6 @@ const messages = defineMessages({
         defaultMessage: 'Fix shader errors',
         description: 'Status shown when shader compilation fails',
         id: 'movie.shader.compileError'
-    },
-    arguments: {
-        defaultMessage: 'Block arguments',
-        description: 'Heading before automatically generated shader block arguments',
-        id: 'movie.shader.arguments'
-    },
-    noArguments: {
-        defaultMessage: 'No custom uniforms — the block has no arguments.',
-        description: 'Message shown when a shader has no custom uniforms',
-        id: 'movie.shader.noArguments'
     }
 });
 
@@ -422,27 +414,13 @@ class ShaderTab extends React.Component {
                             onChange={this.handleSourceChange}
                             onSave={this.handleApply}
                         />
-                        <div className={styles.uniformBar}>
-                            <span className={styles.uniformHeading}>
-                                {this.props.intl.formatMessage(messages.arguments)}
-                            </span>
-                            <div className={styles.uniformList}>
-                                {draftInputs.length ? draftInputs.map(input => (
-                                    <span
-                                        className={styles.uniformChip}
-                                        key={input.id}
-                                        title={`${input.uniform}${typeof input.component === 'undefined' ? '' :
-                                            `.${'xyzw'[input.component]}`} · ${input.type}`}
-                                    >
-                                        {input.label}
-                                    </span>
-                                )) : (
-                                    <span className={styles.uniformEmpty}>
-                                        {this.props.intl.formatMessage(messages.noArguments)}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
+                        <ShaderArguments
+                            editable={selectedShader.autoInputs}
+                            inputs={draftInputs}
+                            key={selectedShader.key}
+                            source={this.state.draftSource}
+                            onSourceChange={this.handleSourceChange}
+                        />
                         {this.state.error ? (
                             <div
                                 className={styles.errorPanel}
