@@ -90,7 +90,7 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.l10n.getLocale()`, `localize(locale, en, ja)` | 表示言語 |
 | `shading.files.list()`, `has(path)`, `text(path)`, `json(path)`, `bytes(path)`, `url(path)` | zip 内のファイル（同期）。`url` は blob URL |
 | `shading.extensions.register(extension)` | 独自カテゴリ（Scratch 拡張と同じ `getInfo()` 形式） |
-| `shading.penfx.registerBlocks(package, options)` | Looks カテゴリへブロック群を追加（[shader package](PENFX_SHADER_PACKAGES.md) 形式、`implementation` で PenFX メソッドを呼ぶ） |
+| `shading.penfx.registerBlocks(package, options)` | Looks カテゴリへブロック群を追加（[shader package](PENFX_SHADER_PACKAGES.md) 形式、`implementation` で PenFX メソッドを呼ぶ。block の `presets` で複数の入力をまとめて設定するプリセットメニューが付く） |
 | `shading.penfx.addToolbox({id, order, label, blocks, menus})` | Looks カテゴリへ任意のブロック定義を追加 |
 | `shading.penfx.extendPenFX(install)` | ブロックが呼ぶ PenFX メソッドを追加（`install({PenFX, vm})` 形式でも可） |
 | `shading.penfx.extendEngine(install, {onResize})` | 描画エンジンにメソッドを追加 |
@@ -98,7 +98,8 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.penfx.helpers`, `vertexShader`, `createPreviewRenderer()` | 引数変換ヘルパー、頂点シェーダー、サムネイル用の描画 |
 | `shading.blocks.define(categoryId, (ScratchBlocks, {locale, vm}) => …)` | ブロック定義のカスタマイズ（独自フィールドなど） |
 | `shading.blocks.filterToolboxXML(categoryId, xml => xml)` | ツールボックス XML の調整 |
-| `shading.ui.definePresetMenuBlock(ScratchBlocks, options)` | サムネイル付きプリセット選択メニュー |
+| `shading.ui.definePresetMenuBlock(ScratchBlocks, options)` | サムネイル付きプリセット選択メニュー。`source.onSelect(entry, block)` で選択時に他の入力も設定できる |
+| `shading.ui.setBlockInputs(block, values)` | Blockly ブロックの入力（`{入力名: 値}`）をまとめて書き換える。reporter が入った入力は変更しない |
 | `shading.gui.addTab({id, label, icon, component \| mount})` | コスチューム・音などと並ぶタブ。React コンポーネントか DOM の `mount(container)` |
 | `shading.gui.addStyle(css)`, `addMenuItem({label, onClick})`, `notify(message)` | CSS、管理画面のコマンド、通知 |
 | `shading.gui.react` | エディターの React / ReactDOM / `AssetPanel` など |

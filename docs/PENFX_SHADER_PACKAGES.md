@@ -138,6 +138,7 @@ tint-wave.zip
 | `implementation` | v2 のみ | 既存 PenFX pipeline へ接続する adapter 定義 |
 | `groupEffectScope` | 任意 | `expanded` の場合、grouping 内でも全画面を入力として effect を実行 |
 | `separatorBefore` | 任意 | `true` の場合、このブロックの前に palette separator を表示 |
+| `presets` | 任意 | 複数の入力をまとめて設定するプリセット。最大 64 個（プラグインは 256 個） |
 
 `text` を書く場合、すべての input id を 1 回以上含め、定義していない placeholder を置かないでください。`text` を省略すると `name label: [ID] ...` の順で自動生成されます。
 
@@ -168,6 +169,32 @@ tint-wave.zip
 `id` は `A-Z`、`0-9`、`_` を使用します。`uniform` は `u_` から始めてください。省略した場合は `AMOUNT` → `u_amount` のように作られます。
 
 `number`、`integer`、`angle` では `scale`（初期値 1）と `offset`（初期値 0）を利用できます。たとえば UI の 0〜100% を GLSL の 0〜1 に渡すには `"scale": 0.01` を指定します。
+
+### プリセット
+
+`presets` を持つ block には、名前の右に「プリセット」メニューが付きます。メニューはサムネイル（この block への入力に
+各プリセットを適用したもの）を一覧表示し、選ぶと `values` に書いた入力がまとめて書き換わります（1 回の取り消しで戻せます）。
+`values` に書いていない入力（`MIX` など）はそのままです。プリセットは編集時の入力補助なので project には保存されず、
+block は常に入力の値で動きます。既存の block に後から追加しても保存済みの project は変わりません。
+
+```json
+{
+  "id": "bloom",
+  "presets": [
+    {"id": "soft-glow", "name": "Soft Glow", "values": {"THRESHOLD": 0.65, "RADIUS": 16, "VALUE": 0.5}},
+    {"id": "warm-glow", "name": "Warm Glow", "values": {"THRESHOLD": 0.6, "RADIUS": 18, "COLOR": "#ffb070"}}
+  ]
+}
+```
+
+| フィールド | 必須 | 内容 |
+| --- | --- | --- |
+| `id` | 推奨 | block 内で一意の小文字英数字と `-`。省略時は `name` から作成 |
+| `name` | はい | メニューに表示する名前 |
+| `values` | はい | `{入力 id: 値}`。数値系は有限の数、`color` は `#rrggbb`、`menu` は `items` のいずれか。`boolean` は指定不可 |
+
+プリセットを選んでも、reporter を差し込んだ入力は変更しません。プラグインの `translations` では
+`{"bloom": {"presets": {"soft-glow": "ソフトグロー"}}}` のようにプリセット名を翻訳できます。
 
 ## schema version 2: program と PenFX adapter
 

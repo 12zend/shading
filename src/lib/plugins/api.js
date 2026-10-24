@@ -11,6 +11,7 @@ import {BLEND_MODES} from 'scratch-render/src/pen-fx/constants';
 import {localize, resolveLocale} from '../movie-block-l10n';
 import {decodeText} from './archive';
 import {createPresetPickerField, definePresetMenuBlock} from './ui/preset-picker';
+import {setBlockInputs} from './ui/input-presets';
 import {EffectPreviewRenderer} from './ui/preview-renderer';
 import {createSampleSnapshot, isBlankSnapshot} from './ui/snapshots';
 
@@ -270,6 +271,8 @@ const createPluginAPI = (manager, record) => {
                 ScratchBlocks, vm, getLocale(), source),
             definePresetMenuBlock: (ScratchBlocks, options) => definePresetMenuBlock(
                 ScratchBlocks, vm, getLocale(), options),
+            // Fill a Blockly block's inputs ({inputName: value}), e.g. from a preset picker's onSelect.
+            setBlockInputs,
             createSampleSnapshot,
             isBlankSnapshot
         }),

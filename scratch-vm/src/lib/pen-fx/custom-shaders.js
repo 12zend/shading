@@ -31,6 +31,8 @@ const MAX_INPUTS = 24;
 const MAX_PLUGIN_BLOCKS = 4096;
 const MAX_PLUGIN_INPUTS = 128;
 const MAX_PROGRAMS = 64;
+const MAX_PRESETS = 64;
+const MAX_PLUGIN_PRESETS = 256;
 const STANDARD_UNIFORMS = new Set(['u_image', 'u_resolution', 'u_time', 'u_frame']);
 const INPUT_TYPES = new Set(['angle', 'boolean', 'color', 'costume', 'integer', 'menu', 'number', 'string']);
 const BLOCK_TYPES = new Set(['command', 'reporter']);
@@ -73,13 +75,19 @@ const localizeShaderBlock = (packageDescriptor, shaderBlock, locale) => {
     const translations = packageDescriptor.translations && packageDescriptor.translations[locale];
     const translation = translations && translations[shaderBlock.id];
     if (!translation) return shaderBlock;
-    return Object.assign({}, shaderBlock, {
+    const localized = Object.assign({}, shaderBlock, {
         name: translation.name || shaderBlock.name,
         text: translation.text || shaderBlock.text,
         inputs: shaderBlock.inputs.map(input => Object.assign({}, input, {
             label: translation.labels && translation.labels[input.id] || input.label
         }))
     });
+    if (shaderBlock.presets) {
+        localized.presets = shaderBlock.presets.map(preset => Object.assign({}, preset, {
+            name: translation.presets && translation.presets[preset.id] || preset.name
+        }));
+    }
+    return localized;
 };
 
 const bindableProgramNames = () => new Set(Object.keys(coreProgramSources).concat(getRegisteredProgramNames()));
@@ -246,6 +254,54 @@ const normalizeInput = (rawInput, blockLabel, shaderInput = true, trusted = fals
     return result;
 };
 
+// Presets fill several inputs of a block at once from a menu in the editor. They only change the inputs they list;
+// the block itself always runs on its inputs, so a preset never has to be saved with the project.
+const normalizePresetValue = (input, value, label) => {
+    if (input.type === 'menu') {
+        const item = String(value);
+        if (!input.items.includes(item)) throw new Error(`${label} must be one of the input's menu items.`);
+        return item;
+    }
+    if (input.type === 'color') {
+        const hex = String(value);
+        if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`${label} must be a six-digit hex color.`);
+        return hex;
+    }
+    // Boolean inputs have no field to write into.
+    if (input.type === 'boolean') throw new Error(`${label} cannot be set by a preset.`);
+    if (input.type === 'string' || input.type === 'costume') return assertString(value, label, 1024);
+    return normalizeNumber(value, NaN, label);
+};
+
+const normalizePresets = (rawPresets, inputs, blockLabel, trusted) => {
+    const maximum = trusted ? MAX_PLUGIN_PRESETS : MAX_PRESETS;
+    if (!Array.isArray(rawPresets) || rawPresets.length > maximum) {
+        throw new Error(`${blockLabel} must define no more than ${maximum} presets.`);
+    }
+    const inputsById = new Map(inputs.map(input => [input.id, input]));
+    const usedIds = new Set();
+    return rawPresets.map(rawPreset => {
+        if (!rawPreset || typeof rawPreset !== 'object' || Array.isArray(rawPreset)) {
+            throw new Error(`${blockLabel} has an invalid preset.`);
+        }
+        const id = normalizeId(rawPreset.id || slug(rawPreset.name), `${blockLabel} preset id`);
+        if (usedIds.has(id)) throw new Error(`${blockLabel} has a duplicate preset id: ${id}.`);
+        usedIds.add(id);
+        const name = assertString(rawPreset.name || humanize(id), `${blockLabel} preset ${id} name`, 64);
+        const rawValues = rawPreset.values;
+        if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues) || !Object.keys(rawValues).length) {
+            throw new Error(`${blockLabel} preset ${id} must set at least one input.`);
+        }
+        const values = {};
+        for (const key of Object.keys(rawValues)) {
+            const input = inputsById.get(key);
+            if (!input) throw new Error(`${blockLabel} preset ${id} sets unknown input ${key}.`);
+            values[key] = normalizePresetValue(input, rawValues[key], `${blockLabel} preset ${id} input ${key}`);
+        }
+        return {id, name, values};
+    });
+};
+
 const normalizeBlock = (rawBlock, source, usedIds, trusted = false) => {
     if (!rawBlock || typeof rawBlock !== 'object' || Array.isArray(rawBlock)) {
         throw new Error('Each shader block must be an object.');
@@ -350,6 +406,10 @@ const normalizeBlock = (rawBlock, source, usedIds, trusted = false) => {
         autoInputs: rawBlock.autoInputs === true
     };
     if (groupEffectScope) normalizedBlock.groupEffectScope = groupEffectScope;
+    if (rawBlock.presets !== undefined) {
+        const presets = normalizePresets(rawBlock.presets, normalizedInputs, `Shader block ${id}`, trusted);
+        if (presets.length) normalizedBlock.presets = presets;
+    }
     return normalizedBlock;
 };
 
@@ -725,7 +785,7 @@ class PenFXCustomShaderManager extends EventEmitter {
      * @param {number} [options.order] Toolbox position; lower comes first.
      * @param {string|object|Function} [options.label] Toolbox label; defaults to the package name.
      * @param {string} [options.menuNamespace] Package id used for menu names (keeps legacy menu opcodes).
-     * @param {object} [options.translations] {locale: {blockId: {name, text, labels}}}.
+     * @param {object} [options.translations] {locale: {blockId: {name, text, labels, presets: {presetId: name}}}}.
      * @param {object} [options.legacyMenus] Extra static menus {name: items}.
      * @param {object|Function} [options.menus] Extra menus {name: menuInfo} or (locale) => menus.
      * @param {Array|Function} [options.before] Raw toolbox entries shown before the package blocks.
@@ -1005,6 +1065,46 @@ class PenFXCustomShaderManager extends EventEmitter {
         });
     }
 
+    _captureInputPreview (util) {
+        const penFX = this.penFX;
+        const thread = util && util.thread;
+        const blockId = thread && typeof thread.peekStack === 'function' ? thread.peekStack() || null : null;
+        if (!blockId || typeof penFX.hasInputPreviewListener !== 'function' || !penFX.hasInputPreviewListener(blockId)) {
+            return;
+        }
+        penFX._safe(engine => penFX.captureInputPreview(engine, blockId), {target: util && util.target});
+    }
+
+    /**
+     * Presets of a bound block, localized, for the editor's preset menu.
+     * @param {string} opcode Block opcode without the extension prefix.
+     * @param {string} [locale] Locale.
+     * @returns {?{name: string, inputs: Array<object>, presets: Array<object>}} The block's presets, or null.
+     */
+    getInputPresets (opcode, locale = resolveLocale(null, this.vm)) {
+        for (const packageDescriptor of this.packages.values()) {
+            for (const shaderBlock of packageDescriptor.blocks) {
+                if (!shaderBlock.presets || opcodeFor(packageDescriptor.id, shaderBlock.id, shaderBlock.opcode) !== opcode) {
+                    continue;
+                }
+                const displayBlock = localizeShaderBlock(packageDescriptor, shaderBlock, locale);
+                return {name: displayBlock.name, inputs: displayBlock.inputs, presets: displayBlock.presets};
+            }
+        }
+        return null;
+    }
+
+    // Opcodes of every bound block that has presets.
+    getPresetOpcodes () {
+        const opcodes = [];
+        for (const packageDescriptor of this.packages.values()) {
+            for (const shaderBlock of packageDescriptor.blocks) {
+                if (shaderBlock.presets) opcodes.push(opcodeFor(packageDescriptor.id, shaderBlock.id, shaderBlock.opcode));
+            }
+        }
+        return opcodes;
+    }
+
     _packageToolboxBlocks (packageDescriptor, locale) {
         const blocks = [];
         const namespace = packageDescriptor.menuNamespace || packageDescriptor.id;
@@ -1169,6 +1269,8 @@ class PenFXCustomShaderManager extends EventEmitter {
                 const implementation = this._implementationFor(implementationOpcode);
                 if (!implementation) throw new Error(`PenFX implementation not found: ${implementationOpcode}.`);
                 wrapper = (args, util) => {
+                    // While a preset picker is open it previews the presets on this block's input.
+                    if (shaderBlock.presets) this._captureInputPreview(util);
                     const runImplementation = () => implementation.call(this.penFX, args || {}, util);
                     const invoke = () => {
                         if (shaderBlock.groupEffectScope === 'expanded' &&
@@ -1184,7 +1286,8 @@ class PenFXCustomShaderManager extends EventEmitter {
                     return invoke();
                 };
             } else {
-                wrapper = args => {
+                wrapper = (args, util) => {
+                    if (shaderBlock.presets) this._captureInputPreview(util);
                     const uniforms = {
                         u_resolution: [0, 0],
                         u_time: this._timelineTime(),

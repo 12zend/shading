@@ -6,6 +6,7 @@ import {verifyPluginSignature} from './signature';
 import {createModuleSystem} from './module-loader';
 import {createPluginAPI} from './api';
 import {createDefaultStorage} from './storage';
+import {installInputPresetFields} from './ui/input-presets';
 import legacyOpcodes from './legacy-plugin-opcodes.json';
 
 // Plugins extend shading.app with arbitrary JavaScript: blocks, renderer effects, editor tabs, project data. The
@@ -714,6 +715,13 @@ class ShadingPluginManager extends EventEmitter {
      * @param {object} context {locale, vm}.
      */
     defineBlocks (categoryId, ScratchBlocks, context) {
+        if (categoryId === 'penfx') {
+            try {
+                installInputPresetFields(ScratchBlocks, this.vm, context.locale);
+            } catch (error) {
+                console.error('[plugins] Could not add preset menus:', error);
+            }
+        }
         for (const callback of this.blockDefiners.get(categoryId) || []) {
             try {
                 callback(ScratchBlocks, context);
