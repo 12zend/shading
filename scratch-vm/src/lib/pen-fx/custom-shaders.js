@@ -1196,12 +1196,13 @@ class PenFXCustomShaderManager extends EventEmitter {
                         let uniformValue;
                         if (input.type === 'color') {
                             uniformValue = color(value);
+                            if (input.uniformType === 'vec4') uniformValue.push(1);
                         } else if (input.type === 'boolean') {
                             uniformValue = boolean(value) ? 1 : 0;
                             integerUniforms.add(input.uniform);
                         } else if (input.type === 'menu') {
                             uniformValue = Math.max(0, input.items.indexOf(String(value)));
-                            integerUniforms.add(input.uniform);
+                            if (input.uniformType !== 'float') integerUniforms.add(input.uniform);
                         } else {
                             uniformValue = (number(value) * input.scale) + input.offset;
                             if (input.type === 'integer') {

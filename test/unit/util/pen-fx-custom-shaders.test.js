@@ -407,6 +407,87 @@ describe('Pen FX custom shader packages', () => {
         expect(vm.runtime.emitProjectChanged).toHaveBeenCalledTimes(2);
     });
 
+    test('turns annotated uniforms of an editable shader into color and menu arguments', async () => {
+        const customShader = jest.fn();
+        const engine = {
+            customShader,
+            registerCustomShader: jest.fn(),
+            unregisterCustomShader: jest.fn(),
+            validateCustomShader: jest.fn()
+        };
+        const vm = {
+            runtime: {
+                emitProjectChanged: jest.fn(),
+                movieAssetManager: {timeline: {currentTime: 0, framerate: 30}}
+            },
+            extensionManager: {
+                isExtensionLoaded: () => true,
+                refreshBlocks: jest.fn(async () => undefined)
+            }
+        };
+        const penFX = {
+            blendMode: 'normal',
+            engine: null,
+            _getEngine: () => {
+                penFX.engine = engine;
+                return engine;
+            },
+            _safe: callback => callback(engine)
+        };
+        const manager = new PenFXCustomShaderManager(vm, penFX);
+        const source = `
+            precision highp float;
+            varying vec2 v_uv;
+            uniform sampler2D u_image;
+            uniform vec3 u_tint; // @color #204080
+            uniform vec4 u_glow; // @color #ffffff
+            uniform int u_mode; // @menu soft, hard @default hard
+            uniform float u_shape; // @menu circle, square
+            void main() { gl_FragColor = texture2D(u_image, v_uv) * vec4(u_tint, 1.0) * u_glow; }
+        `;
+
+        const created = await manager.createShader({name: 'Tint', source});
+        const block = manager.getToolboxBlocks().find(item => item && item.opcode === 'shader_tint_main');
+        expect(block).toMatchObject({
+            text: 'Tint tint: [TINT] glow: [GLOW] mode: [MODE] shape: [SHAPE]',
+            arguments: {
+                TINT: {type: 'color', defaultValue: '#204080'},
+                GLOW: {type: 'color', defaultValue: '#ffffff'},
+                MODE: {type: 'string', defaultValue: 'hard', menu: 'shader_tint_main_mode'},
+                SHAPE: {type: 'string', defaultValue: 'circle', menu: 'shader_tint_main_shape'}
+            }
+        });
+        expect(manager.getMenus()).toMatchObject({
+            shader_tint_main_mode: {items: ['soft', 'hard']},
+            shader_tint_main_shape: {items: ['circle', 'square']}
+        });
+
+        const result = penFX[opcodeFor('tint', 'main')]({
+            TINT: '#ff0000',
+            GLOW: '#000000',
+            MODE: 'soft',
+            SHAPE: 'square'
+        });
+        expect(result).toBeUndefined();
+        expect(customShader).toHaveBeenCalledWith('custom:tint:main', {
+            u_resolution: [0, 0],
+            u_time: 0,
+            u_frame: 0,
+            u_tint: [1, 0, 0],
+            u_glow: [0, 0, 0, 1],
+            u_mode: 0,
+            u_shape: 1
+        }, ['u_frame', 'u_mode'], 'normal');
+
+        const updated = await manager.updateShader(created.key, {
+            source: source.replace('@menu soft, hard @default hard', '@menu soft, hard, glow')
+        });
+        expect(updated.inputs.find(input => input.id === 'MODE')).toMatchObject({
+            items: ['soft', 'hard', 'glow'],
+            defaultValue: 'soft'
+        });
+    });
+
     test('keeps the previous editable shader when an update does not compile', async () => {
         const engine = {
             registerCustomShader: jest.fn(),
