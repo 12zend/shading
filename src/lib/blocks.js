@@ -333,6 +333,46 @@ export default function (vm, locale = 'en') {
         }
     };
 
+    const operatorBlock = (message0, args0, output) => ({
+        message0,
+        args0,
+        inputsInline: true,
+        category: ScratchBlocks.Categories.operators,
+        extensions: ['colours_operators', output]
+    });
+
+    ScratchBlocks.Blocks.operator_le = {
+        init: function () {
+            this.jsonInit(operatorBlock('%1 ≤ %2', [
+                numberInput('OPERAND1'), numberInput('OPERAND2')
+            ], 'output_boolean'));
+        }
+    };
+
+    ScratchBlocks.Blocks.operator_ge = {
+        init: function () {
+            this.jsonInit(operatorBlock('%1 ≥ %2', [
+                numberInput('OPERAND1'), numberInput('OPERAND2')
+            ], 'output_boolean'));
+        }
+    };
+
+    ScratchBlocks.Blocks.operator_letters_of = {
+        init: function () {
+            this.jsonInit(operatorBlock(translate('letters %1 to %2 of %3', '%3 の %1 番目から %2 番目の文字'), [
+                numberInput('FROM'), numberInput('TO'), numberInput('STRING')
+            ], 'output_string'));
+        }
+    };
+
+    ScratchBlocks.Blocks.operator_power = {
+        init: function () {
+            this.jsonInit(operatorBlock('%1 ^ %2', [
+                numberInput('NUM1'), numberInput('NUM2')
+            ], 'output_number'));
+        }
+    };
+
     ScratchBlocks.Blocks.motion_gotoxyz = {
         init: function () {
             this.jsonInit(motionStatement(translate('go to x: %1 y: %2 z: %3', 'x: %1 y: %2 z: %3 に移動する'), [

@@ -334,6 +334,16 @@ class JSGenerator {
             // No compile-time optimizations possible - use fallback method.
             return `compareGreaterThan(${this.descendInput(left)}, ${this.descendInput(right)})`;
         }
+        case InputOpcode.OP_GREATER_OR_EQUAL: {
+            const left = node.left;
+            const right = node.right;
+            // When both operands are known to be numbers, we can use >=
+            if (left.isAlwaysType(InputType.NUMBER_INTERPRETABLE) && right.isAlwaysType(InputType.NUMBER_INTERPRETABLE)) {
+                return `(${this.descendInput(left.toType(InputType.NUMBER))} >= ${this.descendInput(right.toType(InputType.NUMBER))})`;
+            }
+            // Otherwise "a >= b" is "not a < b", which keeps the Scratch string and NaN rules of <.
+            return `!compareLessThan(${this.descendInput(left)}, ${this.descendInput(right)})`;
+        }
         case InputOpcode.OP_JOIN:
             return `(${this.descendInput(node.left)} + ${this.descendInput(node.right)})`;
         case InputOpcode.OP_LENGTH:
@@ -356,6 +366,18 @@ class JSGenerator {
             // No compile-time optimizations possible - use fallback method.
             return `compareLessThan(${this.descendInput(left)}, ${this.descendInput(right)})`;
         }
+        case InputOpcode.OP_LESS_OR_EQUAL: {
+            const left = node.left;
+            const right = node.right;
+            // When both operands are known to be numbers, we can use <=
+            if (left.isAlwaysType(InputType.NUMBER_INTERPRETABLE) && right.isAlwaysType(InputType.NUMBER_INTERPRETABLE)) {
+                return `(${this.descendInput(left.toType(InputType.NUMBER))} <= ${this.descendInput(right.toType(InputType.NUMBER))})`;
+            }
+            // Otherwise "a <= b" is "not a > b", which keeps the Scratch string and NaN rules of >.
+            return `!compareGreaterThan(${this.descendInput(left)}, ${this.descendInput(right)})`;
+        }
+        case InputOpcode.OP_LETTERS_OF:
+            return `runtime.ext_scratch3_operators._lettersOf(${this.descendInput(node.string)}, ${this.descendInput(node.from)}, ${this.descendInput(node.to)})`;
         case InputOpcode.OP_LETTER_OF:
             return `((${this.descendInput(node.string)})[${this.descendInput(node.letter)} - 1] || "")`;
         case InputOpcode.OP_LOG_E:
@@ -391,6 +413,8 @@ class JSGenerator {
             return `tan(${this.descendInput(node.value)})`;
         case InputOpcode.OP_POW_10:
             return `(10 ** ${this.descendInput(node.value)})`;
+        case InputOpcode.OP_POWER:
+            return `Math.pow(${this.descendInput(node.left)}, ${this.descendInput(node.right)})`;
 
         case InputOpcode.PROCEDURE_CALL: {
             const procedureCode = node.code;

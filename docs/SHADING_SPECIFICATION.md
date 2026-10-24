@@ -214,6 +214,15 @@ power [POWER] speed [SPEED] strength [STRENGTH]
 
 `TYPE` は `PowerIn`、`PowerOut`、`PowerInOut`、`CircIn`、`CircOut`、`CircInOut`、`ExpoIn`、`ExpoOut`、`ExpoInOut`。`TYPE2` は `Elastic` または `Bounce` で、一次 easing に二次エフェクトを加える。`POWER` は一次 easing の指数、`SPEED` は二次エフェクトの速度、`STRENGTH` は二次エフェクトの強度を指定する。`STRENGTH` が 0 なら二次エフェクトは無効。時間が開始前なら `V0`、終了後なら `V1`、範囲内なら選択した easing で補間する。`T1 <= T0` の場合は、開始時刻より前なら `V0`、それ以外なら `V1` を返す。
 
+ほかに次の演算ブロックを追加している。
+
+| opcode | 表示 | 動作 |
+| --- | --- | --- |
+| `operator_le` | `[OPERAND1] ≤ [OPERAND2]` | `<` または `=` のとき真。比較規則（数値・大文字小文字を区別しない文字列）は `<` / `>` と同じ。 |
+| `operator_ge` | `[OPERAND1] ≥ [OPERAND2]` | `>` または `=` のとき真。 |
+| `operator_letters_of` | `[STRING] の [FROM] 番目から [TO] 番目の文字` | 1 始まりで両端を含む部分文字列。位置は切り捨て、文字列の範囲に収める。`FROM > TO` なら空文字。 |
+| `operator_power` | `[NUM1] ^ [NUM2]` | `NUM1` の `NUM2` 乗（`Math.pow`）。 |
+
 Objects の色補間などが使う共通 animation vocabulary には `Linear`、`BackIn`、`BackOut`、`BackInOut` も含まれる。
 
 ## 4. PenFX

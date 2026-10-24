@@ -23,15 +23,19 @@ class Scratch3OperatorsBlocks {
             operator_lt: this.lt,
             operator_equals: this.equals,
             operator_gt: this.gt,
+            operator_le: this.le,
+            operator_ge: this.ge,
             operator_and: this.and,
             operator_or: this.or,
             operator_not: this.not,
             operator_random: this.random,
             operator_join: this.join,
             operator_letter_of: this.letterOf,
+            operator_letters_of: this.lettersOf,
             operator_length: this.length,
             operator_contains: this.contains,
             operator_mod: this.mod,
+            operator_power: this.power,
             operator_round: this.round,
             operator_mathop: this.mathop
         };
@@ -63,6 +67,14 @@ class Scratch3OperatorsBlocks {
 
     gt (args) {
         return Cast.compare(args.OPERAND1, args.OPERAND2) > 0;
+    }
+
+    le (args) {
+        return !(Cast.compare(args.OPERAND1, args.OPERAND2) > 0);
+    }
+
+    ge (args) {
+        return !(Cast.compare(args.OPERAND1, args.OPERAND2) < 0);
     }
 
     and (args) {
@@ -107,6 +119,20 @@ class Scratch3OperatorsBlocks {
         return str.charAt(index);
     }
 
+    lettersOf (args) {
+        return this._lettersOf(args.STRING, args.FROM, args.TO);
+    }
+    _lettersOf (string, from, to) { // used by compiler
+        const str = Cast.toString(string);
+        // Positions are 1-based and inclusive; out-of-range positions are clamped to the string.
+        const start = Math.max(Math.floor(Cast.toNumber(from)), 1);
+        const end = Math.min(Math.floor(Cast.toNumber(to)), str.length);
+        if (start > end) {
+            return '';
+        }
+        return str.slice(start - 1, end);
+    }
+
     length (args) {
         return Cast.toString(args.STRING).length;
     }
@@ -125,6 +151,10 @@ class Scratch3OperatorsBlocks {
         // Scratch mod uses floored division instead of truncated division.
         if (result / modulus < 0) result += modulus;
         return result;
+    }
+
+    power (args) {
+        return Math.pow(Cast.toNumber(args.NUM1), Cast.toNumber(args.NUM2));
     }
 
     round (args) {

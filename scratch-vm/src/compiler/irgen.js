@@ -338,6 +338,11 @@ class ScriptTreeGenerator {
                 left: this.descendInputOfBlock(block, 'OPERAND1'),
                 right: this.descendInputOfBlock(block, 'OPERAND2')
             });
+        case 'operator_ge':
+            return new IntermediateInput(InputOpcode.OP_GREATER_OR_EQUAL, InputType.BOOLEAN, {
+                left: this.descendInputOfBlock(block, 'OPERAND1'),
+                right: this.descendInputOfBlock(block, 'OPERAND2')
+            });
         case 'operator_join':
             return new IntermediateInput(InputOpcode.OP_JOIN, InputType.STRING, {
                 left: this.descendInputOfBlock(block, 'STRING1').toType(InputType.STRING),
@@ -351,6 +356,17 @@ class ScriptTreeGenerator {
             return new IntermediateInput(InputOpcode.OP_LETTER_OF, InputType.STRING, {
                 letter: this.descendInputOfBlock(block, 'LETTER').toType(InputType.NUMBER_INDEX),
                 string: this.descendInputOfBlock(block, 'STRING').toType(InputType.STRING)
+            });
+        case 'operator_letters_of':
+            return new IntermediateInput(InputOpcode.OP_LETTERS_OF, InputType.STRING, {
+                string: this.descendInputOfBlock(block, 'STRING'),
+                from: this.descendInputOfBlock(block, 'FROM').toType(InputType.NUMBER),
+                to: this.descendInputOfBlock(block, 'TO').toType(InputType.NUMBER)
+            });
+        case 'operator_le':
+            return new IntermediateInput(InputOpcode.OP_LESS_OR_EQUAL, InputType.BOOLEAN, {
+                left: this.descendInputOfBlock(block, 'OPERAND1'),
+                right: this.descendInputOfBlock(block, 'OPERAND2')
             });
         case 'operator_lt':
             return new IntermediateInput(InputOpcode.OP_LESS, InputType.BOOLEAN, {
@@ -396,6 +412,11 @@ class ScriptTreeGenerator {
             return new IntermediateInput(InputOpcode.OP_OR, InputType.BOOLEAN, {
                 left: this.descendInputOfBlock(block, 'OPERAND1').toType(InputType.BOOLEAN),
                 right: this.descendInputOfBlock(block, 'OPERAND2').toType(InputType.BOOLEAN)
+            });
+        case 'operator_power':
+            return new IntermediateInput(InputOpcode.OP_POWER, InputType.NUMBER_OR_NAN, {
+                left: this.descendInputOfBlock(block, 'NUM1').toType(InputType.NUMBER),
+                right: this.descendInputOfBlock(block, 'NUM2').toType(InputType.NUMBER)
             });
         case 'operator_random': {
             const from = this.descendInputOfBlock(block, 'FROM');

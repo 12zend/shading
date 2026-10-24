@@ -593,6 +593,30 @@ const operators = function (isInitialSetup, isStage, targetId, colors) {
                 </shadow>
             </value>
         </block>
+        <block type="operator_le">
+            <value name="OPERAND1">
+                <shadow type="text">
+                    <field name="TEXT"/>
+                </shadow>
+            </value>
+            <value name="OPERAND2">
+                <shadow type="text">
+                    <field name="TEXT">50</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="operator_ge">
+            <value name="OPERAND1">
+                <shadow type="text">
+                    <field name="TEXT"/>
+                </shadow>
+            </value>
+            <value name="OPERAND2">
+                <shadow type="text">
+                    <field name="TEXT">50</field>
+                </shadow>
+            </value>
+        </block>
         <block type="operator_equals">
             <value name="OPERAND1">
                 <shadow type="text">
@@ -635,6 +659,23 @@ const operators = function (isInitialSetup, isStage, targetId, colors) {
                     </shadow>
                 </value>
             </block>
+            <block type="operator_letters_of">
+                <value name="FROM">
+                    <shadow type="math_whole_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="TO">
+                    <shadow type="math_whole_number">
+                        <field name="NUM">3</field>
+                    </shadow>
+                </value>
+                <value name="STRING">
+                    <shadow type="text">
+                        <field name="TEXT">${apple}</field>
+                    </shadow>
+                </value>
+            </block>
             <block type="operator_length">
                 <value name="STRING">
                     <shadow type="text">
@@ -657,6 +698,18 @@ const operators = function (isInitialSetup, isStage, targetId, colors) {
         `}
         ${blockSeparator}
         <block type="operator_mod">
+            <value name="NUM1">
+                <shadow type="math_number">
+                    <field name="NUM"/>
+                </shadow>
+            </value>
+            <value name="NUM2">
+                <shadow type="math_number">
+                    <field name="NUM"/>
+                </shadow>
+            </value>
+        </block>
+        <block type="operator_power">
             <value name="NUM1">
                 <shadow type="math_number">
                     <field name="NUM"/>

@@ -84,7 +84,11 @@ const MOVIE_ASSET_BLOCKS = [
 ];
 
 const MOVIE_OPERATOR_BLOCKS = [
-    'operator_easing'
+    'operator_easing',
+    'operator_ge',
+    'operator_le',
+    'operator_letters_of',
+    'operator_power'
 ];
 
 const MOVIE_TIMER_BLOCKS = [
