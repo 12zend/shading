@@ -108,6 +108,7 @@ const installInputPresetFields = (ScratchBlocks, vm, locale) => {
         const pickerSource = () => ({
             label: localize(locale, `${info.name} presets`, `${info.name}のプリセット`),
             buttonLabel: localize(locale, 'presets', 'プリセット'),
+            searchLabel: localize(locale, 'Search presets', 'プリセットを検索'),
             categories: [{id: 'presets', name: localize(locale, 'Presets', 'プリセット')}],
             presets: info.presets.map(preset => ({id: preset.id, name: preset.name, category: 'presets', preset})),
             thumbnailsPerFrame: 8,
