@@ -4,7 +4,7 @@ import React from 'react';
 import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
-import formatTimecode from '../../lib/timecode';
+import formatTime from '../../lib/timecode';
 import {getWaveformPath, subscribeTimelineWaveform} from '../../lib/timeline-waveform';
 
 import {getShortcutGroups, getShortcutKey, isModifierPressed, withModifier} from './shortcuts';
@@ -29,15 +29,6 @@ const ZOOM_FACTOR = 1.25;
 const COMPACT_TIMELINE_WIDTH = 360;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
-const formatTime = seconds => {
-    const safeSeconds = Math.max(0, Number(seconds) || 0);
-    const minutes = Math.floor(safeSeconds / 60);
-    const remaining = safeSeconds - (minutes * 60);
-    const minuteText = minutes < 10 ? `0${minutes}` : String(minutes);
-    const secondText = remaining < 10 ? `0${remaining.toFixed(2)}` : remaining.toFixed(2);
-    return `${minuteText}:${secondText}`;
-};
 
 const formatRulerTime = seconds => {
     if (seconds >= 60) {
@@ -856,8 +847,8 @@ class Timeline extends React.Component {
                             aria-live="off"
                             className={styles.timecode}
                         >
-                            {formatTimecode(timeline.currentTime, timeline.framerate)}{' '}
-                            <span>{'/ '}{formatTimecode(timeline.duration, timeline.framerate)}</span>
+                            {formatTime(timeline.currentTime)}{' '}
+                            <span>{'/ '}{formatTime(timeline.duration)}</span>
                         </output>
                         <button
                             aria-expanded={this.state.settingsOpen}

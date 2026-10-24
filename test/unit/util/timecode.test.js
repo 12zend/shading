@@ -1,19 +1,24 @@
 import formatTimecode from '../../../src/lib/timecode';
 
 describe('formatTimecode', () => {
-    test('formats seconds as HH:MM:SS:FF timecode', () => {
-        expect(formatTimecode(0, 30)).toBe('00:00:00:00');
-        expect(formatTimecode(1.5, 30)).toBe('00:00:01:15');
-        expect(formatTimecode(3725 + (29 / 30), 30)).toBe('01:02:05:29');
+    test('formats minutes, seconds and hundredths', () => {
+        expect(formatTimecode(0)).toBe('00:00.00');
+        expect(formatTimecode(1.5)).toBe('00:01.50');
+        expect(formatTimecode(65.25)).toBe('01:05.25');
+        expect(formatTimecode(29 / 30)).toBe('00:00.97');
     });
 
-    test('pads the frame field to the framerate width', () => {
-        expect(formatTimecode(0.5, 120)).toBe('00:00:00:060');
-        expect(formatTimecode(0, 1)).toBe('00:00:00:0');
+    test('adds hours only from one hour', () => {
+        expect(formatTimecode(3599.99)).toBe('59:59.99');
+        expect(formatTimecode(3725.5)).toBe('1:02:05.50');
     });
 
-    test('treats invalid input as zero', () => {
-        expect(formatTimecode(-3, 30)).toBe('00:00:00:00');
-        expect(formatTimecode(NaN, 0)).toBe('00:00:00:0');
+    test('carries rounding into the next second', () => {
+        expect(formatTimecode(59.999)).toBe('01:00.00');
+    });
+
+    test('clamps invalid and negative values to zero', () => {
+        expect(formatTimecode(-3)).toBe('00:00.00');
+        expect(formatTimecode(NaN)).toBe('00:00.00');
     });
 });
