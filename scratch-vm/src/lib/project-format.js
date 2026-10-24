@@ -6,7 +6,7 @@ const MOVIE_PROJECT_FORMAT_VERSION = 1;
 const SHADING_PROJECT_KEY = 'shading';
 // Always the "current" version of engine-versions.json (checked by the GUI's unit tests): a file records the engine
 // version that saved it, and opens in that engine when it is still listed.
-const SHADING_PROJECT_VERSION = '1.7.0';
+const SHADING_PROJECT_VERSION = '1.8.0';
 const LEGACY_SHADING_PROJECT_VERSION = '1.0.0';
 
 const MOVIE_ASSET_BLOCKS = [
