@@ -253,4 +253,97 @@ describe('block number scrubbing', () => {
         expect(dropdownGesture.usedOriginalDrag_).toBe(true);
         expect(flyoutGesture.usedOriginalDrag_).toBe(true);
     });
+
+    test('locks the pointer and wraps its stand-in cursor around the window edges', () => {
+        const listeners = {};
+        const appended = [];
+        const body = {
+            style: {cursor: ''},
+            requestPointerLock: jest.fn(),
+            appendChild: element => {
+                element.parentNode = body;
+                appended.push(element);
+            },
+            removeChild: element => {
+                appended.splice(appended.indexOf(element), 1);
+            }
+        };
+        global.document = {
+            body,
+            pointerLockElement: null,
+            addEventListener: (type, listener) => {
+                listeners[type] = listener;
+            },
+            removeEventListener: jest.fn(type => {
+                delete listeners[type];
+            }),
+            createElement: () => ({style: {}, setAttribute: jest.fn()}),
+            exitPointerLock: jest.fn(() => {
+                document.pointerLockElement = null;
+            })
+        };
+        global.window = {innerWidth: 100, innerHeight: 50};
+        const ScratchBlocks = makeScratchBlocks();
+        installBlockNumberScrubbing(ScratchBlocks);
+        const field = makeField(ScratchBlocks, '10');
+        const gesture = makeGesture(ScratchBlocks, field);
+        gesture.mouseDownXY_ = {x: 90, y: 20};
+
+        gesture.handleMove({clientX: 95, clientY: 20, shiftKey: true});
+        expect(body.requestPointerLock).toHaveBeenCalledTimes(1);
+        expect(field.setValue).toHaveBeenLastCalledWith('10.5');
+
+        document.pointerLockElement = body;
+        listeners.pointerlockchange();
+        expect(appended).toHaveLength(1);
+        // The position no longer changes while locked; the first reported movement is ignored.
+        gesture.handleMove({clientX: 95, clientY: 20, movementX: 400, movementY: 0, shiftKey: true});
+        expect(field.setValue).toHaveBeenCalledTimes(1);
+
+        // Moving 10px right from x=95 passes the right edge, so the cursor comes back in at the left.
+        gesture.handleMove({clientX: 95, clientY: 20, movementX: 10, movementY: 0, shiftKey: true});
+        expect(field.setValue).toHaveBeenLastCalledWith('11.5');
+        expect(appended[0].style.transform).toBe('translate(5px, 20px) translate(-50%, -50%)');
+        gesture.handleMove({clientX: 95, clientY: 20, movementX: -20, movementY: 0, shiftKey: true});
+        expect(field.setValue).toHaveBeenLastCalledWith('9.5');
+        expect(appended[0].style.transform).toBe('translate(85px, 20px) translate(-50%, -50%)');
+
+        gesture.handleUp({clientX: 95, clientY: 20, movementX: 0, movementY: 0, shiftKey: true});
+        expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+        expect(appended).toHaveLength(0);
+        expect(listeners.pointerlockchange).toBeUndefined();
+        expect(body.style.cursor).toBe('');
+        delete global.window;
+    });
+
+    test('keeps scrubbing by position after the pointer lock ends', () => {
+        const listeners = {};
+        const body = {style: {cursor: ''}, requestPointerLock: jest.fn(), appendChild: jest.fn(), removeChild: jest.fn()};
+        global.document = {
+            body,
+            pointerLockElement: null,
+            addEventListener: (type, listener) => {
+                listeners[type] = listener;
+            },
+            removeEventListener: jest.fn(),
+            createElement: () => ({style: {}, setAttribute: jest.fn(), parentNode: body})
+        };
+        global.window = {innerWidth: 100, innerHeight: 50};
+        const ScratchBlocks = makeScratchBlocks();
+        installBlockNumberScrubbing(ScratchBlocks);
+        const field = makeField(ScratchBlocks, '10');
+        const gesture = makeGesture(ScratchBlocks, field);
+
+        gesture.handleMove({clientX: 5, clientY: 0, shiftKey: true});
+        document.pointerLockElement = body;
+        listeners.pointerlockchange();
+        document.pointerLockElement = null;
+        listeners.pointerlockchange();
+        // The first event after the lock ends only records the cursor position, so the value does not jump.
+        gesture.handleMove({clientX: 60, clientY: 0, shiftKey: true});
+        gesture.handleMove({clientX: 70, clientY: 0, shiftKey: true});
+
+        expect(field.setValue.mock.calls).toEqual([['10.5'], ['11.5']]);
+        delete global.window;
+    });
 });
