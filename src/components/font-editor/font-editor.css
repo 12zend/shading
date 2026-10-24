@@ -25,7 +25,8 @@
     padding: 0.5rem 0.75rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
     border-bottom: 1px solid $ui-black-transparent;
     background: $ui-tertiary;
 }
@@ -40,8 +41,14 @@
     font-weight: bold;
 }
 
+.name-label span,
+.preview-input-label span,
+.size-control span {
+    white-space: nowrap;
+}
+
 .preview-input-label {
-    min-width: 0;
+    min-width: 12rem;
     flex: 1;
 }
 
