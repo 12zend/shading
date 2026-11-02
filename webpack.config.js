@@ -184,8 +184,14 @@ const makeExtensionConfig = () => {
         module: {
             rules: base.module.rules.concat([{
                 test: /\.(svg|png|wav|mp3|gif|jpg|woff2|hex)$/,
+                exclude: /default-fonts/,
                 loader: 'url-loader',
                 options: {limit: true, esModule: false}
+            }, {
+                // The default Japanese fonts are tens of megabytes; keep them out of the inlined bundle.
+                test: /default-fonts[\\/].+\.woff2$/,
+                loader: 'file-loader',
+                options: {outputPath: 'static/assets/', esModule: false}
             }])
         },
         optimization: {

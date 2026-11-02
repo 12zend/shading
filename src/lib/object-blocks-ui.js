@@ -10,6 +10,7 @@ import {
     normalizeShapeType
 } from './object-blocks';
 import installObjectCompositionBlockDefinitions from './object-composition-blocks-ui';
+import {DEFAULT_FONTS} from './default-fonts';
 import log from './log';
 import {localize, resolveLocale} from './movie-block-l10n';
 
@@ -157,7 +158,8 @@ const getAssetItems = vm => {
     const fonts = [
         {name: 'Sans Serif', value: 'sans-serif'},
         {name: 'Serif', value: 'serif'},
-        {name: 'Monospace', value: 'monospace'}
+        {name: 'Monospace', value: 'monospace'},
+        ...DEFAULT_FONTS.map(font => ({name: font.name, value: font.name}))
     ];
     const fontManager = vm.runtime && vm.runtime.fontManager;
     if (fontManager && typeof fontManager.getFonts === 'function') {

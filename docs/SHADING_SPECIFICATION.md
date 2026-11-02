@@ -441,7 +441,9 @@ frame graph は Scene、Draw、Group、Composite、Transform ノードで構成�
 ### 8.3 テキストとフォント
 
 - フォントは runtime font manager に登録する。
-- 組み込みフォントは Sans Serif、Serif、Monospace。
+- 組み込みフォントは Sans Serif、Serif、Monospace と、Shippori Mincho（Regular / Medium / SemiBold / Bold / ExtraBold）、
+  Zen Kaku Gothic New（Light / Regular / Medium / Bold / Black）。後者は太さごとに別のファミリー名
+  （例: `Shippori Mincho Bold`）で `src/lib/default-fonts/` に同梱し、描画で初めて使われたときに読み込む。
 - テキストは 96 px の canvas に描画し、行間は約 1.2 倍、padding は 16 px。
 - canvas の最大辺は 4096 px。
 - テキスト canvas cache は最大 128 エントリ、または約 16M pixel を上限とする。

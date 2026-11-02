@@ -1,4 +1,5 @@
 import installShadingFeaturesFromVm from '../../scratch-vm/src/lib/movie-features';
+import {installDefaultFontFaces} from './default-fonts';
 
 /**
  * Install Movie/Shading features on both the migrated VM and older VM
@@ -13,6 +14,7 @@ import installShadingFeaturesFromVm from '../../scratch-vm/src/lib/movie-feature
  * @returns {object} the extended VM instance
  */
 const installShadingFeatures = vm => {
+    installDefaultFontFaces();
     if (vm && typeof vm.installShadingFeatures === 'function') {
         return vm.installShadingFeatures();
     }
