@@ -96,6 +96,13 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.penfx.extendEngine(install, {onResize})` | 描画エンジンにメソッドを追加 |
 | `shading.penfx.registerProgram(name, glsl, {boundsPadding})` | エンジンで使う fragment program を登録 |
 | `shading.penfx.helpers`, `vertexShader`, `createPreviewRenderer()` | 引数変換ヘルパー、頂点シェーダー、サムネイル用の描画 |
+| `shading.objects.addBlocks({blocks, menus, methods, toolboxXML})` | レイヤー（Objects）カテゴリへブロックを追加。`blocks` / `menus` は `getInfo()` 形式（opcode は `objects_<opcode>`）、`methods[opcode](args, util)` が実行され、`toolboxXML` は図形ブロックの後に入る。`menus` の `items` は関数でもよい |
+| `shading.objects.draw(util, configuration)` | 描画ブロックと同じ設定（`source`, `asset`, `text`, `position`, `rotation`, `scale`, `size`, `width`, `height`, `time` など）で描画する。呼び出し元のトランスフォーム・時間スコープ・シーン・グループ化に従う |
+| `shading.objects.getTime(util)`, `posterizeTime(time, fps)`, `getFramerate()` | ブロックが評価される時刻（秒）、時間のポスタライズ、プロジェクトのフレームレート |
+| `shading.objects.getInstanceId(util)`, `hash(text)` | ブロックのインスタンスごとに安定した ID と、乱数の種にできるハッシュ |
+| `shading.objects.getFonts()`, `measureText(font, text)`, `TEXT_SIZE` | テキストに使えるフォント（`{name, value}`）、size 100 での文字幅（ステージ単位）、size 100 での文字の大きさ（48） |
+| `shading.easing.progress(type, progress, power)`, `value(options, time)` | イージングブロックと同じ計算（`value` は `{type, v0, v1, t0, t1, power, speed}`、speed は elastic の振動） |
+| `shading.ui.useBlockRows(ScratchBlocks, block, inputNames)` | ブロックを複数行で表示する（`inputNames` の入力で改行）。ブロックの `init` から呼ぶ |
 | `shading.blocks.define(categoryId, (ScratchBlocks, {locale, vm}) => …)` | ブロック定義のカスタマイズ（独自フィールドなど） |
 | `shading.blocks.filterToolboxXML(categoryId, xml => xml)` | ツールボックス XML の調整 |
 | `shading.ui.definePresetMenuBlock(ScratchBlocks, options)` | サムネイル付きプリセット選択メニュー。`source.onSelect(entry, block)` で選択時に他の入力も設定できる |
@@ -242,6 +249,7 @@ exports.activate = shading => {
 | `buffer-stack` | フレームの蓄積（残像・長時間露光） |
 | `genshade` | ReShade FX エフェクト（コンパイラーとテクスチャを同梱） |
 | `easy` | ワンクリックのルック（他のエフェクトプラグインを組み合わせる） |
+| `lyric-motion` | 歌詞の文字を1文字ずつ飛び込ませるリリックモーション（レイヤーカテゴリ） |
 
 テスト（`test/unit/plugins`、`test/unit/util/pen-fx*.test.js`）は、隣に置いた shading-plugins の
 チェックアウト（または環境変数 `SHADING_PLUGINS_DIR`）から公式プラグインを読み込んで実行します。

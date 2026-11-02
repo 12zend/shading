@@ -8,6 +8,7 @@ import {createPluginAPI} from './api';
 import {createDefaultStorage} from './storage';
 import {installInputPresetFields} from './ui/input-presets';
 import legacyOpcodes from './legacy-plugin-opcodes.json';
+import {registerObjectBlocks} from '../../../scratch-vm/src/lib/object-blocks';
 
 // Plugins extend shading.app with arbitrary JavaScript: blocks, renderer effects, editor tabs, project data. The
 // user reviews each zip (with the static security scan) before it is installed; installed plugins are stored and
@@ -108,6 +109,9 @@ class ShadingPluginManager extends EventEmitter {
         this.projectData = new Map();
         this.loadListeners = new Set();
         this.extensionProxies = new Map();
+        // Objects-category blocks added by plugins: opcode (without "objects_") -> plugin id, and toolbox XML.
+        this.objectBlockOwners = new Map();
+        this.objectToolboxXML = new Map();
         this.penFXMethods = new Map();
         this.orphanData = new Map();
         this.projectReferences = [];
@@ -695,6 +699,34 @@ class ShadingPluginManager extends EventEmitter {
         return this.refreshExtension(categoryId);
     }
 
+    /**
+     * Add blocks to the core Objects category.
+     * @param {string} pluginId Plugin that provides the blocks.
+     * @param {object} contribution {blocks, menus, methods, toolboxXML}.
+     * @returns {Function} Removes the blocks.
+     */
+    addObjectBlocks (pluginId, contribution) {
+        const key = `${pluginId}:${this.objectToolboxXML.size}:${Date.now()}`;
+        const unregister = registerObjectBlocks(this.vm, Object.assign({}, contribution, {id: key}));
+        const opcodes = (contribution.blocks || []).map(block => block && block.opcode).filter(Boolean);
+        for (const opcode of opcodes) this.objectBlockOwners.set(opcode, pluginId);
+        this.objectToolboxXML.set(key, typeof contribution.toolboxXML === 'string' ? contribution.toolboxXML : '');
+        this._toolboxChanged();
+        return () => {
+            unregister();
+            for (const opcode of opcodes) {
+                if (this.objectBlockOwners.get(opcode) === pluginId) this.objectBlockOwners.delete(opcode);
+            }
+            this.objectToolboxXML.delete(key);
+            this._toolboxChanged();
+        };
+    }
+
+    // Toolbox XML of the blocks plugins added to the Objects category.
+    getObjectsToolboxXML () {
+        return Array.from(this.objectToolboxXML.values()).join('\n');
+    }
+
     addBlockDefiner (categoryId, callback) {
         if (typeof callback !== 'function') throw new TypeError('blocks.define needs a function.');
         const id = String(categoryId);
@@ -1028,6 +1060,9 @@ class ShadingPluginManager extends EventEmitter {
                     }
                 }
             }
+        }
+        for (const [opcode, pluginId] of this.objectBlockOwners) {
+            if (opcodes.has(`objects_${opcode}`)) use(pluginId);
         }
         for (const proxy of this.extensionProxies.values()) {
             if (!proxy.pluginId) continue;

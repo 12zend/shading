@@ -14,6 +14,16 @@ import {createPresetPickerField, definePresetMenuBlock} from './ui/preset-picker
 import {setBlockInputs} from './ui/input-presets';
 import {EffectPreviewRenderer} from './ui/preview-renderer';
 import {createSampleSnapshot, isBlankSnapshot} from './ui/snapshots';
+import {
+    drawObjectConfiguration,
+    getObjectInstanceId,
+    getProjectFramerate,
+    hashString
+} from '../../../scratch-vm/src/lib/object-blocks';
+import {getObjectTime, posterizeTime} from '../../../scratch-vm/src/lib/object-animation';
+import {calculateEasingProgress, calculateEasingValue} from '../../../scratch-vm/src/lib/movie-easing';
+import {getTextFontOptions, useObjectRows} from '../object-blocks-ui';
+import {measureTextWidth} from './text-metrics';
 
 const API_VERSION = 1;
 
@@ -224,6 +234,44 @@ const createPluginAPI = (manager, record) => {
             refresh: extensionId => manager.refreshExtension(extensionId)
         }),
 
+        objects: Object.freeze({
+            // Add blocks to the Objects category: {blocks, menus, methods, toolboxXML}. Blocks and menus use the
+            // getInfo() format (opcodes become objects_<opcode>), methods[opcode](args, util) runs each block, and
+            // toolboxXML is placed after the shape blocks.
+            addBlocks: contribution => {
+                assertActive();
+                return track(manager.addObjectBlocks(record.id, contribution || {}));
+            },
+            // Draw like the draw block ({source, asset, text, position, rotation, scale, size, width, height,
+            // time, ...}), inside the calling block's transforms, time scopes, scenes and groupings.
+            draw: (util, configuration) => drawObjectConfiguration(vm.runtime, configuration || {}, util),
+            // The time (seconds) the calling block is evaluated at.
+            getTime: util => getObjectTime(vm.runtime, util),
+            posterizeTime,
+            getFramerate: () => getProjectFramerate(vm.runtime),
+            // A stable id for the calling block instance (target, block and repeat/instance path).
+            getInstanceId: util => getObjectInstanceId(util),
+            hash: hashString,
+            // Fonts text can be drawn with ({name, value}); value is what `draw` takes as the text asset.
+            getFonts: () => getTextFontOptions(vm).map(font => ({name: font.name, value: font.value})),
+            // Width of text drawn at size 100, in stage units (0 without a document).
+            measureText: (font, text) => {
+                const manager_ = vm.runtime.movieAssetManager;
+                const resolved = manager_ && typeof manager_.getFont === 'function' ?
+                    manager_.getFont(font) : {family: font};
+                return measureTextWidth(resolved.family || font, text);
+            },
+            // Height of one line of text drawn at size 100, in stage units.
+            TEXT_SIZE: 48
+        }),
+
+        easing: Object.freeze({
+            // The easing block's curve: progress (0-1) eased with type (PowerOut, ExpoOut, CircOut, ...).
+            progress: calculateEasingProgress,
+            // The easing block itself: {type, v0, v1, t0, t1, power, speed} at time.
+            value: calculateEasingValue
+        }),
+
         blocks: Object.freeze({
             // Run whenever the GUI (re)defines a category's blocks, e.g. to add custom fields.
             define: (categoryId, callback) => {
@@ -273,6 +321,8 @@ const createPluginAPI = (manager, record) => {
                 ScratchBlocks, vm, getLocale(), options),
             // Fill a Blockly block's inputs ({inputName: value}), e.g. from a preset picker's onSelect.
             setBlockInputs,
+            // Lay a block out in rows, starting a new row at each named input (call from a block's init).
+            useBlockRows: (ScratchBlocks, block, inputNames) => useObjectRows(ScratchBlocks, block, inputNames),
             createSampleSnapshot,
             isBlankSnapshot
         }),

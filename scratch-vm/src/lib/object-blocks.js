@@ -418,6 +418,90 @@ const installReporterStackClickGuard = runtime => {
     runtime[REPORTER_STACK_CLICK_GUARD] = true;
 };
 
+// Send one draw (the same configuration the draw block builds) through the thread's transforms, time scopes, scene
+// capture and grouping, like the draw block itself. Returns nothing; the asynchronous draw is tracked on the thread.
+const drawObjectConfiguration = (runtime, configuration, util) => {
+    const context = applyThreadComposition(Object.assign({playbackId: getObjectPlaybackId(util)}, configuration),
+        util, runtime);
+    if (util && util.thread && util.thread.objectSceneCapture) {
+        context.sceneCapture = util.thread.objectSceneCapture;
+    }
+    if (!context.time) delete context.time;
+    const manager = runtime.movieAssetManager;
+    if (manager && typeof manager.drawObject === 'function') {
+        const graphParent = util && util.thread && util.thread.objectFrameGraphParent;
+        const pendingDraw = graphParent ? manager.drawObject(util.target, context, graphParent) :
+            manager.drawObject(util.target, context);
+        trackPendingDraw(pendingDraw, util, manager);
+    }
+};
+
+const DEFAULT_PROJECT_FRAMERATE = 30;
+
+// Frames per second of the project timeline (the rendering framerate).
+const getProjectFramerate = runtime => {
+    const manager = runtime && runtime.movieAssetManager;
+    const timelineRate = Number(manager && manager.timeline && manager.timeline.framerate);
+    if (Number.isFinite(timelineRate) && timelineRate > 0) return timelineRate;
+    const loopRate = Number(runtime && runtime.frameLoop && runtime.frameLoop.framerate);
+    return Number.isFinite(loopRate) && loopRate > 0 ? loopRate : DEFAULT_PROJECT_FRAMERATE;
+};
+
+// Blocks that plugins add to the Objects category. Each contribution is {id, blocks, menus, methods}: blocks and
+// menus use the getInfo() format, and methods[opcode](args, util) runs a block.
+const getObjectBlockContributions = runtime => {
+    if (!(runtime.objectBlockContributions instanceof Map)) runtime.objectBlockContributions = new Map();
+    return runtime.objectBlockContributions;
+};
+
+const findObjectBlockContribution = (runtime, opcode) => {
+    for (const contribution of getObjectBlockContributions(runtime).values()) {
+        if (contribution.blocks.some(block => block.opcode === opcode)) return contribution;
+    }
+    return null;
+};
+
+const refreshObjectBlocks = vm => {
+    const extensionManager = vm.extensionManager;
+    if (!extensionManager || !extensionManager.isExtensionLoaded(EXTENSION_ID)) return Promise.resolve();
+    return Promise.resolve(extensionManager.refreshBlocks(EXTENSION_ID)).catch(() => {});
+};
+
+/**
+ * Add blocks to the Objects category.
+ * @param {object} vm VM with the Objects extension.
+ * @param {object} contribution {id, blocks, menus, methods}.
+ * @returns {Function} Removes the blocks again.
+ */
+const registerObjectBlocks = (vm, contribution) => {
+    if (!contribution || !Array.isArray(contribution.blocks)) throw new TypeError('Object blocks need a blocks list.');
+    const id = String(contribution.id || '');
+    if (!id) throw new TypeError('Object blocks need an id.');
+    const contributions = getObjectBlockContributions(vm.runtime);
+    if (contributions.has(id)) throw new Error(`Object blocks ${id} are already registered.`);
+    const blocks = contribution.blocks.filter(block => block && typeof block === 'object');
+    const methods = Object.assign({}, contribution.methods);
+    for (const block of blocks) {
+        if (!/^[a-z0-9_]+$/i.test(String(block.opcode || ''))) {
+            throw new Error(`Invalid Objects block opcode: ${block.opcode}`);
+        }
+        if (findObjectBlockContribution(vm.runtime, block.opcode)) {
+            throw new Error(`The Objects block ${block.opcode} is already registered.`);
+        }
+        if (typeof methods[block.opcode] !== 'function') {
+            throw new TypeError(`Objects block ${block.opcode} needs a method.`);
+        }
+    }
+    const entry = {id, blocks, menus: Object.assign({}, contribution.menus), methods};
+    contributions.set(id, entry);
+    refreshObjectBlocks(vm);
+    return () => {
+        if (contributions.get(id) !== entry) return;
+        contributions.delete(id);
+        refreshObjectBlocks(vm);
+    };
+};
+
 const createObjectBlocksClass = vm => class ObjectBlocks {
     constructor () {
         this.runtime = vm.runtime;
@@ -564,7 +648,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     getInfo () {
         const numberArgument = defaultValue => ({type: ArgumentType.NUMBER, defaultValue});
         const translate = (english, japanese) => localize(resolveLocale(null, vm), english, japanese);
-        return {
+        return this.addContributedBlocks({
             id: EXTENSION_ID,
             name: translate('Objects', 'レイヤー'),
             color1: PRIMARY,
@@ -1130,7 +1214,44 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     items: ['x', 'y']
                 }
             }
-        };
+        });
+    }
+
+    // Append the blocks and menus that plugins contributed (registerObjectBlocks) after the core ones.
+    addContributedBlocks (info) {
+        const coreOpcodes = new Set(info.blocks.map(block => block.opcode));
+        for (const contribution of getObjectBlockContributions(this.runtime).values()) {
+            for (const block of contribution.blocks) {
+                if (coreOpcodes.has(block.opcode)) continue;
+                const func = `contributed_${block.opcode}`;
+                if (typeof this[func] !== 'function') {
+                    // Commands must not hand a value (or Promise) back to the VM.
+                    this[func] = (args, util) => {
+                        const owner = findObjectBlockContribution(this.runtime, block.opcode);
+                        if (!owner) return;
+                        const ownBlock = owner.blocks.find(candidate => candidate.opcode === block.opcode);
+                        if (!ownBlock.blockType || ownBlock.blockType === BlockType.COMMAND) {
+                            owner.methods[block.opcode](args, util);
+                            return;
+                        }
+                        return owner.methods[block.opcode](args, util);
+                    };
+                }
+                info.blocks.push(Object.assign({}, block, {func}));
+            }
+            for (const name of Object.keys(contribution.menus)) {
+                if (Object.prototype.hasOwnProperty.call(info.menus, name)) continue;
+                const menu = contribution.menus[name];
+                if (menu && typeof menu.items === 'function') {
+                    const func = `contributedMenu_${name}`;
+                    this[func] = (...menuArgs) => menu.items(...menuArgs);
+                    info.menus[name] = Object.assign({}, menu, {items: func});
+                } else {
+                    info.menus[name] = menu;
+                }
+            }
+        }
+        return info;
     }
 
     clear () {
@@ -1143,11 +1264,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     draw (args, util) {
         const selection = decodeDrawAsset(args.ASSET, args.SOURCE);
-        const context = applyThreadComposition({
+        drawObjectConfiguration(this.runtime, {
             asset: selection.asset,
             frame: args.FRAME,
             height: args.HEIGHT,
-            playbackId: getObjectPlaybackId(util),
             position: {x: args.PX, y: args.PY, z: args.PZ},
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ},
@@ -1161,18 +1281,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             width: args.WIDTH,
             time: Object.prototype.hasOwnProperty.call(args, 'T1') ||
                 Object.prototype.hasOwnProperty.call(args, 'T2') ? {start: args.T1, end: args.T2} : null
-        }, util, this.runtime);
-        if (util && util.thread && util.thread.objectSceneCapture) {
-            context.sceneCapture = util.thread.objectSceneCapture;
-        }
-        if (!context.time) delete context.time;
-        const manager = this.runtime.movieAssetManager;
-        if (manager && typeof manager.drawObject === 'function') {
-            const graphParent = util && util.thread && util.thread.objectFrameGraphParent;
-            const pendingDraw = graphParent ? manager.drawObject(util.target, context, graphParent) :
-                manager.drawObject(util.target, context);
-            trackPendingDraw(pendingDraw, util, manager);
-        }
+        }, util);
     }
 
     shape (args, util) {
@@ -1776,5 +1885,10 @@ export {
     normalizeBlendMode,
     normalizeShapeType,
     createObjectBlocksClass,
+    drawObjectConfiguration,
+    getProjectFramerate,
+    hashString,
+    getObjectInstanceId,
+    registerObjectBlocks,
     installObjectBlocks as default
 };

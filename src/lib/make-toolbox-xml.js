@@ -821,7 +821,7 @@ const proceduralShapeBlocks = function () {
     ];
 };
 
-const objects = function (costumeName, locale) {
+const objects = function (costumeName, locale, pluginBlocksXML = '') {
     const number = (name, value) => (
         `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`
     );
@@ -851,6 +851,7 @@ const objects = function (costumeName, locale) {
             ${number('T1', 0)}${number('T2', 'Infinity')}
         </block>
         ${proceduralShapeBlocks().join('\n')}
+        ${pluginBlocksXML}
         <block type="objects_grouping"/>
         <block type="objects_scene"/>
         <block type="objects_bake"/>
@@ -902,13 +903,15 @@ const xmlClose = '</xml>';
  * @param {?string} soundName -  The name of the default selected sound dropdown.
  * @param {?object} colors - The colors for the theme.
  * @param {?string} locale - The active UI locale.
+ * @param {?object} objectsOptions - {pluginBlocksXML, filterXML} for the Objects category.
  * @returns {string} - a ScratchBlocks-style XML document for the contents of the toolbox.
  */
 // The backdrop argument is retained for the public toolbox builder signature;
 // the Movie toolbox supplies its own Camera category instead.
 const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categoriesXML = [],
     // eslint-disable-next-line no-unused-vars
-    costumeName = '', _backdropName = '', soundName = '', colors = defaultBlockColors, locale = 'en') {
+    costumeName = '', _backdropName = '', soundName = '', colors = defaultBlockColors, locale = 'en',
+    objectsOptions = {}) {
     isStage = isInitialSetup || isStage;
     const gap = [categorySeparator];
 
@@ -930,7 +933,11 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     // category is intentionally hidden from the Movie toolbox.
     moveCategory('looks');
     const objectsCategory = moveCategory('objects');
-    const objectsXML = objectsCategory ? objects(costumeName, locale) : null;
+    // The Objects category is written here rather than generated, so blocks that plugins add to it are inserted
+    // after the shape blocks (objectsOptions.pluginBlocksXML) and plugin toolbox filters run on the result.
+    const filterObjects = objectsOptions.filterXML || (xml => xml);
+    const objectsXML = objectsCategory ?
+        filterObjects(objects(costumeName, locale, objectsOptions.pluginBlocksXML || '')) : null;
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);

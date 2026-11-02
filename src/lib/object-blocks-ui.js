@@ -76,6 +76,31 @@ const getDrawAssetValue = block => {
     return block.getFieldValue('ASSET');
 };
 
+/**
+ * Fonts that text can be drawn with: the generic families, the bundled default fonts and the project's fonts.
+ * @param {object} vm VM.
+ * @returns {Array<object>} {name, value, family?, deletable?, index?}; value is what a draw stores.
+ */
+const getTextFontOptions = vm => {
+    const fonts = [
+        {name: 'Sans Serif', value: 'sans-serif'},
+        {name: 'Serif', value: 'serif'},
+        {name: 'Monospace', value: 'monospace'},
+        ...DEFAULT_FONTS.map(font => ({name: font.name, value: font.name}))
+    ];
+    const fontManager = vm && vm.runtime && vm.runtime.fontManager;
+    if (fontManager && typeof fontManager.getFonts === 'function') {
+        fontManager.getFonts().forEach((font, index) => fonts.push({
+            deletable: true,
+            family: font.family || font.name,
+            index,
+            name: font.name,
+            value: font.name
+        }));
+    }
+    return fonts;
+};
+
 const getAssetItems = vm => {
     // Read the live VM each time the picker is opened so Costume tab edits are reflected here.
     const items = [];
@@ -155,23 +180,7 @@ const getAssetItems = vm => {
         }));
     }
 
-    const fonts = [
-        {name: 'Sans Serif', value: 'sans-serif'},
-        {name: 'Serif', value: 'serif'},
-        {name: 'Monospace', value: 'monospace'},
-        ...DEFAULT_FONTS.map(font => ({name: font.name, value: font.name}))
-    ];
-    const fontManager = vm.runtime && vm.runtime.fontManager;
-    if (fontManager && typeof fontManager.getFonts === 'function') {
-        fontManager.getFonts().forEach((font, index) => fonts.push({
-            deletable: true,
-            family: font.family || font.name,
-            index,
-            name: font.name,
-            value: font.name
-        }));
-    }
-    fonts.forEach(font => items.push({
+    getTextFontOptions(vm).forEach(font => items.push({
         family: font.family || font.value,
         label: SOURCE_LABELS.text,
         name: font.name,
@@ -1616,6 +1625,7 @@ export {
     getDrawInputVisibility,
     getAssetItems,
     getAssetOptions,
+    getTextFontOptions,
     modelHasFrames,
     normalizeVideoMode,
     deleteAsset,
