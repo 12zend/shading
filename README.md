@@ -64,6 +64,17 @@ SHADING_PLUGINS_DIR=../shading-plugins npm start
 
 Cloudflare 向けビルドは `ROOT=/` を指定し、JavaScript・manifest をサイト直下から読み込みます。shading.app 用には `npm run build:cloudflare` を使用してください。
 
+shading.app へのデプロイは GitHub Actions（`.github/workflows/deploy-cloudflare.yml`）が行います。`develop` への push で
+`npm run build:cloudflare` を実行し、`wrangler deploy --config cloudflare/wrangler.jsonc` で同じ Worker（`shading-app`）と
+`shading.app/*` のルートへアップロードします。Cloudflare 側のビルドは 20 分で打ち切られるため使いません。
+古いエンジンのビルド結果は `actions/cache` で保持し、新しく増えたバージョンだけをビルドします（[docs/ENGINE_VERSIONS.md](docs/ENGINE_VERSIONS.md)）。
+
+初回の設定:
+
+1. Cloudflare で「Edit Cloudflare Workers」テンプレートから API トークンを作成します（Workers Scripts: Edit、shading.app の Workers Routes: Edit）。
+2. GitHub の Settings → Secrets and variables → Actions に `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を登録します。
+3. Cloudflare ダッシュボードの Worker（`shading-app`）→ Settings → Build で Git リポジトリの接続を外し、二重にビルドしないようにします。
+
 ### テスト
 
 ```bash
