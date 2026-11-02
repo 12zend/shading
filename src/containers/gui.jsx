@@ -9,6 +9,7 @@ import {injectIntl, intlShape} from 'react-intl';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import installShadingFeatures from '../lib/shading-features';
 import installPluginManager from '../lib/plugins/manager';
+import installFontCache from '../lib/font-cache';
 import {installProjectFileHooks, SETTINGS_RESTORED_EVENT} from '../lib/project-file';
 import {LANGUAGE_KEY} from '../lib/detect-locale';
 import {detectTheme} from '../lib/themes/themePersistance';
@@ -104,6 +105,8 @@ class GUI extends React.Component {
     componentDidMount () {
         this.props.onStorageInit(storage);
         installShadingFeatures(this.props.vm);
+        // Fonts loaded before (in any project) are added to every project.
+        installFontCache(this.props.vm);
         // Installed plugins load before any project; vm.deserializeProject waits for them.
         this.pluginManager = installPluginManager(this.props.vm, {
             guiContext: {
