@@ -112,3 +112,6 @@ scratch-blocks/local_blockly_compressed_vertical.js
 scratch-blocks/chromedriver
 # --flagfiles used on Windows
 scratch-blocks/*.config
+
+# Finished builds of archived engines (scripts/build-engines.cjs)
+/.engine-builds

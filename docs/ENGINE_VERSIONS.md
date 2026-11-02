@@ -47,6 +47,10 @@ shading.app のエディター（エンジン）のリリースは、リポジ�
 3. `npm run build` のあとに同じ `ROOT` で `npm run build:engines` を実行すると、古いバージョンがそれぞれのコミットから
    `build/engines/<version>/` にビルドされます（`npm run build:cloudflare` と GitHub Pages のデプロイは自動で実行します）。
    - コミットは `.engine-cache/<commit>/` に git worktree として取り出し、`npm ci` してビルドします（2 回目からは再利用）。
+   - 古いバージョンは変わらないので、ビルド結果を `.engine-builds/<環境>/<version>-<commit>/` に保存し、次からはビルドせずにコピーします。
+     `<環境>` は `ROOT` などビルドに効く環境変数のハッシュなので、`ROOT` が違うビルドを使い回すことはありません。
+     一覧から消えたバージョンの保存分は削除します。`--no-reuse` で保存分を使わずにビルドし直せます（保存先は `ENGINE_BUILD_CACHE` で変更可）。
+   - GitHub Actions は `.engine-builds/` を `actions/cache` で保持するので、デプロイのたびにビルドするのは前回以降に増えたバージョンだけです。
    - `--only=1.0.0` で一部だけビルドできます。
    - エンジン切り替えの受け取り処理（`src/lib/engine-handoff.js`）がないコミットや、`current` が一覧と食い違うコミットはエラーになります。
 
