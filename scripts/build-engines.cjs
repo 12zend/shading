@@ -43,6 +43,10 @@ const only = onlyArgument ? onlyArgument.slice('--only='.length).split(',')
     .filter(Boolean) : null;
 const reuse = !process.argv.includes('--no-reuse');
 
+// Production builds run with NODE_ENV=production, which makes npm leave out devDependencies: webpack and the Closure
+// packages scratch-blocks compiles with. Older commits cannot be changed, so ask npm for them through the environment.
+const buildEnvironment = Object.assign({}, process.env, {npm_config_include: 'dev'});
+
 const run = (command, args, options = {}) => {
     const where = options.cwd ? `  (in ${path.relative(repository, options.cwd)})` : '';
     console.log(`> ${command} ${args.join(' ')}${where}`);
@@ -68,7 +72,9 @@ const checkout = commit => {
         run('git', ['worktree', 'prune'], {cwd: repository});
         run('git', ['worktree', 'add', '--force', '--detach', directory, commit], {cwd: repository});
     }
-    if (!fs.existsSync(path.join(directory, 'node_modules'))) run('npm', ['ci'], {cwd: directory});
+    if (!fs.existsSync(path.join(directory, 'node_modules'))) {
+        run('npm', ['ci'], {cwd: directory, env: buildEnvironment});
+    }
     return directory;
 };
 
@@ -89,7 +95,7 @@ const build = entry => {
     assertEngine(directory, entry);
     run('npm', ['run', 'build'], {
         cwd: directory,
-        env: Object.assign({}, process.env, {
+        env: Object.assign({}, buildEnvironment, {
             ROOT: `${root}engines/${entry.version}/`,
             SHADING_SITE_ROOT: root
         })

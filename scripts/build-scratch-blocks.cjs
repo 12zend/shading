@@ -45,6 +45,7 @@ const hasClosure = ['google-closure-library', 'google-closure-compiler']
     .every(name => fs.existsSync(path.join(root, 'node_modules', name)));
 if (!hasClosure) {
     // Skip install scripts: chromedriver and friends are only needed for scratch-blocks' own browser tests.
-    run(['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
+    // The Closure packages are devDependencies, which npm leaves out when NODE_ENV=production (production builds).
+    run(['ci', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund']);
 }
 run(['run', 'prepublish']);
