@@ -344,10 +344,12 @@ const spritePlaneMatrix = (transform, cameraTransform, skinSize, rotationCenter,
         .setFromEuler(degreesToEuler(cameraTransform.rotation, cameraTransform.rotationOrder))
         .invert();
 
+    // The quad's center sits away from the rotation center, as in createImagePlane. The axes below are negated
+    // (Scratch draws direction 90 as a half turn of the quad), so this offset must not be negated with them.
     const origin = scratchPlaneOrigin
         .set(
-            (centerX - (width / 2)) * scratchScaleX * scaleX,
-            -(centerY - (height / 2)) * scratchScaleY * scaleY,
+            ((width / 2) - centerX) * scratchScaleX * scaleX,
+            (centerY - (height / 2)) * scratchScaleY * scaleY,
             0
         )
         .applyQuaternion(objectRotation)

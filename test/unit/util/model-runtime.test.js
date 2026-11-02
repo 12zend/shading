@@ -17,6 +17,7 @@ import {
     projectPosition,
     resampleAnimationClip,
     restoreMMDBoneHierarchy,
+    spritePlaneMatrix,
     verticalFOVFromFocalLength
 } from 'scratch-render/src/model-runtime';
 
@@ -520,6 +521,31 @@ describe('Movie 3D projection', () => {
             x: 120,
             y: 60
         });
+    });
+
+    test('places a sprite plane around its rotation center like a Scratch drawable', () => {
+        // A 640x180 costume whose rotation center is the middle of its bottom edge, as drawn in the paint editor
+        // when only the upper half of the art board is filled.
+        const matrix = spritePlaneMatrix({
+            position: {x: 0, y: 0, z: DEFAULT_FOCAL_LENGTH},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ',
+            scale: {x: 1, y: 1, z: 1}
+        }, camera, [640, 180], [320, 180], [100, 100]);
+        const project = (x, y) => {
+            const w = (matrix[3] * x) + (matrix[7] * y) + matrix[15];
+            return [
+                ((matrix[0] * x) + (matrix[4] * y) + matrix[12]) / w,
+                ((matrix[1] * x) + (matrix[5] * y) + matrix[13]) / w
+            ];
+        };
+        // The drawable quad samples the top-left texel at a_position (0.5, -0.5).
+        const topLeft = project(0.5, -0.5);
+        const bottomRight = project(-0.5, 0.5);
+        expect(topLeft[0]).toBeCloseTo(-320);
+        expect(topLeft[1]).toBeCloseTo(180);
+        expect(bottomRight[0]).toBeCloseTo(320);
+        expect(bottomRight[1]).toBeCloseTo(0);
     });
 
     test('look at keeps a camera facing positive z at zero rotation', () => {
