@@ -112,6 +112,38 @@ const registerEngineProgram = (name, source, options = {}) => {
 
 const getRegisteredProgramNames = () => Array.from(programRegistry.keys());
 
+// Effect shaders work in stage pixels so they look the same at every display resolution. gl_FragCoord counts
+// physical buffer pixels, so programs that read it get a stage-pixel version through this uniform instead.
+const FRAG_COORD_SCALE_UNIFORM = 'shading_fragCoordScale';
+const FRAG_COORD_PATTERN = /\bgl_FragCoord\b/g;
+
+const withStageFragCoord = source => {
+    if (!/\bgl_FragCoord\b/.test(source)) return null;
+    const lines = source.replace(FRAG_COORD_PATTERN, 'shading_FragCoord').split('\n');
+    // Declarations must follow #version and #extension, and must not land inside a conditional block.
+    let insertAt = 0;
+    let depth = 0;
+    let inComment = false;
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index].trim();
+        if (inComment) {
+            if (line.indexOf('*/') !== -1) inComment = false;
+        } else if (line.startsWith('/*')) {
+            if (line.indexOf('*/', 2) === -1) inComment = true;
+        } else if (line.startsWith('#')) {
+            if (/^#\s*if/.test(line)) depth++;
+            else if (/^#\s*endif/.test(line)) depth--;
+        } else if (line && !line.startsWith('//')) {
+            break;
+        }
+        if (!inComment && depth === 0) insertAt = index + 1;
+    }
+    lines.splice(insertAt, 0,
+        `uniform mediump vec2 ${FRAG_COORD_SCALE_UNIFORM};`,
+        `#define shading_FragCoord vec4(gl_FragCoord.xy * ${FRAG_COORD_SCALE_UNIFORM}, gl_FragCoord.zw)`);
+    return lines.join('\n');
+};
+
 const CAPTURE_SHADER = `
   precision highp float;
   varying vec2 v_uv;
@@ -148,7 +180,12 @@ const createPenFXEngine = (gl, renderer) => {
             ]), gl.STATIC_DRAW);
             this.width = 0;
             this.height = 0;
+            // Physical work-buffer size is width/height. resolution is the stage size that effect parameters are
+            // measured in, and pixelScale converts stage pixels to buffer pixels.
             this.resolution = new Float32Array(2);
+            this.pixelScale = 1;
+            this.fragCoordScale = new Float32Array([1, 1]);
+            this.fragCoordPrograms = new WeakSet();
             this.textures = [];
             this.framebuffers = [];
             this.groupStack = [];
@@ -197,7 +234,10 @@ const createPenFXEngine = (gl, renderer) => {
 
         _boundsPaddingFor (program, uniforms) {
             const direct = this.programBoundsPadding && this.programBoundsPadding.get(program);
-            if (direct) return direct(uniforms);
+            if (direct) {
+                const padding = direct(uniforms);
+                return Number.isFinite(padding) ? this._stagePaddingToPixels(padding) : null;
+            }
             const name = Object.keys(this.programs).find(key => this.programs[key] === program);
             if (!name) return null;
             const entry = activeProgram(name);
@@ -205,7 +245,12 @@ const createPenFXEngine = (gl, renderer) => {
             // An imported package that overrides the slot runs its own GLSL, which may sample anywhere.
             if (!entry || !entry.boundsPadding || !sourceCode || sourceCode.trim() !== entry.source.trim()) return null;
             const padding = entry.boundsPadding(uniforms);
-            return Number.isFinite(padding) ? padding : null;
+            return Number.isFinite(padding) ? this._stagePaddingToPixels(padding) : null;
+        }
+
+        // Bounds padding is measured in stage pixels, like the uniforms it is derived from.
+        _stagePaddingToPixels (padding) {
+            return Math.ceil(padding * Math.max(1, this.pixelScale || 1));
         }
 
         dispose () {
@@ -225,6 +270,20 @@ const createPenFXEngine = (gl, renderer) => {
         }
 
         _createProgram (fragmentSource) {
+            const stageSource = withStageFragCoord(String(fragmentSource));
+            if (stageSource !== null) {
+                try {
+                    const program = this._linkProgram(stageSource);
+                    this.fragCoordPrograms.add(program);
+                    return program;
+                } catch (error) {
+                    // Unusual preprocessor layouts can reject the injected declaration; keep the shader working.
+                }
+            }
+            return this._linkProgram(fragmentSource);
+        }
+
+        _linkProgram (fragmentSource) {
             const fragment = this._compileShader(gl.FRAGMENT_SHADER, fragmentSource);
             const program = gl.createProgram();
             try {
@@ -336,6 +395,19 @@ const createPenFXEngine = (gl, renderer) => {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         }
 
+        // The Movie surface is the stage size times the display's render quality. Effects measure radii, offsets
+        // and centers in stage pixels, so the preview, full screen and export all show the same image.
+        _syncStageResolution (skin) {
+            const nativeSize = skin && skin._nativeSize;
+            const stageWidth = nativeSize && nativeSize[0] > 0 ? nativeSize[0] : this.width;
+            const stageHeight = nativeSize && nativeSize[1] > 0 ? nativeSize[1] : this.height;
+            this.resolution[0] = stageWidth;
+            this.resolution[1] = stageHeight;
+            this.pixelScale = stageWidth > 0 ? this.width / stageWidth : 1;
+            this.fragCoordScale[0] = this.width > 0 ? stageWidth / this.width : 1;
+            this.fragCoordScale[1] = this.height > 0 ? stageHeight / this.height : 1;
+        }
+
         _ensureSecondaryBuffer () {
             if (this.textures.length > 1) return;
             const secondary = this._createBufferTexture();
@@ -349,6 +421,7 @@ const createPenFXEngine = (gl, renderer) => {
             if (!skin || !skin._texture || !skin._framebuffer || !skin._size) return null;
             if (typeof renderer._doExitDrawRegion === 'function') renderer._doExitDrawRegion();
             this._resize(skin._size[0], skin._size[1]);
+            this._syncStageResolution(skin);
             gl.disable(gl.DEPTH_TEST);
             gl.disable(gl.SCISSOR_TEST);
             gl.disable(gl.BLEND);
@@ -924,6 +997,9 @@ const createPenFXEngine = (gl, renderer) => {
                 gl.activeTexture(gl.TEXTURE0 + i);
                 gl.bindTexture(gl.TEXTURE_2D, samplers[i].texture);
                 gl.uniform1i(this._location(program, samplers[i].name), i);
+            }
+            if (this.fragCoordPrograms && this.fragCoordPrograms.has(program)) {
+                gl.uniform2fv(this._location(program, FRAG_COORD_SCALE_UNIFORM), this.fragCoordScale);
             }
             for (const name in uniforms) {
                 const value = uniforms[name];
