@@ -124,6 +124,18 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 - 画像やフォントなど非同期の資源は、プラグインの有効化時や `registerData` の `deserialize` で準備しておく。
 - 描画ループ内で使われるブロックは、1 tick の中で完結し、途中のフレームを表示しないこと。
 
+### 解像度と pixel 単位
+
+Pen レイヤーの解像度は、ステージのサイズに表示倍率 (プレビューの表示サイズ、フルスクリーン、書き出しサイズ) を掛けたものです。エフェクトの半径やオフセットは、どの表示でも同じ見た目になるようにステージの pixel で扱います。
+
+| Engine のプロパティ | 内容 |
+| --- | --- |
+| `this.resolution` | ステージの pixel サイズ。シェーダーの `u_resolution` に渡す |
+| `this.width`, `this.height` | 作業バッファの実際の pixel サイズ (`readPixels` や `texImage2D` で使う) |
+| `this.pixelScale` | ステージの 1 pixel が作業バッファの何 pixel か (`this.width / this.resolution[0]`) |
+
+GLSL で `1.0 / u_resolution` を使って uv に変換する場合は何もしなくても解像度に依存しません。`gl_FragCoord.xy` もステージの pixel 座標に換算されます。CPU で pixel を直接処理する場合は、ブロックの pixel 単位の値に `this.pixelScale` を掛けてください。`boundsPadding` もステージの pixel で返します。
+
 ### 例: Looks にエフェクトを 1 つ追加する
 
 ```js

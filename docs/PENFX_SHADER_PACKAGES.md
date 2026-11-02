@@ -255,12 +255,14 @@ precision highp float;
 
 varying vec2 v_uv;          // 左下 (0, 0) から右上 (1, 1)
 uniform sampler2D u_image;  // 現在の Pen レイヤー
-uniform vec2 u_resolution;  // Pen レイヤーの pixel サイズ
+uniform vec2 u_resolution;  // ステージの pixel サイズ (表示解像度に依存しない)
 uniform float u_time;       // Movie timeline の秒数
 uniform int u_frame;        // timeline time × frame rate
 ```
 
 `u_image`、`u_resolution`、`u_time`、`u_frame` は予約名なので manifest の input には指定できません。`u_time` と `u_frame` は実時間ではなく Movie timeline 由来のため、同じ frame は同じ値になります。
+
+半径・オフセット・中心などの pixel 単位の値は、ステージの pixel (`u_resolution` の単位) で扱います。Pen レイヤーの実際の解像度はプレビューの表示サイズ、フルスクリーン、書き出しで変わりますが、`1.0 / u_resolution` を使って uv に変換すれば、どの解像度でも同じ見た目になります。`gl_FragCoord.xy` も自動でステージの pixel 座標に換算されます。
 
 Pen レイヤーの色は premultiplied alpha です。RGB を処理するときは一度 straight color に戻し、出力時に alpha を掛け直すと透明な輪郭が汚れにくくなります。
 
