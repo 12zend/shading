@@ -1,0 +1,82 @@
+name: Deploy to Cloudflare
+
+# Builds shading.app on GitHub Actions and uploads it with `wrangler deploy` (cloudflare/wrangler.jsonc), instead of
+# building on Cloudflare: Cloudflare builds stop after 20 minutes, and building every archived engine takes longer.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN   "Edit Cloudflare Workers" token (Workers Scripts: Edit, Workers Routes: Edit on shading.app)
+#   CLOUDFLARE_ACCOUNT_ID  the account that owns the shading-app Worker
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy
+  # Let a running deploy finish, so the engines it built are saved to the cache.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check Cloudflare secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          # Engines missing from the cache are built from their commits (engine-versions.json).
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Finished builds of archived engines (scripts/build-engines.cjs). They never change, so a deploy only builds
+      # the engines released since the cache was saved. The key changes with every release, and the newest older
+      # cache is restored as a starting point.
+      - name: Restore archived engine builds
+        uses: actions/cache@v4
+        with:
+          path: .engine-builds
+          key: engine-builds-cloudflare-${{ hashFiles('engine-versions.json', 'scripts/build-engines.cjs', '.github/workflows/deploy-cloudflare.yml') }}
+          restore-keys: |
+            engine-builds-cloudflare-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build:cloudflare
+
+      - name: Count static assets
+        run: |
+          count=$(find build -type f | wc -l)
+          echo "Static assets: $count (Workers Free allows 20,000 per version)"
+          if [ "$count" -gt 18000 ]; then
+            echo "::warning::$count static assets; the Workers Free limit is 20,000 per version."
+          fi
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.121.0 deploy --config cloudflare/wrangler.jsonc

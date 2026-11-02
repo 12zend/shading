@@ -33,6 +33,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Finished builds of archived engines (scripts/build-engines.cjs); only newly released engines are built.
+      - name: Restore archived engine builds
+        uses: actions/cache@v4
+        with:
+          path: .engine-builds
+          key: engine-builds-pages-${{ hashFiles('engine-versions.json', 'scripts/build-engines.cjs', '.github/workflows/static.yml') }}
+          restore-keys: |
+            engine-builds-pages-
+
       - name: Install dependencies
         run: npm ci
 
