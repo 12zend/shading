@@ -88,6 +88,8 @@ class MemoryFontStorage {
 
 const keyOf = family => String(family).toLowerCase();
 
+const logError = (message, error) => console.error(`[fonts] ${message}`, error); // eslint-disable-line no-console
+
 class FontCache {
     /**
      * @param {object} vm VM with a font manager.
@@ -122,7 +124,7 @@ class FontCache {
                     if (record && record.family && record.data) this.records.set(record.key, record);
                 }
             })
-            .catch(error => console.error('[fonts] Could not read cached fonts:', error)) // eslint-disable-line no-console
+            .catch(error => logError('Could not read cached fonts:', error))
             .then(() => {
                 this.restore();
                 // Fonts of the project that loaded before the cache was read.
@@ -151,7 +153,7 @@ class FontCache {
 
     _enqueue (operation) {
         this.queue = this.queue.then(operation)
-            .catch(error => console.error('[fonts] Could not update the font cache:', error)); // eslint-disable-line no-console
+            .catch(error => logError('Could not update the font cache:', error));
         return this.queue;
     }
 
@@ -202,7 +204,7 @@ class FontCache {
                         new Uint8Array(record.data), null, true);
                     fontManager.addCustomFont(record.family, record.fallback || 'sans-serif', asset);
                 } catch (error) {
-                    console.error(`[fonts] Could not restore ${record.family}:`, error); // eslint-disable-line no-console
+                    logError(`Could not restore ${record.family}:`, error);
                 }
             }
         } finally {
