@@ -1121,6 +1121,26 @@ const makeObjectRightEdgeRenderer = ScratchBlocks => function (steps, inputRows,
     return cursorY;
 };
 
+// Inputs of the draw block that begin a new row: one row per vector, size, dimensions and time range.
+const DRAW_ROW_STARTS = ['PX', 'RX', 'SX', 'SIZE', 'WIDTH', 'T1'];
+
+/**
+ * Lay a command block out in several rows, starting a row at each named input.
+ * @param {object} ScratchBlocks scratch-blocks.
+ * @param {object} block Block being initialised.
+ * @param {string[]} rowStarts Names of the inputs that begin a row.
+ * @returns {object} The block.
+ */
+const useObjectRows = (ScratchBlocks, block, rowStarts) => {
+    for (const name of rowStarts) {
+        const input = block.getInput(name);
+        if (input) input.objectStartRow_ = true;
+    }
+    block.renderCompute_ = makeObjectRowsRenderer(ScratchBlocks);
+    block.renderDrawRight_ = makeObjectRightEdgeRenderer(ScratchBlocks);
+    return block;
+};
+
 const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
     const translate = (english, japanese) => localize(resolveLocale(locale, vm), english, japanese);
     // Saved projects use looks_* lighting opcodes. Keep those IDs while presenting the blocks as Objects.
@@ -1255,6 +1275,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             this.setPreviousStatement(true);
             this.setNextStatement(true);
             this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_SQUARE);
+            useObjectRows(ScratchBlocks, this, DRAW_ROW_STARTS);
             this.setOnChange(function () {
                 // ScratchBlocks binds onchange handlers to the block instance.
                 // eslint-disable-next-line no-invalid-this
@@ -1582,6 +1603,8 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
 };
 
 export {
+    DRAW_ROW_STARTS,
+    useObjectRows,
     DRAW_MEDIA_MENU,
     getDrawAssetValue,
     getDrawBlock,

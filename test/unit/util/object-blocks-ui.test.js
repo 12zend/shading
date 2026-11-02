@@ -1,4 +1,4 @@
-import {createMediaField} from '../../../src/lib/object-blocks-ui';
+import {DRAW_ROW_STARTS, createMediaField, useObjectRows} from '../../../src/lib/object-blocks-ui';
 
 const createFakeDocument = () => {
     const fakeDocument = {activeElement: null};
@@ -355,5 +355,18 @@ describe('Objects draw media picker', () => {
         } finally {
             global.document = originalDocument;
         }
+    });
+});
+
+describe('Objects block rows', () => {
+    test('break the draw block into position, rotation, scale, size, dimensions and time rows', () => {
+        const inputs = {};
+        const block = {getInput: name => inputs[name] || null};
+        for (const name of ['TEXT', 'PX', 'PY', 'RX', 'SX', 'SIZE', 'WIDTH', 'HEIGHT', 'T1', 'T2']) inputs[name] = {name};
+        useObjectRows({}, block, DRAW_ROW_STARTS);
+        expect(Object.keys(inputs).filter(name => inputs[name].objectStartRow_))
+            .toEqual(['PX', 'RX', 'SX', 'SIZE', 'WIDTH', 'T1']);
+        expect(typeof block.renderCompute_).toBe('function');
+        expect(typeof block.renderDrawRight_).toBe('function');
     });
 });
