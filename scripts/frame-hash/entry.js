@@ -62,6 +62,49 @@ const createVM = async (project, {compiler, framerate, duration}) => {
     return {vm, manager, renderer, driver};
 };
 
+// Pixels of one frame of a project, reached by seeking.
+const renderFrame = async (project, params, frame, options) => {
+    const {vm, driver} = await createVM(PROJECTS[project](params), options);
+    const pixels = await driver.seekTo(frame);
+    const precision = vm.runtime.penFX.getAccumulationPrecision();
+    driver.dispose();
+    return {pixels, precision};
+};
+
+const maxDifference = (first, second) => {
+    let max = 0;
+    for (let index = 0; index < first.length; index++) max = Math.max(max, Math.abs(first[index] - second[index]));
+    return max;
+};
+
+// Motion blur against its definition: one sample is the plain image; K samples are the average of the K images
+// rendered one by one at the sample times.
+window.runBlurCheck = async ({frame = 12, samples = 8, compiler = true, framerate = 30, duration = 1}) => {
+    const options = {compiler, framerate, duration};
+    const plain = await renderFrame('moving', {}, frame, options);
+    const single = await renderFrame('motionBlur', {samples: 1}, frame, options);
+    const blurred = await renderFrame('motionBlur', {samples}, frame, options);
+    const sum = new Float64Array(plain.pixels.length);
+    for (let index = 0; index < samples; index++) {
+        const seconds = (-90 + (180 * (index + 0.5) / samples)) / 360 / framerate;
+        const {pixels} = await renderFrame('atOffset', {seconds}, frame, options);
+        for (let pixel = 0; pixel < pixels.length; pixel++) sum[pixel] += pixels[pixel];
+    }
+    const average = sum.map(value => value / samples);
+    return {
+        precision: blurred.precision,
+        singleSampleMatchesPlain: maxDifference(single.pixels, plain.pixels) === 0,
+        singleSampleMaxDifference: maxDifference(single.pixels, plain.pixels),
+        blurDiffersFromPlain: maxDifference(blurred.pixels, plain.pixels) > 0,
+        maxDifferenceFromAverage: maxDifference(blurred.pixels, average),
+        hashes: {
+            plain: await sha256(plain.pixels),
+            singleSample: await sha256(single.pixels),
+            blurred: await sha256(blurred.pixels)
+        }
+    };
+};
+
 window.runFrameHash = async ({project, frames, compiler = true, framerate = 30, duration = 1}) => {
     const {renderer, driver} = await createVM(PROJECTS[project](), {compiler, framerate, duration});
     const gl = renderer.gl;

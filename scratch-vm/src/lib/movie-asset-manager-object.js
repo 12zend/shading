@@ -612,6 +612,7 @@ const MovieAssetManagerObjectMethods = {
     },
 
     syncObjectVideoAudio (target, video, configuration, playback, currentTime) {
+        if (configuration && configuration.suppressAudio) return;
         const key = this.getObjectVideoPlaybackKey(target, configuration);
         if (!(this.objectVideoAudioSeen instanceof Set)) this.objectVideoAudioSeen = new Set();
         this.objectVideoAudioSeen.add(key);

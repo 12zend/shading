@@ -268,6 +268,46 @@ const createPenFXClass = vm => {
             }
         }
 
+        // Time sampling (motion blur, echo): samples are layers added into an accumulation buffer.
+        beginAccumulation() {
+            try {
+                const engine = this._getEngine();
+                return typeof engine.beginAccumulation === 'function' && engine.beginAccumulation();
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return false;
+            }
+        }
+
+        accumulateLayer(layer, weight, operation) {
+            if (!this.engine || !layer) return false;
+            try {
+                return this.engine.accumulateLayer(layer, weight, operation);
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return false;
+            }
+        }
+
+        endAccumulation(options) {
+            if (!this.engine || typeof this.engine.endAccumulation !== 'function') return false;
+            try {
+                return this.engine.endAccumulation(options);
+            } catch (error) {
+                console.error('[Pen FX]', error);
+                return false;
+            }
+        }
+
+        getAccumulationPrecision() {
+            try {
+                const engine = this._getEngine();
+                return typeof engine.getAccumulationPrecision === 'function' ? engine.getAccumulationPrecision() : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
         beginMatte() {
             try {
                 return this._getEngine().beginMatte();
@@ -328,6 +368,7 @@ const createPenFXClass = vm => {
             try {
                 this.engine.clearGroupStack();
                 this.engine.clearMatteStack();
+                if (typeof this.engine.clearAccumulationStack === 'function') this.engine.clearAccumulationStack();
                 this.engine._restoreGLState();
             } catch (error) {
                 console.error('[Pen FX]', error);

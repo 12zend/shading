@@ -3,6 +3,7 @@ const FRAME_GRAPH_NODE_TYPES = Object.freeze({
     DRAW: 'Draw',
     GROUP: 'Group',
     SCENE: 'Scene',
+    TIME_SAMPLE: 'TimeSample',
     TRANSFORM: 'Transform'
 });
 
@@ -127,7 +128,7 @@ const optimizeNode = node => {
     for (const child of node.children || []) {
         const optimized = optimizeNode(child);
         if (optimized && optimized.type === FRAME_GRAPH_NODE_TYPES.GROUP && optimized.flattened &&
-            !optimized.name && !optimized.simulation) {
+            !optimized.name && !optimized.simulation && !optimized.sample) {
             children.push(...optimized.children);
         } else if (optimized) {
             children.push(optimized);
@@ -145,8 +146,9 @@ const optimizeNode = node => {
     if (!children.length) return null;
 
     // Structural groups do not need their own render target. Flattening them reduces traversal and allocations
-    // while preserving the authored node order. Named groups remain available for diagnostics.
-    if (node.type === FRAME_GRAPH_NODE_TYPES.GROUP && !node.name && !node.simulation) {
+    // while preserving the authored node order. Named groups remain available for diagnostics. The groups of a
+    // time-sampling node are its samples and keep their weights.
+    if (node.type === FRAME_GRAPH_NODE_TYPES.GROUP && !node.name && !node.simulation && !node.sample) {
         return children.length === 1 ? children[0] : {...optimized, children, flattened: true};
     }
     return optimized;

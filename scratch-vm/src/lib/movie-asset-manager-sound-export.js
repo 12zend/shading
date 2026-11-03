@@ -81,6 +81,7 @@ const MovieAssetManagerSoundExportMethods = {
 
     playSoundAtFrame (args, util) {
         if (!this.timeline.playing || !util || !util.target) return;
+        if (util.thread && util.thread.objectSuppressSound) return;
         if (!(this.playedTimelineSoundBlocks instanceof Set)) this.playedTimelineSoundBlocks = new Set();
         if (!Array.isArray(this.renderingSoundEvents)) this.renderingSoundEvents = [];
         const requestedFrame = Math.max(0, Math.round(toNumber(args && args.FRAME)));
@@ -115,6 +116,8 @@ const MovieAssetManagerSoundExportMethods = {
 
     playSoundAtTime (args, util) {
         if (!util || !util.target) return;
+        // A motion blur or echo plays sound only while its reference sample is evaluated.
+        if (util.thread && util.thread.objectSuppressSound) return;
         // Projects saved before the ranged sound block used TIME as an offset into the source audio.
         if (!Object.prototype.hasOwnProperty.call(args || {}, 'T1') &&
             !Object.prototype.hasOwnProperty.call(args || {}, 'T2')) {
@@ -487,6 +490,8 @@ const MovieAssetManagerSoundExportMethods = {
 
     stopObjectVideoAudio (target, configuration) {
         if (!(this.objectVideoAudio instanceof Map) || !target) return;
+        // Draws of a motion blur or echo's other samples leave the audio to the reference sample.
+        if (configuration && configuration.suppressAudio) return;
         const key = this.getObjectVideoPlaybackKey(target, configuration);
         this.stopObjectVideoAudioEntry(key, this.objectVideoAudio.get(key));
     },

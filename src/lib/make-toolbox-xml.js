@@ -864,6 +864,11 @@ const objects = function (costumeName, locale, pluginBlocksXML = '') {
         <block type="objects_localTime">
             <field name="MODE">posterize</field>${text('A', '12')}${number('B', 0)}
         </block>
+        <block type="objects_motionBlur">${number('ANGLE', 180)}${number('PHASE', -90)}${number('SAMPLES', 8)}</block>
+        <block type="objects_echo">
+            ${number('COUNT', 4)}${number('INTERVAL', -0.05)}${number('DECAY', 0.5)}
+            <field name="MODE">composite in back</field>
+        </block>
         <block type="objects_composite">
             ${number('OPACITY', 100)}<field name="BLEND">normal</field>
         </block>

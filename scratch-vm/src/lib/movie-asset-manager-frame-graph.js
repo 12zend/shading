@@ -437,6 +437,35 @@ const MovieAssetManagerFrameGraphMethods = {
         }, context.generation);
     },
 
+    // Draw each sample of a motion blur or echo into its own layer and add the layers, weighted, into one
+    // accumulation buffer that is composited once. The samples' draws already carry their sample times.
+    executeFrameGraphTimeSample (node, context) {
+        const penFX = this.penFX || this.runtime.penFX;
+        const samples = node.children.filter(child => child.sample)
+            .sort((a, b) => a.sample.order - b.sample.order);
+        if (!penFX || typeof penFX.beginAccumulation !== 'function' || penFX.beginAccumulation() === false) {
+            // Without accumulation buffers, draw the reference sample alone.
+            const reference = samples.find(child => child.sample.reference);
+            return reference ? this.executeFrameGraphChildren(reference, context) : null;
+        }
+        const pending = executeSequence(samples, child => {
+            if (this.frameGraphRenderer && this.frameGraphRenderer.generation !== context.generation) return;
+            if (penFX.beginLayer() === false) return;
+            const sampleContext = this.createFrameGraphPassContext(context, child);
+            const drawn = this.executeFrameGraphChildren(child, sampleContext);
+            return this.finishFrameGraphScope(drawn, () => {
+                const layer = penFX.endLayer();
+                if (!layer) return;
+                penFX.accumulateLayer(layer, child.sample.weight, child.sample.operation);
+                penFX.releaseLayer(layer);
+            }, context.generation);
+        });
+        return this.finishFrameGraphScope(pending, () => {
+            penFX.endAccumulation({opacity: node.opacity});
+            this.setFrameGraphDepthResource(context, null);
+        }, context.generation);
+    },
+
     executeFrameGraphScene (node, context) {
         if (node.sceneKind === 'frame') return this.executeFrameGraphChildren(node, context);
         if (node.sceneKind === 'objects') {
@@ -529,6 +558,7 @@ const MovieAssetManagerFrameGraphMethods = {
         if (node.type === FRAME_GRAPH_NODE_TYPES.SCENE) return this.executeFrameGraphScene(node, context);
         if (node.type === FRAME_GRAPH_NODE_TYPES.DRAW) return this.executeFrameGraphDraw(node, context);
         if (node.type === FRAME_GRAPH_NODE_TYPES.COMPOSITE) return this.executeFrameGraphComposite(node, context);
+        if (node.type === FRAME_GRAPH_NODE_TYPES.TIME_SAMPLE) return this.executeFrameGraphTimeSample(node, context);
         if (node.type === FRAME_GRAPH_NODE_TYPES.TRANSFORM) {
             return this.executeFrameGraphChildren(node, {
                 ...context,

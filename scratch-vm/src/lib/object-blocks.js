@@ -43,6 +43,8 @@ const BLEND_MODES = ['normal', 'add', 'mul', 'screen', 'overlay', 'darken', 'lig
 const MATTE_MODES = ['alpha', 'luma', 'alpha inverted', 'luma inverted'];
 const VECTOR_COMPONENTS = ['x', 'y', 'z'];
 const TIME_LOOP_MODES = ['loop', 'ping-pong'];
+const ECHO_MODES = ['composite in back', 'composite in front', 'add', 'max'];
+const MAX_TIME_SAMPLES = 64;
 const MAX_REPEAT_COUNT = 512;
 const OBJECT_REPORTER_OPCODES = new Set([
     'objects_timelineTime',
@@ -131,7 +133,9 @@ const applyThreadComposition = (configuration, util, runtime) => {
     // Inside a local time or time-sampling block every draw carries its evaluation time (video frames, time windows
     // and model frames follow it even when the frame graph executes the draw later).
     if (hasContextTimeScopes(thread)) {
-        return {...transformed, evaluationTime: getObjectTime(runtime, util, transformed)};
+        const sampled = {...transformed, evaluationTime: getObjectTime(runtime, util, transformed)};
+        if (thread.objectSuppressSound) sampled.suppressAudio = true;
+        return sampled;
     }
     if (!transformed.time) return transformed;
     if (thread && Array.isArray(thread.objectTimeScopes) && thread.objectTimeScopes.length) {
@@ -335,6 +339,7 @@ const getGroupingContext = util => {
         objectFrameGraphParent: parentThread && parentThread.objectFrameGraphParent,
         objectSceneCapture: parentThread && parentThread.objectSceneCapture,
         objectSimulationName: parentThread && parentThread.objectSimulationName,
+        objectSuppressSound: parentThread && parentThread.objectSuppressSound,
         objectTimeOffset: parentThread && parentThread.objectTimeOffset,
         objectTimeScopes: parentThread && parentThread.objectTimeScopes,
         objectTransformStack: parentThread && parentThread.objectTransformStack,
@@ -368,6 +373,7 @@ const runGroupingBranch = (runtime, context, branchNumber) => {
     if (context.objectFrameGraphParent) branchThread.objectFrameGraphParent = context.objectFrameGraphParent;
     if (context.objectSceneCapture) branchThread.objectSceneCapture = context.objectSceneCapture;
     if (context.objectSimulationName) branchThread.objectSimulationName = context.objectSimulationName;
+    if (context.objectSuppressSound) branchThread.objectSuppressSound = true;
     if (context.objectTimeOffset) branchThread.objectTimeOffset = context.objectTimeOffset;
     if (Array.isArray(context.objectTimeScopes)) branchThread.objectTimeScopes = context.objectTimeScopes.slice();
     if (Array.isArray(context.objectTransformStack)) {
@@ -897,6 +903,31 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     }
                 },
                 {
+                    opcode: 'motionBlur',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: translate(
+                        'motion blur shutter angle [ANGLE] phase [PHASE] samples [SAMPLES]',
+                        'モーションブラー シャッター角 [ANGLE] 位相 [PHASE] サンプル [SAMPLES]'
+                    ),
+                    arguments: {ANGLE: numberArgument(180), PHASE: numberArgument(-90), SAMPLES: numberArgument(8)}
+                },
+                {
+                    opcode: 'echo',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: translate(
+                        'echo count [COUNT] interval [INTERVAL] sec decay [DECAY] [MODE]',
+                        'エコー 回数 [COUNT] 間隔 [INTERVAL] 秒 減衰 [DECAY] 合成 [MODE]'
+                    ),
+                    arguments: {
+                        COUNT: numberArgument(4),
+                        INTERVAL: numberArgument(-0.05),
+                        DECAY: numberArgument(0.5),
+                        MODE: {type: ArgumentType.STRING, menu: 'echoMode', defaultValue: ECHO_MODES[0]}
+                    }
+                },
+                {
                     opcode: 'composite',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
@@ -1227,6 +1258,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 localTimeMode: {
                     acceptReporters: true,
                     items: LOCAL_TIME_MODES
+                },
+                echoMode: {
+                    acceptReporters: true,
+                    items: ECHO_MODES
                 },
                 vectorComponent: {
                     acceptReporters: true,
@@ -1683,6 +1718,97 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         this.runWithTimeScope(createLocalTimeScope(args.MODE, args.A, args.B), util);
     }
 
+    /**
+     * Evaluate the substack once per sample at the sample's time and combine the samples' layers into one.
+     * @param {object[]} samples In evaluation order, the reference sample last: {delta (seconds from the block's
+     *     time), weight, operation ('add' | 'over' | 'under' | 'max'), order (composite order), reference}.
+     * @param {object} util Block utility.
+     */
+    runTimeSampling (samples, util) {
+        const context = getGroupingContext(util);
+        const inherited = Array.isArray(context.objectTimeScopes) ? context.objectTimeScopes : [];
+        // With several samples every sample carries its time (so each draw records it); a single sample at the
+        // block's own time evaluates exactly like the substack without the block.
+        const sampleContext = sample => ({
+            ...context,
+            objectTimeScopes: sample.delta || samples.length > 1 ?
+                inherited.concat([{type: 'offset', offset: -sample.delta, legacy: false}]) : inherited,
+            // Sounds (and video audio) belong to the reference sample, so they play once.
+            objectSuppressSound: Boolean(context.objectSuppressSound || !sample.reference)
+        });
+        const reference = samples.find(sample => sample.reference) || samples[samples.length - 1];
+        if (samples.length === 1) {
+            const branchThread = runGroupingBranch(this.runtime, sampleContext(reference), 1);
+            propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+            return;
+        }
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TIME_SAMPLE, {}, context);
+        if (!node) {
+            // Outside a frame (a clicked script) there is nothing to accumulate into: draw the reference sample.
+            const branchThread = runGroupingBranch(this.runtime, sampleContext(reference), 1);
+            propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+            return;
+        }
+        for (const sample of samples) {
+            const sampleNode = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.GROUP, {
+                sample: {
+                    operation: sample.operation,
+                    order: sample.order,
+                    reference: sample === reference,
+                    time: sample.delta,
+                    weight: sample.weight
+                }
+            }, {objectFrameGraphParent: node});
+            runGroupingBranch(this.runtime, {...sampleContext(sample), objectFrameGraphParent: sampleNode}, 1);
+        }
+    }
+
+    // K samples across the shutter, like After Effects: shutter angle 360 is one frame, the phase moves the
+    // shutter's opening from the frame's time. Only values read inside the block are blurred.
+    motionBlur (args, util) {
+        const count = Math.round(Math.min(MAX_TIME_SAMPLES, Math.max(1, finiteNumber(args.SAMPLES, 8))));
+        const angle = finiteNumber(args.ANGLE, 180);
+        const phase = finiteNumber(args.PHASE, -90);
+        const framerate = getProjectFramerate(this.runtime);
+        const center = (phase + (angle / 2)) / 360 / framerate;
+        const samples = [];
+        for (let index = 0; index < count; index++) {
+            samples.push({
+                delta: (phase + (angle * (index + 0.5) / count)) / 360 / framerate,
+                operation: 'add',
+                order: index,
+                weight: 1 / count
+            });
+        }
+        let reference = samples[0];
+        for (const sample of samples) {
+            if (Math.abs(sample.delta - center) < Math.abs(reference.delta - center) - 1e-12) reference = sample;
+        }
+        reference.reference = true;
+        this.runTimeSampling(samples.filter(sample => sample !== reference).concat([reference]), util);
+    }
+
+    // COUNT copies at t + i * INTERVAL with opacity DECAY ^ i (i = 0 is now), combined like After Effects' Echo.
+    echo (args, util) {
+        const count = Math.round(Math.min(MAX_TIME_SAMPLES, Math.max(1, finiteNumber(args.COUNT, 4))));
+        const interval = finiteNumber(args.INTERVAL, -0.05);
+        const decay = Math.max(0, finiteNumber(args.DECAY, 0.5));
+        const requested = String(args.MODE || '').toLowerCase();
+        const mode = ECHO_MODES.includes(requested) ? requested : ECHO_MODES[0];
+        const samples = [];
+        for (let index = 0; index < count; index++) {
+            samples.push({
+                delta: index * interval,
+                operation: mode === 'add' || mode === 'max' ? mode : 'over',
+                // In back: the oldest copy is drawn first, so now is on top. In front: now is drawn first.
+                order: mode === 'composite in back' ? count - 1 - index : index,
+                reference: index === 0,
+                weight: Math.pow(decay, index)
+            });
+        }
+        this.runTimeSampling(samples.slice(1).concat([samples[0]]), util);
+    }
+
     timeRange (args, util) {
         const start = finiteNumber(args.START);
         const end = finiteNumber(args.END);
@@ -1910,6 +2036,7 @@ export {
     BLEND_MODES,
     COSTUME_GROUP_SOURCE,
     DRAW_SOURCES,
+    ECHO_MODES,
     LOCAL_TIME_MODES,
     MATTE_MODES,
     SHAPE_TYPES,

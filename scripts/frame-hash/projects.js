@@ -45,7 +45,31 @@ const easing = (v0, v1) => ({
     inputs: {V0: v0, V1: v1, T0: 0, T1: 1, POWER: 2, SPEED: 0}
 });
 
+// A shape that moves fast enough to blur, drawn inside `wrap` (a C block around the draw, or none).
+const movingShape = wrap => {
+    const body = [shape({
+        PX: {opcode: 'operator_multiply', inputs: {NUM1: {opcode: 'objects_timelineTime'}, NUM2: 600}},
+        PY: {opcode: 'operator_multiply', inputs: {NUM1: {opcode: 'objects_timelineTime'}, NUM2: -90}},
+        RZ: {opcode: 'operator_multiply', inputs: {NUM1: {opcode: 'objects_timelineTime'}, NUM2: 720}}
+    })];
+    return buildProject({
+        costume: COSTUME,
+        scripts: [{
+            hat: 'event_renderframe',
+            body: [{opcode: 'objects_clear'}, ...(wrap ? [{...wrap, substack: body}] : body)]
+        }]
+    });
+};
+
 const PROJECTS = {
+    // The moving shape as is, under a motion blur, or at a local time offset (one sample of the blur).
+    moving: () => movingShape(null),
+    motionBlur: ({samples = 8, angle = 180, phase = -90} = {}) => movingShape({
+        opcode: 'objects_motionBlur', inputs: {ANGLE: angle, PHASE: phase, SAMPLES: samples}
+    }),
+    atOffset: ({seconds = 0} = {}) => movingShape({
+        opcode: 'objects_localTime', fields: {MODE: 'offset'}, inputs: {A: -seconds, B: 0}
+    }),
     // Every value is a function of the timeline time.
     stateless: () => buildProject({
         costume: COSTUME,

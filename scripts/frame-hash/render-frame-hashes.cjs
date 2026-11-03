@@ -3,9 +3,13 @@
  * before the frame, seek, play and stop, export reusing frames) in headless Chromium with the real renderer.
  *
  *   node scripts/frame-hash/render-frame-hashes.cjs [project] [frames] [--interpreter] [--fps=30] [--json=out.json]
+ *   node scripts/frame-hash/render-frame-hashes.cjs --blur-check [--samples=8] [--frame=12]
  *
  * project is a key of scripts/frame-hash/projects.js (default: stateless); frames is a comma list (default 0,7,13).
  * Exits with status 1 when any way of reaching a frame gives a different image.
+ *
+ * --blur-check renders a motion blur and checks that one sample is exactly the plain image and that K samples are
+ * the average of the K sample times rendered one by one (within the accumulation buffer's precision).
  */
 const fs = require('fs');
 const os = require('os');
@@ -84,6 +88,22 @@ const bundle = async () => {
         });
         page.on('pageerror', error => console.error('[page]', error));
         await page.goto(`${origin}/`);
+        if (args.includes('--blur-check')) {
+            const blur = await page.evaluate(options => window.runBlurCheck(options), {
+                compiler: !args.includes('--interpreter'),
+                frame: Number(option('frame') || 12),
+                samples: Number(option('samples') || 8)
+            });
+            console.log(JSON.stringify(blur, null, 2));
+            if (option('json')) fs.writeFileSync(option('json'), JSON.stringify(blur, null, 2));
+            // RGBA16F accumulates without rounding each sample; RGBA8 rounds every weighted sample.
+            const tolerance = blur.precision === 'RGBA16F' ? 2 : Math.ceil(Number(option('samples') || 8) / 2) + 1;
+            const passed = blur.singleSampleMatchesPlain && blur.blurDiffersFromPlain &&
+                blur.maxDifferenceFromAverage <= tolerance;
+            console.log(`accumulation: ${blur.precision}, tolerance ${tolerance}: ${passed ? 'PASS' : 'FAIL'}`);
+            process.exitCode = passed ? 0 : 1;
+            return;
+        }
         const result = await page.evaluate(options => window.runFrameHash(options), {
             project,
             frames,

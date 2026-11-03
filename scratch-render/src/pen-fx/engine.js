@@ -378,6 +378,8 @@ const createPenFXEngine = (gl, renderer) => {
             this.clearGroupStack();
             this.clearMatteStack();
             this.clearRenderPasses();
+            // Accumulation buffers have the old size: drop them (a sampling block in progress draws nothing).
+            this.clearAccumulationStack();
             for (const framebuffer of this.framebuffers) gl.deleteFramebuffer(framebuffer);
             for (const texture of this.textures) gl.deleteTexture(texture);
             this.width = width;
@@ -800,6 +802,161 @@ const createPenFXEngine = (gl, renderer) => {
 
         releaseLayer (layer) {
             if (layer && layer.buffer) this._releaseGroupBuffer(layer.buffer);
+        }
+
+        // ---- time sampling (motion blur, echo) ------------------------------------------------------------
+        // Each sample of a time-sampling block is drawn into its own layer (beginLayer / endLayer). The layers
+        // are added into an accumulation buffer with a weight, premultiplied, and the result is composited onto
+        // the drawing surface once. The buffer is half float (RGBA16F) when the context can render to it, so
+        // many small weights add up without 8-bit rounding; otherwise it is RGBA8.
+
+        _accumulationFormat () {
+            if (this.accumulationFormat) return this.accumulationFormat;
+            const isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+            let format = {name: 'RGBA8', internalFormat: gl.RGBA, type: gl.UNSIGNED_BYTE};
+            if (isWebGL2 && gl.getExtension('EXT_color_buffer_float')) {
+                format = {name: 'RGBA16F', internalFormat: gl.RGBA16F, type: gl.HALF_FLOAT};
+            }
+            this.accumulationFormat = format;
+            return format;
+        }
+
+        _createAccumulationBuffer () {
+            const create = format => {
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texImage2D(gl.TEXTURE_2D, 0, format.internalFormat, this.width, this.height, 0, gl.RGBA,
+                    format.type, null);
+                const framebuffer = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+                    return {framebuffer, format: format.name, height: this.height, texture, width: this.width};
+                }
+                gl.deleteFramebuffer(framebuffer);
+                gl.deleteTexture(texture);
+                return null;
+            };
+            const preferred = this._accumulationFormat();
+            let buffer = create(preferred);
+            if (!buffer && preferred.name !== 'RGBA8') {
+                this.accumulationFormat = {name: 'RGBA8', internalFormat: gl.RGBA, type: gl.UNSIGNED_BYTE};
+                buffer = create(this.accumulationFormat);
+            }
+            return buffer;
+        }
+
+        _accumulationProgram () {
+            if (!this.accumulateProgram) {
+                this.accumulateProgram = this._createProgram(`
+                    precision highp float;
+                    varying vec2 v_uv;
+                    uniform sampler2D u_image;
+                    uniform float u_weight;
+                    void main() { gl_FragColor = texture2D(u_image, v_uv) * u_weight; }
+                `);
+            }
+            return this.accumulateProgram;
+        }
+
+        // The precision the accumulation buffer actually uses: 'RGBA16F' or 'RGBA8'.
+        getAccumulationPrecision () {
+            return this._accumulationFormat().name;
+        }
+
+        beginAccumulation () {
+            const skin = this._prepare(false, false);
+            if (!skin) return false;
+            if (!this.accumulationStack) this.accumulationStack = [];
+            const buffer = this._createAccumulationBuffer();
+            if (!buffer) return false;
+            this._clearTransparent(buffer.framebuffer);
+            this._restoreGLState();
+            this.accumulationStack.push({buffer, drawn: false, skin});
+            return true;
+        }
+
+        /**
+         * Add a layer to the innermost accumulation.
+         * @param {object} layer A layer from endLayer (may be null when nothing was drawn).
+         * @param {number} weight Factor applied to the layer's premultiplied colour.
+         * @param {string} operation 'add' (sum), 'over' (on top of what was added), 'under' (behind it) or
+         *     'max' (per-channel maximum).
+         * @returns {boolean} Whether the layer was added.
+         */
+        accumulateLayer (layer, weight = 1, operation = 'add') {
+            const entry = this.accumulationStack && this.accumulationStack[this.accumulationStack.length - 1];
+            if (!entry || !layer || !layer.texture || layer.width !== this.width || layer.height !== this.height ||
+                entry.buffer.width !== this.width || entry.buffer.height !== this.height) return false;
+            gl.disable(gl.DEPTH_TEST);
+            gl.disable(gl.SCISSOR_TEST);
+            gl.disable(gl.STENCIL_TEST);
+            gl.colorMask(true, true, true, true);
+            gl.enable(gl.BLEND);
+            if (operation === 'max') {
+                const minMax = typeof WebGL2RenderingContext !== 'undefined' &&
+                    gl instanceof WebGL2RenderingContext ? gl : gl.getExtension('EXT_blend_minmax');
+                gl.blendEquation(minMax ? (minMax.MAX || minMax.MAX_EXT) : gl.FUNC_ADD);
+                gl.blendFunc(gl.ONE, gl.ONE);
+            } else {
+                gl.blendEquation(gl.FUNC_ADD);
+                if (operation === 'over') gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+                else if (operation === 'under') gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.ONE);
+                else gl.blendFunc(gl.ONE, gl.ONE);
+            }
+            this.withProgramOverrides(null, () => this._render(this._accumulationProgram(), entry.buffer.framebuffer,
+                [{name: 'u_image', texture: layer.texture}], {u_weight: Math.max(0, Number(weight) || 0)}, []));
+            this._restoreGLState();
+            entry.drawn = true;
+            return true;
+        }
+
+        // Composite the accumulated samples onto the drawing surface (premultiplied source-over) and free them.
+        endAccumulation (options = {}) {
+            const entry = this.accumulationStack && this.accumulationStack.pop();
+            if (!entry) return false;
+            const skin = entry.skin;
+            const valid = entry.drawn && this._prepare(false, false) === skin &&
+                entry.buffer.width === this.width && entry.buffer.height === this.height;
+            if (valid) {
+                const requestedOpacity = Number(options.opacity);
+                const opacity = Number.isFinite(requestedOpacity) ? Math.max(0, Math.min(1, requestedOpacity)) : 1;
+                if (!this.accumulationResolveProgram) {
+                    this.accumulationResolveProgram = this._createProgram(`
+                        precision highp float;
+                        varying vec2 v_uv;
+                        uniform sampler2D u_image;
+                        uniform float u_opacity;
+                        void main() {
+                            vec4 color = clamp(texture2D(u_image, v_uv), 0.0, 1.0);
+                            gl_FragColor = vec4(min(color.rgb, vec3(color.a)), color.a) * u_opacity;
+                        }
+                    `);
+                }
+                gl.enable(gl.BLEND);
+                gl.blendEquation(gl.FUNC_ADD);
+                gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+                const target = skin._framebuffer.framebuffer || skin._framebuffer;
+                this.withProgramOverrides(null, () => this._render(this.accumulationResolveProgram, target,
+                    [{name: 'u_image', texture: entry.buffer.texture}], {u_opacity: opacity}, []));
+                this._markSkinChanged(skin);
+                this._restoreGLState();
+            }
+            gl.deleteFramebuffer(entry.buffer.framebuffer);
+            gl.deleteTexture(entry.buffer.texture);
+            return valid;
+        }
+
+        clearAccumulationStack () {
+            for (const entry of this.accumulationStack || []) {
+                gl.deleteFramebuffer(entry.buffer.framebuffer);
+                gl.deleteTexture(entry.buffer.texture);
+            }
+            this.accumulationStack = [];
         }
 
         drawRenderPass (name, options = {}) {

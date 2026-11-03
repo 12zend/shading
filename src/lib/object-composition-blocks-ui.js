@@ -1,6 +1,7 @@
 import {
     ANIMATION_EASING_TYPES,
     BLEND_MODES,
+    ECHO_MODES,
     LOCAL_TIME_MODES,
     MATTE_MODES,
     PRIMARY,
@@ -92,6 +93,41 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
             },
             numberInput('A'),
             numberInput('B')
+        ],
+        message1: '%1',
+        args1: [statementInput],
+        extensions: ['shape_statement']
+    });
+
+    installObjectBlock('objects_motionBlur', {
+        message0: localize(locale, 'motion blur shutter angle %1 phase %2 samples %3',
+            'モーションブラー シャッター角 %1 位相 %2 サンプル %3',
+            'もーしょんぶらー しゃったーかく %1 いそう %2 さんぷる %3'),
+        args0: [numberInput('ANGLE'), numberInput('PHASE'), numberInput('SAMPLES')],
+        message1: '%1',
+        args1: [statementInput],
+        extensions: ['shape_statement']
+    });
+
+    const echoLabels = {
+        'composite in back': ['composite in back', '後ろに合成', 'うしろにごうせい'],
+        'composite in front': ['composite in front', '前に合成', 'まえにごうせい'],
+        'add': ['add', '加算', 'かさん'],
+        'max': ['max', '最大', 'さいだい']
+    };
+    installObjectBlock('objects_echo', {
+        message0: localize(locale, 'echo count %1 interval %2 sec decay %3 %4',
+            'エコー 回数 %1 間隔 %2 秒 減衰 %3 合成 %4',
+            'えこー かいすう %1 かんかく %2 びょう げんすい %3 ごうせい %4'),
+        args0: [
+            numberInput('COUNT'),
+            numberInput('INTERVAL'),
+            numberInput('DECAY'),
+            {
+                type: 'field_dropdown',
+                name: 'MODE',
+                options: ECHO_MODES.map(mode => [localize(locale, ...echoLabels[mode]), mode])
+            }
         ],
         message1: '%1',
         args1: [statementInput],
