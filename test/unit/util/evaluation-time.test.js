@@ -41,6 +41,10 @@ describe('evaluation time', () => {
         expect(easing(easingArgs, timerUtil({objectTimeScopes: [offsetScope(1)]}))).toBe(25);
         // Legacy scopes in the same context still do not apply to easing.
         expect(easing(easingArgs, timerUtil({objectTimeScopes: LEGACY_SCOPES.concat([offsetScope(-1)])}))).toBe(75);
+        // Posterize to 1 fps: 2.75 s reads as 2 s.
+        expect(easing(easingArgs, timerUtil({
+            objectTimeScopes: [{type: 'posterize', framerate: 1, legacy: false}]
+        }, 2.75))).toBe(50);
     });
 
     test('Objects readers apply every scope of the thread, legacy ones included', () => {
@@ -117,6 +121,10 @@ void main() {
         const run = await makeShaderBlock();
         expect(run({thread: {objectTimeScopes: [offsetScope(0.5)]}})).toEqual([1, 24]);
         expect(run({thread: {objectTimeScopes: [offsetScope(-0.5), offsetScope(1.5)]}})).toEqual([0.5, 12]);
+        expect(run({thread: {objectTimeScopes: [{type: 'posterize', framerate: 2, legacy: false}]}}))
+            .toEqual([1.5, 36]);
+        expect(run({thread: {objectTimeScopes: [{type: 'posterize', framerate: 1, legacy: false}]}}))
+            .toEqual([1, 24]);
     });
 });
 

@@ -4,7 +4,12 @@ const resolveLocale = (locale, vm) => {
     return 'en';
 };
 
-const localize = (locale, english, japanese) => (locale === 'ja' ? japanese : english);
+// `hiragana` is optional: blocks that provide it are shown in it for ja-Hira; the others keep English there.
+const localize = (locale, english, japanese, hiragana) => {
+    if (locale === 'ja') return japanese;
+    if (locale === 'ja-Hira' && typeof hiragana !== 'undefined') return hiragana;
+    return english;
+};
 
 export {
     localize,

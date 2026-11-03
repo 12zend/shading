@@ -9,7 +9,9 @@ import {
     getBakedLayerPlane
 } from './movie-frame-graph';
 import {
+    LOCAL_TIME_MODES,
     calculateAnimationValue,
+    createLocalTimeScope,
     calculateLoopValue,
     calculatePingPongValue,
     calculateWiggleValue,
@@ -21,6 +23,7 @@ import {
     finiteNumber,
     getAnimationProgress,
     getObjectTime,
+    hasContextTimeScopes,
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
@@ -125,6 +128,11 @@ const applyThreadComposition = (configuration, util, runtime) => {
         manager.isCollectingFrameGraph();
     const transformed = graphCollecting ? configuration :
         applyObjectTransforms(configuration, thread && thread.objectTransformStack);
+    // Inside a local time or time-sampling block every draw carries its evaluation time (video frames, time windows
+    // and model frames follow it even when the frame graph executes the draw later).
+    if (hasContextTimeScopes(thread)) {
+        return {...transformed, evaluationTime: getObjectTime(runtime, util, transformed)};
+    }
     if (!transformed.time) return transformed;
     if (thread && Array.isArray(thread.objectTimeScopes) && thread.objectTimeScopes.length) {
         return {...transformed, evaluationTime: getObjectTime(runtime, util, transformed)};
@@ -878,6 +886,17 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                     }
                 },
                 {
+                    opcode: 'localTime',
+                    blockType: BlockType.CONDITIONAL,
+                    branchCount: 1,
+                    text: translate('time [MODE] [A] [B]', '時間 [MODE] [A] [B] で'),
+                    arguments: {
+                        MODE: {type: ArgumentType.STRING, menu: 'localTimeMode', defaultValue: 'posterize'},
+                        A: {type: ArgumentType.STRING, defaultValue: '12'},
+                        B: numberArgument(0)
+                    }
+                },
+                {
                     opcode: 'composite',
                     blockType: BlockType.CONDITIONAL,
                     branchCount: 1,
@@ -1204,6 +1223,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 timeLoopMode: {
                     acceptReporters: true,
                     items: TIME_LOOP_MODES
+                },
+                localTimeMode: {
+                    acceptReporters: true,
+                    items: LOCAL_TIME_MODES
                 },
                 vectorComponent: {
                     acceptReporters: true,
@@ -1654,6 +1677,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
 
+    // Evaluate the substack at the local time t' of MODE (see createLocalTimeScope). Unlike the hidden time blocks,
+    // the scope applies to every time reader in the substack: easing, PenFX, Objects, video and simulation reads.
+    localTime (args, util) {
+        this.runWithTimeScope(createLocalTimeScope(args.MODE, args.A, args.B), util);
+    }
+
     timeRange (args, util) {
         const start = finiteNumber(args.START);
         const end = finiteNumber(args.END);
@@ -1881,6 +1910,7 @@ export {
     BLEND_MODES,
     COSTUME_GROUP_SOURCE,
     DRAW_SOURCES,
+    LOCAL_TIME_MODES,
     MATTE_MODES,
     SHAPE_TYPES,
     TIME_LOOP_MODES,

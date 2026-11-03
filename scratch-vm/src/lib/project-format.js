@@ -60,6 +60,7 @@ const MOVIE_ASSET_BLOCKS = [
     'objects_instanceId',
     'objects_instanceSeed',
     'objects_line',
+    'objects_localTime',
     'objects_loopValue',
     'objects_matte',
     'objects_grouping',

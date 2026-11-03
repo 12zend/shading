@@ -86,7 +86,13 @@ const evaluateBezierPath = (path, component, time) => {
         (progress * progress * progress * end);
 };
 
-const TIME_SCOPE_TYPES = ['range', 'offset', 'scale', 'loop', 'pingpong', 'freeze', 'reverse', 'remap'];
+const TIME_SCOPE_TYPES = ['range', 'offset', 'scale', 'loop', 'pingpong', 'freeze', 'reverse', 'remap', 'posterize'];
+
+// The modes of the local time block (objects_localTime) and the time scope each creates.
+const LOCAL_TIME_MODES = ['offset', 'speed', 'posterize', 'freeze', 'loop', 'reverse', 'remap'];
+
+// Quantize a time to steps of 1 / fps. Shared by the posterize time reporter and the posterize local time mode.
+const quantizeTime = (time, fps) => Math.floor((finiteNumber(time) * fps) + 1e-9) / fps;
 
 const parseCurvePoints = memoizedStringParser(value => {
     if (Array.isArray(value)) {
@@ -177,10 +183,20 @@ const transformTimeByScope = (time, requestedScope) => {
     const currentTime = finiteNumber(time);
     if (type === 'range') return currentTime - finiteNumber(scope.start);
     if (type === 'offset') return currentTime - finiteNumber(scope.offset);
-    if (type === 'scale') return currentTime * finiteNumber(scope.scale, 1);
+    if (type === 'scale') {
+        // Speed changes around `pivot` (0 for the legacy block): the pivot time stays where it is.
+        const pivot = finiteNumber(scope.pivot);
+        return pivot + ((currentTime - pivot) * finiteNumber(scope.scale, 1));
+    }
     if (type === 'loop') {
+        // Loops of `duration` that start at `start` (0 for the legacy block).
         const duration = Math.abs(finiteNumber(scope.duration));
-        return duration > 0 ? positiveModulo(currentTime, duration) : 0;
+        const start = finiteNumber(scope.start);
+        return duration > 0 ? start + positiveModulo(currentTime - start, duration) : start;
+    }
+    if (type === 'posterize') {
+        const fps = finiteNumber(scope.framerate);
+        return fps > 0 ? quantizeTime(currentTime, fps) : currentTime;
     }
     if (type === 'pingpong') {
         const duration = Math.abs(finiteNumber(scope.duration));
@@ -324,7 +340,29 @@ const isTimeWithin = (time, start, end) => {
 const posterizeTime = (time, framerate) => {
     const fps = Math.abs(finiteNumber(framerate));
     if (fps <= 0) return 0;
-    return Math.floor((finiteNumber(time) * fps) + 1e-9) / fps;
+    return quantizeTime(time, fps);
+};
+
+/**
+ * The time scope of a local time block. A is the mode's amount (seconds, a speed factor, frames per second or a
+ * remap curve); B is the pivot of `speed` and the start of `loop`, and is ignored by the other modes.
+ * @param {string} mode One of LOCAL_TIME_MODES.
+ * @param {*} a First input.
+ * @param {*} b Second input.
+ * @returns {object} A non-legacy time scope.
+ */
+const createLocalTimeScope = (mode, a, b) => {
+    const requested = String(mode || '').toLowerCase();
+    const type = LOCAL_TIME_MODES.includes(requested) ? requested : LOCAL_TIME_MODES[0];
+    if (type === 'speed') return {type: 'scale', scale: finiteNumber(a, 1), pivot: finiteNumber(b), legacy: false};
+    if (type === 'posterize') return {type, framerate: finiteNumber(a), legacy: false};
+    if (type === 'freeze') return {type, time: finiteNumber(a), legacy: false};
+    if (type === 'loop') {
+        return {type, duration: Math.abs(finiteNumber(a)), start: finiteNumber(b), legacy: false};
+    }
+    if (type === 'reverse') return {type, duration: Math.abs(finiteNumber(a)), legacy: false};
+    if (type === 'remap') return {type, map: String(a === null || typeof a === 'undefined' ? '' : a), legacy: false};
+    return {type: 'offset', offset: finiteNumber(a), legacy: false};
 };
 
 const parseHexColor = value => {
@@ -384,7 +422,9 @@ const getAnimationProgress = ({start, end, easing, power = 2}, time) => calculat
 }, time);
 
 export {
+    LOCAL_TIME_MODES,
     calculateAnimationValue,
+    createLocalTimeScope,
     calculateLoopValue,
     calculatePingPongValue,
     calculateWiggleValue,
@@ -404,5 +444,7 @@ export {
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
-    posterizeTime
+    posterizeTime,
+    quantizeTime,
+    transformTimeByScope
 };

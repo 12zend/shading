@@ -619,7 +619,8 @@ describe('Objects blocks', () => {
 
         expect(info.blocks.map(blockInfo => blockInfo.opcode)).toEqual([
             'clear', 'drawSprite', 'draw', 'shape', 'arc', 'circularSegment', 'line', 'grouping', 'scene', 'bake',
-            'group', 'simulation', 'transform', 'composite', 'matte', 'renderPass', 'drawPass', 'clearPass',
+            'group', 'simulation', 'transform', 'localTime', 'composite', 'matte', 'renderPass', 'drawPass',
+            'clearPass',
             'repeat', 'timeOffset',
             'timeRange', 'timeScale', 'timeLoop', 'timeFreeze', 'timeReverse', 'timeRemap',
             'timelineTime', 'keyframeTime', 'leftKeyframeTime',

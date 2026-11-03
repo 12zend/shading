@@ -1,6 +1,7 @@
 import {
     ANIMATION_EASING_TYPES,
     BLEND_MODES,
+    LOCAL_TIME_MODES,
     MATTE_MODES,
     PRIMARY,
     SECONDARY,
@@ -69,6 +70,31 @@ const installObjectCompositionBlockDefinitions = (ScratchBlocks, locale = 'en') 
         message5: '%1',
         args5: [statementInput],
         inputsInline: false,
+        extensions: ['shape_statement']
+    });
+
+    const localTimeLabels = {
+        offset: ['offset', 'ずらす', 'ずらす'],
+        speed: ['speed', '速度', 'そくど'],
+        posterize: ['posterize', 'ポスタライズ', 'ぽすたらいず'],
+        freeze: ['freeze', '止める', 'とめる'],
+        loop: ['loop', 'ループ', 'るーぷ'],
+        reverse: ['reverse', '逆再生', 'ぎゃくさいせい'],
+        remap: ['remap', 'リマップ', 'りまっぷ']
+    };
+    installObjectBlock('objects_localTime', {
+        message0: localize(locale, 'time %1 %2 %3', '時間 %1 %2 %3 で', 'じかん %1 %2 %3 で'),
+        args0: [
+            {
+                type: 'field_dropdown',
+                name: 'MODE',
+                options: LOCAL_TIME_MODES.map(mode => [localize(locale, ...localTimeLabels[mode]), mode])
+            },
+            numberInput('A'),
+            numberInput('B')
+        ],
+        message1: '%1',
+        args1: [statementInput],
         extensions: ['shape_statement']
     });
 
