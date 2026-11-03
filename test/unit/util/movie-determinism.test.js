@@ -43,6 +43,20 @@ const statefulProject = () => buildProject({
     }]
 });
 
+// The stateful project's state as a simulation: x grows by 150 per second (5 per 30 fps frame), at 120 Hz.
+const simulationProject = () => buildProject({
+    scripts: [{
+        hat: {opcode: 'simulation_whenInitialized', inputs: {NAME: 'counter', START: 0, RATE: 120}},
+        body: [{opcode: 'simulation_setState', inputs: {KEY: 'x', VALUE: 0}}]
+    }, {
+        hat: {opcode: 'simulation_whenStepped', inputs: {NAME: 'counter'}},
+        body: [{opcode: 'simulation_changeState', inputs: {KEY: 'x', VALUE: 1.25}}]
+    }, {
+        hat: 'event_renderframe',
+        body: [draw({PX: {opcode: 'simulation_stateAt', inputs: {NAME: 'counter', KEY: 'x', TIME: ''}}})]
+    }]
+});
+
 const FRAMES = [0, 7, 13, 29];
 
 const expectAllEqual = (ways, only = Object.keys(ways)) => {
@@ -79,9 +93,18 @@ describe('frame determinism', () => {
             expect(new Set(frames.values()).size).toBe(31);
         });
 
-        // A render-frame script that integrates state cannot be deterministic: the time evaluation model v2 moves
-        // such state into simulations (M7 makes the simulation version of this test pass).
-        test.failing('a render-frame script that integrates state draws frame 13 the same way', async () => {
+        // The same state, integrated by a simulation: every way of reaching a frame draws it the same.
+        test.each([0, 13, 29])('a project whose state is a simulation draws frame %i the same way', async frame => {
+            harness = await createHarness(simulationProject(), {compiler, duration: 1});
+            const ways = await harness.reachFrame(frame);
+            expectAllEqual(ways);
+            const x = JSON.parse(ways.seek).children[0].configuration.position.x;
+            expect(x).toBeCloseTo(5 * frame, 6);
+        });
+
+        // A render-frame script that integrates a variable stays path-dependent (it depends on which frames were
+        // evaluated before): such state belongs in a simulation, as above.
+        test.failing('a render-frame script that integrates a variable draws frame 13 the same way', async () => {
             harness = await createHarness(statefulProject(), {compiler, duration: 1});
             expectAllEqual(await harness.reachFrame(13));
         });

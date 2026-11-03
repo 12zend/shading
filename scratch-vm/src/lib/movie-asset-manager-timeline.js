@@ -7,6 +7,7 @@ import {
     normalizeTimelineKeyframes,
     toNumber
 } from './movie-asset-manager-utils';
+import {captureVariables, syncSimulations} from './simulation-blocks';
 
 // The timeline playhead is driven by the underlying clock. Project scripts read the offset clock instead.
 const getTimelineClockTime = clock => {
@@ -18,6 +19,12 @@ const getTimelineClockTime = clock => {
 
 // Frame times are snapped with this tolerance so a time computed as k / fps never lands just below frame k.
 const FRAME_EPSILON = 1e-9;
+
+// How long one VM tick may spend computing simulation steps before the frame waits for the next tick.
+const SIMULATION_BUDGET_MS = {preview: 8, export: 50};
+// A frame that read simulation times that were not computed is discarded and evaluated again once they are. Each
+// evaluation can only add times to the computed ones, so this is a safety net, not the normal end of the loop.
+const MAX_SIMULATION_REDOS = 16;
 
 const MovieAssetManagerTimelineMethods = {
     // The one definition of frame time. Preview playback, export, seeking and single-frame PNG export all go
@@ -267,6 +274,9 @@ const MovieAssetManagerTimelineMethods = {
     finishTimelineInitialize () {
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
+        // Simulations read ordinary variables as they are once `initialize` has run.
+        this.simulationVariables = captureVariables(this.runtime);
+        this.syncSimulationDefinitions();
         if (!this.timeline.recording) this.timeline.previewInitialized = true;
         if (this.timeline.startClockAfterInitialize) this.startTimelinePlaybackClock();
     },
@@ -274,6 +284,7 @@ const MovieAssetManagerTimelineMethods = {
     pauseTimeline () {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
+        this.cancelSimulationWork();
         const clock = this.runtime.ioDevices.clock;
         if (this.timeline.playing && !this.timeline.startClockAfterInitialize) {
             this.timeline.currentTime = this.snapTimelineTime(getTimelineClockTime(clock));
@@ -301,6 +312,7 @@ const MovieAssetManagerTimelineMethods = {
     stopTimeline () {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
+        this.cancelSimulationWork();
         const cancelledRendering = this.timeline.recording;
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
@@ -325,6 +337,7 @@ const MovieAssetManagerTimelineMethods = {
     seekTimeline (seconds) {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
+        this.cancelSimulationWork();
         const wasPlaying = this.timeline.playing;
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
@@ -365,6 +378,8 @@ const MovieAssetManagerTimelineMethods = {
         // updates would continuously restart a paused preview, so only edits made outside the frame transaction
         // should schedule another evaluation at the current timeline time.
         if (this.timeline.renderedThisStep) return;
+        // Only simulations whose definition changed are computed again; editing a render-frame script keeps them.
+        this.syncSimulationDefinitions();
         this.renderCacheGeneration = (Number(this.renderCacheGeneration) || 0) + 1;
         if (this.renderingFrameCache instanceof Map) this.renderingFrameCache.clear();
         if (this.renderingSoundEventCache instanceof Map) this.renderingSoundEventCache.clear();
@@ -424,8 +439,123 @@ const MovieAssetManagerTimelineMethods = {
             this.timeline.width,
             this.timeline.height,
             this.timeline.framerate,
+            this.getSimulationCacheKey(),
             frameIndex
         ].join(':');
+    },
+
+    // ---- simulations ------------------------------------------------------------------------------------------
+
+    getSimulationRuntime () {
+        return this.runtime && this.runtime.simulationRuntime ? this.runtime.simulationRuntime : null;
+    },
+
+    // {simulation name: [{start, end}]} seconds that are computed (see SimulationCache.getRanges).
+    getSimulationCacheRanges () {
+        const simulationRuntime = this.getSimulationRuntime();
+        return simulationRuntime ? simulationRuntime.getCachedRanges() : {};
+    },
+
+    // The hashes of every simulation: a cached frame is only reused while they are unchanged.
+    getSimulationCacheKey () {
+        const simulationRuntime = this.getSimulationRuntime();
+        if (!simulationRuntime || typeof simulationRuntime.names !== 'function') return '';
+        return simulationRuntime.names().sort()
+            .map(name => `${name}=${simulationRuntime.simulations.get(name).definition.hash}`)
+            .join(',');
+    },
+
+    syncSimulationDefinitions () {
+        const simulationRuntime = this.getSimulationRuntime();
+        if (!simulationRuntime || !this.vm) return;
+        if (!this.simulationVariables) this.simulationVariables = captureVariables(this.runtime);
+        try {
+            syncSimulations(this.vm, this.simulationVariables);
+        } catch (error) {
+            this.reportSimulationError({name: '', error});
+        }
+    },
+
+    cancelSimulationWork () {
+        const simulationRuntime = this.getSimulationRuntime();
+        if (simulationRuntime) simulationRuntime.cancel();
+        if (this.timeline) {
+            this.timeline.waitingForSimulation = false;
+            this.timeline.simulationRequests = [];
+            this.timeline.simulationRedos = 0;
+        }
+    },
+
+    reportSimulationError ({name, error}) {
+        if (!(this.simulationErrorKeys instanceof Set)) this.simulationErrorKeys = new Set();
+        const message = error && error.message ? error.message : String(error);
+        const key = `${name}\u0000${message}`;
+        if (this.simulationErrorKeys.has(key)) return;
+        this.simulationErrorKeys.add(key);
+        const diagnostic = Object.freeze({code: 'simulation-error', message, simulation: name});
+        // eslint-disable-next-line no-console
+        console.warn(`[Movie] Simulation ${name}: ${message}`);
+        this.emit('simulationError', diagnostic);
+    },
+
+    /**
+     * Compute every simulation up to the frame's time (and the times the previous evaluation of this frame read),
+     * within this tick's budget. Returns false while the frame has to wait for more steps.
+     * @param {number} time The frame's time.
+     * @returns {boolean} Whether the frame can be evaluated.
+     */
+    ensureSimulationsForFrame (time) {
+        const simulationRuntime = this.getSimulationRuntime();
+        if (!simulationRuntime || !simulationRuntime.simulations.size) return true;
+        if (!this.simulationVariables) this.syncSimulationDefinitions();
+        const requests = simulationRuntime.names().map(name => ({name, time}))
+            .concat(this.timeline.simulationRequests || []);
+        const budget = this.timeline.recording ? SIMULATION_BUDGET_MS.export : SIMULATION_BUDGET_MS.preview;
+        const result = simulationRuntime.ensureTimes(requests, budget);
+        for (const error of result.errors) this.reportSimulationError(error);
+        // A simulation that failed is not waited for: its reads return its initial state.
+        if (result.ready || result.errors.length) {
+            this.timeline.waitingForSimulation = false;
+            return true;
+        }
+        this.timeline.waitingForSimulation = true;
+        return false;
+    },
+
+    // After a frame's scripts and drawing finished: discard the frame if it read simulation times that were not
+    // computed. The staging frame is not committed, so nothing of it reaches the screen or the export.
+    redoFrameForSimulation () {
+        const simulationRuntime = this.getSimulationRuntime();
+        if (!simulationRuntime || !simulationRuntime.hasRequestedTimes()) return false;
+        const requests = simulationRuntime.takeRequestedTimes();
+        if ((Number(this.timeline.simulationRedos) || 0) >= MAX_SIMULATION_REDOS) {
+            this.reportSimulationError({
+                name: requests[0].name,
+                error: new Error('A frame kept reading simulation times that were not computed.')
+            });
+            return false;
+        }
+        this.timeline.simulationRedos = (Number(this.timeline.simulationRedos) || 0) + 1;
+        this.timeline.simulationRequests = (this.timeline.simulationRequests || []).concat(requests);
+        this.cancelFrameTransaction();
+        this.discardFrameSoundEvents();
+        this.timeline.pendingFrame = true;
+        this.timeline.waitingForSimulation = true;
+        if (this.timeline.playing) this.timeline.previewFrameIndex = null;
+        return true;
+    },
+
+    // Forget the sound events recorded while evaluating the current export frame.
+    discardFrameSoundEvents () {
+        if (!this.timeline.recording || !Array.isArray(this.renderingSoundEvents)) return;
+        const frame = this.timeline.renderFrameIndex;
+        this.renderingSoundEvents = this.renderingSoundEvents.filter(event => {
+            if (Number(event.frame) !== frame) return true;
+            if (event.dedupeKey && this.playedTimelineSoundBlocks instanceof Set) {
+                this.playedTimelineSoundBlocks.delete(event.dedupeKey);
+            }
+            return false;
+        });
     },
 
     getRenderEndTime () {
@@ -571,6 +701,7 @@ const MovieAssetManagerTimelineMethods = {
     renderTimeline (options = {}) {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
+        this.cancelSimulationWork();
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
@@ -709,11 +840,21 @@ const MovieAssetManagerTimelineMethods = {
                 return;
             }
         }
+        if (!this.ensureSimulationsForFrame(this.timeline.currentTime)) {
+            // Not every simulation reached this frame's time within the tick's budget. Nothing of the frame has
+            // started: evaluate it again next tick (playback picks the frame the clock has reached by then).
+            this.timeline.renderedThisStep = false;
+            this.timeline.pendingFrame = true;
+            if (this.timeline.playing) this.timeline.previewFrameIndex = null;
+            return;
+        }
         this.beginObjectVideoAudioFrame();
         this.beginTimelineSoundFrame();
         this.resetDrawingForRenderFrame();
         // Counts evaluations of render frames: per-frame state (such as seeded random call counts) resets with it.
         this.timeline.frameEvaluationId = (Number(this.timeline.frameEvaluationId) || 0) + 1;
+        const simulationRuntime = this.getSimulationRuntime();
+        if (simulationRuntime) simulationRuntime.takeRequestedTimes();
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     },
@@ -732,6 +873,9 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
+        if (!this.timeline.reusedFrameThisStep && this.redoFrameForSimulation()) return;
+        this.timeline.simulationRequests = [];
+        this.timeline.simulationRedos = 0;
         if (!this.timeline.reusedFrameThisStep) {
             this.finishObjectVideoAudioFrame();
             this.finishTimelineSoundFrame();

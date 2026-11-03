@@ -97,13 +97,18 @@ class Timeline extends React.Component {
         this.handleZoomOut = this.handleZoomOut.bind(this);
         this.handleZoomToFit = this.handleZoomToFit.bind(this);
         this.measureTimelineViewport = this.measureTimelineViewport.bind(this);
+        this.handleSimulationCacheChanged = this.handleSimulationCacheChanged.bind(this);
     }
+
 
     componentDidMount () {
         this.unmounted = false;
         this.manager = installMovieAssetManager(this.props.vm);
         this.manager.on('timelineChanged', this.handleTimelineChanged);
         this.manager.on('renderingFramesChanged', this.handleRenderingFramesChanged);
+        this.manager.on('simulationCacheChanged', this.handleSimulationCacheChanged);
+        this.handleSimulationCacheChanged(this.manager.getSimulationCacheRanges ?
+            this.manager.getSimulationCacheRanges() : {});
         document.addEventListener('keydown', this.handleKeyDown);
         if (typeof ResizeObserver === 'function') {
             this.resizeObserver = new ResizeObserver(this.measureTimelineViewport);
@@ -131,6 +136,7 @@ class Timeline extends React.Component {
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
         this.manager.removeListener('renderingFramesChanged', this.handleRenderingFramesChanged);
+        this.manager.removeListener('simulationCacheChanged', this.handleSimulationCacheChanged);
         document.removeEventListener('keydown', this.handleKeyDown);
         document.removeEventListener('mousemove', this.handleScrubMove);
         document.removeEventListener('mouseup', this.handleScrubEnd);
@@ -138,6 +144,23 @@ class Timeline extends React.Component {
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', this.measureTimelineViewport);
         }
+    }
+
+    // Keep the computed simulation ranges (seconds, merged across simulations) for the cache bar.
+    handleSimulationCacheChanged (rangesByName) {
+        if (this.unmounted) return;
+        const ranges = Object.values(rangesByName || {}).reduce((all, list) => all.concat(list), [])
+            .sort((a, b) => a.start - b.start);
+        const merged = [];
+        for (const range of ranges) {
+            const last = merged[merged.length - 1];
+            if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+            else merged.push({start: range.start, end: range.end});
+        }
+        const key = JSON.stringify(merged);
+        if (key === this.simulationRangesKey) return;
+        this.simulationRangesKey = key;
+        this.setState({simulationRanges: merged});
     }
 
     measureTimelineViewport () {
@@ -950,6 +973,19 @@ class Timeline extends React.Component {
                                 }}
                             >
                                 {this.renderWaveform(timelineWidth)}
+                                {(this.state.simulationRanges || []).map(range => (
+                                    <span
+                                        aria-hidden="true"
+                                        className={styles.simulationRange}
+                                        key={range.start}
+                                        style={{
+                                            left: `${range.start * this.state.pixelsPerSecond}px`,
+                                            width: `${Math.max(1, (range.end - range.start) *
+                                                this.state.pixelsPerSecond)}px`
+                                        }}
+                                        title="Computed simulation"
+                                    />
+                                ))}
                                 <span
                                     aria-hidden="true"
                                     className={styles.elapsedRange}

@@ -273,19 +273,17 @@ describe.each([true, false])('Simulation blocks (compiler %s)', compiler => {
         expect(new Set(seeded).size).toBe(3);
     });
 
-    test('a render frame reads S(t) at its time and asks for times that are not computed', async () => {
+    test('a render frame reads S(t) at its time; reads of times not computed are recorded', async () => {
         await load(fallingBall());
         const simulationRuntime = harness.runtime.simulationRuntime;
-        // Nothing computed yet: the read falls back to S0... once S0 exists.
-        simulationRuntime.ensureAll(0);
+        // The timeline computes every simulation up to the frame's time before evaluating the frame.
         await harness.seekTo(15);
         const drawnY = () => JSON.parse(harness.frames.committed).children[0].configuration.position.y;
-        expect(drawnY()).toBe(100);
-        expect(simulationRuntime.takeRequestedTimes()).toEqual([{name: 'ball', time: 0.5}]);
-        simulationRuntime.ensureAll(0.5);
-        await harness.seekTo(15);
         expect(drawnY()).toBeCloseTo(expectedBallY(0.5), 9);
         expect(simulationRuntime.hasRequestedTimes()).toBe(false);
+        // Outside the timeline, a read of a time that is not computed falls back and is recorded.
+        expect(sample(harness, 'y', 1.75)).toBeCloseTo(expectedBallY(0.5), 9);
+        expect(simulationRuntime.takeRequestedTimes()).toEqual([{name: 'ball', time: 1.75}]);
     });
 
     test('render-frame seeded random is the same for the same seed, time and call order', async () => {

@@ -360,6 +360,15 @@
     content: "";
 }
 
+/* Simulation time that is computed: seeking or playing there needs no new simulation steps. */
+.simulation-range {
+    position: absolute;
+    bottom: 0;
+    height: 3px;
+    background: $zone-7;
+    pointer-events: none;
+}
+
 /* Volume wave of the timeline's sound blocks. */
 .waveform {
     position: absolute;

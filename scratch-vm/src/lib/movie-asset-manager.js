@@ -128,6 +128,8 @@ class MovieAssetManager extends EventEmitter {
         this.runtime.on('PROJECT_STOP_ALL', this.stopAllObjectVideoAudio);
         this.runtime.on('PROJECT_STOP_ALL', () => this.discardFrameGraph());
         this.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
+        // Computed simulation ranges, for the timeline's cache bar.
+        this.runtime.on('SIMULATION_CACHE_CHANGED', ranges => this.emit('simulationCacheChanged', ranges));
         if (this.runtime.renderer && typeof this.runtime.renderer.on === 'function') {
             this.runtime.renderer.on('NativeSizeChanged', this.handleNativeSizeChanged);
         }

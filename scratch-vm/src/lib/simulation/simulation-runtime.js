@@ -158,7 +158,8 @@ class SimulationRuntime {
             start: definition.start,
             rate: definition.rate,
             memoryLimit: this.memoryLimit / Math.max(1, this.simulations.size + 1),
-            now: this.now,
+            // Deadlines come from this.now (ensureTimes), so the cache must read the same clock.
+            now: () => this.now(),
             getSolver: id => this.getSolver(id),
             initialize: (state, context) => {
                 this.executor.initialize(definition, state, makeContext(state, context, 'initialize'));
