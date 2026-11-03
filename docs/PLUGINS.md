@@ -128,6 +128,9 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 - コマンドブロックは待たずに戻り、Scratch VM に `Promise` を返さないこと。非同期処理は `shading.runWithoutWaiting` で開始する。
 - 画像やフォントなど非同期の資源は、プラグインの有効化時や `registerData` の `deserialize` で準備しておく。
 - 描画ループ内で使われるブロックは、1 tick の中で完結し、途中のフレームを表示しないこと。
+- タイムライン上の時刻（秒）を受け取る引数には `timelineTime: true` を付ける（例: `TIME: {type: ArgumentType.NUMBER, defaultValue: 0, timelineTime: true}`）。
+  その値を入力している間はメインのタイムラインがプレビューになり、再生ヘッドが値の時刻へ移動し、再生ヘッドをドラッグすると値が書き換わる。
+  確定すると再生ヘッドは元の位置に戻る。長さや間隔（秒数の差）には付けない。
 
 ### 解像度と pixel 単位
 

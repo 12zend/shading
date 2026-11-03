@@ -1,6 +1,7 @@
 import installLegacyDrawingBlocks from './legacy-drawing-blocks';
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import installBlockNumberScrubbing from './block-number-scrubbing';
+import {installBlockTimeInputPreview} from './block-time-input-preview';
 import installObjectBlockDefinitions from './object-blocks-ui';
 import installListBlocks from './list-blocks';
 import {localize} from './movie-block-l10n';
@@ -22,6 +23,7 @@ export default function (vm, locale = 'en') {
             manager.requestTimelinePreviewRefresh();
         }
     });
+    installBlockTimeInputPreview(ScratchBlocks, vm);
     const jsonForMenuBlock = function (name, menuOptionsFn, colors, start) {
         return {
             message0: '%1',

@@ -512,7 +512,7 @@ const createSimulationBlocksClass = vm => class SimulationBlocks {
                     arguments: {
                         NAME: {type: ArgumentType.STRING, menu: 'simulationName', defaultValue: 'simulation'},
                         KEY: key('x'),
-                        TIME: {type: ArgumentType.STRING, defaultValue: ''}
+                        TIME: {type: ArgumentType.STRING, defaultValue: '', timelineTime: true}
                     }
                 },
                 {
@@ -527,7 +527,7 @@ const createSimulationBlocksClass = vm => class SimulationBlocks {
                         NAME: {type: ArgumentType.STRING, menu: 'simulationName', defaultValue: 'simulation'},
                         KEY: key('particles'),
                         INDEX: number(1),
-                        TIME: {type: ArgumentType.STRING, defaultValue: ''}
+                        TIME: {type: ArgumentType.STRING, defaultValue: '', timelineTime: true}
                     }
                 }
             ],
