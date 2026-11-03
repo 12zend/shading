@@ -1,4 +1,5 @@
 import compilerCompatBlocks from '../compiler/compat-blocks';
+import {getEvaluationTime} from './object-animation';
 import {getTimeRangeProgress} from './time-range';
 
 /**
@@ -184,6 +185,9 @@ const calculateEasingValue = ({
  * Install Movie's native operator primitive into a VM instance. The compiler
  * compatibility entry keeps the block working when TurboWarp compilation is
  * enabled, while still using the same project timer as Scratch's timer block.
+ * Inside a local time block the timer is mapped through that block's time
+ * scope; legacy (hidden) time scopes do not apply, so existing projects
+ * evaluate exactly as before.
  *
  * @param {VirtualMachine} vm Scratch VM instance.
  * @returns {VirtualMachine} The same VM instance.
@@ -197,7 +201,7 @@ const installMovieEasing = vm => {
         t1: args.T1,
         power: args.POWER,
         speed: args.SPEED
-    }, util.ioQuery('clock', 'projectTimer'));
+    }, getEvaluationTime(vm.runtime, util, {reader: 'timer'}));
 
     if (!compilerCompatBlocks.inputs.includes('operator_easing')) {
         compilerCompatBlocks.inputs.push('operator_easing');

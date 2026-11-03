@@ -199,6 +199,23 @@ const evaluateTimeScopes = (time, scopes) => {
     return scopes.reduce((result, scope) => transformTimeByScope(result, scope), finiteNumber(time));
 };
 
+// The thread whose time context a reader uses: the one evaluating the block, or the sequencer's running thread.
+const getEvaluationThread = (runtime, util) => {
+    if (util && util.thread) return util.thread;
+    const sequencer = runtime && runtime.sequencer;
+    return sequencer && sequencer.activeThread ? sequencer.activeThread : null;
+};
+
+// Time scopes from the time blocks that are part of the time evaluation model (objects_localTime and the
+// time-sampling blocks). Scopes marked `legacy` come from the hidden compatibility time blocks: they keep affecting
+// only the Objects time readers, as they always have, and never easing or PenFX.
+const getContextTimeScopes = thread => (
+    thread && Array.isArray(thread.objectTimeScopes) ?
+        thread.objectTimeScopes.filter(scope => scope && !scope.legacy) : []
+);
+
+const hasContextTimeScopes = thread => getContextTimeScopes(thread).length > 0;
+
 const getObjectTime = (runtime, util, configuration = null) => {
     const manager = runtime && runtime.movieAssetManager;
     const timelineTime = manager && manager.timeline && Number(manager.timeline.currentTime);
@@ -211,6 +228,39 @@ const getObjectTime = (runtime, util, configuration = null) => {
     const thread = util && util.thread;
     const offset = thread ? finiteNumber(thread.objectTimeOffset) : 0;
     return evaluateTimeScopes(time - offset, thread && thread.objectTimeScopes);
+};
+
+const getProjectTimer = (runtime, util) => {
+    if (util && typeof util.ioQuery === 'function') return finiteNumber(util.ioQuery('clock', 'projectTimer'));
+    const clock = runtime && runtime.ioDevices && runtime.ioDevices.clock;
+    return clock && typeof clock.projectTimer === 'function' ? finiteNumber(clock.projectTimer()) : 0;
+};
+
+const getTimelineTime = runtime => {
+    const manager = runtime && runtime.movieAssetManager;
+    return finiteNumber(manager && manager.timeline && manager.timeline.currentTime);
+};
+
+/**
+ * The time a block is evaluated at: the one place every time reader goes through.
+ *
+ * - reader 'objects' (default): Objects reporters, draw time windows, video, simulation reads. The timeline time
+ *   (or the draw's evaluation time) with every time scope of the thread, legacy ones included.
+ * - reader 'timer': operator_easing. The project timer, with only the thread's non-legacy time scopes, so outside
+ *   them (or inside legacy scopes only) it is exactly the project timer, as before.
+ * - reader 'timeline': PenFX u_time / u_frame. The timeline time with only the non-legacy time scopes.
+ *
+ * @param {Runtime} runtime The VM runtime.
+ * @param {object} util Block utility (its thread carries the time context); null uses the running thread.
+ * @param {object} options {reader, configuration}.
+ * @returns {number} Seconds.
+ */
+const getEvaluationTime = (runtime, util, {reader = 'objects', configuration = null} = {}) => {
+    if (reader === 'objects') return getObjectTime(runtime, util, configuration);
+    const thread = getEvaluationThread(runtime, util);
+    const base = reader === 'timer' ? getProjectTimer(runtime, util) : getTimelineTime(runtime);
+    const scopes = getContextTimeScopes(thread);
+    return scopes.length ? evaluateTimeScopes(base, scopes) : base;
 };
 
 const calculateAnimationValue = ({from, to, start, end, easing, power = 2}, time) => {
@@ -346,7 +396,11 @@ export {
     evaluateTimeScopes,
     finiteNumber,
     getAnimationProgress,
+    getContextTimeScopes,
+    getEvaluationThread,
+    getEvaluationTime,
     getObjectTime,
+    hasContextTimeScopes,
     interpolateAngle,
     interpolateColor,
     isTimeWithin,

@@ -1641,7 +1641,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
         propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
     }
 
+    // The hidden compatibility time blocks: their scopes are `legacy`, so easing and PenFX ignore them as before.
     runTimeScope (scope, util) {
+        this.runWithTimeScope({...scope, legacy: true}, util);
+    }
+
+    runWithTimeScope (scope, util) {
         const context = getGroupingContext(util);
         const inherited = Array.isArray(context.objectTimeScopes) ? context.objectTimeScopes : [];
         context.objectTimeScopes = inherited.concat([scope]);

@@ -10,6 +10,7 @@ import {BLEND_MODES} from './constants';
 import {markMovieProject} from '../project-format';
 import {inferShaderInputs} from './shader-uniforms';
 import {localize, resolveLocale} from '../movie-block-l10n';
+import {getEvaluationTime} from '../object-animation';
 import {programSources as coreProgramSources} from 'scratch-render/src/pen-fx/shaders';
 import {getRegisteredProgramNames} from 'scratch-render/src/pen-fx/engine';
 
@@ -1288,10 +1289,12 @@ class PenFXCustomShaderManager extends EventEmitter {
             } else {
                 wrapper = (args, util) => {
                     if (shaderBlock.presets) this._captureInputPreview(util);
+                    // The time is read now, from the block's thread, and travels with the effect into the frame graph.
+                    const time = this._timelineTime(util);
                     const uniforms = {
                         u_resolution: [0, 0],
-                        u_time: this._timelineTime(),
-                        u_frame: this._timelineFrame()
+                        u_time: time,
+                        u_frame: this._timelineFrame(util, time)
                     };
                     const integerUniforms = new Set(['u_frame']);
                     for (const input of shaderBlock.inputs) {
@@ -1395,18 +1398,18 @@ class PenFXCustomShaderManager extends EventEmitter {
         }
     }
 
-    _timelineTime () {
-        const timeline = this.vm && this.vm.runtime && this.vm.runtime.movieAssetManager &&
-            this.vm.runtime.movieAssetManager.timeline;
-        const currentTime = timeline && Number(timeline.currentTime);
-        return Number.isFinite(currentTime) ? currentTime : 0;
+    // The evaluation time of the thread running the block: the timeline time, mapped through local time blocks
+    // (not the legacy hidden time blocks, which never applied to PenFX).
+    _timelineTime (util = null) {
+        const time = getEvaluationTime(this.vm && this.vm.runtime, util, {reader: 'timeline'});
+        return Number.isFinite(time) ? time : 0;
     }
 
-    _timelineFrame () {
+    _timelineFrame (util = null, time = this._timelineTime(util)) {
         const timeline = this.vm && this.vm.runtime && this.vm.runtime.movieAssetManager &&
             this.vm.runtime.movieAssetManager.timeline;
         const frameRate = timeline && Number(timeline.framerate);
-        return Math.round(this._timelineTime() * (Number.isFinite(frameRate) ? frameRate : 30));
+        return Math.round(time * (Number.isFinite(frameRate) ? frameRate : 30));
     }
 
     async _refreshBlocks () {
