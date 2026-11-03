@@ -226,6 +226,29 @@ describe('simulation cache', () => {
         expect(runtime.sample('ball', 'count', 1)).toBe(120);
     });
 
+    test('several times that each take longer than the budget are all computed eventually', () => {
+        let clock = 0;
+        const runtime = new SimulationRuntime({executor, now: () => clock});
+        runtime.registerSolver(createFakeSolver());
+        runtime.syncDefinitions([{name: 'ball', hash: 'h', start: 0, rate: 120}]);
+        runtime.ensureAll(5);
+        const cache = runtime.getSimulation('ball');
+        const step = cache.stepState;
+        cache.stepState = (...args) => {
+            clock += 1;
+            step(...args);
+        };
+        // Three times away from the live state and the checkpoints, each needing about 50 steps, 10 per call.
+        const requests = [0.4, 1.4, 2.4].map(time => ({name: 'ball', time}));
+        let calls = 0;
+        while (!runtime.ensureTimes(requests, 10).ready) {
+            calls++;
+            expect(calls).toBeLessThan(100);
+        }
+        expect(requests.every(({time}) => runtime.isAvailable('ball', time))).toBe(true);
+        expect(runtime.sample('ball', 'count', 1.4)).toBe(168);
+    });
+
     test('keeps the computed steps when a definition keeps its hash', () => {
         const runtime = makeRuntime();
         runtime.ensureAll(1);

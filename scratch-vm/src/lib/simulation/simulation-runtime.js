@@ -209,10 +209,16 @@ class SimulationRuntime {
             }
             if (cache.ensureTime(time, deadline, {batch: true})) {
                 done++;
-            } else {
-                ready = false;
-                if (cache.error) errors.push({name, error: cache.error});
+                continue;
             }
+            ready = false;
+            if (cache.error) {
+                errors.push({name, error: cache.error});
+                continue;
+            }
+            // Out of budget: leave the rest for the next call. Starting another request now would replace this
+            // request's partly computed steps, and the next call would start it over again.
+            break;
         }
         if (this.rangesKey() !== before) this.emitChange();
         return {ready, progress: requests.length ? done / requests.length : 1, errors};
