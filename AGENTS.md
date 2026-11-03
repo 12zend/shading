@@ -74,6 +74,10 @@ Existing blocks with deliberately documented atomic behavior are compatibility e
 7. If the task added features, release a new engine version after the last feature commit, as described in [Engine Version Records](#engine-version-records-required).
 8. Report the changes, checks performed, commit hashes, and any remaining issues.
 
+## Branches
+- Commit directly to `develop`. Do not create new branches (feature, fix or any other), even when the default branch is checked out.
+- Do not open pull requests unless the user explicitly asks for one; work lands on `develop` as plain commits.
+
 ## When to commit
 Commit at a natural boundary, such as:
 - Completing a coherent feature or subfeature.
