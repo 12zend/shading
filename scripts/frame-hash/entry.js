@@ -6,6 +6,7 @@ import VM from '../../scratch-vm/src/index';
 import RenderWebGL from '../../scratch-render/src/index';
 import {createTimelineDriver} from '../../test/helpers/timeline-driver';
 import {COSTUME, COSTUME_SVG, PROJECTS} from './projects';
+import {runPhysicsBenchmark} from './physics-benchmark';
 
 const sha256 = async pixels => {
     const digest = await crypto.subtle.digest('SHA-256', pixels);
@@ -14,7 +15,7 @@ const sha256 = async pixels => {
 
 const readPixels = canvas => canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.slice();
 
-const createVM = async (project, {compiler, framerate, duration}) => {
+const createVM = async (project, {compiler, framerate, duration, beforeLoad = null}) => {
     const canvas = document.createElement('canvas');
     canvas.width = 480;
     canvas.height = 360;
@@ -48,6 +49,7 @@ const createVM = async (project, {compiler, framerate, duration}) => {
         return frame;
     };
 
+    if (beforeLoad) await beforeLoad(vm);
     await vm.loadProject(JSON.stringify(project));
     vm.setCompilerOptions({enabled: compiler});
     manager.updateTimelineSettings({
@@ -104,6 +106,8 @@ window.runBlurCheck = async ({frame = 12, samples = 8, compiler = true, framerat
         }
     };
 };
+
+window.runPhysicsBenchmark = () => runPhysicsBenchmark(createVM, COSTUME);
 
 window.runFrameHash = async ({project, frames, compiler = true, framerate = 30, duration = 1}) => {
     const {renderer, driver} = await createVM(PROJECTS[project](), {compiler, framerate, duration});

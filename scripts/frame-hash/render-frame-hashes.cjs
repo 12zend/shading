@@ -10,6 +10,10 @@
  *
  * --blur-check renders a motion blur and checks that one sample is exactly the plain image and that K samples are
  * the average of the K sample times rendered one by one (within the accumulation buffer's precision).
+ *
+ * --physics-benchmark measures 100 rigid bodies over 10 s at 120 Hz (the physics plugin from the shading-plugins
+ * checkout next to this repository, or SHADING_PLUGINS_DIR): the first computation, then seeks with and without an
+ * 8-sample motion blur.
  */
 const fs = require('fs');
 const os = require('os');
@@ -30,10 +34,35 @@ const frames = (positional[1] || '0,7,13').split(',').map(Number);
 // esbuild does not run webpack loaders: strip loader prefixes (`!raw-loader!./file`), inline base64-loader files,
 // leave out modules only exporting needs (mediabunny) and stub the Node built-ins some dependencies mention.
 const NODE_BUILTINS = /^(fs|path|crypto|module)$/;
+const PLUGINS_DIR = process.env.SHADING_PLUGINS_DIR || path.resolve(root, '../shading-plugins');
+
+// `shading-plugin-files:<id>` is a plugin folder of the shading-plugins checkout as {path: base64}.
+const pluginFiles = id => {
+    const base = path.join(PLUGINS_DIR, id);
+    const files = {};
+    const walk = directory => {
+        for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+            const absolute = path.join(directory, entry.name);
+            if (entry.isDirectory()) walk(absolute);
+            else files[path.relative(base, absolute).split(path.sep).join('/')] = fs.readFileSync(absolute)
+                .toString('base64');
+        }
+    };
+    if (fs.existsSync(base)) walk(base);
+    return files;
+};
 const webpackCompatibility = {
     name: 'webpack-compatibility',
     setup (build) {
         build.onResolve({filter: NODE_BUILTINS}, () => ({path: 'builtin', namespace: 'empty'}));
+        build.onResolve({filter: /^shading-plugin-files:/}, resolved => ({
+            path: resolved.path.slice('shading-plugin-files:'.length),
+            namespace: 'plugin-files'
+        }));
+        build.onLoad({filter: /.*/, namespace: 'plugin-files'}, loaded => ({
+            contents: `module.exports = ${JSON.stringify(pluginFiles(loaded.path))};`,
+            loader: 'js'
+        }));
         build.onResolve({filter: /^mediabunny\//}, () => ({path: 'mediabunny', namespace: 'empty'}));
         build.onResolve({filter: /!/}, resolved => {
             const request = resolved.path.slice(resolved.path.lastIndexOf('!') + 1);
@@ -87,7 +116,16 @@ const bundle = async () => {
             return route.fulfill({contentType: 'text/html', body: '<!doctype html><body><script src="/bundle.js"></script></body>'});
         });
         page.on('pageerror', error => console.error('[page]', error));
+        page.on('console', message => {
+            if (message.text().startsWith('[benchmark]')) console.log(message.text());
+        });
         await page.goto(`${origin}/`);
+        if (args.includes('--physics-benchmark')) {
+            const benchmark = await page.evaluate(() => window.runPhysicsBenchmark());
+            console.log(JSON.stringify(benchmark, null, 2));
+            if (option('json')) fs.writeFileSync(option('json'), JSON.stringify(benchmark, null, 2));
+            return;
+        }
         if (args.includes('--blur-check')) {
             const blur = await page.evaluate(options => window.runBlurCheck(options), {
                 compiler: !args.includes('--interpreter'),
