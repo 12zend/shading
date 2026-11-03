@@ -2746,10 +2746,15 @@ describe('MovieAssetManager rendering performance', () => {
             isMesh: true,
             name: 'Movie image plane'
         });
-        expect(prepared.item.sourceObject.material).toMatchObject({
+        expect(prepared.item.sourceObject.material[0]).toMatchObject({
             depthTest: true,
             depthWrite: true,
             transparent: false
+        });
+        expect(prepared.item.sourceObject.material[1]).toMatchObject({
+            depthTest: true,
+            depthWrite: false,
+            transparent: true
         });
         expect(prepared.item.transform).toMatchObject({
             rotation: {x: 1, y: 2, z: 3},
@@ -2759,8 +2764,8 @@ describe('MovieAssetManager rendering performance', () => {
             worldZ: 480
         });
         prepared.resource.geometry.dispose();
-        prepared.resource.material.map.dispose();
-        prepared.resource.material.dispose();
+        prepared.resource.material[0].map.dispose();
+        prepared.resource.material.forEach(material => material.dispose());
     });
 
     test('converts an ordinary Scratch costume into a Three.js image plane', async () => {
@@ -2799,8 +2804,8 @@ describe('MovieAssetManager rendering performance', () => {
             worldZ: 480
         });
         prepared.resource.geometry.dispose();
-        prepared.resource.material.map.dispose();
-        prepared.resource.material.dispose();
+        prepared.resource.material[0].map.dispose();
+        prepared.resource.material.forEach(material => material.dispose());
         texture.dispose();
     });
 
@@ -2837,9 +2842,83 @@ describe('MovieAssetManager rendering performance', () => {
         expect(prepared.item.sourceObject.geometry.boundingBox.max.toArray()).toEqual([200, 0, 0]);
 
         prepared.resource.geometry.dispose();
-        prepared.resource.material.map.dispose();
-        prepared.resource.material.dispose();
+        prepared.resource.material[0].map.dispose();
+        prepared.resource.material.forEach(material => material.dispose());
         texture.dispose();
+    });
+
+    test('rasterizes an SVG costume above its intrinsic size for a scene, once per image', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const image = {height: 100, width: 200};
+        const texture = new THREE.Texture(image);
+        const context = {drawImage: jest.fn()};
+        const originalDocument = global.document;
+        global.document = {createElement: jest.fn(() => ({getContext: () => context}))};
+        manager.getCostumeForObjectDraw = jest.fn(() => ({
+            asset: {assetId: 'logo', decodeText: () => '<svg></svg>', encodeDataURI: jest.fn()},
+            bitmapResolution: 1,
+            dataFormat: 'svg',
+            rotationCenterX: 100,
+            rotationCenterY: 50,
+            size: [200, 100]
+        }));
+        manager.getBuildingTexture = jest.fn(() => ({texture}));
+        const configuration = {
+            asset: 'logo',
+            height: 100,
+            position: {x: 0, y: 0, z: 480},
+            rotation: {x: 0, y: 0, z: 0},
+            scale: {x: 1, y: 1, z: 1},
+            size: 100,
+            source: 'costume',
+            width: 100
+        };
+        let prepared;
+        try {
+            prepared = await manager.prepareObjectSceneItem(target, configuration);
+            manager.objectImagePlanes.clear();
+            await manager.prepareObjectSceneItem(target, configuration);
+        } finally {
+            global.document = originalDocument;
+        }
+
+        const raster = prepared.item.sourceObject.material[0].map.image;
+        expect([raster.width, raster.height]).toEqual([1200, 600]);
+        expect(context.drawImage).toHaveBeenCalledTimes(1);
+        expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, 1200, 600);
+
+        prepared.resource.geometry.dispose();
+        prepared.resource.material[0].map.dispose();
+        prepared.resource.material.forEach(material => material.dispose());
+        texture.dispose();
+    });
+
+    test('renders a scene at twice the Movie buffer density within a 4K frame', async () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const canvas = {height: 1, width: 1};
+        manager.camera = {name: 'camera'};
+        manager.getStageSize = jest.fn(() => [640, 360]);
+        const model = {renderWorldScene: jest.fn(() => canvas)};
+        MovieSourceRenderer.forRenderer(manager.runtime.renderer).model = model;
+        manager.prepareObjectSceneItem = jest.fn(async () => ({item: {sourceObject: {}}, resource: null}));
+        manager.publishModelZBuffer = jest.fn();
+        manager.finishObjectDraw = jest.fn();
+        const buffer = manager.runtime.renderer._allSkins[0];
+
+        for (const [quality, resolution] of [[0.75, 1.5], [1, 2], [3, 6], [4, 6], [0.25, 1]]) {
+            buffer.renderQuality = quality;
+            expect(manager.getObjectSceneBitmapResolution()).toBe(resolution);
+        }
+
+        buffer.renderQuality = 1.5;
+        await manager.performObjectScene(target, {entries: [{asset: 'image'}]});
+        expect(model.renderWorldScene).toHaveBeenCalledWith([{sourceObject: {}}], manager.camera, [640, 360], 3);
+        // The texture's stage size follows the rendered density.
+        expect(manager.runtime.renderer.prepareMovieSource).toHaveBeenCalledWith(
+            expect.objectContaining({kind: 'model', resolution: 3})
+        );
     });
 
     test('keeps a following draw behind an asynchronous scene render', async () => {
@@ -3115,7 +3194,7 @@ describe('MovieAssetManager rendering performance', () => {
         }
     );
 
-    test('samples shape and text textures smoothly and model frames with nearest-neighbor', () => {
+    test('samples shape, text and model textures smoothly', () => {
         const manager = makeManager();
         const context = {
             beginPath: jest.fn(),
@@ -3144,7 +3223,7 @@ describe('MovieAssetManager rendering performance', () => {
                 kind: 'text', font: {name: 'sans', family: 'sans-serif'}, text: 'smooth'
             }).nearest).toBe(false);
             expect(renderer.prepareMovieSource({kind: 'model', arguments: [], owner: 'target'}).nearest)
-                .toBe(true);
+                .toBe(false);
         } finally {
             global.document = originalDocument;
         }
@@ -4178,7 +4257,7 @@ describe('Objects draw resource scaling', () => {
         expect(manager.decodeObjectVideoFrame).toHaveBeenCalledTimes(1);
         const plane = frames.get('clip:4').plane;
         plane.geometry.dispose();
-        plane.material.map.dispose();
-        plane.material.dispose();
+        plane.material[0].map.dispose();
+        plane.material.forEach(material => material.dispose());
     });
 });

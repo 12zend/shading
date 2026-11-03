@@ -237,16 +237,22 @@ const createBuildingPrimitive = (type, requestedBounds, requestedUV, material = 
     return mesh;
 };
 
-const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, requestedRotationCenter) => {
+// Texels at least this opaque are drawn in the opaque pass; the rest are blended in the transparent pass.
+const IMAGE_PLANE_OPAQUE_ALPHA = 1 - (0.5 / 255);
+
+const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, requestedRotationCenter, options = {}) => {
     const width = Math.max(0.001, Number(requestedWidth) || 0.001);
     const height = Math.max(0.001, Number(requestedHeight) || 0.001);
     const texture = sourceTexture && sourceTexture.isTexture ?
         sourceTexture.clone() : new THREE.Texture(sourceTexture);
     texture.colorSpace = THREE.SRGBColorSpace;
-    // These planes are refreshed frequently (especially video). Mipmap generation would rebuild the full
-    // chain for every new frame, while stage-sized Movie output only needs linear sampling.
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
+    // Premultiplied texels filter without dark fringes around colored text and costumes.
+    texture.premultiplyAlpha = true;
+    // Video planes are refreshed every frame, and rebuilding a mipmap chain for each would be wasted work. Cached
+    // planes (text, shapes, costumes) keep theirs, so they stay smooth when drawn smaller than their bitmap.
+    const mipmaps = Boolean(options.mipmaps);
+    texture.generateMipmaps = mipmaps;
+    texture.minFilter = mipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.needsUpdate = true;
 
@@ -255,19 +261,42 @@ const createImagePlane = (sourceTexture, requestedWidth, requestedHeight, reques
     const centerX = Number.isFinite(Number(rotationCenter.x)) ? Number(rotationCenter.x) : width / 2;
     const centerY = Number.isFinite(Number(rotationCenter.y)) ? Number(rotationCenter.y) : height / 2;
     geometry.translate((width / 2) - centerX, centerY - (height / 2), 0);
+    // Draw the plane twice: once per material below.
+    geometry.clearGroups();
+    geometry.addGroup(0, Infinity, 0);
+    geometry.addGroup(0, Infinity, 1);
 
-    const material = new THREE.MeshBasicMaterial({
-        alphaTest: 1 / 255,
+    // Opaque texels stay in the opaque pass: visibility is decided by the GPU depth buffer, not by Three.js's
+    // transparent-object painter ordering. Three.js writes alpha 1 in this pass, which is exact for these texels.
+    const opaque = new THREE.MeshBasicMaterial({
+        alphaTest: IMAGE_PLANE_OPAQUE_ALPHA,
         depthTest: true,
         depthWrite: true,
         map: texture,
         side: THREE.DoubleSide,
         toneMapped: false,
-        // Alpha-tested planes stay in the opaque pass: visibility is decided by the GPU depth buffer, not by
-        // Three.js's transparent-object painter ordering. The render target still receives the texture alpha.
         transparent: false
     });
-    const mesh = new THREE.Mesh(geometry, material);
+    // Anti-aliased edges and translucent texels are blended over what lies behind them, keeping their alpha like
+    // a plain Objects draw. They test depth against the opaque pass but do not write it. Opaque texels drawn again
+    // here blend onto themselves unchanged.
+    const translucent = new THREE.MeshBasicMaterial({
+        alphaTest: 1 / 255,
+        blendDst: THREE.OneMinusSrcAlphaFactor,
+        blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        blendEquation: THREE.AddEquation,
+        blendEquationAlpha: THREE.AddEquation,
+        blendSrc: THREE.OneFactor,
+        blendSrcAlpha: THREE.OneFactor,
+        blending: THREE.CustomBlending,
+        depthTest: true,
+        depthWrite: false,
+        map: texture,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+        transparent: true
+    });
+    const mesh = new THREE.Mesh(geometry, [opaque, translucent]);
     mesh.userData.movieStaticPlane = true;
     mesh.name = 'Movie image plane';
     return mesh;

@@ -19,11 +19,24 @@ import {isTimeInRange} from './time-range';
 
 const MAX_OBJECT_IMAGE_PLANES = 256;
 const BAKED_LAYER_DEPTH = 480;
+// An Objects scene is rendered at twice the pixel density of the Movie buffer it is drawn into, so the linear
+// downsample smooths the edges of planes. The offscreen size stays within a 4K frame.
+const OBJECT_SCENE_SUPERSAMPLING = 2;
+const OBJECT_SCENE_MAX_PIXELS = 3840 * 2160;
+const OBJECT_SCENE_MAX_EDGE = 4096;
+// SVG costumes load at one pixel per stage unit. Scenes rasterize them at the text bitmap density instead.
+const OBJECT_SCENE_VECTOR_RESOLUTION = 6;
+const OBJECT_SCENE_VECTOR_MAX_PIXELS = 2048 * 2048;
+const OBJECT_SCENE_VECTOR_MAX_EDGE = 4096;
+
+const isSvgCostume = costume => {
+    const asset = costume && costume.asset;
+    return String((costume && costume.dataFormat) || (asset && asset.dataFormat) || '').toLowerCase() === 'svg';
+};
 
 const getSvgViewBoxOrigin = costume => {
     const asset = costume && costume.asset;
-    const dataFormat = String((costume && costume.dataFormat) || (asset && asset.dataFormat) || '').toLowerCase();
-    if (dataFormat !== 'svg' || !asset || typeof asset.decodeText !== 'function') return null;
+    if (!isSvgCostume(costume) || !asset || typeof asset.decodeText !== 'function') return null;
     const svg = asset.decodeText();
     const viewBoxMatch = String(svg).match(/<svg\b[^>]*\bviewBox\s*=\s*(["'])([^"']+)\1/i);
     if (!viewBoxMatch) return null;
@@ -31,6 +44,40 @@ const getSvgViewBoxOrigin = costume => {
         .map(Number);
     if (values.length < 2 || !Number.isFinite(values[0]) || !Number.isFinite(values[1])) return null;
     return {x: values[0], y: values[1]};
+};
+
+const vectorRasters = new WeakMap();
+
+/**
+ * Rasterize a loaded SVG costume image above its intrinsic size, cached per image.
+ * @param {object} texture Three.js texture holding the decoded SVG image.
+ * @param {number} width Costume width in stage units.
+ * @param {number} height Costume height in stage units.
+ * @returns {HTMLCanvasElement|object} A canvas, or the texture when the image cannot be rasterized.
+ */
+const getVectorRaster = (texture, width, height) => {
+    const image = texture && texture.image;
+    if (!image || typeof document === 'undefined' || !(width > 0) || !(height > 0)) return texture;
+    const cached = vectorRasters.get(image);
+    if (cached) return cached;
+    const resolution = Math.min(
+        OBJECT_SCENE_VECTOR_RESOLUTION,
+        OBJECT_SCENE_VECTOR_MAX_EDGE / Math.max(width, height),
+        Math.sqrt(OBJECT_SCENE_VECTOR_MAX_PIXELS / (width * height))
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * resolution));
+    canvas.height = Math.max(1, Math.round(height * resolution));
+    const context = canvas.getContext('2d');
+    if (!context) return texture;
+    try {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    } catch (error) {
+        return texture;
+    }
+    canvas.reusable = false;
+    vectorRasters.set(image, canvas);
+    return canvas;
 };
 
 const MovieAssetManagerObjectMethods = {
@@ -43,7 +90,7 @@ const MovieAssetManagerObjectMethods = {
             this.objectImagePlanes.set(key, cached);
             return cached;
         }
-        const plane = createImagePlane(bitmap, width, height, rotationCenter);
+        const plane = createImagePlane(bitmap, width, height, rotationCenter, {mipmaps: true});
         this.objectImagePlanes.set(key, plane);
         while (this.objectImagePlanes.size > MAX_OBJECT_IMAGE_PLANES) {
             this.objectImagePlanes.delete(this.objectImagePlanes.keys().next().value);
@@ -80,6 +127,21 @@ const MovieAssetManagerObjectMethods = {
             }
         }
         return this.timeline ? toNumber(this.timeline.currentTime) : 0;
+    },
+
+    getObjectSceneBitmapResolution () {
+        const renderer = this.runtime.renderer;
+        let quality = 1;
+        if (renderer && renderer._allSkins && typeof renderer.getMovieBufferId === 'function') {
+            const buffer = renderer._allSkins[renderer.getMovieBufferId()];
+            if (buffer && toNumber(buffer.renderQuality) > 0) quality = toNumber(buffer.renderQuality);
+        }
+        const [width, height] = this.getStageSize();
+        return Math.max(1, Math.min(
+            quality * OBJECT_SCENE_SUPERSAMPLING,
+            OBJECT_SCENE_MAX_EDGE / Math.max(1, width, height),
+            Math.sqrt(OBJECT_SCENE_MAX_PIXELS / Math.max(1, width * height))
+        ));
     },
 
     createObjectSceneCapture (target, requestedCamera = null) {
@@ -256,7 +318,7 @@ const MovieAssetManagerObjectMethods = {
                 y: (toNumber(costume.rotationCenterY, (logicalHeight * resolution) / 2) / resolution) -
                     (viewBoxOrigin ? viewBoxOrigin.y : 0)
             };
-            bitmap = texture;
+            bitmap = isSvgCostume(costume) ? getVectorRaster(texture, logicalWidth, logicalHeight) : texture;
             planeCacheKey = `costume:${costume.assetId || costume.name}:${logicalWidth}:${logicalHeight}:` +
                 `${rotationCenter.x}:${rotationCenter.y}`;
         } else if (source === 'video') {
@@ -359,15 +421,16 @@ const MovieAssetManagerObjectMethods = {
                 if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
             }
             if (!prepared.length) return;
+            const resolution = this.getObjectSceneBitmapResolution();
             const renderArguments = [
                 prepared.map(result => result.item),
                 camera,
                 this.getStageSize(),
-                BITMAP_RESOLUTION
+                resolution
             ];
             if (Array.isArray(this.lights)) renderArguments.push(this.lights);
             state.objectSource = this.runtime.renderer.prepareMovieSource({
-                kind: 'model', arguments: renderArguments, owner: target.id
+                kind: 'model', arguments: renderArguments, owner: target.id, resolution
             });
             this.publishModelZBuffer(target, camera);
             this.finishObjectDraw(target, {}, 'model', false, camera);

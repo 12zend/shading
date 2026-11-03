@@ -29,21 +29,38 @@ const camera = {
 };
 
 describe('Movie 3D projection', () => {
-    test('uses depth-tested opaque-pass image planes instead of transparent painter ordering', () => {
+    test('draws opaque texels with depth and blends anti-aliased edges without painter ordering', () => {
         const texture = new THREE.Texture();
         const plane = createImagePlane(texture, 100, 50, {x: 25, y: 10});
         plane.geometry.computeBoundingBox();
+        const [opaque, translucent] = plane.material;
 
-        expect(plane.material.transparent).toBe(false);
-        expect(plane.material.depthTest).toBe(true);
-        expect(plane.material.depthWrite).toBe(true);
-        expect(plane.material.alphaTest).toBeCloseTo(1 / 255);
-        expect(plane.material.map).not.toBe(texture);
+        expect(plane.geometry.groups).toEqual([
+            {start: 0, count: Infinity, materialIndex: 0},
+            {start: 0, count: Infinity, materialIndex: 1}
+        ]);
+        expect(opaque.transparent).toBe(false);
+        expect(opaque.depthTest).toBe(true);
+        expect(opaque.depthWrite).toBe(true);
+        expect(opaque.alphaTest).toBeCloseTo(254.5 / 255);
+        // Three.js forces alpha to 1 for opaque materials, so edges and translucent texels need the blended pass.
+        expect(translucent.transparent).toBe(true);
+        expect(translucent.depthTest).toBe(true);
+        expect(translucent.depthWrite).toBe(false);
+        expect(translucent.alphaTest).toBeCloseTo(1 / 255);
+        expect(translucent.blending).toBe(THREE.CustomBlending);
+        expect([translucent.blendSrc, translucent.blendDst]).toEqual([THREE.OneFactor, THREE.OneMinusSrcAlphaFactor]);
+        expect(opaque.map).not.toBe(texture);
+        expect(translucent.map).toBe(opaque.map);
+        expect(opaque.map.premultiplyAlpha).toBe(true);
+        expect(opaque.map.generateMipmaps).toBe(false);
+        expect(createImagePlane(texture, 1, 1, null, {mipmaps: true}).material[0].map.minFilter)
+            .toBe(THREE.LinearMipmapLinearFilter);
         expect(plane.geometry.boundingBox.min.toArray()).toEqual([-25, -40, 0]);
         expect(plane.geometry.boundingBox.max.toArray()).toEqual([75, 10, 0]);
 
-        plane.material.map.dispose();
-        plane.material.dispose();
+        plane.material[0].map.dispose();
+        plane.material.forEach(material => material.dispose());
         plane.geometry.dispose();
         texture.dispose();
     });
@@ -55,8 +72,8 @@ describe('Movie 3D projection', () => {
         expect(plane.geometry.boundingBox.min.toArray()).toEqual([0, -50, 0]);
         expect(plane.geometry.boundingBox.max.toArray()).toEqual([100, 0, 0]);
 
-        plane.material.map.dispose();
-        plane.material.dispose();
+        plane.material[0].map.dispose();
+        plane.material.forEach(material => material.dispose());
         plane.geometry.dispose();
     });
 
@@ -590,8 +607,8 @@ describe('Objects image plane instancing', () => {
         expect(renderer.scene.children).toHaveLength(1000);
         submitted[0].dispose();
         source.geometry.dispose();
-        source.material.map.dispose();
-        source.material.dispose();
+        source.material[0].map.dispose();
+        source.material.forEach(material => material.dispose());
     });
 
     test('preserves mirrored planes and restores visibility after a failed render', () => {
@@ -611,7 +628,7 @@ describe('Objects image plane instancing', () => {
         expect(renderer.scene.children).toHaveLength(3);
         renderer.imagePlaneBatches[0].dispose();
         source.geometry.dispose();
-        source.material.map.dispose();
-        source.material.dispose();
+        source.material[0].map.dispose();
+        source.material.forEach(material => material.dispose());
     });
 });
