@@ -712,6 +712,8 @@ const MovieAssetManagerTimelineMethods = {
         this.beginObjectVideoAudioFrame();
         this.beginTimelineSoundFrame();
         this.resetDrawingForRenderFrame();
+        // Counts evaluations of render frames: per-frame state (such as seeded random call counts) resets with it.
+        this.timeline.frameEvaluationId = (Number(this.timeline.frameEvaluationId) || 0) + 1;
         const threads = this.runtime.startHats('event_renderframe');
         this.timeline.renderFrameThreads = Array.isArray(threads) ? threads : [];
     },

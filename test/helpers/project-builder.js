@@ -99,10 +99,13 @@ const buildProject = ({variables = {}, scripts = [], costume = null} = {}) => {
             visible: false, x: 0, y: 0, size: 100, direction: 90, draggable: false, rotationStyle: 'all around'
         })
     });
+    const extensions = ['objects', 'simulation'].filter(extension => Object.values(blocks).some(block => (
+        block.opcode.startsWith(`${extension}_`)
+    )));
     return {
         targets: [target(true, 'Stage', {}, stageVariables), target(false, 'main', blocks, {})],
         monitors: [],
-        extensions: ['objects'],
+        extensions,
         meta: {semver: '3.0.0', vm: '0.2.0', agent: ''}
     };
 };

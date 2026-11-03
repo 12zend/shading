@@ -5,6 +5,7 @@ import installListBlocks from './list-blocks';
 import installMovieAssetManager from './movie-asset-manager';
 import installPenFX from './pen-fx';
 import installObjectBlocks from './object-blocks';
+import installSimulationBlocks from './simulation-blocks';
 
 const resetCompilerCaches = vm => {
     const runtime = vm && vm.runtime;
@@ -43,6 +44,7 @@ const installShadingFeatures = vm => {
     installMovieAssetManager(vm);
     installPenFX(vm);
     installObjectBlocks(vm);
+    installSimulationBlocks(vm);
     vm.__shadingFeaturesInstalled = true;
     resetCompilerCaches(vm);
     return vm;

@@ -944,6 +944,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const penFXXML = moveCategory('penfx');
     const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
+    const simulationXML = moveCategory('simulation');
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
     const sensingXML = moveCategory('sensing') || sensing(isInitialSetup, isStage, targetId, colors.sensing);
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
@@ -965,6 +966,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         motionXML, gap,
         soundXML, gap,
         eventsXML, gap,
+        ...(simulationXML ? [simulationXML, gap] : []),
         controlXML, gap,
         sensingXML, gap,
         operatorsXML, gap,

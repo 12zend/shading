@@ -12,6 +12,7 @@ import VM from 'scratch-vm';
 import installMovieAssetManager from '../../scratch-vm/src/lib/movie-asset-manager';
 import installMovieEasing from '../../scratch-vm/src/lib/movie-easing';
 import installObjectBlocks from '../../scratch-vm/src/lib/object-blocks';
+import installSimulationBlocks from '../../scratch-vm/src/lib/simulation-blocks';
 import {buildProject} from './project-builder';
 import {createTimelineDriver} from './timeline-driver';
 
@@ -59,6 +60,7 @@ const createHarness = async (project, {compiler = true, framerate = 30, duration
     const runtime = vm.runtime;
     runtime.renderer = createFakeRenderer();
     installObjectBlocks(vm);
+    installSimulationBlocks(vm);
     installMovieEasing(vm);
     const manager = installMovieAssetManager(vm);
 

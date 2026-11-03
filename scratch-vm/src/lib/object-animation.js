@@ -265,6 +265,7 @@ const getTimelineTime = runtime => {
  * - reader 'timer': operator_easing. The project timer, with only the thread's non-legacy time scopes, so outside
  *   them (or inside legacy scopes only) it is exactly the project timer, as before.
  * - reader 'timeline': PenFX u_time / u_frame. The timeline time with only the non-legacy time scopes.
+ * Inside a simulation step every reader returns the step's simulation time.
  *
  * @param {Runtime} runtime The VM runtime.
  * @param {object} util Block utility (its thread carries the time context); null uses the running thread.
@@ -272,8 +273,10 @@ const getTimelineTime = runtime => {
  * @returns {number} Seconds.
  */
 const getEvaluationTime = (runtime, util, {reader = 'objects', configuration = null} = {}) => {
-    if (reader === 'objects') return getObjectTime(runtime, util, configuration);
     const thread = getEvaluationThread(runtime, util);
+    // Inside a simulation step, every time reader sees the step's simulation time.
+    if (thread && thread.simulationContext) return finiteNumber(thread.simulationContext.time);
+    if (reader === 'objects') return getObjectTime(runtime, util, configuration);
     const base = reader === 'timer' ? getProjectTimer(runtime, util) : getTimelineTime(runtime);
     const scopes = getContextTimeScopes(thread);
     return scopes.length ? evaluateTimeScopes(base, scopes) : base;

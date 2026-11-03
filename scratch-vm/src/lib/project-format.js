@@ -184,9 +184,12 @@ const MOVIE_BLOCK_SET = new Set(MOVIE_ASSET_BLOCKS.concat(
 const ADVANCED_GRAPHIC_BLOCK_SET = new Set(ADVANCED_GRAPHIC_BLOCKS);
 const ADVANCED_GRAPHIC_EFFECT_SET = new Set(ADVANCED_GRAPHIC_EFFECTS);
 
+const isSimulationOpcode = opcode => typeof opcode === 'string' && opcode.startsWith('simulation_');
+
 const isMovieBlockOpcode = opcode => (
     MOVIE_BLOCK_SET.has(opcode) ||
     ADVANCED_GRAPHIC_BLOCK_SET.has(opcode) ||
+    isSimulationOpcode(opcode) ||
     (typeof opcode === 'string' && opcode.startsWith('penfx_'))
 );
 
@@ -199,6 +202,10 @@ const getFieldValue = field => {
 const addBlockFeatures = (features, block) => {
     if (!block || typeof block !== 'object' || Array.isArray(block)) return;
     if (MOVIE_BLOCK_SET.has(block.opcode)) features.add('movie-blocks');
+    if (isSimulationOpcode(block.opcode)) {
+        features.add('movie-blocks');
+        features.add('simulation');
+    }
     if (typeof block.opcode === 'string' && block.opcode.startsWith('penfx_')) features.add('pen-fx');
     if (MOVIE_3D_BLOCKS.includes(block.opcode) || MOVIE_3D_REPORTER_BLOCKS.includes(block.opcode)) {
         features.add('3d-engine');
