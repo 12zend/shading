@@ -78,6 +78,40 @@ describe('renderer-owned Movie sources', () => {
         expect(MovieSourceRenderer.forRenderer(makeRenderer())).not.toBe(source);
     });
 
+    test('fills text with its color and keys colored text apart from black text', () => {
+        const originalDocument = global.document;
+        const contexts = [];
+        global.document = {createElement: () => {
+            const context = {
+                fillText: jest.fn(),
+                measureText: () => ({width: 100}),
+                setTransform: jest.fn()
+            };
+            contexts.push(context);
+            return {getContext: () => context, width: 0, height: 0};
+        }};
+        try {
+            const font = {name: 'sans', family: 'sans-serif'};
+            const textSource = new MovieTextSource();
+            const black = textSource.createTextCanvas(font, 'Hi');
+            const red = textSource.createTextCanvas(font, 'Hi', null, 0, '#FF0000');
+
+            expect(contexts[0].fillStyle).toBe('#000000');
+            expect(contexts[1].fillStyle).toBe('#ff0000');
+            expect(red).not.toBe(black);
+            expect(textSource.createTextCanvas(font, 'Hi', null, 0, '#ff0000')).toBe(red);
+            expect(MovieTextSource.getTextCacheKey(font, 'Hi', 0, '#000000')).toBe('sans\0sans-serif\0Hi');
+            expect(MovieTextSource.getTextCacheKey(font, 'Hi', 0, '#ff0000'))
+                .toBe('sans\0sans-serif\0Hi\0color:#ff0000');
+            expect(MovieTextSource.normalizeTextColor(undefined)).toBe('#000000');
+            expect(MovieTextSource.normalizeTextColor('not a color')).toBe('#000000');
+            expect(MovieTextSource.normalizeTextColor(0x00ff00)).toBe('#00ff00');
+            expect(MovieTextSource.normalizeTextColor('255')).toBe('#0000ff');
+        } finally {
+            global.document = originalDocument;
+        }
+    });
+
     test('italic text shears each pixel by italic times its height above the text bottom', () => {
         const originalDocument = global.document;
         const contexts = [];

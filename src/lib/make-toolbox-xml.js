@@ -841,6 +841,7 @@ const objects = function (costumeName, locale, pluginBlocksXML = '') {
             </value>
             <value name="TEXT"><shadow type="text"><field name="TEXT">Hello!</field></shadow></value>
             ${number('ITALIC', 0)}
+            <value name="COLOR"><shadow type="colour_picker"><field name="COLOUR">#000000</field></shadow></value>
             ${number('FRAME', 1)}
             ${number('SPEED', 1)}${number('VOLUME', 100)}
             ${number('PX', 0)}${number('PY', 0)}${number('PZ', 480)}

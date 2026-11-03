@@ -97,7 +97,7 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.penfx.registerProgram(name, glsl, {boundsPadding})` | エンジンで使う fragment program を登録 |
 | `shading.penfx.helpers`, `vertexShader`, `createPreviewRenderer()` | 引数変換ヘルパー、頂点シェーダー、サムネイル用の描画 |
 | `shading.objects.addBlocks({blocks, menus, methods, toolboxXML})` | レイヤー（Objects）カテゴリへブロックを追加。`blocks` / `menus` は `getInfo()` 形式（opcode は `objects_<opcode>`）、`methods[opcode](args, util)` が実行され、`toolboxXML` は図形ブロックの後に入る。`menus` の `items` は関数でもよい |
-| `shading.objects.draw(util, configuration)` | 描画ブロックと同じ設定（`source`, `asset`, `text`, `position`, `rotation`, `scale`, `size`, `width`, `height`, `time` など）で描画する。呼び出し元のトランスフォーム・時間スコープ・シーン・グループ化に従う |
+| `shading.objects.draw(util, configuration)` | 描画ブロックと同じ設定（`source`, `asset`, `text`, `italic`, `color`, `position`, `rotation`, `scale`, `size`, `width`, `height`, `time` など）で描画する。呼び出し元のトランスフォーム・時間スコープ・シーン・グループ化に従う |
 | `shading.objects.getTime(util)`, `posterizeTime(time, fps)`, `getFramerate()` | ブロックが評価される時刻（秒。ローカル時間ブロック・モーションブラー／エコーのサンプル・シミュレーションのステップの中ではその時刻）、時間のポスタライズ、プロジェクトのフレームレート |
 | `shading.objects.runWithTransform(util, transform)` | 呼び出した C ブロックの中のスタックを、移動ブロックと同じ規則で `{position, anchor, rotation, scale}` を掛けて実行する（回転は度、X→Y→Z の順） |
 | `shading.simulation.registerSolver(solver)` | シミュレーションで使うソルバー（物理エンジンなど）。`{id, create(settings), beforeStep(world, ctx), step(world, dt), snapshot(world), restore(bytes), dispose(world), readPose(world, bodyName)}`。詳細は [SIMULATION.md](SIMULATION.md) |

@@ -288,7 +288,8 @@ const MovieAssetManagerObjectMethods = {
             const text = typeof configuration.text === 'string' ?
                 configuration.text : String(configuration.text);
             const italic = MovieTextSource.normalizeTextItalic(configuration.italic);
-            const canvasKey = MovieTextSource.getTextCacheKey(font, text, italic);
+            const color = MovieTextSource.normalizeTextColor(configuration.color);
+            const canvasKey = MovieTextSource.getTextCacheKey(font, text, italic, color);
             planeCacheKey = `text:${canvasKey}`;
             // Reuse the cached plane without allocating a canvas when the same text was drawn before.
             // getCachedObjectImagePlane would create the canvas-backed plane on miss, so check first.
@@ -310,7 +311,7 @@ const MovieAssetManagerObjectMethods = {
                 }
             }
             bitmap = MovieSourceRenderer.forRenderer(this.runtime.renderer).text.createTextCanvas(
-                font, text, canvasKey, italic
+                font, text, canvasKey, italic, color
             );
             const bitmapResolution = Math.max(
                 0.001,
@@ -823,7 +824,8 @@ const MovieAssetManagerObjectMethods = {
                 kind: 'text',
                 font,
                 text: String(configuration.text),
-                italic: MovieTextSource.normalizeTextItalic(configuration.italic)
+                italic: MovieTextSource.normalizeTextItalic(configuration.italic),
+                color: MovieTextSource.normalizeTextColor(configuration.color)
             });
             const pending = this.ensureFontLoaded(font.name);
             if (pending) return pending.then(prepare);

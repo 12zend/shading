@@ -65,7 +65,7 @@ class MovieSourceRenderer {
         if (kind === 'shape' || kind === 'line') {
             key = `shape:${getShapeBitmapCacheKey(request.configuration)}`;
         } else if (kind === 'text') {
-            key = `text:${MovieTextSource.getTextCacheKey(request.font, request.text, request.italic)}`;
+            key = `text:${MovieTextSource.getTextCacheKey(request.font, request.text, request.italic, request.color)}`;
         } else if (kind === 'costume') {
             const skin = this.renderer._allSkins[request.skinId];
             if (!skin) return null;
@@ -93,7 +93,7 @@ class MovieSourceRenderer {
             if (!bitmap) return null;
             resolution = bitmap.movieBitmapResolution || 2;
         } else if (kind === 'text') {
-            bitmap = this.text.createTextCanvas(request.font, request.text, null, request.italic);
+            bitmap = this.text.createTextCanvas(request.font, request.text, null, request.italic, request.color);
             resolution = bitmap.movieBitmapResolution || 4;
         } else if (kind === 'model') {
             bitmap = this.getModelRenderer().renderWorldScene(...request.arguments);
@@ -131,10 +131,12 @@ class MovieSourceRenderer {
     render (request) {
         let entry;
         if (request.kind === 'text') {
-            const key = MovieTextSource.getTextCacheKey(request.font, request.text, request.italic);
+            const key = MovieTextSource.getTextCacheKey(request.font, request.text, request.italic, request.color);
             entry = this.texts.get(key);
             if (!entry) {
-                const bitmap = this.text.createTextCanvas(request.font, request.text, key, request.italic);
+                const bitmap = this.text.createTextCanvas(
+                    request.font, request.text, key, request.italic, request.color
+                );
                 entry = this.upload({bitmap, resolution: bitmap.movieBitmapResolution || 4});
                 this.texts.pixels += entry.pixels;
             }

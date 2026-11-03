@@ -247,6 +247,7 @@ describe('Objects blocks', () => {
             expect(restored.objectDrawAsset_).toBe('sans-serif');
             expect(restored.visibility.TEXT).toBe(true);
             expect(restored.visibility.ITALIC).toBe(true);
+            expect(restored.visibility.COLOR).toBe(true);
         } finally {
             global.document = originalDocument;
         }
@@ -313,7 +314,7 @@ describe('Objects blocks', () => {
 
         draw.syncDrawOptionalInputs_();
         expect(visibility).toMatchObject({
-            FRAME: false, ITALIC: false, SPEED: true, TEXT: false, VIDEO_MODE_INPUT: true, VOLUME: true
+            COLOR: false, FRAME: false, ITALIC: false, SPEED: true, TEXT: false, VIDEO_MODE_INPUT: true, VOLUME: true
         });
 
         media = {isShadow: () => false, type: 'data_variable'};
@@ -322,7 +323,7 @@ describe('Objects blocks', () => {
         draw.render.mockClear();
         draw.syncDrawOptionalInputs_();
         expect(visibility).toMatchObject({
-            FRAME: true, ITALIC: true, SPEED: true, TEXT: true, VIDEO_MODE_INPUT: true, VOLUME: true
+            COLOR: true, FRAME: true, ITALIC: true, SPEED: true, TEXT: true, VIDEO_MODE_INPUT: true, VOLUME: true
         });
         expect(draw.render).toHaveBeenCalledTimes(1);
         draw.syncDrawOptionalInputs_();
@@ -629,7 +630,7 @@ describe('Objects blocks', () => {
             'pass', 'numberCurve', 'colorCurve', 'angleCurve', 'stepCurve', 'instanceId', 'instanceSeed'
         ]);
         expect(Object.keys(info.blocks.find(block => block.opcode === 'draw').arguments)).toEqual([
-            'SOURCE', 'ASSET', 'TEXT', 'ITALIC', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
+            'SOURCE', 'ASSET', 'TEXT', 'ITALIC', 'COLOR', 'VIDEO_MODE', 'FRAME', 'SPEED', 'VOLUME',
             'PX', 'PY', 'PZ',
             'RX', 'RY', 'RZ',
             'SX', 'SY', 'SZ',
@@ -1322,6 +1323,7 @@ describe('Objects blocks', () => {
             ASSET: 'Movie Sans',
             TEXT: 'Title',
             ITALIC: 0.25,
+            COLOR: '#ff8800',
             VIDEO_MODE: 'sequence',
             FRAME: 12,
             SPEED: 1,
@@ -1347,6 +1349,7 @@ describe('Objects blocks', () => {
             frame: 12,
             height: 80,
             italic: 0.25,
+            color: '#ff8800',
             playbackId: 'draw-block',
             position: {x: 10, y: 20, z: 30},
             rotation: {x: 1, y: 2, z: 3},

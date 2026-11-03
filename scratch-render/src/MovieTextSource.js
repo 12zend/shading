@@ -14,22 +14,39 @@ const normalizeTextItalic = italic => {
     if (!Number.isFinite(value)) return 0;
     return Math.max(-MAX_TEXT_ITALIC, Math.min(MAX_TEXT_ITALIC, value));
 };
-// Upright text keeps its original key so existing caches and callers stay compatible.
-const getTextCacheKey = (font, text, italic = 0) => {
-    const key = `${font.name}\0${font.family}\0${text}`;
+const DEFAULT_TEXT_COLOR = '#000000';
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+// Text is filled with a hex color. Scratch colors may also arrive as RGB numbers; anything else falls back to black.
+const normalizeTextColor = color => {
+    if (typeof color === 'string') {
+        const trimmed = color.trim();
+        if (HEX_COLOR.test(trimmed)) return trimmed.toLowerCase();
+        if (trimmed === '' || !Number.isFinite(Number(trimmed))) return DEFAULT_TEXT_COLOR;
+        color = Number(trimmed);
+    }
+    if (typeof color !== 'number' || !Number.isFinite(color)) return DEFAULT_TEXT_COLOR;
+    const rgb = Math.max(0, Math.min(0xffffff, Math.floor(color)));
+    return `#${rgb.toString(16).padStart(6, '0')}`;
+};
+// Upright black text keeps its original key so existing caches and callers stay compatible.
+const getTextCacheKey = (font, text, italic = 0, color = DEFAULT_TEXT_COLOR) => {
+    let key = `${font.name}\0${font.family}\0${text}`;
     const normalizedItalic = normalizeTextItalic(italic);
-    return normalizedItalic ? `${key}\0italic:${normalizedItalic}` : key;
+    if (normalizedItalic) key = `${key}\0italic:${normalizedItalic}`;
+    const normalizedColor = normalizeTextColor(color);
+    return normalizedColor === DEFAULT_TEXT_COLOR ? key : `${key}\0color:${normalizedColor}`;
 };
 
 class MovieTextSource {
-    createTextCanvas (font, text, cacheKey = null, italic = 0) {
+    createTextCanvas (font, text, cacheKey = null, italic = 0, color = DEFAULT_TEXT_COLOR) {
         if (!(this.textCanvasCache instanceof Map)) {
             this.textCanvasCache = new Map();
             this.textCanvasCachePixels = 0;
         }
         const stringText = typeof text === 'string' ? text : String(text);
         const italicShear = normalizeTextItalic(italic);
-        const key = cacheKey || getTextCacheKey(font, stringText, italicShear);
+        const fillColor = normalizeTextColor(color);
+        const key = cacheKey || getTextCacheKey(font, stringText, italicShear, fillColor);
         const cached = this.textCanvasCache.get(key);
         if (cached) {
             this.textCanvasCache.delete(key);
@@ -80,7 +97,7 @@ class MovieTextSource {
         canvas.height = Math.max(2, Math.ceil(requestedHeight * scale));
         canvas.movieBitmapResolution = TEXT_BITMAP_RESOLUTION * scale;
         context.font = `${fontSize}px ${font.family}`;
-        context.fillStyle = '#000000';
+        context.fillStyle = fillColor;
         context.textBaseline = 'top';
         if (italicShear) {
             // x' = x + italic * (textBottom - y), so positive values lean the tops of glyphs to the right.
@@ -109,4 +126,5 @@ class MovieTextSource {
 }
 MovieTextSource.getTextCacheKey = getTextCacheKey;
 MovieTextSource.normalizeTextItalic = normalizeTextItalic;
+MovieTextSource.normalizeTextColor = normalizeTextColor;
 module.exports = MovieTextSource;
