@@ -12,8 +12,26 @@ const physicsProject = ({costume, motionBlur}) => {
     const shape = {
         opcode: 'objects_shape',
         inputs: {
-            SHAPE: 'polygon', N: 4, RATIO: 0.5, PX: 0, PY: 0, PZ: 0, RX: 0, RY: 0, RZ: 45, SX: 1, SY: 1, SZ: 1,
-            INNER: 0, OUTER: 14, WIDTH: 100, HEIGHT: 100, T1: 0, T2: 1000, COLOR: '#40c0ff', OPACITY: 100
+            SHAPE: 'polygon',
+            N: 4,
+            RATIO: 0.5,
+            PX: 0,
+            PY: 0,
+            PZ: 0,
+            RX: 0,
+            RY: 0,
+            RZ: 45,
+            SX: 1,
+            SY: 1,
+            SZ: 1,
+            INNER: 0,
+            OUTER: 14,
+            WIDTH: 100,
+            HEIGHT: 100,
+            T1: 0,
+            T2: 1000,
+            COLOR: '#40c0ff',
+            OPACITY: 100
         }
     };
     // The loop runs inside an (identity) transform block, whose substack runs without yielding, so a frame is one
@@ -42,8 +60,21 @@ const physicsProject = ({costume, motionBlur}) => {
                 {opcode: 'simulation_physicsCreateWorld', inputs: {GX: 0, GY: -980, GZ: 0}},
                 {
                     opcode: 'simulation_physicsAddBody',
-                    inputs: {NAME: 'floor', SHAPE: 'plane', PX: 0, PY: -160, PZ: 480, RX: 0, RY: 0, RZ: 0,
-                        SX: 1, SY: 1, SZ: 1, TYPE: 'fixed', MASS: 1, RESTITUTION: 0.2, FRICTION: 0.6}
+                    inputs: {NAME: 'floor',
+                        SHAPE: 'plane',
+                        PX: 0,
+                        PY: -160,
+                        PZ: 480,
+                        RX: 0,
+                        RY: 0,
+                        RZ: 0,
+                        SX: 1,
+                        SY: 1,
+                        SZ: 1,
+                        TYPE: 'fixed',
+                        MASS: 1,
+                        RESTITUTION: 0.2,
+                        FRICTION: 0.6}
                 },
                 {opcode: 'data_setvariableto', fields: {VARIABLE: 'i'}, inputs: {VALUE: 0}},
                 {
@@ -52,7 +83,8 @@ const physicsProject = ({costume, motionBlur}) => {
                     substack: [{
                         opcode: 'simulation_physicsAddBody',
                         inputs: {
-                            NAME: bodyName, SHAPE: 'box',
+                            NAME: bodyName,
+                            SHAPE: 'box',
                             PX: reporter('operator_subtract', {
                                 NUM1: reporter('operator_multiply', {
                                     NUM1: reporter('operator_mod', {NUM1: variable('i'), NUM2: 10}), NUM2: 36
@@ -62,8 +94,17 @@ const physicsProject = ({costume, motionBlur}) => {
                             PY: reporter('operator_add', {
                                 NUM1: 40, NUM2: reporter('operator_multiply', {NUM1: variable('i'), NUM2: 3.7})
                             }),
-                            PZ: 480, RX: 0, RY: 0, RZ: reporter('operator_multiply', {NUM1: variable('i'), NUM2: 9}),
-                            SX: 20, SY: 20, SZ: 20, TYPE: 'dynamic', MASS: 1, RESTITUTION: 0.3, FRICTION: 0.5
+                            PZ: 480,
+                            RX: 0,
+                            RY: 0,
+                            RZ: reporter('operator_multiply', {NUM1: variable('i'), NUM2: 9}),
+                            SX: 20,
+                            SY: 20,
+                            SZ: 20,
+                            TYPE: 'dynamic',
+                            MASS: 1,
+                            RESTITUTION: 0.3,
+                            FRICTION: 0.5
                         }
                     }, {opcode: 'data_changevariableby', fields: {VARIABLE: 'i'}, inputs: {VALUE: 1}}]
                 }

@@ -56,15 +56,16 @@ const runPhysicsBenchmark = async (createVM, costume) => {
         const manager = vm.runtime.movieAssetManager;
         manager.syncSimulationDefinitions();
         console.log(`[benchmark] loaded (motion blur: ${motionBlur})`);
-        if (!motionBlur) {
+        if (motionBlur) {
+            simulationRuntime.ensureAll(10);
+        } else {
             const start = performance.now();
             const computed = simulationRuntime.ensureAll(10);
+            results.bodies = BODIES;
             results.initialComputeMs = performance.now() - start;
             results.initialComputeReady = computed.ready;
             results.errors = computed.errors.map(error => String(error.error && error.error.message));
             console.log(`[benchmark] computed in ${results.initialComputeMs.toFixed(0)} ms`);
-        } else {
-            simulationRuntime.ensureAll(10);
         }
         // Seek to frames spread over the 10 s (the simulation is cached): time to evaluate, draw and finish.
         const frames = [12, 287, 45, 233, 150, 9, 299, 77, 190, 120, 260, 33];
@@ -76,8 +77,10 @@ const runPhysicsBenchmark = async (createVM, costume) => {
                 await driver.settle(100000);
             } catch (error) {
                 const t = manager.timeline;
-                throw new Error(`${error.message} ${JSON.stringify({pending: t.pendingFrame, waitingForFrame: t.waitingForFrame,
-                    waitingForSimulation: t.waitingForSimulation, initializing: t.initializing,
+                throw new Error(`${error.message} ${JSON.stringify({pending: t.pendingFrame,
+                    waitingForFrame: t.waitingForFrame,
+                    waitingForSimulation: t.waitingForSimulation,
+                    initializing: t.initializing,
                     errors: simulationRuntime.getErrors().map(e => String(e.error.message)),
                     threads: vm.runtime.threads.length})}`);
             }
