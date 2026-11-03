@@ -19,6 +19,7 @@ import DragConstants from '../lib/drag-constants';
 import defineDynamicBlock from '../lib/define-dynamic-block';
 import replaceToolbox from '../lib/replace-toolbox';
 import {CATEGORY_SEARCH_CALLBACK, CategorySearchInput, applyCategorySearch} from '../lib/toolbox-search';
+import {BlockPins, addPinnedCategory, installBlockPinMenu} from '../lib/block-pins';
 import {Theme} from '../lib/themes';
 import {injectExtensionBlockTheme, injectExtensionCategoryTheme} from '../lib/themes/blockHelpers';
 
@@ -96,8 +97,10 @@ class Blocks extends React.Component {
             'attachVM',
             'detachVM',
             'getCategorySearchAnchor',
+            'getPinnedBlock',
             'getToolboxBlockText',
             'getToolboxXML',
+            'handleBlockPinsChange',
             'handleCategorySearchButton',
             'handleCategorySearchChange',
             'handleCategorySelected',
@@ -145,6 +148,13 @@ class Blocks extends React.Component {
             onChange: this.handleCategorySearchChange
         });
         this.updateCategorySearch = debounce(this.updateCategorySearch, 150);
+        let storage = null;
+        try {
+            storage = window.localStorage;
+        } catch (error) {
+            // Pins last until the editor is reloaded.
+        }
+        this.blockPins = new BlockPins({storage, onChange: this.handleBlockPinsChange});
     }
     componentDidMount () {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.locale);
@@ -168,7 +178,7 @@ class Blocks extends React.Component {
             this.props.options,
             {
                 rtl: this.props.isRtl,
-                toolbox: this.getSearchedToolboxXML(this.props.toolboxXML),
+                toolbox: this.getDisplayedToolboxXML(this.props.toolboxXML),
                 colours: this.props.theme.getBlockColors(),
                 grid: {
                     colour: this.props.theme.getBlockColors().gridColor
@@ -211,6 +221,11 @@ class Blocks extends React.Component {
         toolboxWorkspace.registerButtonCallback(CATEGORY_SEARCH_CALLBACK, this.handleCategorySearchButton);
         // The search input stays over its button; scrolling the palette would leave it behind.
         this.workspace.getFlyout().svgGroup_.addEventListener('wheel', this.categorySearch.close, {passive: true});
+        this.detachBlockPinMenu = installBlockPinMenu(this.ScratchBlocks, {
+            getLocale: () => this.props.locale,
+            getPinnedBlock: this.getPinnedBlock,
+            pins: this.blockPins
+        });
 
         // Store the xml of the toolbox that is actually rendered.
         // This is used in componentDidUpdate instead of prevProps, because
@@ -309,6 +324,7 @@ class Blocks extends React.Component {
         clearTimeout(this.toolboxUpdateTimeout);
         this.updateCategorySearch.cancel();
         this.categorySearch.dispose();
+        this.detachBlockPinMenu();
         if (this.categorySearchWorkspace) this.categorySearchWorkspace.dispose();
 
         // Clear the flyout blocks so that they can be recreated on mount.
@@ -348,7 +364,7 @@ class Blocks extends React.Component {
 
         const categoryId = this.workspace.toolbox_.getSelectedCategoryId();
         const offset = this.workspace.toolbox_.getCategoryScrollOffset();
-        replaceToolbox(this.workspace, this.getSearchedToolboxXML(this.props.toolboxXML), this.forceToolboxRebuild);
+        replaceToolbox(this.workspace, this.getDisplayedToolboxXML(this.props.toolboxXML), this.forceToolboxRebuild);
         this.forceToolboxRebuild = false;
         this._renderedToolboxXML = this.props.toolboxXML;
 
@@ -370,12 +386,35 @@ class Blocks extends React.Component {
         queue.forEach(fn => fn());
     }
 
-    getSearchedToolboxXML (toolboxXML) {
-        return applyCategorySearch(toolboxXML, {
+    getDisplayedToolboxXML (toolboxXML) {
+        const searched = applyCategorySearch(toolboxXML, {
             getBlockText: this.getToolboxBlockText,
             locale: this.props.locale,
             queries: this.categorySearchQueries
         });
+        return addPinnedCategory(searched, this.getAvailablePins(), this.props.locale);
+    }
+
+    // Pins of blocks that are not defined now (such as those of a plugin that is not installed) are kept but hidden.
+    getAvailablePins () {
+        const definitions = this.ScratchBlocks.Blocks;
+        return this.blockPins.blocks.filter(xml => Array.from(xml.matchAll(/<(?:block|shadow)\b[^>]*\btype="([^"]+)"/g))
+            .every(match => Object.prototype.hasOwnProperty.call(definitions, match[1])));
+    }
+
+    // The pinned category comes first, so its entries are the first blocks of the palette.
+    getPinnedBlock (entry) {
+        const pins = this.getAvailablePins();
+        const flyout = this.workspace && this.workspace.getFlyout();
+        if (!pins.length || !flyout) return null;
+        const index = flyout.getWorkspace().getTopBlocks(true)
+            .indexOf(entry);
+        return index >= 0 && index < pins.length ? pins[index] : null;
+    }
+
+    handleBlockPinsChange () {
+        if (this.unmounted || !this.props.toolboxXML) return;
+        this.updateToolbox();
     }
 
     // Blocks are matched against the text they show, read from a block built in a headless workspace.
