@@ -18,6 +18,7 @@ import DropAreaHOC from '../lib/drop-area-hoc.jsx';
 import DragConstants from '../lib/drag-constants';
 import defineDynamicBlock from '../lib/define-dynamic-block';
 import replaceToolbox from '../lib/replace-toolbox';
+import {CATEGORY_SEARCH_CALLBACK, CategorySearchInput, applyCategorySearch} from '../lib/toolbox-search';
 import {Theme} from '../lib/themes';
 import {injectExtensionBlockTheme, injectExtensionCategoryTheme} from '../lib/themes/blockHelpers';
 
@@ -94,7 +95,11 @@ class Blocks extends React.Component {
         bindAll(this, [
             'attachVM',
             'detachVM',
+            'getCategorySearchAnchor',
+            'getToolboxBlockText',
             'getToolboxXML',
+            'handleCategorySearchButton',
+            'handleCategorySearchChange',
             'handleCategorySelected',
             'handleConnectionModalStart',
             'handleDrop',
@@ -132,6 +137,14 @@ class Blocks extends React.Component {
         this.forceToolboxRebuild = false;
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
         this.toolboxUpdateQueue = [];
+        this.categorySearchQueries = {};
+        this.categorySearchTexts = new Map();
+        this.categorySearch = new CategorySearchInput({
+            getAnchor: this.getCategorySearchAnchor,
+            locale: props.locale,
+            onChange: this.handleCategorySearchChange
+        });
+        this.updateCategorySearch = debounce(this.updateCategorySearch, 150);
     }
     componentDidMount () {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.locale);
@@ -155,7 +168,7 @@ class Blocks extends React.Component {
             this.props.options,
             {
                 rtl: this.props.isRtl,
-                toolbox: this.props.toolboxXML,
+                toolbox: this.getSearchedToolboxXML(this.props.toolboxXML),
                 colours: this.props.theme.getBlockColors(),
                 grid: {
                     colour: this.props.theme.getBlockColors().gridColor
@@ -195,6 +208,9 @@ class Blocks extends React.Component {
         toolboxWorkspace.registerButtonCallback('OPEN_RETURN_DOCS', () => {
             window.open('https://docs.turbowarp.org/return', '_blank');
         });
+        toolboxWorkspace.registerButtonCallback(CATEGORY_SEARCH_CALLBACK, this.handleCategorySearchButton);
+        // The search input stays over its button; scrolling the palette would leave it behind.
+        this.workspace.getFlyout().svgGroup_.addEventListener('wheel', this.categorySearch.close, {passive: true});
 
         // Store the xml of the toolbox that is actually rendered.
         // This is used in componentDidUpdate instead of prevProps, because
@@ -291,6 +307,9 @@ class Blocks extends React.Component {
         this.unmounted = true;
         this.workspace.dispose();
         clearTimeout(this.toolboxUpdateTimeout);
+        this.updateCategorySearch.cancel();
+        this.categorySearch.dispose();
+        if (this.categorySearchWorkspace) this.categorySearchWorkspace.dispose();
 
         // Clear the flyout blocks so that they can be recreated on mount.
         this.props.vm.clearFlyoutBlocks();
@@ -304,6 +323,8 @@ class Blocks extends React.Component {
         }, 0);
     }
     setLocale () {
+        this.categorySearchTexts.clear();
+        this.categorySearch.locale = this.props.locale;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.locale);
         this.props.vm.setLocale(this.props.locale, this.props.messages)
@@ -327,7 +348,7 @@ class Blocks extends React.Component {
 
         const categoryId = this.workspace.toolbox_.getSelectedCategoryId();
         const offset = this.workspace.toolbox_.getCategoryScrollOffset();
-        replaceToolbox(this.workspace, this.props.toolboxXML, this.forceToolboxRebuild);
+        replaceToolbox(this.workspace, this.getSearchedToolboxXML(this.props.toolboxXML), this.forceToolboxRebuild);
         this.forceToolboxRebuild = false;
         this._renderedToolboxXML = this.props.toolboxXML;
 
@@ -347,6 +368,73 @@ class Blocks extends React.Component {
         const queue = this.toolboxUpdateQueue;
         this.toolboxUpdateQueue = [];
         queue.forEach(fn => fn());
+    }
+
+    getSearchedToolboxXML (toolboxXML) {
+        return applyCategorySearch(toolboxXML, {
+            getBlockText: this.getToolboxBlockText,
+            locale: this.props.locale,
+            queries: this.categorySearchQueries
+        });
+    }
+
+    // Blocks are matched against the text they show, read from a block built in a headless workspace.
+    getToolboxBlockText (element) {
+        const key = new XMLSerializer().serializeToString(element);
+        if (this.categorySearchTexts.has(key)) return this.categorySearchTexts.get(key);
+        const ScratchBlocks = this.ScratchBlocks;
+        let text = element.getAttribute('type') || '';
+        if (!this.categorySearchWorkspace) this.categorySearchWorkspace = new ScratchBlocks.Workspace({});
+        ScratchBlocks.Events.disable();
+        try {
+            const block = ScratchBlocks.Xml.domToBlock(element, this.categorySearchWorkspace);
+            text = `${block.toString()} ${text}`;
+            block.dispose();
+        } catch (error) {
+            // Fall back to the block type and the values in its XML.
+            text = `${text} ${element.textContent}`;
+        } finally {
+            ScratchBlocks.Events.enable();
+        }
+        this.categorySearchTexts.set(key, text);
+        return text;
+    }
+
+    getCategorySearchButton (categoryId) {
+        const flyout = this.workspace && this.workspace.getFlyout();
+        const buttons = (flyout && flyout.buttons_) || [];
+        return buttons.find(button => button.callback_ === this.handleCategorySearchButton &&
+            button.callbackData_ === categoryId) || null;
+    }
+
+    getCategorySearchAnchor (categoryId) {
+        const button = this.getCategorySearchButton(categoryId);
+        const flyout = this.workspace && this.workspace.getFlyout();
+        if (!button || !button.svgGroup_ || !flyout) return null;
+        const rect = button.svgGroup_.getBoundingClientRect();
+        const flyoutRect = flyout.svgGroup_.getBoundingClientRect();
+        if (rect.bottom <= flyoutRect.top || rect.top >= flyoutRect.bottom) return null;
+        // Span the palette, leaving room for its scrollbar.
+        return {rect, width: flyoutRect.right - rect.left - 16};
+    }
+
+    handleCategorySearchButton (button) {
+        const categoryId = button.callbackData_;
+        this.categorySearch.open(categoryId, this.categorySearchQueries[categoryId]);
+    }
+
+    handleCategorySearchChange (categoryId, query) {
+        this.categorySearchQueries[categoryId] = query;
+        this.updateCategorySearch(categoryId);
+    }
+
+    // Rebuild the palette with the new query and keep the searched category, and its input, at the top.
+    updateCategorySearch (categoryId) {
+        if (this.unmounted || !this.props.toolboxXML) return;
+        this.updateToolbox();
+        const toolbox = this.workspace.toolbox_;
+        toolbox.setFlyoutScrollPos(toolbox.getCategoryPositionById(categoryId));
+        if (!this.categorySearch.reposition()) this.categorySearch.close();
     }
 
     withToolboxUpdates (fn) {

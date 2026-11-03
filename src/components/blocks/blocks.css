@@ -97,3 +97,25 @@
     min-width: auto;
     min-height: auto;
 }
+
+/* The search button at the top of each palette category looks like a search field. */
+.blocks :global(.shadingCategorySearchButton .blocklyFlyoutButtonBackground) {
+    rx: 1rem;
+    ry: 1rem;
+}
+
+/* Search box of a palette category, placed over its search button. */
+:global(.shading-category-search) {
+    position: fixed;
+    z-index: $z-index-dragging-sprite;
+    box-sizing: border-box;
+    padding: 0 0.75rem;
+    border: 1px solid $looks-secondary;
+    border-radius: 1rem;
+    outline: none;
+    background: $ui-white;
+    color: $text-primary;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 0.75rem;
+    box-shadow: 0 0 0 3px $looks-transparent;
+}
