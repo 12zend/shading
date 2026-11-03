@@ -5,6 +5,7 @@ import VM from 'scratch-vm';
 
 import installMovieAssetManager from '../../lib/movie-asset-manager';
 import formatTime from '../../lib/timecode';
+import {beginTimelineTimeInput, isEditingTimelineTimeInput} from '../../lib/timeline-time-input';
 import {getWaveformPath, subscribeTimelineWaveform} from '../../lib/timeline-waveform';
 
 import {getShortcutGroups, getShortcutKey, isModifierPressed, withModifier} from './shortcuts';
@@ -82,6 +83,9 @@ class Timeline extends React.Component {
         this.handleToggleShortcuts = this.handleToggleShortcuts.bind(this);
         this.handleShortcutsKeyDown = this.handleShortcutsKeyDown.bind(this);
         this.handleDraftChange = this.handleDraftChange.bind(this);
+        this.handleTimeInputBlur = this.handleTimeInputBlur.bind(this);
+        this.handleTimeInputFocus = this.handleTimeInputFocus.bind(this);
+        this.handleTimeInputKeyDown = this.handleTimeInputKeyDown.bind(this);
         this.handleSaveSettings = this.handleSaveSettings.bind(this);
         this.handleExport = this.handleExport.bind(this);
         this.handleMarkerMouseDown = this.handleMarkerMouseDown.bind(this);
@@ -132,6 +136,7 @@ class Timeline extends React.Component {
 
     componentWillUnmount () {
         this.unmounted = true;
+        this.endTimeInput();
         if (this.unsubscribeWaveform) this.unsubscribeWaveform();
         if (!this.manager) return;
         this.manager.removeListener('timelineChanged', this.handleTimelineChanged);
@@ -216,7 +221,8 @@ class Timeline extends React.Component {
             return;
         }
 
-        if (isEditingText) return;
+        // Typing a time value uses the arrow and period keys, and the timeline previews the value meanwhile.
+        if (isEditingText || isEditingTimelineTimeInput()) return;
 
         if (key === 'space') {
             if (event.repeat || (isInteractiveControl && !isTimelineScrubber)) return;
@@ -377,6 +383,8 @@ class Timeline extends React.Component {
 
     handleMarkerMouseDown (event) {
         event.stopPropagation();
+        // Keep the time value being typed focused, so clicking a keyframe writes its time into the value.
+        if (isEditingTimelineTimeInput()) event.preventDefault();
     }
 
     handleScroll (event) {
@@ -487,6 +495,7 @@ class Timeline extends React.Component {
         }
         if (event.key !== 'Escape') return;
         event.stopPropagation();
+        this.endTimeInput();
         this.setState({settingsOpen: false});
     }
 
@@ -504,6 +513,7 @@ class Timeline extends React.Component {
     }
 
     handleToggleSettings () {
+        if (this.state.settingsOpen) this.endTimeInput();
         this.setState(state => {
             if (state.settingsOpen) return {settingsOpen: false};
             return {
@@ -525,6 +535,37 @@ class Timeline extends React.Component {
         this.setState(state => ({
             draft: Object.assign({}, state.draft, {[property]: value}, property === 'preset' ? presets[value] : null)
         }));
+        if (this.timeInputSession && property === this.timeInputName) this.timeInputSession.preview(value);
+    }
+
+    // Range start and end preview on the timeline while they are edited, like block time values.
+    handleTimeInputFocus (event) {
+        const name = event.target.name;
+        this.endTimeInput();
+        this.timeInputName = name;
+        this.timeInputSession = beginTimelineTimeInput(this.manager, {
+            read: () => String(this.state.draft ? this.state.draft[name] : ''),
+            write: text => {
+                if (this.unmounted || !this.state.draft) return;
+                this.setState(state => ({draft: Object.assign({}, state.draft, {[name]: text})}));
+            }
+        });
+    }
+
+    handleTimeInputBlur () {
+        this.endTimeInput();
+    }
+
+    handleTimeInputKeyDown (event) {
+        if (event.key !== 'Enter' || isModifierPressed(event)) return;
+        event.preventDefault();
+        event.target.blur();
+    }
+
+    endTimeInput () {
+        if (this.timeInputSession) this.timeInputSession.end();
+        this.timeInputSession = null;
+        this.timeInputName = null;
     }
 
     handleSaveSettings () {
@@ -539,6 +580,7 @@ class Timeline extends React.Component {
             reuseFrames: draft.reuseFrames,
             width: Number(draft.width)
         });
+        this.endTimeInput();
         this.setState({settingsOpen: false});
     }
 
@@ -732,7 +774,10 @@ class Timeline extends React.Component {
                             step="0.01"
                             type="number"
                             value={this.state.draft.rangeStart}
+                            onBlur={this.handleTimeInputBlur}
                             onChange={this.handleDraftChange}
+                            onFocus={this.handleTimeInputFocus}
+                            onKeyDown={this.handleTimeInputKeyDown}
                         />
                     </label>
                     <label>
@@ -744,7 +789,10 @@ class Timeline extends React.Component {
                             step="0.01"
                             type="number"
                             value={this.state.draft.rangeEnd}
+                            onBlur={this.handleTimeInputBlur}
                             onChange={this.handleDraftChange}
+                            onFocus={this.handleTimeInputFocus}
+                            onKeyDown={this.handleTimeInputKeyDown}
                         />
                     </label>
                     <label className={styles.checkboxLabel}>

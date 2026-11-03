@@ -1,3 +1,4 @@
+import EventEmitter from 'events';
 import React from 'react';
 import {shallow} from 'enzyme';
 import VM from 'scratch-vm';
@@ -520,5 +521,111 @@ describe('Timeline keyboard controls', () => {
         expect(instance.state.draft.height).toBe(1080);
         expect(instance.state.draft.width).toBe(1920);
         expect(component.text()).toContain('The stage stays at 480×360');
+    });
+});
+
+describe('Timeline time value editing', () => {
+    let component;
+    let instance;
+    let manager;
+    const body = {};
+
+    beforeAll(() => {
+        global.document = {body};
+    });
+
+    afterAll(() => {
+        delete global.document;
+    });
+
+    beforeEach(() => {
+        component = shallow(
+            <Timeline
+                customStageSize={{height: 360, width: 480}}
+                framerate={30}
+                vm={Object.create(VM.prototype)}
+            />,
+            {disableLifecycleMethods: true}
+        );
+        instance = component.instance();
+        manager = new EventEmitter();
+        manager.timeline = {currentTime: 2, duration: 10, playing: false, recording: false};
+        manager.getTimelineState = () => Object.assign({}, manager.timeline);
+        manager.seekTimeline = jest.fn(seconds => {
+            manager.timeline.currentTime = Math.round(Math.max(0, Math.min(10, seconds)) * 30) / 30;
+            manager.emit('timelineChanged', manager.getTimelineState());
+        });
+        manager.pauseTimeline = jest.fn();
+        manager.playTimeline = jest.fn();
+        manager.updateTimelineSettings = jest.fn();
+        instance.manager = manager;
+        component.setState({
+            draft: Object.assign({}, instance.state.timeline, {rangeEnd: 8, rangeStart: 1}),
+            settingsOpen: true
+        });
+    });
+
+    afterEach(() => {
+        instance.endTimeInput();
+    });
+
+    const rangeStartInput = () => component.find('input[name="rangeStart"]');
+
+    test('range start previews on the timeline, follows the playhead and restores it on blur', () => {
+        rangeStartInput().simulate('focus', {target: {name: 'rangeStart'}});
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(1);
+
+        rangeStartInput().simulate('change', {target: {name: 'rangeStart', type: 'number', value: '4'}});
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(4);
+
+        // Dragging the playhead writes its time into the draft.
+        manager.seekTimeline(6);
+        expect(instance.state.draft.rangeStart).toBe('6');
+
+        rangeStartInput().simulate('blur');
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(2);
+        expect(instance.state.draft.rangeStart).toBe('6');
+    });
+
+    test('Enter commits the range value by leaving the input', () => {
+        const target = {blur: jest.fn(), name: 'rangeEnd'};
+        const event = {key: 'Enter', metaKey: false, ctrlKey: false, preventDefault: jest.fn(), target};
+
+        component.find('input[name="rangeEnd"]').simulate('keydown', event);
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(target.blur).toHaveBeenCalled();
+    });
+
+    test('timeline shortcuts stay off and keyframe clicks keep the value focused while editing', () => {
+        rangeStartInput().simulate('focus', {target: {name: 'rangeStart'}});
+        manager.seekTimeline.mockClear();
+
+        // Focus may sit on a non-text control (for example a keyframe marker) while the value is edited.
+        ['ArrowRight', '.', ',', 'Home', 'k'].forEach(key => {
+            const event = {altKey: false, ctrlKey: false, key, metaKey: false, preventDefault: jest.fn(), target: body};
+            instance.handleKeyDown(event);
+            expect(event.preventDefault).not.toHaveBeenCalled();
+        });
+        expect(manager.seekTimeline).not.toHaveBeenCalled();
+
+        const markerEvent = {preventDefault: jest.fn(), stopPropagation: jest.fn()};
+        instance.handleMarkerMouseDown(markerEvent);
+        expect(markerEvent.preventDefault).toHaveBeenCalled();
+
+        instance.endTimeInput();
+        const idleMarkerEvent = {preventDefault: jest.fn(), stopPropagation: jest.fn()};
+        instance.handleMarkerMouseDown(idleMarkerEvent);
+        expect(idleMarkerEvent.preventDefault).not.toHaveBeenCalled();
+    });
+
+    test('closing the settings ends the range edit', () => {
+        rangeStartInput().simulate('focus', {target: {name: 'rangeStart'}});
+        manager.seekTimeline(5);
+
+        instance.handleSettingsKeyDown({key: 'Escape', stopPropagation: jest.fn()});
+
+        expect(manager.seekTimeline).toHaveBeenLastCalledWith(2);
+        expect(manager.listenerCount('timelineChanged')).toBe(0);
     });
 });
