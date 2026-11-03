@@ -37,7 +37,7 @@ const createTimelineDriver = ({vm, readFrame, readExportedFrame}) => {
         },
 
         setClock (seconds) {
-            nowMSecs = Math.round(seconds * 1000 * 1e6) / 1e6;
+            nowMSecs = seconds * 1000;
             runtime.updateCurrentMSecs();
         },
 
@@ -85,12 +85,17 @@ const createTimelineDriver = ({vm, readFrame, readExportedFrame}) => {
             return readFrame();
         },
 
-        // Play from `from` with the clock advancing by `stepSeconds` per VM tick, then stop on the frame.
-        async playUntil (frameIndex, {stepSeconds = 1 / manager.timeline.framerate, from = 0} = {}) {
+        // Play from `from` (or the current frame with seek: false) with the clock advancing by `stepSeconds` per VM
+        // tick, then stop on the frame.
+        async playUntil (frameIndex, {stepSeconds = 1 / manager.timeline.framerate, from = 0, seek = true} = {}) {
             if (manager.timeline.playing) manager.pauseTimeline();
-            manager.seekTimeline(driver.frameTime(from));
-            await driver.settle();
-            manager.playTimeline();
+            if (seek) {
+                manager.seekTimeline(driver.frameTime(from));
+                await driver.settle();
+            } else {
+                from = manager.getFrameIndexAtTime(manager.timeline.currentTime);
+            }
+            await driver.startPlayback();
             const startClock = nowMSecs / 1000;
             const target = driver.frameTime(frameIndex) - driver.frameTime(from);
             let elapsed = 0;
@@ -106,6 +111,16 @@ const createTimelineDriver = ({vm, readFrame, readExportedFrame}) => {
             const frame = readFrame();
             manager.pauseTimeline();
             return frame;
+        },
+
+        // Start playback and step until `initialize` has finished and the playback clock runs.
+        async startPlayback () {
+            manager.playTimeline();
+            for (let guard = 0; manager.timeline.startClockAfterInitialize && guard < 1000; guard++) {
+                driver.step();
+                const promises = manager.getOfflineRenderPromises();
+                if (promises.length) await Promise.all(promises);
+            }
         },
 
         // Reach `frame` in each of the five ways. Returns {way: signature}.

@@ -16,7 +16,32 @@ const getTimelineClockTime = clock => {
     return clock && typeof clock.projectTimer === 'function' ? clock.projectTimer() : 0;
 };
 
+// Frame times are snapped with this tolerance so a time computed as k / fps never lands just below frame k.
+const FRAME_EPSILON = 1e-9;
+
 const MovieAssetManagerTimelineMethods = {
+    // The one definition of frame time. Preview playback, export, seeking and single-frame PNG export all go
+    // through these, so frame N always evaluates at exactly N / fps however it is reached.
+    getFrameTime (frameIndex) {
+        return toNumber(frameIndex) / this.timeline.framerate;
+    },
+
+    // The frame showing at `seconds`: frame k covers [k / fps, (k + 1) / fps).
+    getFrameIndexAtTime (seconds) {
+        return Math.max(0, Math.floor((toNumber(seconds) * this.timeline.framerate) + FRAME_EPSILON));
+    },
+
+    // The first frame at or after `seconds` (the first frame of an export range).
+    getFirstFrameIndexFrom (seconds) {
+        return Math.max(0, Math.ceil((toNumber(seconds) * this.timeline.framerate) - FRAME_EPSILON));
+    },
+
+    // Snap a time to the start of the frame showing at it, within the timeline.
+    snapTimelineTime (seconds) {
+        const time = clamp(toNumber(seconds), 0, this.timeline.duration);
+        return Math.min(this.timeline.duration, this.getFrameTime(this.getFrameIndexAtTime(time)));
+    },
+
     serializeTimeline () {
         return {
             duration: this.timeline.duration,
@@ -71,6 +96,10 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.keyframes = normalizeTimelineKeyframes(settings.keyframes, this.timeline.duration);
         this.timeline.pendingFrame = true;
         this.timeline.playing = false;
+        // The preview runs `initialize` once before the first frame it evaluates after a project is opened.
+        this.timeline.previewInitialized = false;
+        this.timeline.previewFrameIndex = null;
+        this.timeline.startClockAfterInitialize = false;
         this.timeline.recording = false;
         this.timeline.rangeStart = clamp(toNumber(settings.rangeStart), 0, this.timeline.duration);
         this.timeline.rangeEnd = clamp(
@@ -173,37 +202,88 @@ const MovieAssetManagerTimelineMethods = {
         clock._projectTimer.startTime = this.runtime.currentMSecs - (time * 1000);
         clock._pausedTime = time * 1000;
         clock._paused = Boolean(paused);
+        this.timeline.clockHeld = false;
         this.timeline.currentTime = time;
+    },
+
+    // While playback evaluates a frame, scripts that read the project timer (easing, the timer reporter) see the
+    // frame's time, as they do during export. The underlying clock keeps running and is released after the tick.
+    holdTimelineClock (seconds) {
+        const clock = this.runtime.ioDevices.clock;
+        if (!clock || clock._paused) return;
+        clock._pausedTime = toNumber(seconds) * 1000;
+        clock._paused = true;
+        this.timeline.clockHeld = true;
+    },
+
+    releaseTimelineClock () {
+        if (!this.timeline.clockHeld) return;
+        this.timeline.clockHeld = false;
+        const clock = this.runtime.ioDevices.clock;
+        if (clock) clock._paused = false;
     },
 
     playTimeline () {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         if (this.timeline.currentTime >= this.timeline.duration) this.timeline.currentTime = 0;
+        this.timeline.currentTime = this.snapTimelineTime(this.timeline.currentTime);
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
-        this.setTimelineClock(this.timeline.currentTime, false);
-        this.timeline.initializePromises = new Set();
-        this.timeline.initializeThreads = [];
-        this.timeline.initializing = false;
         this.timeline.pendingFrame = true;
         this.timeline.playing = true;
+        this.timeline.previewFrameIndex = null;
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
-        this.playTimelineSounds(this.timeline.currentTime);
+        // Playback starts from `initialize`, wherever the playhead is. The clock and timeline sounds wait for it.
+        this.setTimelineClock(this.timeline.currentTime, true);
+        this.timeline.startClockAfterInitialize = true;
+        this.startTimelineInitialize();
+        if (!this.timeline.initializing) this.startTimelinePlaybackClock();
         this.emitTimelineChanged();
+    },
+
+    startTimelinePlaybackClock () {
+        this.timeline.startClockAfterInitialize = false;
+        if (!this.timeline.playing) return;
+        this.setTimelineClock(this.timeline.currentTime, false);
+        this.playTimelineSounds(this.timeline.currentTime);
+    },
+
+    // Start the `initialize` hats. Their threads (and initializePromises) hold the next frame until they finish.
+    startTimelineInitialize () {
+        this.timeline.initializePromises = new Set();
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = true;
+        const initializeThreads = this.runtime.startHats('event_initialize');
+        this.timeline.initializeThreads = Array.isArray(initializeThreads) ? initializeThreads : [];
+        if (!this.timeline.initializeThreads.length && !this.timeline.initializePromises.size) {
+            this.finishTimelineInitialize();
+        }
+    },
+
+    finishTimelineInitialize () {
+        this.timeline.initializeThreads = [];
+        this.timeline.initializing = false;
+        if (!this.timeline.recording) this.timeline.previewInitialized = true;
+        if (this.timeline.startClockAfterInitialize) this.startTimelinePlaybackClock();
     },
 
     pauseTimeline () {
         this.cancelFrameTransaction();
         this.cancelPendingObjectDraws();
         const clock = this.runtime.ioDevices.clock;
-        if (this.timeline.playing) {
-            this.timeline.currentTime = clamp(getTimelineClockTime(clock), 0, this.timeline.duration);
+        if (this.timeline.playing && !this.timeline.startClockAfterInitialize) {
+            this.timeline.currentTime = this.snapTimelineTime(getTimelineClockTime(clock));
+            // The clock may have reached a frame that playback had not evaluated yet; show that frame.
+            if (this.getFrameIndexAtTime(this.timeline.currentTime) !== this.timeline.previewFrameIndex) {
+                this.timeline.pendingFrame = true;
+            }
         }
         this.timeline.playing = false;
+        this.timeline.startClockAfterInitialize = false;
         this.timeline.initializePromises = new Set();
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
@@ -225,6 +305,7 @@ const MovieAssetManagerTimelineMethods = {
         this.playedTimelineSoundBlocks.clear();
         this.timeline.playing = false;
         this.timeline.recording = false;
+        this.timeline.startClockAfterInitialize = false;
         this.timeline.initializePromises = new Set();
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
@@ -248,15 +329,25 @@ const MovieAssetManagerTimelineMethods = {
         this.playedTimelineSoundBlocks.clear();
         this.stopTimelineSounds();
         this.runtime.stopAll();
-        this.setTimelineClock(seconds, !wasPlaying);
+        // A seek does not run `initialize`. One cancelled here (playback start) is started again by playback.
+        const restartInitialize = wasPlaying && this.timeline.startClockAfterInitialize;
+        this.timeline.startClockAfterInitialize = false;
+        this.setTimelineClock(this.snapTimelineTime(seconds), !wasPlaying);
         this.timeline.initializePromises = new Set();
         this.timeline.initializeThreads = [];
         this.timeline.initializing = false;
         this.timeline.pendingFrame = true;
+        this.timeline.previewFrameIndex = null;
         this.timeline.renderFrameThreads = [];
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
-        if (wasPlaying) this.playTimelineSounds(this.timeline.currentTime);
+        if (restartInitialize) {
+            this.setTimelineClock(this.timeline.currentTime, true);
+            this.timeline.startClockAfterInitialize = true;
+            this.startTimelineInitialize();
+        } else if (wasPlaying) {
+            this.playTimelineSounds(this.timeline.currentTime);
+        }
         this.emitTimelineChanged();
     },
 
@@ -501,22 +592,18 @@ const MovieAssetManagerTimelineMethods = {
         this.timeline.playing = false;
         this.timeline.recording = true;
         this.timeline.renderEndTime = rangeEnd;
-        this.timeline.renderFrameIndex = Math.max(0, Math.ceil((rangeStart * this.timeline.framerate) - 1e-9));
-        this.timeline.initializePromises = new Set();
-        this.timeline.initializeThreads = [];
-        this.timeline.initializing = true;
+        // A single-frame export (the current frame PNG) renders the frame showing at that time.
+        this.timeline.renderFrameIndex = rangeEnd === rangeStart ?
+            this.getFrameIndexAtTime(rangeStart) : this.getFirstFrameIndexFrom(rangeStart);
+        this.timeline.startClockAfterInitialize = false;
         this.timeline.renderFrameThreads = [];
         this.timeline.renderedThisStep = false;
         this.timeline.reuseFramesDuringRender = reuseFrames;
         this.timeline.waitingForFrame = false;
         this.timeline.waitingForVideo = false;
         this.prepareOfflineRendering();
-        this.setTimelineClock(this.timeline.renderFrameIndex / this.timeline.framerate, true);
-        const initializeThreads = this.runtime.startHats('event_initialize');
-        this.timeline.initializeThreads = Array.isArray(initializeThreads) ? initializeThreads : [];
-        if (!this.timeline.initializeThreads.length && !this.timeline.initializePromises.size) {
-            this.timeline.initializing = false;
-        }
+        this.setTimelineClock(this.getFrameTime(this.timeline.renderFrameIndex), true);
+        this.startTimelineInitialize();
         this.emitTimelineChanged();
         this.scheduleOfflineRenderStep();
     },
@@ -550,13 +637,17 @@ const MovieAssetManagerTimelineMethods = {
 
     handleTimelineBeforeExecute () {
         this.beginFrameGraph();
-        if (this.timeline.recording && this.timeline.initializing) {
+        if (!this.timeline.recording && !this.timeline.initializing && !this.timeline.previewInitialized &&
+            (this.timeline.playing || this.timeline.pendingFrame)) {
+            // The first preview evaluation after a project is opened runs `initialize` first.
+            this.startTimelineInitialize();
+        }
+        if (this.timeline.initializing) {
             const hasInitializePromises = this.timeline.initializePromises instanceof Set &&
                 this.timeline.initializePromises.size > 0;
             if (this.hasActiveInitializeThreads() || hasInitializePromises ||
                 this.hasBlockingVideoRenders() || this.hasPendingVisualRenders()) return;
-            this.timeline.initializeThreads = [];
-            this.timeline.initializing = false;
+            this.finishTimelineInitialize();
         }
         if (this.timeline.waitingForFrame || this.timeline.waitingForVideo) {
             if (this.hasBlockingVideoRenders() || this.hasPendingVisualRenders()) return;
@@ -565,18 +656,32 @@ const MovieAssetManagerTimelineMethods = {
             this.timeline.waitingForFrame = false;
             this.timeline.waitingForVideo = false;
             this.timeline.renderedThisStep = true;
+            if (this.timeline.playing) this.holdTimelineClock(this.timeline.currentTime);
             return;
         }
         if (!this.timeline.playing && !this.timeline.pendingFrame && !this.timeline.recording) return;
         if (this.timeline.recording) {
             this.setTimelineClock(
-                Math.min(this.timeline.renderFrameIndex / this.timeline.framerate, this.getRenderEndTime()),
+                Math.min(this.getFrameTime(this.timeline.renderFrameIndex), this.getRenderEndTime()),
                 true
             );
         } else if (this.timeline.playing) {
-            const time = getTimelineClockTime(this.runtime.ioDevices.clock);
-            this.timeline.currentTime = clamp(time, 0, this.timeline.duration);
-            if (time >= this.timeline.duration) this.setTimelineClock(this.timeline.duration, false);
+            // Playback evaluates whole frames: the clock selects frame floor(t * fps) and the frame is evaluated at
+            // exactly that frame's time. A frame is evaluated once; when the preview falls behind, frames are skipped.
+            const clockTime = getTimelineClockTime(this.runtime.ioDevices.clock);
+            const frameIndex = this.getFrameIndexAtTime(clamp(clockTime, 0, this.timeline.duration));
+            if (!this.timeline.pendingFrame && frameIndex === this.timeline.previewFrameIndex) {
+                // The clock passed the end of a duration that is not a whole number of frames.
+                if (clockTime >= this.timeline.duration) this.pauseTimeline();
+                return;
+            }
+            this.timeline.previewFrameIndex = frameIndex;
+            this.timeline.currentTime = Math.min(this.timeline.duration, this.getFrameTime(frameIndex));
+            if (clockTime >= this.timeline.duration) this.setTimelineClock(this.timeline.duration, false);
+            this.holdTimelineClock(this.timeline.currentTime);
+        } else {
+            this.timeline.currentTime = this.snapTimelineTime(this.timeline.currentTime);
+            this.timeline.previewFrameIndex = this.getFrameIndexAtTime(this.timeline.currentTime);
         }
         this.timeline.pendingFrame = false;
         this.timeline.renderedThisStep = true;
@@ -612,6 +717,7 @@ const MovieAssetManagerTimelineMethods = {
     },
 
     handleTimelineAfterExecute () {
+        this.releaseTimelineClock();
         this.flushFrameGraph();
         if (!this.timeline.renderedThisStep) return;
         this.timeline.renderedThisStep = false;
@@ -656,12 +762,6 @@ const MovieAssetManagerTimelineMethods = {
                 this.timeline.renderFrameIndex++;
                 this.timeline.pendingFrame = true;
             }
-        } else if (this.timeline.playing) {
-            this.timeline.currentTime = clamp(
-                getTimelineClockTime(this.runtime.ioDevices.clock),
-                0,
-                this.timeline.duration
-            );
         }
         this.emitTimelineChanged();
         if (this.timeline.recording && this.timeline.currentTime >= this.getRenderEndTime()) {

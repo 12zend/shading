@@ -930,9 +930,15 @@ describe('MovieAssetManager rendering performance', () => {
         manager.playTimeline();
         manager.handleTimelineBeforeExecute();
 
-        expect(manager.runtime.ioDevices.clock._projectTimer.startTime).toBe(7500);
-        expect(manager.runtime.ioDevices.clock._paused).toBe(false);
+        const clock = manager.runtime.ioDevices.clock;
+        expect(clock._projectTimer.startTime).toBe(7500);
+        // Scripts in the frame read the frame's time from the project timer; the clock runs again afterwards.
+        expect(clock._paused).toBe(true);
+        expect(clock._pausedTime).toBe(2500);
         expect(manager.runtime.startHats).toHaveBeenCalledWith('event_renderframe');
+        manager.handleTimelineAfterExecute();
+        expect(clock._paused).toBe(false);
+        expect(clock._projectTimer.startTime).toBe(7500);
     });
 
     test('refreshes a paused timeline preview at its current time', () => {
@@ -1470,10 +1476,11 @@ describe('MovieAssetManager rendering performance', () => {
         const manager = makeTimelineManager();
         manager.addRenderingFrame = jest.fn();
         manager.timeline.playing = true;
-        manager.timeline.renderedThisStep = true;
 
+        manager.handleTimelineBeforeExecute();
         manager.handleTimelineAfterExecute();
         expect(manager.addRenderingFrame).not.toHaveBeenCalled();
+        // The clock reads 2.5 s, which is frame 75 at 30 fps.
         expect(manager.timeline.currentTime).toBe(2.5);
 
         manager.pauseTimeline();
@@ -1523,7 +1530,8 @@ describe('MovieAssetManager rendering performance', () => {
 
         manager.pauseTimeline();
 
-        expect(manager.timeline.currentTime).toBe(0.25);
+        // 0.25 s on the timeline clock is within frame 7 at 30 fps; pausing stops on that frame.
+        expect(manager.timeline.currentTime).toBe(7 / 30);
         expect(clock.projectTimer).not.toHaveBeenCalled();
         expect(clock.projectTimerWithoutOffset).toHaveBeenCalled();
     });
