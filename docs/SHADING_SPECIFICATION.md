@@ -93,6 +93,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Camera | `motion` | カメラ操作とカメラレポーター |
 | Sound | `sound` | 現行の時間範囲音声ブロック |
 | Events | `events` | `initialize`、`render frame`、通常のブロードキャスト |
+| Simulation | `simulation` | シミュレーションの hat、状態、時間、シード付き乱数、S(t) の読み取り（§14） |
 | Control | `control` | Scratch の制御ブロック |
 | Sensing | `sensing` | Scratch のセンシングブロック |
 | Operators | `operators` | Scratch の演算子と `easing` |
@@ -116,6 +117,9 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | `objects_grouping` | サブスタックを 1 つのグループ（独立した描画レイヤー）として評価する C ブロック |
 | `objects_bake` | サブスタックを 1 枚のレイヤーに描画し、そのレイヤーを 1 つの Draw として描く |
 | `objects_transform` | 位置、アンカー、回転、XYZ スケールをサブスタックへ適用 |
+| `objects_localTime` | サブスタックをローカル時間 t′（offset、speed、posterize、freeze、loop、reverse、remap）で評価する（§15.2） |
+| `objects_motionBlur` | サブスタックをシャッター内の K 個の時刻で評価し、平均して 1 枚にする（§15.3） |
+| `objects_echo` | サブスタックを `t + i·間隔` の時刻で評価し、`減衰^i` の不透明度で重ねる（§15.3） |
 | `objects_composite` | 不透明度とブレンドモードをサブスタックへ適用 |
 | `objects_scene` | 子 Objects を同一 3D シーン・深度バッファで評価 |
 | `objects_timeWithin` | 現在時刻が指定範囲内かを返す |
@@ -254,6 +258,9 @@ PenFX は `penfx` extension として登録され、ツールボックス上で�
 - frame 外の直接実行でも、GL state を保存・復元して後続の Scratch 描画へ影響させない。
 - 色は premultiplied alpha を前提とする。GLSL で RGB を処理する場合は必要に応じて straight color に戻し、出力時に alpha を掛け直す。
 - `u_time` と `u_frame` は実時間ではなく Movie タイムライン由来であり、同じ frame では同じ値になる。
+  値はブロックを実行したスレッドの評価時刻（§15.1、reader `timeline`）で、ローカル時間・時間サンプリングの中では
+  その時刻になる。非表示の旧時間スコープ（legacy）は適用しない。ブロック実行時に uniform として確定するので、
+  frame graph に収集されて後で flush されても値は変わらない。`u_frame = round(u_time × framerate)`。
 
 ### 4.3 Custom shader package
 
@@ -327,11 +334,19 @@ PenFX は `penfx` extension として登録され、ツールボックス上で�
 
 ### 5.3 再生
 
-- `play` は現在時刻が duration 以上なら 0 秒へ戻し、音声と VM の実行を再初期化する。
-- `pause` は実時間から現在時刻をサンプルし、音声、実行スレッド、プレビューサイズを停止・復元する。
+- frame の時刻は `getFrameTime(n) = n / framerate`、時刻 t に表示される frame は
+  `getFrameIndexAtTime(t) = floor(t × framerate + 1e-9)`。プレビュー、書き出し、シーク、現在フレームの PNG はすべてこれを使う
+  （書き出し範囲の先頭 frame だけは `ceil(rangeStart × framerate − 1e-9)`）。
+- `play` は現在時刻が duration 以上なら 0 秒へ戻し、音声と VM の実行を再初期化する。再生開始時（どの位置からでも）に
+  `event_initialize` を起動し、それが終わるまで再生クロックとタイムライン音声を止めておく。
+- プロジェクトを開いた後、プレビューが最初の frame を評価する前に `event_initialize` を 1 回起動する。シークでは起動しない。
+- `pause` は再生クロックの位置の frame で止める。まだ評価していない frame なら、その frame を評価し直す。
 - `stop` は 0 秒へ戻し、未完了の書き出しをキャンセルする。
-- `seek` は再生状態を維持したまま指定時刻へ移動し、次の frame を再評価する。
-- 再生中の `event_renderframe` は実時間に基づく。書き出し中の `event_renderframe` は `renderFrameIndex / framerate` で決まる決定的な時間を使う。
+- `seek` は再生状態を維持したまま、指定時刻に表示される frame の時刻へ移動し、その frame を再評価する。
+- 再生中は、クロックが示す frame の時刻 `n / framerate` で `event_renderframe` を評価する。同じ frame は 1 回だけ評価し、
+  処理が遅れたら frame を飛ばす。評価中の tick ではプロジェクトタイマーがその frame の時刻を返す（easing やタイマーが
+  書き出しと同じ値を読む）。書き出し中の `event_renderframe` は `renderFrameIndex / framerate` を使う。
+- これらは既存プロジェクトのプレビューの見え方だけを変え、書き出し結果は変えない。
 
 ### 5.4 frame 生成トランザクション
 
@@ -339,11 +354,16 @@ PenFX は `penfx` extension として登録され、ツールボックス上で�
 2. 必要ならレンダラーを出力サイズへ変更し、`event_initialize` を開始する。
 3. 初期化用スレッド、資産読み込み、保留中のビジュアル処理が終わるまで内部状態で待つ。
 4. frame ごとに frame graph を開始し、決定的なタイムライン時刻を設定する。
-5. MovieBuffer を透明な staging frame へ切り替え、既定背景を描画する。
-6. `event_renderframe` を起動する。
-7. frame graph、Objects 描画、ビデオ frame、テキスト、モデル、PenFX の保留処理を完了させる。
-8. 音声イベントを確定し、Movie frame を commit してから frame を保存する。
-9. 次の frame index へ進む。終了時刻に達したらプレビューサイズを復元し、完了イベントを通知する。
+5. 各シミュレーションをその時刻（と、前回の評価で読まれた未計算の時刻）まで計算する（§14.4）。1 tick の予算
+   （プレビュー約 8 ms、書き出し約 50 ms）で終わらなければ、時刻を進めずに同じ frame を次の tick に回す。
+   途中から書き出す場合も、シミュレーションは開始時刻から計算される。
+6. MovieBuffer を透明な staging frame へ切り替え、既定背景を描画する。
+7. `event_renderframe` を起動する。
+8. frame graph、Objects 描画、ビデオ frame、テキスト、モデル、PenFX の保留処理を完了させる。
+9. 評価中にシミュレーションの未計算の時刻が読まれていたら、staging frame を commit せずに破棄し、その frame の音声イベントも
+   捨て、その時刻を計算してから同じ frame をやり直す。
+10. 音声イベントを確定し、Movie frame を commit してから frame を保存する。
+11. 次の frame index へ進む。終了時刻に達したらプレビューサイズを復元し、完了イベントを通知する。
 
 ### 5.5 キーフレーム
 
@@ -476,7 +496,7 @@ UI からの `renderAndExportTimeline` は UI 用の非同期 API であり、Sc
 
 ### 9.3 frame cache
 
-- cache key は render cache generation、width、height、framerate、frame index で構成する。
+- cache key は render cache generation、width、height、framerate、全シミュレーションのハッシュ、frame index で構成する。
 - timeline 設定またはプロジェクト変更時は generation を進め、古い frame cache と音声 event cache を破棄する。
 - `reuseFrames` が有効な場合、変更されていない frame と対応する音声イベントを再利用する。
 - 出力範囲を指定した場合、`rangeStart` から `rangeEnd` までを含む frame を処理する。
@@ -505,7 +525,9 @@ Movie プロジェクトの marker は次の形で保存する。
 }
 ```
 
-`features` は検出された機能をソートして保存する。候補は `movie-blocks`、`pen-fx`、`my-blocks-scene`、`3d-engine`、`graphic-effects`、`video-assets`、`costume-groups`、`model-assets`、`timeline`、`pen-fx-shaders`。
+`features` は検出された機能をソートして保存する。候補は `movie-blocks`、`pen-fx`、`my-blocks-scene`、`3d-engine`、`graphic-effects`、`video-assets`、`costume-groups`、`model-assets`、`timeline`、`pen-fx-shaders`、`simulation`。
+`simulation_` で始まる opcode があれば `simulation` と `movie-blocks` を付ける。`objects_localTime`、`objects_motionBlur`、
+`objects_echo` は `movie-blocks` に含める。シミュレーションのキャッシュは保存しない。
 
 ### 10.2 保存データ
 
@@ -542,6 +564,12 @@ MovieAssetManager が扱う主要な project JSON key は次のとおり。
 `objects_drawPass`、`objects_clearPass`、`objects_repeat`、`objects_timeOffset`、
 `objects_timeRange`、`objects_timeScale`、`objects_timeLoop`、`objects_timeFreeze`、
 `objects_timeReverse`、`objects_timeRemap`
+
+旧時間制御ブロック（`objects_timeOffset`〜`objects_timeRemap`、`objects_repeat` の時間オフセット）の時間スコープは
+`legacy: true` で、Objects の時刻（描画の時間範囲、Objects のレポーター、ビデオ）にだけ効く。`operator_easing` と
+PenFX の `u_time` / `u_frame` には効かない（以前と同じ）。新しい `objects_localTime` と時間サンプリングのブロックの
+スコープはすべての読み手に効く（§15.1）。非表示の `objects_simulation` は名前付きの Group を作るだけの互換ブロックで、
+Simulation カテゴリ（§14）とは別のものである。
 
 ### 11.2 旧 Movie Looks／Sound opcode
 
@@ -605,5 +633,89 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | `src/lib/my-blocks-scene-blocks.js` | My Blocks Scene の Blockly 定義、カテゴリ、procedure mutation |
 | `scratch-render/src/model-runtime.js` | Three.js model、camera、light、depth rendering |
 | `src/lib/tutorial/`、`src/components/shading-tutorial/` | 初回チュートリアルのページ、文言、ブロックの段階、表示 |
+| `src/lib/object-animation.js` | 時間スコープ、`getEvaluationTime`（§15.1）、ローカル時間のスコープ |
+| `scratch-vm/src/lib/simulation-blocks.js` | Simulation カテゴリ、ステップの実行、定義の収集とハッシュ |
+| `scratch-vm/src/lib/simulation/` | シミュレーションの状態、キャッシュ、補間、ハッシュ、シード付き乱数、ランタイム |
+| `scratch-render/src/pen-fx/engine.js` | 時間サンプリングの蓄積バッファー（`beginAccumulation` / `accumulateLayer` / `endAccumulation`） |
 
 関連する検証コードは `test/unit/util/tutorial-blocks.test.js`、`test/unit/util/tutorial-steps.test.js`、`test/unit/components/shading-tutorial.test.jsx`、`test/unit/util/movie-project-roundtrip.test.js`、`test/unit/util/pen-fx-custom-shaders.test.js`、`test/unit/util/object-blocks.test.js`、`test/unit/util/movie-asset-manager.test.js`、`test/unit/components/timeline.test.jsx` にある。
+
+## 14. シミュレーション
+
+設計の要点は [`SIMULATION.md`](SIMULATION.md) にまとめる。
+
+### 14.1 評価モデル
+
+- 状態を持たない値は時刻の関数 `v(t) = f(project, t)`。
+- 状態を持つ値はシミュレーションに置く: `S0 = init()`、`S(k+1) = step(S(k), t0 + k·dt, dt)`。`S(t)` は step `k = floor((t − t0)/dt)`
+  と `k + 1` の補間で、`t < t0` なら `S0`。dt はシミュレーションの刻みで、書き出し fps とは独立。
+- frame の画像は `render(f, S, t)`、`t = N / fps`。`render frame` は S を読むだけで書かない。
+
+### 14.2 ブロック
+
+| opcode | 種類 | 表示（ja） |
+| --- | --- | --- |
+| `simulation_whenInitialized` | hat | シミュレーション [NAME] を初期化するとき 開始 (START) 秒 刻み (RATE) Hz |
+| `simulation_whenStepped` | hat | シミュレーション [NAME] を 1 ステップ進めるとき |
+| `simulation_setState` / `simulation_changeState` | command | 状態 [KEY] を (VALUE) にする / ずつ変える |
+| `simulation_state` | reporter | 状態 [KEY] |
+| `simulation_addToList` / `simulation_replaceListItem` / `simulation_clearList` | command | 状態リストの追加・置き換え・全削除 |
+| `simulation_listItem` / `simulation_listLength` | reporter | 状態リストの要素・長さ |
+| `simulation_time` / `simulation_stepIndex` / `simulation_dt` | reporter | シミュレーション時間 / ステップ番号 / dt |
+| `simulation_seededRandom` | reporter | シード (SEED) の乱数 (FROM) から (TO) |
+| `simulation_stateAt` / `simulation_listItemAt` | reporter | シミュレーション [NAME] の [KEY]（リストは INDEX 番目）時刻 (TIME)。TIME が空なら評価時刻 |
+
+- hat は EVENT 型（edge activated ではない）で、緑の旗、`event_renderframe`、ブロードキャストでは起動しない。
+  RATE は 1〜1000 Hz にクランプする（既定 120）。
+- 状態は数値・文字列・真偽値とそのリスト。キーの順序は挿入順で固定。
+- 書き込みブロックはシミュレーションの外では何もせず、警告を 1 回出す。command primitive はすべて `undefined` を返す。
+
+### 14.3 ステップの実行
+
+- ステップは warp のスレッドで同期実行し、yield したら中止して診断エラー（`simulationError`）を出す。
+- 待つ・描画・PenFX・スプライト・カメラ・音・ブロードキャスト・時間ブロックなどを含むシミュレーションは計算しない
+  （許可するのは operator / control（待つ・クローン・停止を除く）/ data / procedures / argument / simulation と
+  マウス・キー・タイマーのレポーター）。
+- ステップ内の通常変数は `initialize` 完了時点の値のコピー。タイマー・マウス・キーは固定値、`pick random` はシード付き。
+- 時刻を読むブロックはシミュレーション時間を返す。
+
+### 14.4 キャッシュ、やり直し、再計算
+
+- ライブ状態、0.5 秒ごとのチェックポイント、直近 2 秒の全ステップ、ライブ状態から離れて計算したステップを、
+  合計 256 MB まで保持する（S0 は常に保持）。
+- 未計算の時刻の読み取りは近い計算済みの値を返して時刻を記録し、frame をやり直させる（§5.4）。
+- 定義のハッシュ（ブロック木の opcode・入力・フィールド、呼ぶカスタムブロック、hat の入力、参照する変数の初期化時の値）が
+  変わったシミュレーションだけ計算し直す。`render frame` だけの編集では計算し直さない。
+- タイムライン UI は計算済み範囲のバーを表示する（`simulationCacheChanged`）。
+- プラグインはソルバーを `shading.simulation.registerSolver` で登録する（[PLUGINS.md](PLUGINS.md)）。
+
+## 15. 時間コンテキストと時間軸エフェクト
+
+### 15.1 時間コンテキスト
+
+時刻は評価中のスレッドが持つ時間スコープとして渡し、すべて `getEvaluationTime(runtime, util, {reader})` で読む。
+
+| reader | 基準 | スコープ | 使うもの |
+| --- | --- | --- | --- |
+| `objects` | タイムライン時刻（描画は evaluationTime） | すべて | Objects のレポーター、描画の時間範囲、ビデオ、シミュレーションの読み取り、剛体の姿勢 |
+| `timer` | プロジェクトタイマー | legacy 以外 | `operator_easing` |
+| `timeline` | タイムライン時刻 | legacy 以外 | PenFX の `u_time` / `u_frame` |
+
+スコープの外と legacy スコープだけの中では、easing と PenFX の値は以前と同じ。シミュレーションのステップの中では
+どの reader もシミュレーション時間を返す。
+
+### 15.2 ローカル時間
+
+`objects_localTime` の `t′` は [`SIMULATION.md`](SIMULATION.md) の表のとおり（offset、speed、posterize、freeze、loop、reverse、remap）。
+posterize は `objects_posterizeTime` と同じ式 `floor(t × fps + 1e-9) / fps`（fps ≤ 0 なら無変換）。入れ子は外側から適用する。
+
+### 15.3 時間サンプリング
+
+- `objects_motionBlur`: サンプル時刻 `t + (phase + angle·(i + 0.5)/K) / 360 / fps`、重み `1/K`、K は 1〜64。
+- `objects_echo`: i 番目（0 が今）は `t + i·間隔`、不透明度 `減衰^i`、合成は後ろ・前・加算・最大。
+- サンプルごとに独立レイヤーへ描き、蓄積バッファー（WebGL2 で `EXT_color_buffer_float` があれば RGBA16F、無ければ RGBA8）
+  に premultiplied のまま重み付きで足し、1 枚として合成する。1 サンプルなら C ブロックが無い場合と同じ画像になる。
+- ブラーがかかるのは C ブロックの中で時刻を読んだ値だけ。外で計算した値は全サンプルで同じ。
+- 基準サンプル（シャッター中心に最も近いもの、エコーは i = 0）を最後に評価し、音とビデオ音声は基準サンプルだけが鳴らす。
+- 非同期の描画は既存の保留処理で全サンプルがそろうまで commit しない。
+
