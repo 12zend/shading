@@ -9,6 +9,7 @@ import {createDefaultStorage} from './storage';
 import {installInputPresetFields} from './ui/input-presets';
 import legacyOpcodes from './legacy-plugin-opcodes.json';
 import {registerObjectBlocks} from '../../../scratch-vm/src/lib/object-blocks';
+import {registerSimulationBlocks} from '../../../scratch-vm/src/lib/simulation-blocks';
 
 // Plugins extend shading.app with arbitrary JavaScript: blocks, renderer effects, editor tabs, project data. The
 // user reviews each zip (with the static security scan) before it is installed; installed plugins are stored and
@@ -111,6 +112,7 @@ class ShadingPluginManager extends EventEmitter {
         this.extensionProxies = new Map();
         // Objects-category blocks added by plugins: opcode (without "objects_") -> plugin id, and toolbox XML.
         this.objectBlockOwners = new Map();
+        this.simulationBlockOwners = new Map();
         this.objectToolboxXML = new Map();
         this.penFXMethods = new Map();
         this.orphanData = new Map();
@@ -722,6 +724,19 @@ class ShadingPluginManager extends EventEmitter {
         };
     }
 
+    addSimulationBlocks (pluginId, contribution) {
+        const key = `${pluginId}:simulation:${this.simulationBlockOwners.size}:${Date.now()}`;
+        const unregister = registerSimulationBlocks(this.vm, Object.assign({}, contribution, {id: key}));
+        const opcodes = (contribution.blocks || []).map(block => block && block.opcode).filter(Boolean);
+        for (const opcode of opcodes) this.simulationBlockOwners.set(opcode, pluginId);
+        return () => {
+            unregister();
+            for (const opcode of opcodes) {
+                if (this.simulationBlockOwners.get(opcode) === pluginId) this.simulationBlockOwners.delete(opcode);
+            }
+        };
+    }
+
     // Toolbox XML of the blocks plugins added to the Objects category.
     getObjectsToolboxXML () {
         return Array.from(this.objectToolboxXML.values()).join('\n');
@@ -1063,6 +1078,9 @@ class ShadingPluginManager extends EventEmitter {
         }
         for (const [opcode, pluginId] of this.objectBlockOwners) {
             if (opcodes.has(`objects_${opcode}`)) use(pluginId);
+        }
+        for (const [opcode, pluginId] of this.simulationBlockOwners) {
+            if (opcodes.has(`simulation_${opcode}`)) use(pluginId);
         }
         for (const proxy of this.extensionProxies.values()) {
             if (!proxy.pluginId) continue;

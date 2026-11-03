@@ -98,7 +98,12 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.penfx.helpers`, `vertexShader`, `createPreviewRenderer()` | 引数変換ヘルパー、頂点シェーダー、サムネイル用の描画 |
 | `shading.objects.addBlocks({blocks, menus, methods, toolboxXML})` | レイヤー（Objects）カテゴリへブロックを追加。`blocks` / `menus` は `getInfo()` 形式（opcode は `objects_<opcode>`）、`methods[opcode](args, util)` が実行され、`toolboxXML` は図形ブロックの後に入る。`menus` の `items` は関数でもよい |
 | `shading.objects.draw(util, configuration)` | 描画ブロックと同じ設定（`source`, `asset`, `text`, `position`, `rotation`, `scale`, `size`, `width`, `height`, `time` など）で描画する。呼び出し元のトランスフォーム・時間スコープ・シーン・グループ化に従う |
-| `shading.objects.getTime(util)`, `posterizeTime(time, fps)`, `getFramerate()` | ブロックが評価される時刻（秒）、時間のポスタライズ、プロジェクトのフレームレート |
+| `shading.objects.getTime(util)`, `posterizeTime(time, fps)`, `getFramerate()` | ブロックが評価される時刻（秒。ローカル時間ブロック・モーションブラー／エコーのサンプル・シミュレーションのステップの中ではその時刻）、時間のポスタライズ、プロジェクトのフレームレート |
+| `shading.objects.runWithTransform(util, transform)` | 呼び出した C ブロックの中のスタックを、移動ブロックと同じ規則で `{position, anchor, rotation, scale}` を掛けて実行する（回転は度、X→Y→Z の順） |
+| `shading.simulation.registerSolver(solver)` | シミュレーションで使うソルバー（物理エンジンなど）。`{id, create(settings), beforeStep(world, ctx), step(world, dt), snapshot(world), restore(bytes), dispose(world), readPose(world, bodyName)}`。詳細は [SIMULATION.md](SIMULATION.md) |
+| `shading.simulation.addBlocks({blocks, menus, methods})` | Simulation カテゴリへブロックを追加（形式は `objects.addBlocks` と同じ、opcode は `simulation_<opcode>`） |
+| `shading.simulation.getContext(util)` | シミュレーションのスクリプトの中では `{name, phase, stepIndex, time, dt, state, random(seed), createWorld(solverId, settings), getWorld()}`、それ以外では `null` |
+| `shading.simulation.sample(name, key, time, util)`, `readPose(name, bodyName, time, util)` | ステップ間を補間した S(t) の値と、ソルバーの剛体の姿勢 `{position, quaternion}`。`time` を省略すると `util` のブロックの評価時刻。まだ計算していない時刻は近い計算済みの値を返し、そのフレームは計算後にやり直される |
 | `shading.objects.getInstanceId(util)`, `hash(text)` | ブロックのインスタンスごとに安定した ID と、乱数の種にできるハッシュ |
 | `shading.objects.getFonts()`, `measureText(font, text)`, `TEXT_SIZE` | テキストに使えるフォント（`{name, value}`）、size 100 での文字幅（ステージ単位）、size 100 での文字の大きさ（48） |
 | `shading.easing.progress(type, progress, power)`, `value(options, time)` | イージングブロックと同じ計算（`value` は `{type, v0, v1, t0, t1, power, speed}`、speed は elastic の振動） |

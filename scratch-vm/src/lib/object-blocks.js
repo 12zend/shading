@@ -450,6 +450,38 @@ const drawObjectConfiguration = (runtime, configuration, util) => {
     }
 };
 
+/**
+ * Run the calling C block's substack with a transform appended to the thread's transforms, exactly like the
+ * transform block (position, anchor, rotation in degrees applied X then Y then Z, XYZ scale).
+ * @param {Runtime} runtime The VM runtime.
+ * @param {object} util Utility of the C block whose substack runs.
+ * @param {object} transform {position, anchor, rotation, scale}; missing parts are identity.
+ */
+const runBranchWithTransform = (runtime, util, transform) => {
+    const context = getGroupingContext(util);
+    const inherited = Array.isArray(context.objectTransformStack) ? context.objectTransformStack : [];
+    const part = (value, fallback) => ({
+        x: value && typeof value.x !== 'undefined' ? value.x : fallback,
+        y: value && typeof value.y !== 'undefined' ? value.y : fallback,
+        z: value && typeof value.z !== 'undefined' ? value.z : fallback
+    });
+    const requested = transform || {};
+    const normalized = {
+        anchor: part(requested.anchor, 0),
+        position: part(requested.position, 0),
+        rotation: part(requested.rotation, 0),
+        scale: part(requested.scale, 1)
+    };
+    context.objectTransformStack = inherited.concat([normalized]);
+    const manager = runtime.movieAssetManager;
+    const node = manager && typeof manager.createFrameGraphNode === 'function' ?
+        manager.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {transform: normalized},
+            context.objectFrameGraphParent) : null;
+    if (node) context.objectFrameGraphParent = node;
+    const branchThread = runGroupingBranch(runtime, context, 1);
+    propagatePendingDraws(branchThread, util, manager);
+};
+
 const DEFAULT_PROJECT_FRAMERATE = 30;
 
 // Frames per second of the project timeline (the rendering framerate).
@@ -1448,19 +1480,12 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
     }
 
     transform (args, util) {
-        const context = getGroupingContext(util);
-        const inherited = Array.isArray(context.objectTransformStack) ? context.objectTransformStack : [];
-        const transform = {
+        runBranchWithTransform(this.runtime, util, {
             anchor: {x: args.AX, y: args.AY, z: args.AZ},
             position: {x: args.PX, y: args.PY, z: args.PZ},
             rotation: {x: args.RX, y: args.RY, z: args.RZ},
             scale: {x: args.SX, y: args.SY, z: args.SZ}
-        };
-        context.objectTransformStack = inherited.concat([transform]);
-        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TRANSFORM, {transform}, context);
-        if (node) context.objectFrameGraphParent = node;
-        const branchThread = runGroupingBranch(this.runtime, context, 1);
-        propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
+        });
     }
 
     bake (args, util) {
@@ -2052,5 +2077,6 @@ export {
     hashString,
     getObjectInstanceId,
     registerObjectBlocks,
+    runBranchWithTransform,
     installObjectBlocks as default
 };

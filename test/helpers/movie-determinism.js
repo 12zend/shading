@@ -50,10 +50,11 @@ const createFakeRenderer = () => new Proxy({
 /**
  * Load a project into a VM with Movie, Objects and easing installed and the renderer stubbed out.
  * @param {object} project sb3 project JSON (see buildProject).
- * @param {object} options {compiler: boolean, framerate: number, duration: number}.
+ * @param {object} options {compiler, framerate, duration, beforeLoad: async vm => {}} (beforeLoad runs before the
+ *     project loads, to install plugins whose blocks the project uses).
  * @returns {Promise<object>} Timeline driver (see timeline-driver.js) with vm, runtime, manager and frames.
  */
-const createHarness = async (project, {compiler = true, framerate = 30, duration = 10} = {}) => {
+const createHarness = async (project, {compiler = true, framerate = 30, duration = 10, beforeLoad = null} = {}) => {
     // Runtime._step reads document.hidden before drawing; a hidden document skips the (stubbed) draw.
     if (typeof document === 'undefined') global.document = {hidden: true};
     const vm = new VM();
@@ -89,6 +90,7 @@ const createHarness = async (project, {compiler = true, framerate = 30, duration
     };
     manager.captureRenderingFrame = () => frames.committed;
 
+    if (beforeLoad) await beforeLoad(vm);
     await vm.loadProject(JSON.stringify(project));
     vm.setCompilerOptions({enabled: compiler});
     manager.updateTimelineSettings({...manager.getTimelineSettings(), duration, framerate});

@@ -18,9 +18,11 @@ import {
     drawObjectConfiguration,
     getObjectInstanceId,
     getProjectFramerate,
-    hashString
+    hashString,
+    runBranchWithTransform
 } from '../../../scratch-vm/src/lib/object-blocks';
-import {getObjectTime, posterizeTime} from '../../../scratch-vm/src/lib/object-animation';
+import {getEvaluationTime, posterizeTime} from '../../../scratch-vm/src/lib/object-animation';
+import {getSimulationContext} from '../../../scratch-vm/src/lib/simulation-blocks';
 import {calculateEasingProgress, calculateEasingValue} from '../../../scratch-vm/src/lib/movie-easing';
 import {getTextFontOptions, useObjectRows} from '../object-blocks-ui';
 import {measureTextWidth} from './text-metrics';
@@ -245,8 +247,12 @@ const createPluginAPI = (manager, record) => {
             // Draw like the draw block ({source, asset, text, position, rotation, scale, size, width, height,
             // time, ...}), inside the calling block's transforms, time scopes, scenes and groupings.
             draw: (util, configuration) => drawObjectConfiguration(vm.runtime, configuration || {}, util),
-            // The time (seconds) the calling block is evaluated at.
-            getTime: util => getObjectTime(vm.runtime, util),
+            // The time (seconds) the calling block is evaluated at: its thread's time context (local time,
+            // motion blur and echo samples, simulation time inside a simulation step).
+            getTime: util => getEvaluationTime(vm.runtime, util),
+            // Run the calling C block's substack with a transform, like the transform block:
+            // {position, anchor, rotation (degrees, X then Y then Z), scale}.
+            runWithTransform: (util, transform) => runBranchWithTransform(vm.runtime, util, transform),
             posterizeTime,
             getFramerate: () => getProjectFramerate(vm.runtime),
             // A stable id for the calling block instance (target, block and repeat/instance path).
@@ -263,6 +269,42 @@ const createPluginAPI = (manager, record) => {
             },
             // Height of one line of text drawn at size 100, in stage units.
             TEXT_SIZE: 48
+        }),
+
+        simulation: Object.freeze({
+            // A solver (a physics engine, for example) the simulation scripts can create worlds with:
+            // {id, create, beforeStep, step, snapshot, restore, dispose, readPose}. See docs/SIMULATION.md.
+            registerSolver: solver => {
+                assertActive();
+                const simulationRuntime = vm.runtime.simulationRuntime;
+                if (!simulationRuntime) throw new Error('Simulations are not available.');
+                return track(simulationRuntime.registerSolver(solver));
+            },
+            // Add blocks to the Simulation category: {blocks, menus, methods} like objects.addBlocks
+            // (opcodes become simulation_<opcode>).
+            addBlocks: contribution => {
+                assertActive();
+                return track(manager.addSimulationBlocks(record.id, contribution || {}));
+            },
+            // The simulation context inside a simulation script ({name, phase, stepIndex, time, dt, state,
+            // random(seed), createWorld(solverId, settings), getWorld()}), or null elsewhere.
+            getContext: util => getSimulationContext(util),
+            // S(t) of a simulation's state key, interpolated between steps; time defaults to the calling block's
+            // evaluation time. A time that is not computed yet returns the nearest computed value and makes the
+            // frame evaluate again once it is computed.
+            sample: (name, key, time, util = null) => {
+                const simulationRuntime = vm.runtime.simulationRuntime;
+                if (!simulationRuntime) return;
+                const at = typeof time === 'number' ? time : getEvaluationTime(vm.runtime, util);
+                return simulationRuntime.sample(String(name), String(key), at);
+            },
+            // Interpolated pose ({position: {x, y, z}, quaternion: {x, y, z, w}}) of a solver body, or null.
+            readPose: (name, bodyName, time, util = null) => {
+                const simulationRuntime = vm.runtime.simulationRuntime;
+                if (!simulationRuntime) return null;
+                const at = typeof time === 'number' ? time : getEvaluationTime(vm.runtime, util);
+                return simulationRuntime.readPose(String(name), String(bodyName), at);
+            }
         }),
 
         easing: Object.freeze({
