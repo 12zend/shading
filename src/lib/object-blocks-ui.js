@@ -36,6 +36,7 @@ const IMPORT_ACCEPT = [
     '.glb', '.pmx', '.fbx', '.obj', '.mtl',
     '.spa', '.sph', '.tga', '.vmd', '.vpd'
 ].join(',');
+const FONT_IMPORT_ACCEPT = '.ttf,.otf,.woff,.woff2';
 
 const MEDIA_FIELD_ICON = `data:image/svg+xml,${encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="1.5">' +
@@ -203,6 +204,22 @@ const getAssetItems = vm => {
 
     return items;
 };
+
+/**
+ * Font picker items: the same font cards the draw picker shows, but a font menu stores the plain font value.
+ * @param {object} vm VM.
+ * @returns {Array<object>} Picker items.
+ */
+const getFontItems = vm => getTextFontOptions(vm).map(font => ({
+    deletable: Boolean(font.deletable),
+    family: font.family || font.value,
+    index: font.index,
+    label: SOURCE_LABELS.text,
+    name: font.name,
+    previewType: 'font',
+    source: 'text',
+    value: font.value
+}));
 
 const getAssetOptions = vm => [
     ['Import', IMPORT_VALUE],
@@ -405,6 +422,26 @@ const hasFileTransfer = dataTransfer => (
     Boolean(dataTransfer) && Array.from(dataTransfer.types || []).includes('Files')
 );
 
+const chooseFiles = (accept, onFiles) => {
+    const input = document.createElement('input');
+    input.accept = accept;
+    input.multiple = true;
+    input.type = 'file';
+    input.style.display = 'none';
+    const cleanup = () => {
+        if (input.parentNode) input.parentNode.removeChild(input);
+    };
+    input.addEventListener('cancel', cleanup);
+    input.addEventListener('change', () => {
+        const selectedFiles = Array.from(input.files || []);
+        cleanup();
+        if (!selectedFiles.length) return;
+        onFiles(selectedFiles);
+    });
+    document.body.appendChild(input);
+    input.click();
+};
+
 const openImportPicker = (vm, block, ScratchBlocks, files = []) => {
     const importedFiles = Array.from(files || []);
     if (importedFiles.length) {
@@ -419,26 +456,61 @@ const openImportPicker = (vm, block, ScratchBlocks, files = []) => {
         return;
     }
 
-    const input = document.createElement('input');
-    input.accept = IMPORT_ACCEPT;
-    input.multiple = true;
-    input.type = 'file';
-    input.style.display = 'none';
-    const cleanup = () => {
-        if (input.parentNode) input.parentNode.removeChild(input);
-    };
-    input.addEventListener('cancel', cleanup);
-    input.addEventListener('change', () => {
-        const selectedFiles = Array.from(input.files || []);
-        cleanup();
-        if (!selectedFiles.length) return;
-        importDrawFiles(vm, block, ScratchBlocks, selectedFiles);
-    });
-    document.body.appendChild(input);
-    input.click();
+    chooseFiles(IMPORT_ACCEPT, selectedFiles => importDrawFiles(vm, block, ScratchBlocks, selectedFiles));
 };
 
-const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
+/**
+ * Store a font menu's value in the VM and on the live block (which may be a replacement after an import refresh).
+ * @param {object} vm VM.
+ * @param {object} ScratchBlocks scratch-blocks.
+ * @param {object} block Font menu block.
+ * @param {string} fieldName Menu field name.
+ * @param {string} value Font value.
+ */
+const persistFontValue = (vm, ScratchBlocks, block, fieldName, value) => {
+    const target = vm.editingTarget;
+    const blocks = target && target.blocks;
+    if (blocks && block && block.id && typeof blocks.getBlock === 'function' && blocks.getBlock(block.id) &&
+        typeof blocks.changeBlock === 'function') {
+        blocks.changeBlock({element: 'field', id: block.id, name: fieldName, value});
+    }
+    const liveBlock = getImportedBlock(ScratchBlocks, block, block && block.workspace);
+    if (liveBlock) {
+        liveBlock.objectDrawImportError_ = null;
+        if (typeof liveBlock.setFieldValue === 'function') liveBlock.setFieldValue(value, fieldName);
+    }
+};
+
+const importFontFiles = (vm, ScratchBlocks, block, fieldName, files) => {
+    const manager = vm.runtime && vm.runtime.movieAssetManager;
+    const target = vm.editingTarget;
+    if (!manager || typeof manager.importFiles !== 'function' || !target) {
+        showImportError(block, new Error('Select an object before importing a font.'));
+        return;
+    }
+    const importedFiles = Array.from(files || []);
+    if (!importedFiles.length) return;
+    if (block) block.objectDrawImportError_ = null;
+    manager.importFiles(target.id, importedFiles).then(imported => {
+        const font = imported.slice().reverse()
+            .find(asset => asset.source === 'text');
+        if (font) persistFontValue(vm, ScratchBlocks, block, fieldName, font.name);
+    }, error => showImportError(block, error));
+};
+
+/**
+ * The draw block's media picker field. `pickerKind` turns it into a picker for one kind of media:
+ * {kind: 'font', fieldName} lists only fonts, stores the plain font value in the menu block's `fieldName` field and
+ * imports font files into that menu.
+ * @param {object} ScratchBlocks scratch-blocks.
+ * @param {object} vm VM.
+ * @param {Function} assetOptions Dropdown options.
+ * @param {Function} assetValidator Dropdown validator.
+ * @param {object} [pickerKind] Picker kind.
+ * @returns {Function} Field class.
+ */
+const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator, pickerKind = {}) => {
+    const fontsOnly = pickerKind.kind === 'font';
     class MediaField extends ScratchBlocks.FieldDropdown {
         constructor () {
             super(assetOptions, assetValidator);
@@ -458,6 +530,17 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
 
         getDrawBlock_ () {
             return getDrawBlock(getLiveBlock(this.sourceBlock_));
+        }
+
+        importFiles_ (files = []) {
+            if (!fontsOnly) {
+                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks, files);
+                return;
+            }
+            const block = getLiveBlock(this.sourceBlock_);
+            const importFonts = selected => importFontFiles(vm, ScratchBlocks, block, pickerKind.fieldName, selected);
+            if (files.length) importFonts(files);
+            else if (typeof document !== 'undefined' && document.body) chooseFiles(FONT_IMPORT_ACCEPT, importFonts);
         }
 
         refreshDisplay_ () {
@@ -484,7 +567,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
         }
 
         showEditor_ () {
-            const items = getAssetItems(vm);
+            const items = fontsOnly ? getFontItems(vm) : getAssetItems(vm);
             const manager = vm.runtime && vm.runtime.movieAssetManager;
             this.dropDownOpen_ = true;
             ScratchBlocks.DropDownDiv.hideWithoutAnimation();
@@ -493,7 +576,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             const content = ScratchBlocks.DropDownDiv.getContentDiv();
             const picker = document.createElement('section');
             picker.className = styles.mediaPicker;
-            picker.setAttribute('aria-label', 'Choose media for draw');
+            picker.setAttribute('aria-label', fontsOnly ? 'Choose a font' : 'Choose media for draw');
             const boundsElement = this.sourceBlock_.workspace.getParentSvg().parentNode;
             const availableWidth = Math.max(240, boundsElement.clientWidth - 16);
             picker.style.setProperty('--media-picker-available-width', `${availableWidth}px`);
@@ -503,10 +586,11 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             const headingGroup = document.createElement('div');
             const heading = document.createElement('h2');
             heading.className = styles.mediaHeading;
-            heading.textContent = 'Choose media';
+            heading.textContent = fontsOnly ? 'Choose font' : 'Choose media';
             const helper = document.createElement('p');
             helper.className = styles.mediaHelper;
-            helper.textContent = 'Import, drop, or paste files, then select media or make a costume sequence.';
+            helper.textContent = fontsOnly ? 'Import, drop, or paste font files, then select a font.' :
+                'Import, drop, or paste files, then select media or make a costume sequence.';
             headingGroup.appendChild(heading);
             headingGroup.appendChild(helper);
             const importButton = document.createElement('button');
@@ -516,7 +600,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             importButton.appendChild(document.createTextNode('Import'));
             importButton.addEventListener('click', () => {
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks);
+                this.importFiles_();
             });
             const headerActions = document.createElement('div');
             headerActions.className = styles.mediaActions;
@@ -524,7 +608,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
             closeButton.className = styles.closeButton;
             closeButton.type = 'button';
             closeButton.title = 'Close';
-            closeButton.setAttribute('aria-label', 'Close media picker');
+            closeButton.setAttribute('aria-label', fontsOnly ? 'Close font picker' : 'Close media picker');
             closeButton.appendChild(createSvgIcon('M6 6l12 12M18 6 6 18', styles.closeIcon));
             closeButton.addEventListener('click', () => ScratchBlocks.DropDownDiv.hide());
             headerActions.appendChild(importButton);
@@ -631,7 +715,8 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 {label: 'Fonts', value: 'text'},
                 {label: '3D', value: 'model'},
                 {label: 'Sounds', value: SOUND_SOURCE}
-            ].filter(filter => items.some(item => matchesFilter(item, filter.value)));
+            ].filter(filter => !fontsOnly && items.some(item => matchesFilter(item, filter.value)));
+            // A font picker has only one kind of media, so it has no filter chips.
             let activeFilter = 'all';
             let activeFilterButton;
             let searchQuery = '';
@@ -814,8 +899,9 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         emptyTitle.textContent = `Nothing named “${searchInput.value.trim()}”`;
                         emptyHint.textContent = 'Try another name or clear the search.';
                     } else {
-                        emptyTitle.textContent = 'No media yet';
-                        emptyHint.textContent = 'Import, drop, or paste an image, video, font, or 3D model.';
+                        emptyTitle.textContent = fontsOnly ? 'No fonts yet' : 'No media yet';
+                        emptyHint.textContent = fontsOnly ? 'Import, drop, or paste a font file.' :
+                            'Import, drop, or paste an image, video, font, or 3D model.';
                     }
                     empty.appendChild(emptyTitle);
                     empty.appendChild(emptyHint);
@@ -920,7 +1006,10 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                                 const fallback = items.find(candidate => candidate.value !== item.value &&
                                     candidate.source === item.source) ||
                                     items.find(candidate => candidate.value !== item.value);
-                                if (fallback) {
+                                if (fallback && fontsOnly) {
+                                    persistFontValue(vm, ScratchBlocks, getLiveBlock(this.sourceBlock_),
+                                        pickerKind.fieldName, fallback.value);
+                                } else if (fallback) {
                                     const selection = decodeDrawAsset(fallback.value, fallback.source);
                                     persistDrawAsset(
                                         vm,
@@ -982,7 +1071,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 event.preventDefault();
                 event.stopPropagation();
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks, files);
+                this.importFiles_(files);
             });
             let fileDragDepth = 0;
             const showDropOverlay = show => {
@@ -1016,7 +1105,7 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 showDropOverlay(false);
                 if (!files.length) return;
                 ScratchBlocks.DropDownDiv.hideWithoutAnimation();
-                openImportPicker(vm, this.getDrawBlock_(), ScratchBlocks, files);
+                this.importFiles_(files);
             });
             updateCostumeSelectionControls();
             renderGrid();
@@ -1038,6 +1127,32 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
         }
     }
     return MediaField;
+};
+
+/**
+ * Define a reporter-accepting menu block (`<extensionId>_menu_<menu>`, field `<menu>`) whose dropdown is the draw
+ * block's media picker showing only fonts. The field stores the font value, as a plain font menu does.
+ * @param {object} ScratchBlocks scratch-blocks.
+ * @param {object} vm VM.
+ * @param {object} options {menu, extensionId = 'objects', colours = [primary, secondary, tertiary]}.
+ */
+const defineFontMenuBlock = (ScratchBlocks, vm, options = {}) => {
+    if (!ScratchBlocks || !ScratchBlocks.Blocks || !ScratchBlocks.FieldDropdown || !options.menu) return;
+    const menu = String(options.menu);
+    const extensionId = options.extensionId || 'objects';
+    const colours = options.colours || [PRIMARY, SECONDARY, TERTIARY];
+    const fontOptions = () => getTextFontOptions(vm).map(font => [font.name, font.value]);
+    const FontField = createMediaField(ScratchBlocks, vm, fontOptions, value => value,
+        {kind: 'font', fieldName: menu});
+    ScratchBlocks.Blocks[`${extensionId}_menu_${menu}`] = {
+        init: function () {
+            this.appendDummyInput().appendField(new FontField(), menu);
+            this.setInputsInline(true);
+            this.setOutput(true, 'String');
+            this.setColour(colours[0], colours[1], colours[2]);
+            this.setOutputShape(ScratchBlocks.OUTPUT_SHAPE_ROUND);
+        }
+    };
 };
 
 const makeObjectRowsRenderer = ScratchBlocks => function (iconWidth) {
@@ -1649,10 +1764,12 @@ export {
     getLiveBlock,
     IMPORT_VALUE,
     createMediaField,
+    defineFontMenuBlock,
     drawSelectionUsesFrame,
     getDrawInputVisibility,
     getAssetItems,
     getAssetOptions,
+    getFontItems,
     getTextFontOptions,
     modelHasFrames,
     normalizeVideoMode,

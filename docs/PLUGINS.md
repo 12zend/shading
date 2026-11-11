@@ -111,6 +111,7 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.blocks.define(categoryId, (ScratchBlocks, {locale, vm}) => …)` | ブロック定義のカスタマイズ（独自フィールドなど） |
 | `shading.blocks.filterToolboxXML(categoryId, xml => xml)` | ツールボックス XML の調整 |
 | `shading.ui.definePresetMenuBlock(ScratchBlocks, options)` | サムネイル付きプリセット選択メニュー。`source.onSelect(entry, block)` で選択時に他の入力も設定できる |
+| `shading.ui.defineFontMenuBlock(ScratchBlocks, {menu, extensionId?, colours?})` | フォントのメニューを、draw ブロックと同じメディア選択画面（フォントだけ、読み込み・削除付き）で選べるようにする。値は従来どおりフォントの value。`shading.blocks.define` から呼ぶ |
 | `shading.ui.setBlockInputs(block, values)` | Blockly ブロックの入力（`{入力名: 値}`）をまとめて書き換える。reporter が入った入力は変更しない |
 | `shading.gui.addTab({id, label, icon, component \| mount})` | コスチューム・音などと並ぶタブ。React コンポーネントか DOM の `mount(container)` |
 | `shading.gui.addStyle(css)`, `addMenuItem({label, onClick})`, `notify(message)` | CSS、管理画面のコマンド、通知 |

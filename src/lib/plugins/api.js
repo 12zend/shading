@@ -24,7 +24,7 @@ import {
 import {getEvaluationTime, posterizeTime} from '../../../scratch-vm/src/lib/object-animation';
 import {getSimulationContext} from '../../../scratch-vm/src/lib/simulation-blocks';
 import {calculateEasingProgress, calculateEasingValue} from '../../../scratch-vm/src/lib/movie-easing';
-import {getTextFontOptions, useObjectRows} from '../object-blocks-ui';
+import {defineFontMenuBlock, getTextFontOptions, useObjectRows} from '../object-blocks-ui';
 import {measureTextWidth} from './text-metrics';
 
 const API_VERSION = 1;
@@ -361,6 +361,9 @@ const createPluginAPI = (manager, record) => {
                 ScratchBlocks, vm, getLocale(), source),
             definePresetMenuBlock: (ScratchBlocks, options) => definePresetMenuBlock(
                 ScratchBlocks, vm, getLocale(), options),
+            // Make a font menu ({menu, extensionId = 'objects', colours}) open the draw block's media picker with
+            // only fonts. The menu keeps storing the font value, so saved projects are unchanged.
+            defineFontMenuBlock: (ScratchBlocks, options) => defineFontMenuBlock(ScratchBlocks, vm, options),
             // Fill a Blockly block's inputs ({inputName: value}), e.g. from a preset picker's onSelect.
             setBlockInputs,
             // Lay a block out in rows, starting a new row at each named input (call from a block's init).

@@ -1,4 +1,4 @@
-import {DRAW_ROW_STARTS, createMediaField, useObjectRows} from '../../../src/lib/object-blocks-ui';
+import {DRAW_ROW_STARTS, createMediaField, defineFontMenuBlock, useObjectRows} from '../../../src/lib/object-blocks-ui';
 
 const createFakeDocument = () => {
     const fakeDocument = {activeElement: null};
@@ -352,6 +352,125 @@ describe('Objects draw media picker', () => {
             expect(field.getValue()).toBe('costume-group:Walk');
             expect(field.sourceBlock_.setDrawAsset_).toHaveBeenCalledWith('costume-group', 'Walk');
             expect(findByLabel(content, 'Costume group: Walk')).not.toBeNull();
+        } finally {
+            global.document = originalDocument;
+        }
+    });
+
+    test('a font menu shows only fonts, stores the font value and imports dropped fonts into the menu', async () => {
+        const originalDocument = global.document;
+        const fakeDocument = createFakeDocument();
+        global.document = fakeDocument;
+        const content = fakeDocument.createElement('div');
+        class FieldDropdown {
+            constructor (options, validator) {
+                this.options_ = options;
+                this.validator_ = validator;
+                this.value_ = 'serif';
+            }
+
+            callValidator (value) {
+                return this.validator_.call(this, value);
+            }
+
+            getOptions () {
+                return this.options_.call(this);
+            }
+
+            getValue () {
+                return this.value_;
+            }
+
+            onHide () {}
+
+            setText () {}
+
+            setValue (value) {
+                this.value_ = value;
+            }
+        }
+        const ScratchBlocks = {
+            Blocks: {},
+            DropDownDiv: {
+                clearContent: jest.fn(() => {
+                    content.textContent = '';
+                }),
+                getContentDiv: jest.fn(() => content),
+                hide: jest.fn(),
+                hideWithoutAnimation: jest.fn(),
+                setBoundsElement: jest.fn(),
+                setCategory: jest.fn(),
+                setColour: jest.fn(),
+                showPositionedByBlock: jest.fn()
+            },
+            Events: {setGroup: jest.fn()},
+            FieldDropdown,
+            OUTPUT_SHAPE_ROUND: 2
+        };
+        const fonts = [{name: 'My Font', family: 'My Font Family'}];
+        const manager = {
+            getModels: jest.fn(() => []),
+            getVideos: jest.fn(() => []),
+            importFiles: jest.fn(() => Promise.resolve([{name: 'Dropped Font', source: 'text'}]))
+        };
+        const changeBlock = jest.fn();
+        const vm = {
+            editingTarget: {
+                blocks: {changeBlock, getBlock: id => (id === 'menu' ? {id} : null)},
+                getCostumes: () => [{name: 'Costume'}],
+                id: 'sprite'
+            },
+            runtime: {fontManager: {getFonts: () => fonts}, movieAssetManager: manager}
+        };
+
+        defineFontMenuBlock(ScratchBlocks, vm, {menu: 'myFont'});
+        const definition = ScratchBlocks.Blocks.objects_menu_myFont;
+        let field;
+        const block = {
+            appendDummyInput: () => ({appendField: (newField, name) => {
+                expect(name).toBe('myFont');
+                field = newField;
+            }}),
+            getCategory: () => 'Objects',
+            getFieldValue: () => field.getValue(),
+            id: 'menu',
+            setColour: jest.fn(),
+            setFieldValue: jest.fn(value => field.setValue(value)),
+            setInputsInline: jest.fn(),
+            setOutput: jest.fn(),
+            setOutputShape: jest.fn(),
+            type: 'objects_menu_myFont',
+            workspace: {getParentSvg: () => ({parentNode: {clientWidth: 640}})}
+        };
+        definition.init.call(block);
+        field.sourceBlock_ = block;
+
+        try {
+            field.showEditor_();
+            const picker = findByLabel(content, 'Choose a font');
+            expect(picker).not.toBeNull();
+            expect(findByLabel(content, 'Costume: Costume')).toBeNull();
+            expect(findByLabel(content, 'Font: Sans Serif')).not.toBeNull();
+            expect(findByLabel(content, 'Filter media').children).toHaveLength(0);
+
+            findByLabel(content, 'Font: My Font').click();
+            expect(field.getValue()).toBe('My Font');
+
+            const dragEvent = {
+                dataTransfer: {files: [{name: 'Dropped.ttf'}], types: ['Files']},
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn()
+            };
+            picker._listeners.drop(dragEvent);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(manager.importFiles).toHaveBeenCalledWith('sprite', [{name: 'Dropped.ttf'}]);
+            expect(changeBlock).toHaveBeenCalledWith({
+                element: 'field', id: 'menu', name: 'myFont', value: 'Dropped Font'
+            });
+            expect(field.getValue()).toBe('Dropped Font');
+            field.onHide();
         } finally {
             global.document = originalDocument;
         }

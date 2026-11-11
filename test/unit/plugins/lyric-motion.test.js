@@ -90,6 +90,30 @@ describeWithPlugins('Lyric Motion plugin', () => {
         expect(((xs[0] - 24) + (xs[3] + 9.6)) / 2).toBeCloseTo(10, 6);
     });
 
+    test('makes the font menus open the font-only media picker', async () => {
+        const {vm, manager} = await loadLyricMotion();
+        class FieldDropdown {}
+        const ScratchBlocks = {Blocks: {objects_lyricMotion: {init: () => {}}}, FieldDropdown};
+        manager.defineBlocks('objects', ScratchBlocks, {vm, locale: 'en'});
+        const menu = ScratchBlocks.Blocks.objects_menu_lyricMotionFont;
+        expect(menu).toBeTruthy();
+        let field;
+        let fieldName;
+        menu.init.call({
+            appendDummyInput: () => ({appendField: (newField, name) => {
+                field = newField;
+                fieldName = name;
+            }}),
+            setColour: () => {},
+            setInputsInline: () => {},
+            setOutput: () => {},
+            setOutputShape: () => {}
+        });
+        expect(fieldName).toBe('lyricMotionFont');
+        expect(field).toBeInstanceOf(FieldDropdown);
+        expect(typeof field.showEditor_).toBe('function');
+    });
+
     test('starts each character a time interval after the previous one and hides them before', async () => {
         const {run, setTime} = await loadLyricMotion();
         setTime(0.6);
