@@ -1,4 +1,5 @@
 import uid from 'scratch-vm/src/util/uid';
+import {DEFAULT_RENDER_FRAME_ID} from '../default-project/default-render-frame';
 
 // Scripts the first-run tutorial places in the project, one cumulative stage per tutorial milestone.
 // Every block the tutorial owns has an id starting with TUTORIAL_BLOCK_PREFIX, so a stage can be
@@ -385,6 +386,27 @@ const removeTutorialBlocks = target => {
     return position;
 };
 
+/**
+ * A new project starts with an empty `render frame` hat. While it is still untouched (alone, with nothing
+ * attached), the tutorial's script replaces it, so the project does not end up with two render-frame scripts.
+ * @param {object} target Rendered target.
+ * @returns {?{x: number, y: number}} Where the default hat was, if it was removed.
+ */
+const removeUntouchedDefaultHat = target => {
+    const container = target.blocks;
+    const hat = container._blocks[DEFAULT_RENDER_FRAME_ID];
+    if (!hat || hat.opcode !== 'event_renderframe' || !hat.topLevel || hat.next) return null;
+    if (Object.values(container._blocks).some(block => block.parent === DEFAULT_RENDER_FRAME_ID)) return null;
+    if (Object.values(target.comments || {}).some(comment => comment.blockId === DEFAULT_RENDER_FRAME_ID)) {
+        return null;
+    }
+    const position = {x: Number(hat.x) || 0, y: Number(hat.y) || 0};
+    container._deleteScript(DEFAULT_RENDER_FRAME_ID);
+    delete container._blocks[DEFAULT_RENDER_FRAME_ID];
+    container.resetCache();
+    return position;
+};
+
 // Without layout information, start a new script well below the lowest existing one.
 const guessFreePosition = target => {
     const tops = target.blocks.getScripts()
@@ -418,7 +440,9 @@ const applyTutorialStage = (vm, stage, options = {}) => {
     const hasTutorialBlocks = Object.keys(target.blocks._blocks).some(isTutorialBlockId);
     // Opening the tutorial on a project must not mark it as changed.
     if (stage === 'none' && !hasTutorialBlocks) return target;
-    const position = removeTutorialBlocks(target) || options.freePosition || guessFreePosition(target);
+    const tutorialPosition = removeTutorialBlocks(target);
+    const defaultHatPosition = !tutorialPosition && stage !== 'none' ? removeUntouchedDefaultHat(target) : null;
+    const position = tutorialPosition || defaultHatPosition || options.freePosition || guessFreePosition(target);
     const variables = ensureVariables(target, STAGE_VARIABLES[stage] || []);
     const blocks = buildStageBlocks(stage, Object.assign({variables}, position || {}));
     for (const block of blocks) target.blocks.createBlock(block);

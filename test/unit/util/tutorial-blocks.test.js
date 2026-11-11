@@ -11,6 +11,7 @@ import {
     releaseTutorialBlocks,
     tutorialBlockId
 } from '../../../src/lib/tutorial/tutorial-blocks';
+import {DEFAULT_RENDER_FRAME_ID} from '../../../src/lib/default-project/default-render-frame';
 
 const sprite = (name, blocks = {}) => ({
     isStage: false,
@@ -205,6 +206,61 @@ describe('tutorial block stages', () => {
         expect(target.blocks.getScripts()).toEqual(expect.arrayContaining(['own', 'attached', tutorialBlockId('hat')]));
         expect(target.blocks.getBlock(tutorialBlockId('hat')).x).toBe(300);
         expect(target.blocks.getBlock(tutorialBlockId('draw')).next).toBeNull();
+    });
+
+    test('replaces the untouched render-frame hat of a new project', async () => {
+        const defaultHat = {
+            opcode: 'event_renderframe',
+            next: null,
+            parent: null,
+            inputs: {},
+            fields: {},
+            shadow: false,
+            topLevel: true,
+            x: 120,
+            y: 80
+        };
+        const vm = await loadVM({[DEFAULT_RENDER_FRAME_ID]: defaultHat});
+        const target = getTutorialTarget(vm);
+        applyTutorialStage(vm, 'none');
+        expect(target.blocks.getBlock(DEFAULT_RENDER_FRAME_ID)).toBeDefined();
+
+        applyTutorialStage(vm, 'hat');
+        expect(target.blocks.getBlock(DEFAULT_RENDER_FRAME_ID)).toBeUndefined();
+        expect(target.blocks.getScripts()).toEqual([tutorialBlockId('hat')]);
+        const hat = target.blocks.getBlock(tutorialBlockId('hat'));
+        expect([hat.x, hat.y]).toEqual([120, 80]);
+    });
+
+    test('keeps the default render-frame hat once the user has built on it', async () => {
+        const vm = await loadVM({
+            [DEFAULT_RENDER_FRAME_ID]: {
+                opcode: 'event_renderframe',
+                next: 'own',
+                parent: null,
+                inputs: {},
+                fields: {},
+                shadow: false,
+                topLevel: true,
+                x: 48,
+                y: 48
+            },
+            own: {
+                opcode: 'control_wait',
+                next: null,
+                parent: DEFAULT_RENDER_FRAME_ID,
+                inputs: {},
+                fields: {},
+                shadow: false,
+                topLevel: false
+            }
+        });
+        const target = getTutorialTarget(vm);
+        applyTutorialStage(vm, 'hat');
+        expect(target.blocks.getBlock(DEFAULT_RENDER_FRAME_ID).next).toBe('own');
+        expect(target.blocks.getScripts()).toEqual(
+            expect.arrayContaining([DEFAULT_RENDER_FRAME_ID, tutorialBlockId('hat')])
+        );
     });
 
     test('tutorial scripts serialize into a consistent project.json', async () => {

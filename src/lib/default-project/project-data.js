@@ -1,6 +1,7 @@
 import {defineMessages} from 'react-intl';
 import sharedMessages from '../shared-messages';
 import {SHADING_PROJECT_KEY, SHADING_PROJECT_VERSION} from '../project-format';
+import {DEFAULT_RENDER_FRAME_ID} from './default-render-frame';
 
 let messages = defineMessages({
     variable: {
@@ -56,7 +57,19 @@ const projectData = translateFunction => {
                 variables: {},
                 lists: {},
                 broadcasts: {},
-                blocks: {},
+                blocks: {
+                    [DEFAULT_RENDER_FRAME_ID]: {
+                        opcode: 'event_renderframe',
+                        next: null,
+                        parent: null,
+                        inputs: {},
+                        fields: {},
+                        shadow: false,
+                        topLevel: true,
+                        x: 48,
+                        y: 48
+                    }
+                },
                 comments: {},
                 currentCostume: 0,
                 costumes: [

@@ -18,4 +18,12 @@ describe('defaultProject', () => {
             });
         });
     });
+
+    test('a new project starts with a render-frame hat in its sprite', () => {
+        const projectData = JSON.parse(defaultProjectGenerator(() => '')[0].data);
+        const sprite = projectData.targets.find(target => !target.isStage);
+        const scripts = Object.values(sprite.blocks).filter(block => block.topLevel);
+        expect(scripts).toHaveLength(1);
+        expect(scripts[0]).toMatchObject({opcode: 'event_renderframe', next: null, parent: null});
+    });
 });
