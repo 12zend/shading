@@ -227,7 +227,10 @@ class Scratch3SensingBlocks {
     }
 
     getTimer (args, util) {
-        return util.ioQuery('clock', 'projectTimer');
+        const timer = util.ioQuery('clock', 'projectTimer');
+        // Movie installs mapTimerToContextTime so the timer follows the local time block around it.
+        const map = this.runtime.mapTimerToContextTime;
+        return map && util.thread && util.thread.objectTimeScopes ? map(util.thread, timer) : timer;
     }
 
     resetTimer (args, util) {

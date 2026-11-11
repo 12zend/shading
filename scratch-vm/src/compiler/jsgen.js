@@ -509,7 +509,7 @@ class JSGenerator {
             return `(new Date().getFullYear())`;
 
         case InputOpcode.SENSING_TIMER_GET:
-            return 'runtime.ioDevices.clock.projectTimer()';
+            return 'timerValue()';
 
         case InputOpcode.CONTROL_COUNTER:
             return 'runtime.ext_scratch3_control._counter';

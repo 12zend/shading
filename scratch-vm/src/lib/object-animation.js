@@ -232,6 +232,20 @@ const getContextTimeScopes = thread => (
 
 const hasContextTimeScopes = thread => getContextTimeScopes(thread).length > 0;
 
+/**
+ * The value of Scratch's timer block (sensing_timer) for a thread: the project timer mapped through the thread's
+ * non-legacy time scopes, so `timer` inside a local time block reads t' like easing and the Objects time do.
+ * Outside a local time block, or inside a simulation step (whose timer is fixed), it is the timer unchanged.
+ * @param {object} thread The thread evaluating the block.
+ * @param {number} timer The project timer, seconds.
+ * @returns {number} Seconds.
+ */
+const mapTimerToContextTime = (thread, timer) => {
+    if (!thread || thread.simulationContext) return timer;
+    const scopes = getContextTimeScopes(thread);
+    return scopes.length ? evaluateTimeScopes(timer, scopes) : timer;
+};
+
 const getObjectTime = (runtime, util, configuration = null) => {
     const manager = runtime && runtime.movieAssetManager;
     const timelineTime = manager && manager.timeline && Number(manager.timeline.currentTime);
@@ -447,6 +461,7 @@ export {
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
+    mapTimerToContextTime,
     posterizeTime,
     quantizeTime,
     transformTimeByScope

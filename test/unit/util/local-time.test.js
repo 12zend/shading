@@ -139,3 +139,59 @@ describe.each([true, false])('the local time block (compiler %s)', compiler => {
         expect(JSON.parse(harness.frames.committed).children[0].configuration.position.y).toBeCloseTo(0.25, 12);
     });
 });
+
+// Records `timer * 100` inside and outside a local time block, through a probe block with an input.
+const loadTimerProbe = async (mode, a, compiler) => {
+    const timerTimes100 = {opcode: 'operator_multiply', inputs: {NUM1: {opcode: 'sensing_timer'}, NUM2: 100}};
+    const project = buildProject({scripts: [{hat: 'event_renderframe', body: [
+        {opcode: 'objects_timerProbe', inputs: {SCOPE: 0, VALUE: timerTimes100}},
+        {
+            opcode: 'objects_localTime',
+            fields: {MODE: mode},
+            inputs: {A: a, B: 0},
+            substack: [{opcode: 'objects_timerProbe', inputs: {SCOPE: 1, VALUE: timerTimes100}}]
+        }
+    ]}]});
+    const harness = await createHarness(project, {compiler, duration: 1});
+    const probes = {outside: [], inside: []};
+    registerObjectBlocks(harness.vm, {
+        id: 'timerProbe',
+        blocks: [{
+            opcode: 'timerProbe',
+            blockType: 'command',
+            text: 'probe [SCOPE] [VALUE]',
+            arguments: {SCOPE: {type: 'number', defaultValue: 0}, VALUE: {type: 'number', defaultValue: 0}}
+        }],
+        methods: {
+            timerProbe: args => {
+                probes[Number(args.SCOPE) ? 'inside' : 'outside'].push(Number(args.VALUE));
+            }
+        }
+    });
+    harness.vm.runtime.targets.forEach(target => target.blocks.resetCache());
+    return {harness, probes};
+};
+
+describe.each([true, false])('the timer block inside a local time block (compiler %s)', compiler => {
+    let harness;
+    afterEach(() => harness && harness.dispose());
+
+    test('posterize quantizes timer * 100; outside the block the timer is unchanged', async () => {
+        const loaded = await loadTimerProbe('posterize', 12, compiler);
+        harness = loaded.harness;
+        await harness.exportRange({start: 0, end: 1});
+        expect(loaded.probes.inside).toHaveLength(31);
+        for (let frame = 0; frame <= 30; frame++) {
+            expect(loaded.probes.outside[frame]).toBeCloseTo((frame / 30) * 100, 9);
+            expect(loaded.probes.inside[frame]).toBeCloseTo(posterizeTime(frame / 30, 12) * 100, 9);
+        }
+        expect(new Set(loaded.probes.inside.slice(0, 3))).toEqual(new Set([0]));
+    });
+
+    test('reverse can make the timer negative', async () => {
+        const loaded = await loadTimerProbe('reverse', 0.5, compiler);
+        harness = loaded.harness;
+        await harness.exportRange({start: 0, end: 1});
+        expect(loaded.probes.inside[30]).toBeCloseTo(-50, 9);
+    });
+});

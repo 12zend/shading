@@ -698,7 +698,7 @@ Scene の固定ライトは持たない。`lights === null` のときは Objects
 | reader | 基準 | スコープ | 使うもの |
 | --- | --- | --- | --- |
 | `objects` | タイムライン時刻（描画は evaluationTime） | すべて | Objects のレポーター、描画の時間範囲、ビデオ、シミュレーションの読み取り、剛体の姿勢 |
-| `timer` | プロジェクトタイマー | legacy 以外 | `operator_easing` |
+| `timer` | プロジェクトタイマー | legacy 以外 | `operator_easing`、`sensing_timer`（`タイマー` ブロック。インタプリタ・コンパイラとも。シミュレーションのステップの中では固定の 0 のまま） |
 | `timeline` | タイムライン時刻 | legacy 以外 | PenFX の `u_time` / `u_frame` |
 
 スコープの外と legacy スコープだけの中では、easing と PenFX の値は以前と同じ。シミュレーションのステップの中では

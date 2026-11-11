@@ -571,7 +571,7 @@ class ScriptTreeGenerator {
         }
         case 'sensing_timer':
             this.usesTimer = true;
-            return new IntermediateInput(InputOpcode.SENSING_TIMER_GET, InputType.NUMBER_POS_REAL | InputType.NUMBER_ZERO);
+            return new IntermediateInput(InputOpcode.SENSING_TIMER_GET, InputType.NUMBER_REAL);
         case 'sensing_touchingcolor':
             return new IntermediateInput(InputOpcode.SENSING_TOUCHING_COLOR, InputType.BOOLEAN, {
                 color: this.descendInputOfBlock(block, 'COLOR').toType(InputType.COLOR)

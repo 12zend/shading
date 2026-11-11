@@ -27,6 +27,7 @@ import {
     interpolateAngle,
     interpolateColor,
     isTimeWithin,
+    mapTimerToContextTime,
     posterizeTime
 } from './object-animation';
 import {localize, resolveLocale} from './movie-block-l10n';
@@ -2046,6 +2047,7 @@ const installObjectBlocks = vm => {
     const extensionManager = vm.extensionManager;
     installProcedureParameterContext();
     installReporterStackClickGuard(vm.runtime);
+    vm.runtime.mapTimerToContextTime = mapTimerToContextTime;
     if (extensionManager.isExtensionLoaded(EXTENSION_ID)) return vm;
 
     const ObjectBlocks = createObjectBlocksClass(vm);

@@ -602,6 +602,18 @@ runtimeFunctions.yieldThenCallGenerator = `const yieldThenCallGenerator = functi
 }`;
 
 /**
+ * The timer block. Movie installs runtime.mapTimerToContextTime so the timer follows the local time block around it.
+ * @returns {number} The project timer in seconds, mapped through the thread's time context.
+ */
+runtimeFunctions.timerValue = `const timerValue = () => {
+    const thread = globalState.thread;
+    const runtime = thread.target.runtime;
+    const timer = runtime.ioDevices.clock.projectTimer();
+    const map = runtime.mapTimerToContextTime;
+    return map && thread.objectTimeScopes ? map(thread, timer) : timer;
+}`;
+
+/**
  * Step a compiled thread.
  * @param {import("../engine/thread")} thread The thread to step.
  */
