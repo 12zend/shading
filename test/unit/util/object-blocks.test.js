@@ -584,6 +584,7 @@ describe('Objects blocks', () => {
             frame: true,
             speed: false,
             text: false,
+            transform: true,
             videoMode: true,
             volume: false
         });
@@ -591,6 +592,7 @@ describe('Objects blocks', () => {
             frame: false,
             speed: true,
             text: false,
+            transform: true,
             videoMode: true,
             volume: true
         });
@@ -598,8 +600,18 @@ describe('Objects blocks', () => {
             frame: true,
             speed: false,
             text: false,
+            transform: true,
             videoMode: false,
             volume: false
+        });
+        // A sound layer only keeps its speed, volume and time inputs.
+        expect(getDrawInputVisibility(vm, 'sound', 'Music')).toEqual({
+            frame: false,
+            speed: true,
+            text: false,
+            transform: false,
+            videoMode: false,
+            volume: true
         });
         expect(normalizeVideoMode('anything else')).toBe('sequence');
         expect(modelHasFrames({animationCount: 1})).toBe(true);
@@ -612,7 +624,7 @@ describe('Objects blocks', () => {
         const info = blocks.getInfo();
 
         expect(info.name).toBe('Objects');
-        expect(info.blocks.find(blockInfo => blockInfo.opcode === 'draw').text).toBe('draw [ASSET]');
+        expect(info.blocks.find(blockInfo => blockInfo.opcode === 'draw').text).toBe('layer [ASSET]');
         expect(info.blocks.find(blockInfo => blockInfo.opcode === 'grouping')).toEqual(expect.objectContaining({
             branchCount: 1,
             text: 'grouping'
@@ -645,7 +657,7 @@ describe('Objects blocks', () => {
         const japaneseInfo = new JapaneseObjectBlocks().getInfo();
         expect(japaneseInfo.name).toBe('レイヤー');
         expect(japaneseInfo.blocks.find(blockInfo => blockInfo.opcode === 'draw').text)
-            .toBe('描画 [ASSET]');
+            .toBe('レイヤー [ASSET]');
         expect(Object.keys(info.blocks.find(block => block.opcode === 'shape').arguments)).toEqual([
             'SHAPE', 'N',
             'RATIO',
@@ -1305,6 +1317,47 @@ describe('Objects blocks', () => {
             opacity: 65
         });
         expect(manager.runWithoutWaiting).toHaveBeenCalledWith(pending);
+    });
+
+    test('a sound layer plays its sound during its time range and draws nothing', () => {
+        const manager = {
+            drawObject: jest.fn(),
+            playSoundAtTime: jest.fn(),
+            runWithoutWaiting: jest.fn()
+        };
+        const vm = {runtime: {movieAssetManager: manager}};
+        const ObjectBlocks = createObjectBlocksClass(vm);
+        const blocks = new ObjectBlocks();
+        const util = makeUtil();
+
+        expect(blocks.draw({
+            SOURCE: 'costume',
+            ASSET: 'sound:Music',
+            SPEED: 1.5,
+            VOLUME: 40,
+            PX: 10,
+            T1: 2,
+            T2: 6
+        }, util)).toBeUndefined();
+        expect(manager.playSoundAtTime).toHaveBeenCalledWith({
+            SOUND_MENU: 'Music',
+            SPEED: 1.5,
+            T1: 2,
+            T2: 6,
+            VOLUME: 40
+        }, util);
+        expect(manager.drawObject).not.toHaveBeenCalled();
+
+        // Missing inputs play the whole timeline at the normal speed and volume.
+        expect(blocks.draw({SOURCE: 'sound', ASSET: 'Music'}, util)).toBeUndefined();
+        expect(manager.playSoundAtTime).toHaveBeenLastCalledWith({
+            SOUND_MENU: 'Music',
+            SPEED: 1,
+            T1: 0,
+            T2: Infinity,
+            VOLUME: 100
+        }, util);
+        expect(decodeDrawAsset('sound:Music')).toEqual({asset: 'Music', source: 'sound'});
     });
 
     test('draws one complete object and never returns a promise to the VM', () => {

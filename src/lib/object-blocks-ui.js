@@ -4,6 +4,7 @@ import {
     PRIMARY,
     SECONDARY,
     SHAPE_TYPES,
+    SOUND_SOURCE,
     TERTIARY,
     decodeDrawAsset,
     encodeDrawAsset,
@@ -23,6 +24,7 @@ const SOURCE_LABELS = {
     costume: 'Costume',
     [COSTUME_GROUP_SOURCE]: 'Costume group',
     model: 'Model',
+    [SOUND_SOURCE]: 'Sound',
     text: 'Font',
     video: 'Video'
 };
@@ -30,6 +32,7 @@ const IMPORT_ACCEPT = [
     '.svg', '.png', '.bmp', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.exr',
     '.mp4', '.webm', '.ogv', '.mov',
     '.ttf', '.otf', '.woff', '.woff2',
+    '.wav', '.mp3', '.ogg', '.oga', '.flac', '.aac', '.m4a',
     '.glb', '.pmx', '.fbx', '.obj', '.mtl',
     '.spa', '.sph', '.tga', '.vmd', '.vpd'
 ].join(',');
@@ -179,6 +182,13 @@ const getAssetItems = vm => {
             previewType: 'model'
         }));
     }
+    if (target && typeof target.getSounds === 'function') {
+        addItems(SOUND_SOURCE, target.getSounds(), sound => ({
+            deletable: true,
+            details: sound.sampleCount && sound.rate ? `${(sound.sampleCount / sound.rate).toFixed(1)} s` : '',
+            previewType: 'sound'
+        }));
+    }
 
     getTextFontOptions(vm).forEach(font => items.push({
         family: font.family || font.value,
@@ -222,14 +232,17 @@ const drawSelectionUsesFrame = (vm, source, asset, videoMode = 'sequence') => {
 
 const getDrawInputVisibility = (vm, source, asset, videoMode) => {
     const isVideo = source === 'video';
+    const isSound = source === SOUND_SOURCE;
     const normalizedMode = normalizeVideoMode(videoMode);
     const playsVideo = isVideo && normalizedMode === 'video';
     return {
         frame: drawSelectionUsesFrame(vm, source, asset, normalizedMode),
-        speed: playsVideo,
+        speed: playsVideo || isSound,
         text: source === 'text',
+        // A sound has no picture, so its layer only keeps the speed, volume and time inputs.
+        transform: !isSound,
         videoMode: isVideo,
-        volume: playsVideo
+        volume: playsVideo || isSound
     };
 };
 
@@ -268,6 +281,10 @@ const deleteAsset = (vm, item) => {
     }
     if (item.source === 'model' && manager && target && typeof manager.deleteModel === 'function') {
         manager.deleteModel(target.id, item.index);
+        return true;
+    }
+    if (item.source === SOUND_SOURCE && typeof vm.deleteSound === 'function') {
+        vm.deleteSound(item.index);
         return true;
     }
     if (item.source === 'text' && manager && typeof manager.deleteFont === 'function') {
@@ -612,7 +629,8 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                 {label: 'Images', value: 'costume'},
                 {label: 'Videos', value: 'video'},
                 {label: 'Fonts', value: 'text'},
-                {label: '3D', value: 'model'}
+                {label: '3D', value: 'model'},
+                {label: 'Sounds', value: SOUND_SOURCE}
             ].filter(filter => items.some(item => matchesFilter(item, filter.value)));
             let activeFilter = 'all';
             let activeFilterButton;
@@ -749,6 +767,11 @@ const createMediaField = (ScratchBlocks, vm, assetOptions, assetValidator) => {
                         })
                             .catch(error => log.warn(error));
                     }
+                } else if (item.previewType === 'sound') {
+                    preview.appendChild(createSvgIcon(
+                        'M4 9v6h4l5 4V5L8 9H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12',
+                        styles.fallbackIcon
+                    ));
                 } else {
                     preview.appendChild(createSvgIcon(
                         'M4 5h16v14H4zM4 15l4-4 3 3 2-2 7 7M16 9h.01',
@@ -1132,6 +1155,7 @@ const makeObjectRightEdgeRenderer = ScratchBlocks => function (steps, inputRows,
 
 // Inputs of the draw block that begin a new row: one row per vector, size, dimensions and time range.
 const DRAW_ROW_STARTS = ['PX', 'RX', 'SX', 'SIZE', 'WIDTH', 'T1'];
+const DRAW_TRANSFORM_INPUTS = ['PX', 'PY', 'PZ', 'RX', 'RY', 'RZ', 'SX', 'SY', 'SZ', 'SIZE', 'WIDTH', 'HEIGHT'];
 
 /**
  * Lay a command block out in several rows, starting a row at each named input.
@@ -1250,7 +1274,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             };
             const SourceField = ScratchBlocks.FieldLabelSerializable || ScratchBlocks.FieldLabel;
             this.appendDummyInput('DRAW')
-                .appendField(translate('draw', '描画'));
+                .appendField(translate('layer', 'レイヤー'));
             this.appendValueInput('ASSET');
             this.appendDummyInput('VIDEO_MODE_INPUT')
                 .appendField(new ScratchBlocks.FieldDropdown([
@@ -1385,6 +1409,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
                 frame: true,
                 speed: true,
                 text: true,
+                transform: true,
                 videoMode: true,
                 volume: true
             } : getDrawInputVisibility(
@@ -1400,6 +1425,7 @@ const installObjectBlockDefinitions = (ScratchBlocks, vm, locale) => {
             syncVisibility('FRAME', visibility.frame);
             syncVisibility('SPEED', visibility.speed);
             syncVisibility('VOLUME', visibility.volume);
+            DRAW_TRANSFORM_INPUTS.forEach(inputName => syncVisibility(inputName, visibility.transform));
             // Connecting or removing a media reporter is rendered before this change handler runs.
             if (visibilityChanged && this.rendered) this.render();
         },

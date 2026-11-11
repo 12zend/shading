@@ -96,7 +96,6 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 | Objects | `objects` | オブジェクト描画、合成、時間レポーター、ライト |
 | Looks | `penfx` | PenFX。標準 Looks ではなく、PenFX の動的カテゴリ |
 | Camera | `motion` | カメラ操作とカメラレポーター |
-| Sound | `sound` | 現行の時間範囲音声ブロック |
 | Events | `events` | `initialize`、`render frame`、通常のブロードキャスト |
 | Simulation | `simulation` | シミュレーションの hat、状態、時間、シード付き乱数、S(t) の読み取り（§14） |
 | Control | `control` | Scratch の制御ブロック |
@@ -114,7 +113,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 
 | Opcode | 表示内容・役割 |
 | --- | --- |
-| `objects_draw` | コスチューム、コスチュームグループ、ビデオ、テキスト、モデルを描画 |
+| `objects_draw` | `layer`（レイヤー）ブロック。コスチューム、コスチュームグループ、ビデオ、テキスト、モデルを描画し、音声を再生する |
 | `objects_shape` | 多角形・星・曲線星・花形などの手続き型シェイプを描画。`objects_draw` の直下に表示 |
 | `objects_arc` | 円弧を描画。`objects_draw` の直下に表示 |
 | `objects_circularSegment` | 円弧セグメントを描画。`objects_draw` の直下に表示 |
@@ -140,7 +139,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 
 #### `objects_draw` の入力
 
-- `SOURCE`: `costume`、`costume-group`、`video`、`text`、`model`
+- `SOURCE`: `costume`、`costume-group`、`video`、`text`、`model`、`sound`
 - `ASSET`: レポーターを受け付ける入力。既定ではメディア選択メニュー（`objects_menu_media`）が入り、`種類:名前` 形式（例: `costume:コスチューム1`、`text:serif`）の値を返す。`種類:` の付かない値は `SOURCE` の種類で解釈する。レポーターを入れている間は種類が決まらないため、`TEXT`・`VIDEO_MODE`・`FRAME` などの入力をすべて表示する。旧形式の `ASSET` フィールドは読み込み時にこのメニューへ移行する
 - `TEXT`: テキスト描画時の文字列
 - `VIDEO_MODE`: ビデオのフレーム列再生またはタイムライン連動再生
@@ -190,14 +189,11 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 
 カメラの既定値は位置・回転が 0、回転順序が `XYZ`、FOV が約 `53.13` 度である。FOV と焦点距離は相互変換され、FOV は `0.001`〜`179.999` 度の範囲に正規化する。回転順序は Three.js が扱う 6 種類を使用する。
 
-### 3.4 Sound
+### 3.4 音声
 
-現在の Sound カテゴリに表示する Movie 専用ブロックは `sound_playattime` だけである。
+Sound カテゴリは表示しない。音声は `objects_draw`（`layer`）のメディアメニューで選び（`sound:名前`）、その時間範囲・`SPEED`・`VOLUME` で再生する。選択中は位置・回転・スケール・サイズ・幅・高さの入力を隠す。primitive は描画せずに `sound_playattime` と同じ経路（`playSoundAtTime`）で再生し、`undefined` を返す。`sound_playattime` は表示しないが、旧プロジェクトのロード・実行用に登録を残す。音声の時間範囲はタイムライン時刻で判定し、`objects_localTime` などのローカル時間は適用しない。タイムラインの音量波形は、`render frame` スクリプト内の音声レイヤーと `sound_playattime` から求める。
 
-```text
-play [sound] from [T1] to [T2] sec
-speed [SPEED] volume [VOLUME] %
-```
+再生規則（`sound_playattime` と音声レイヤーで共通）は次のとおり。
 
 - `T1`、`T2` はタイムライン上の開始・終了時刻。
 - `SPEED` は正数以外を `1` に補正する。
@@ -591,7 +587,7 @@ Simulation カテゴリ（§14）とは別のものである。
 - `looks_setmodelframeto`、`looks_rendermodel`、`looks_renderwall`、`looks_renderfloor`、`looks_renderbox`
 - `looks_switchmodelto`
 - `looks_addrenderingframe`、`looks_clearrenderingframe`、`looks_exportrenderingmp4`
-- `sound_playatframe`
+- `sound_playatframe`、`sound_playattime`
 
 `looks_clearlight`、`looks_addpointlight`、`looks_addlight` は旧 opcode を使用するが、現在は Objects カテゴリに表示するため、互換性専用一覧からは除外する。
 

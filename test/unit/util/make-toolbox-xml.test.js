@@ -72,7 +72,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox.indexOf('<block type="objects_grouping"/>'))
             .toBeLessThan(toolbox.indexOf('<block type="objects_timeWithin">'));
         expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="motion"'));
-        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+        expect(toolbox.indexOf('id="objects"')).toBeLessThan(toolbox.indexOf('id="events"'));
         expect(toolbox.indexOf('<block type="objects_draw">'))
             .toBeLessThan(toolbox.indexOf('<block type="objects_shape">'));
         expect(toolbox.indexOf('<block type="objects_shape">'))
@@ -94,7 +94,7 @@ describe('Movie toolbox categories', () => {
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
         expect(toolbox).not.toContain('id="pen"');
-        expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
+        expect(toolbox.indexOf('id="events"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 
     test('places Looks (Pen FX) with built-in categories instead of extension categories', () => {
@@ -104,9 +104,9 @@ describe('Movie toolbox categories', () => {
         ];
         const toolbox = makeToolboxXML(false, false, 'target', categories);
 
-        expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="sound"'));
+        expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="events"'));
         expect(toolbox.indexOf('id="penfx"')).toBeLessThan(toolbox.indexOf('id="motion"'));
-        expect(toolbox.indexOf('id="sound"')).toBeLessThan(toolbox.indexOf('id="custom"'));
+        expect(toolbox.indexOf('id="events"')).toBeLessThan(toolbox.indexOf('id="custom"'));
     });
 
     test('hides Looks while keeping later built-in and extension categories', () => {
@@ -118,7 +118,7 @@ describe('Movie toolbox categories', () => {
 
         expect(toolbox).not.toContain('id="looks"');
         expect(toolbox).not.toContain('type="looks_');
-        expect(toolbox).toContain('id="sound"');
+        expect(toolbox).toContain('id="events"');
         expect(toolbox).toContain('id="custom"');
     });
 
@@ -128,6 +128,7 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).toContain('<category name="Camera" id="motion"');
         expect(toolbox).toContain('type="motion_setcamerato"');
         expect(toolbox).toContain('type="motion_lookat"');
+        expect(toolbox).toContain('<block type="motion_setcameraenabled">\n            <field name="STATE">on</field>');
         expect(toolbox).not.toContain('type="motion_gotoxyz"');
         expect(toolbox).not.toContain('type="motion_gotoxyz_nocamera"');
     });
@@ -150,20 +151,25 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="motion_setx"');
     });
 
-    test('shows the curated sound and event blocks', () => {
-        const toolbox = makeToolboxXML(false, false, 'target', [], '', '', 'Music');
+    test('shows the curated event blocks and plays sounds from the layer block instead of a Sound category', () => {
+        const categories = [
+            {id: 'objects', xml: '<category id="objects" />'},
+            {id: 'sound', xml: '<category id="sound"><block type="sound_play" /></category>'}
+        ];
+        const toolbox = makeToolboxXML(false, false, 'target', categories, '', '', 'Music');
 
         expect(toolbox).not.toContain('type="event_whenflagclicked"');
         expect(toolbox).toContain('<block type="event_initialize"/>');
         expect(toolbox).toContain('<block type="event_renderframe"/>');
         expect(toolbox).not.toContain('<block type="event_renderframe">');
-        expect(toolbox).toContain('type="sound_playattime"');
-        expect(toolbox).toContain('<field name="SOUND_MENU">Music</field>');
-        expect(toolbox).toContain('<value name="T1">');
-        expect(toolbox).toContain('<value name="T2">');
-        expect(toolbox).toContain('<field name="NUM">Infinity</field>');
-        expect(toolbox).toContain('<value name="SPEED">');
-        expect(toolbox).toContain('<value name="VOLUME">');
+        expect(toolbox).not.toContain('id="sound"');
+        expect(toolbox).not.toContain('type="sound_playattime"');
+        expect(toolbox).not.toContain('SOUND_MENU');
+        // The layer block keeps the inputs a sound uses.
+        const layer = toolbox.slice(toolbox.indexOf('<block type="objects_draw">'));
+        expect(layer.slice(0, layer.indexOf('</block>'))).toEqual(expect.stringContaining('<value name="VOLUME">'));
+        expect(layer).toContain('<value name="SPEED">');
+        expect(layer).toContain('<field name="NUM">Infinity</field>');
         expect(toolbox).not.toContain('type="sound_play"');
         expect(toolbox).not.toContain('type="sound_playuntildone"');
         expect(toolbox).not.toContain('type="sound_playatframe"');
@@ -190,8 +196,8 @@ describe('Movie toolbox categories', () => {
         expect(toolbox).not.toContain('type="looks_bloom"');
         expect(toolbox).not.toContain('type="looks_effectweight"');
         expect(toolbox).not.toContain('type="looks_hideallsprites"');
-        // Sound.
-        expect(toolbox).toContain('type="sound_playattime"');
+        // Sound: played by the layer block.
+        expect(toolbox).not.toContain('type="sound_playattime"');
         expect(toolbox).not.toContain('type="sound_play"');
         expect(toolbox).not.toContain('type="sound_playuntildone"');
         expect(toolbox).not.toContain('type="sound_playatframe"');

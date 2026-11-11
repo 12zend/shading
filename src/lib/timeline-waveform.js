@@ -2,11 +2,13 @@
  * @fileoverview
  * Loudness envelope of the movie's sound track, for drawing volume waves on the timelines.
  *
- * The track is derived from the "play sound … time: start~end" (and "play sound at frame") blocks in
- * render-frame scripts, using the same rule as playback: during [start, end) the sound plays from
- * offset (time - start) × speed. Blocks whose values come from reporters cannot be placed statically
- * and are left out.
+ * The track is derived from the layer blocks that play a sound and the "play sound … time: start~end" (and
+ * "play sound at frame") blocks in render-frame scripts, using the same rule as playback: during
+ * [start, end) the sound plays from offset (time - start) × speed. Blocks whose values come from reporters
+ * cannot be placed statically and are left out.
  */
+import {SOUND_SOURCE, decodeDrawAsset} from './object-blocks';
+
 const SOURCE_PEAKS_PER_SECOND = 200;
 const MAX_TIMELINE_BUCKETS = 20000;
 const MAX_BUCKETS_PER_SECOND = 100;
@@ -46,6 +48,15 @@ const literalNumber = (blocks, input, fallback) => {
     return Number.isNaN(number) ? null : number;
 };
 
+// The sound a layer block plays, or null when it draws a picture or its media comes from a reporter.
+const readLayerSoundName = (blocks, block) => {
+    const value = readLiteral(blocks, block.inputs.ASSET);
+    if (value === null) return null;
+    const sourceField = block.fields && block.fields.SOURCE;
+    const selection = decodeDrawAsset(value, sourceField ? sourceField.value : 'costume');
+    return selection.source === SOUND_SOURCE ? selection.asset : null;
+};
+
 const isRenderFrameScript = (blocks, blockId) => {
     const topId = typeof blocks.getTopLevelScript === 'function' ? blocks.getTopLevelScript(blockId) : null;
     const top = topId && blocks.getBlock(topId);
@@ -65,9 +76,12 @@ const collectSoundEvents = (vm, framerate) => {
         if (!target || !target.isOriginal || !target.blocks || !target.sprite) continue;
         const blocks = target.blocks;
         for (const block of Object.values(blocks._blocks || {})) {
-            if (block.opcode !== 'sound_playattime' && block.opcode !== 'sound_playatframe') continue;
+            const isLayer = block.opcode === 'objects_draw';
+            if (!isLayer && block.opcode !== 'sound_playattime' && block.opcode !== 'sound_playatframe') continue;
             if (!isRenderFrameScript(blocks, block.id)) continue;
-            const soundName = readLiteral(blocks, block.inputs.SOUND_MENU);
+            const soundName = isLayer ? readLayerSoundName(blocks, block) :
+                readLiteral(blocks, block.inputs.SOUND_MENU);
+            if (soundName === null) continue;
             const sound = (target.sprite.sounds || []).find(item => item && item.name === String(soundName));
             if (!sound) continue;
             let start;

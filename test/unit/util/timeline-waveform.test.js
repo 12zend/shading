@@ -69,6 +69,25 @@ describe('timeline volume wave', () => {
         expect(events[0]).toEqual(expect.objectContaining({start: 1.5, end: 4, speed: 2, volume: 0.5}));
     });
 
+    test('places layer blocks that play a sound, and skips layers that draw a picture', () => {
+        const layerScript = media => {
+            const blocks = soundScript('2', '5', {volume: '80'});
+            blocks[1] = Object.assign({}, blocks[1], {
+                opcode: 'objects_draw',
+                fields: {SOURCE: {name: 'SOURCE', value: 'costume'}},
+                inputs: Object.assign({}, blocks[1].inputs, {ASSET: {block: 'menu', shadow: 'menu'}})
+            });
+            delete blocks[1].inputs.SOUND_MENU;
+            blocks[2] = shadow('menu', 'play', 'ASSET', media);
+            return blocks;
+        };
+        const sound = collectSoundEvents({runtime: {targets: [makeTarget(layerScript('sound:Beat'))]}}, 30);
+        expect(sound).toHaveLength(1);
+        expect(sound[0]).toEqual(expect.objectContaining({start: 2, end: 5, speed: 1, volume: 0.8}));
+        expect(collectSoundEvents({runtime: {targets: [makeTarget(layerScript('costume:Beat'))]}}, 30))
+            .toEqual([]);
+    });
+
     test('ignores sound blocks outside render-frame scripts or driven by reporters', () => {
         expect(collectSoundEvents({runtime: {targets: [
             makeTarget(soundScript('1', '2', {hat: 'event_whenflagclicked'}))

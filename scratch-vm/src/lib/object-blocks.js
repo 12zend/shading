@@ -38,7 +38,9 @@ const PRIMARY = '#4968D4';
 const SECONDARY = '#3E59B8';
 const TERTIARY = '#334A99';
 const COSTUME_GROUP_SOURCE = 'costume-group';
-const DRAW_SOURCES = ['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model'];
+// The layer block (opcode objects_draw) also plays sounds, so all media is chosen from one menu.
+const SOUND_SOURCE = 'sound';
+const DRAW_SOURCES = ['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model', SOUND_SOURCE];
 const SHAPE_TYPES = ['polygon', 'star', 'curved star', 'flower'];
 const BLEND_MODES = ['normal', 'add', 'mul', 'screen', 'overlay', 'darken', 'lighten', 'color dodge'];
 const MATTE_MODES = ['alpha', 'luma', 'alpha inverted', 'luma inverted'];
@@ -715,7 +717,7 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
                 {
                     opcode: 'draw',
                     blockType: BlockType.COMMAND,
-                    text: translate('draw [ASSET]', '描画 [ASSET]'),
+                    text: translate('layer [ASSET]', 'レイヤー [ASSET]'),
                     arguments: {
                         SOURCE: {type: ArgumentType.STRING, defaultValue: 'costume'},
                         ASSET: {type: ArgumentType.STRING, defaultValue: ''},
@@ -1356,6 +1358,20 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
 
     draw (args, util) {
         const selection = decodeDrawAsset(args.ASSET, args.SOURCE);
+        if (selection.source === SOUND_SOURCE) {
+            // A sound layer plays like the ranged sound block: during T1 ~ T2 of the timeline.
+            const manager = this.runtime.movieAssetManager;
+            if (manager && typeof manager.playSoundAtTime === 'function') {
+                manager.playSoundAtTime({
+                    SOUND_MENU: selection.asset,
+                    SPEED: Object.prototype.hasOwnProperty.call(args, 'SPEED') ? args.SPEED : 1,
+                    T1: Object.prototype.hasOwnProperty.call(args, 'T1') ? args.T1 : 0,
+                    T2: Object.prototype.hasOwnProperty.call(args, 'T2') ? args.T2 : Infinity,
+                    VOLUME: Object.prototype.hasOwnProperty.call(args, 'VOLUME') ? args.VOLUME : 100
+                }, util);
+            }
+            return;
+        }
         drawObjectConfiguration(this.runtime, {
             asset: selection.asset,
             frame: args.FRAME,
@@ -2065,6 +2081,7 @@ export {
     BLEND_MODES,
     COSTUME_GROUP_SOURCE,
     DRAW_SOURCES,
+    SOUND_SOURCE,
     ECHO_MODES,
     LOCAL_TIME_MODES,
     MATTE_MODES,

@@ -52,7 +52,7 @@
         "The **Objects** category holds the blocks that draw:",
         {
           "list": [
-            "`draw` — costumes, text, videos and 3D models",
+            "`layer` — costumes, text, videos, 3D models and sounds",
             "`shape` — polygons, stars, flowers and other shapes",
             "`arc` and `circular segment` — rings, pie slices and arcs",
             "`line` — a line between two points in 3D"
@@ -62,17 +62,17 @@
       ]
     },
     "drawMedia": {
-      "title": "The draw block and media",
+      "title": "The layer block and media",
       "body": [
-        "The first menu of `draw` chooses what to draw. It lists the costumes, videos, fonts and 3D models of this project.",
-        "Press **Import** in that menu to load an image, video, font or 3D model straight from your computer — you can also drop or paste files onto it, or put several costumes together into a sequence. Media can also be managed in the tabs on the left.",
+        "The first menu of `layer` chooses what to draw. It lists the costumes, videos, fonts, 3D models and sounds of this project.",
+        "Press **Import** in that menu to load an image, video, font, 3D model or sound straight from your computer — you can also drop or paste files onto it, or put several costumes together into a sequence. Media can also be managed in the tabs on the left.",
         "For text, the menu chooses the font: Sans Serif, Serif, Monospace, or any font you added. Press **Next** to draw the text “Hello Shading!”."
       ]
     },
     "drawPlaced": {
       "title": "Hello Shading!",
       "body": [
-        "The text appears on the stage. These are the values of `draw`:",
+        "The text appears on the stage. These are the values of `layer`:",
         {
           "list": [
             "**text** — the words to draw",
@@ -98,7 +98,7 @@
     "cameraPlaced": {
       "title": "Setting the camera",
       "body": [
-        "`set camera to x: 0 y: 0 z: 0` now runs before `draw`, so the text is filmed from this position. Always set the camera before the blocks that draw.",
+        "`set camera to x: 0 y: 0 z: 0` now runs before `layer`, so the text is filmed from this position. Always set the camera before the blocks that draw.",
         {
           "list": [
             "**x** — moves the camera to the right (negative: to the left)",
@@ -211,7 +211,7 @@
     "tmpPlaced": {
       "title": "Using tmp",
       "body": [
-        "`set tmp to` now calculates the motion once, and `draw` reads (tmp). Anything else that should move the same way can use (tmp) too.",
+        "`set tmp to` now calculates the motion once, and `layer` reads (tmp). Anything else that should move the same way can use (tmp) too.",
         "Set a temporary variable before the blocks that read it — otherwise they see the value from the previous frame."
       ]
     },
@@ -245,20 +245,20 @@
       "title": "The Costumes tab",
       "body": [
         "The **Costumes** tab holds images. Paint them in the built-in editor, or upload SVG, PNG, JPG, GIF, WebP, EXR and more.",
-        "Choose a costume in the menu of `draw` to show it. In that menu you can also turn several costumes into a sequence and flip through them with frame."
+        "Choose a costume in the menu of `layer` to show it. In that menu you can also turn several costumes into a sequence and flip through them with frame."
       ]
     },
     "sounds": {
       "title": "The Sounds tab",
       "body": [
         "The **Sounds** tab holds sounds: upload, record and edit them (WAV, MP3, OGG, FLAC, AAC, M4A).",
-        "To put a sound into the video, use `play sound at [ ] time: [ ] ~ [ ]` from the **Sound** category in the render frame script. It follows the timeline and is included when you render."
+        "To put a sound into the video, choose it in the menu of `layer` in the render frame script. It plays during the layer's time, with its speed and volume, follows the timeline and is included when you render."
       ]
     },
     "videos": {
       "title": "The Videos tab",
       "body": [
-        "The **Videos** tab holds video clips (MP4, WebM, OGV, MOV). Draw them with `draw`:",
+        "The **Videos** tab holds video clips (MP4, WebM, OGV, MOV). Draw them with `layer`:",
         {
           "list": [
             "**sequence** — frame chooses the picture (30 frames per second; frame 1 is the start)",
@@ -270,14 +270,14 @@
     "fonts": {
       "title": "The Fonts tab",
       "body": [
-        "The **Fonts** tab adds fonts (TTF, OTF, WOFF, WOFF2) and shows a preview. Added fonts appear in the text choices of `draw`."
+        "The **Fonts** tab adds fonts (TTF, OTF, WOFF, WOFF2) and shows a preview. Added fonts appear in the text choices of `layer`."
       ]
     },
     "models": {
       "title": "The Models tab",
       "body": [
         "The **Models** tab adds 3D models (GLB, PMX, FBX, OBJ + MTL) and motions or poses (VMD, VPD).",
-        "Draw a model with `draw` like any other object; frame plays its motion. Position, rotation and scale work in real 3D."
+        "Draw a model with `layer` like any other object; frame plays its motion. Position, rotation and scale work in real 3D."
       ]
     },
     "shader": {
@@ -301,7 +301,7 @@
         {
           "list": [
             "**Hat blocks** (rounded top) start a script, like `render frame`.",
-            "**Stack blocks** do something. Their notches snap them together from top to bottom, like `draw`.",
+            "**Stack blocks** do something. Their notches snap them together from top to bottom, like `layer`.",
             "**C blocks** wrap other blocks, like `grouping`, `repeat` and `if`.",
             "**Round reporters** are values — numbers or text — like `easing` or (tmp). They fit into round slots.",
             "**Hexagonal booleans** are true or false, like `>` or `time within`. They fit into hexagonal slots such as the one in `if`."

@@ -366,42 +366,6 @@ const looks = function (isInitialSetup, isStage, targetId, costumeName, backdrop
     `;
 };
 
-const sound = function (soundName, colors) {
-    // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
-    return `
-    <category name="%{BKY_CATEGORY_SOUND}" id="sound" colour="${colors.primary}" secondaryColour="${colors.tertiary}">
-        <block type="sound_playattime">
-            <value name="SOUND_MENU">
-                <shadow type="sound_sounds_menu">
-                    <field name="SOUND_MENU">${soundName}</field>
-                </shadow>
-            </value>
-            <value name="T1">
-                <shadow type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-            <value name="T2">
-                <shadow type="math_number">
-                    <field name="NUM">Infinity</field>
-                </shadow>
-            </value>
-            <value name="SPEED">
-                <shadow type="math_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-            <value name="VOLUME">
-                <shadow type="math_number">
-                    <field name="NUM">100</field>
-                </shadow>
-            </value>
-        </block>
-        ${categorySeparator}
-    </category>
-    `;
-};
-
 const events = function (isInitialSetup, isStage, targetId, soundName, colors) {
     // Note: the category's secondaryColour matches up with the blocks' tertiary color, both used for border color.
     return `
@@ -951,7 +915,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const objectsXML = objectsCategory ?
         filterObjects(objects(costumeName, locale, objectsOptions.pluginBlocksXML || '')) : null;
     const penFXXML = moveCategory('penfx');
-    const soundXML = moveCategory('sound') || sound(soundName, colors.sounds);
+    // Sounds are played by the layer block (objects_draw), so the Sound category is not shown. Its blocks stay
+    // registered so existing projects load.
+    moveCategory('sound');
     const eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, soundName, colors.event);
     const simulationXML = moveCategory('simulation');
     const controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
@@ -973,7 +939,6 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         ...(objectsXML ? [objectsXML, gap] : []),
         ...(penFXXML ? [penFXXML, gap] : []),
         motionXML, gap,
-        soundXML, gap,
         eventsXML, gap,
         ...(simulationXML ? [simulationXML, gap] : []),
         controlXML, gap,
