@@ -65,7 +65,7 @@ const MovieAssetManagerFrameGraphMethods = {
             this.frameGraphCameraSnapshotVersion === this.cameraVersion) {
             return this.frameGraphCameraSnapshot;
         }
-        this.frameGraphCameraSnapshot = cloneCamera(this.camera);
+        this.frameGraphCameraSnapshot = cloneCamera(this.getAppliedCamera());
         this.frameGraphCameraSnapshotVersion = this.cameraVersion;
         return this.frameGraphCameraSnapshot;
     },
@@ -206,17 +206,26 @@ const MovieAssetManagerFrameGraphMethods = {
     executeWithFrameGraphCamera (requestedCamera, callback) {
         if (!requestedCamera) return callback();
         const previousCamera = this.camera;
+        const previousEnabled = this.cameraEnabled;
         const renderingCamera = cloneCamera(requestedCamera);
         this.camera = renderingCamera;
+        // The snapshot already is the applied camera (the default view if the camera was off at that draw), so
+        // a later camera off/on must not change it again.
+        this.cameraEnabled = true;
+        const restoreCamera = () => {
+            if (this.camera !== renderingCamera) return;
+            this.camera = previousCamera;
+            this.cameraEnabled = previousEnabled;
+        };
         let result;
         try {
             result = callback();
         } catch (error) {
-            if (this.camera === renderingCamera) this.camera = previousCamera;
+            restoreCamera();
             throw error;
         }
         const restore = value => {
-            if (this.camera === renderingCamera) this.camera = previousCamera;
+            restoreCamera();
             return value;
         };
         if (result && typeof result.then === 'function') {

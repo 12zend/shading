@@ -19,6 +19,9 @@ const motion = function (isInitialSetup, isStage, targetId, colors, locale) {
     return `
     <category name="${localize(locale, 'Camera', 'カメラ')}" id="motion"
         colour="${colors.primary}" secondaryColour="${colors.tertiary}">
+        <block type="motion_setcameraenabled">
+            <field name="STATE">on</field>
+        </block>
         <block type="motion_setcamerato">
             <value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
             <value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value>

@@ -147,7 +147,7 @@ const MovieAssetManagerObjectMethods = {
     createObjectSceneCapture (target, requestedCamera = null) {
         if (!target || target.isStage) return null;
         return {
-            camera: requestedCamera || cloneCamera(this.camera),
+            camera: requestedCamera || cloneCamera(this.getAppliedCamera()),
             entries: [],
             targetId: target.id
         };
@@ -409,7 +409,7 @@ const MovieAssetManagerObjectMethods = {
     async performObjectScene (target, capture, requestedState, requestedVersion) {
         const state = requestedState || this.getTargetState(target);
         const version = typeof requestedVersion === 'number' ? requestedVersion : state.objectDrawVersion;
-        const camera = capture.camera || cloneCamera(this.camera);
+        const camera = capture.camera || cloneCamera(this.getAppliedCamera());
         const prepared = [];
         const videoFrameBitmaps = new Map();
         try {
@@ -497,7 +497,7 @@ const MovieAssetManagerObjectMethods = {
         const image = state.objectSource;
         if (!image) return;
         const renderer = this.runtime.renderer;
-        const camera = requestedCamera || this.camera || {
+        const camera = requestedCamera || this.getAppliedCamera() || {
             focalLength: 480, position: {x: 0, y: 0, z: 0}, rotation: {x: 0, y: 0, z: 0}, rotationOrder: 'XYZ'
         };
         const drawable = renderer._allDrawables[target.drawableID];
@@ -546,7 +546,7 @@ const MovieAssetManagerObjectMethods = {
         const bufferId = renderer.getMovieBufferId();
         if (bufferId < 0) return;
         const [width, height] = this.getStageSize();
-        const camera = requestedCamera || this.camera || {};
+        const camera = requestedCamera || this.getAppliedCamera() || {};
         const focalLength = toNumber(camera.focalLength, BAKED_LAYER_DEPTH) || BAKED_LAYER_DEPTH;
         // World units at the default draw depth match the stage only when the focal length is 480.
         const planeScale = BAKED_LAYER_DEPTH / focalLength;
@@ -737,7 +737,7 @@ const MovieAssetManagerObjectMethods = {
     queueObjectDraw (target, configuration, requestedCamera = null) {
         const state = this.getTargetState(target);
         state.objectDrawQueue.push({
-            camera: requestedCamera || cloneCamera(this.camera),
+            camera: requestedCamera || cloneCamera(this.getAppliedCamera()),
             configuration: this.cloneObjectDrawConfiguration(configuration),
             version: state.objectDrawVersion
         });
@@ -861,7 +861,7 @@ const MovieAssetManagerObjectMethods = {
         const source = String(configuration.source || 'costume').toLowerCase();
         const state = this.getTargetState(target);
         const renderer = this.runtime.renderer;
-        const camera = requestedCamera || this.camera;
+        const camera = requestedCamera || this.getAppliedCamera();
         const version = state.objectDrawVersion;
         const finish = request => {
             if (this.targetStates.get(target.id) !== state || state.objectDrawVersion !== version) return;
@@ -919,7 +919,7 @@ const MovieAssetManagerObjectMethods = {
 
     drawObjectImmediately (target, configuration = {}, requestedCamera = null) {
         if (!target || target.isStage) return;
-        const camera = requestedCamera || cloneCamera(this.camera);
+        const camera = requestedCamera || cloneCamera(this.getAppliedCamera());
         const source = String(configuration.source || 'costume').toLowerCase();
         if (!['costume', COSTUME_GROUP_SOURCE, 'video', 'text', 'model'].includes(source)) return;
         if (configuration.sceneCapture) {
@@ -1004,7 +1004,7 @@ const MovieAssetManagerObjectMethods = {
             !isWithinTimeWindow(configuration.time, this.getObjectEvaluationTime(configuration))) {
             return;
         }
-        return this.renderShape(target, configuration, requestedCamera || cloneCamera(this.camera));
+        return this.renderShape(target, configuration, requestedCamera || cloneCamera(this.getAppliedCamera()));
     }
 };
 

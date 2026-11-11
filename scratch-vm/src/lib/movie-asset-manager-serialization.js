@@ -39,7 +39,11 @@ const MovieAssetManagerSerializationMethods = {
             if (costumeGroups.length) json[COSTUME_GROUP_PROJECT_KEY] = costumeGroups;
             const models = this.serializeModelsJSON(targetId);
             if (models.length) json[MODEL_PROJECT_KEY] = models;
-            if (!this.isDefaultCamera()) json[CAMERA_PROJECT_KEY] = cloneCamera(this.camera);
+            if (!this.isDefaultCamera() || this.cameraEnabled === false) {
+                json[CAMERA_PROJECT_KEY] = cloneCamera(this.camera);
+                // Saved only while the camera is off, so projects that never use it stay unchanged.
+                if (this.cameraEnabled === false) json[CAMERA_PROJECT_KEY].enabled = false;
+            }
             json[TIMELINE_PROJECT_KEY] = this.serializeTimeline();
             this.serializeTransforms(json, targetId);
             return JSON.stringify(markMovieProject(json));
@@ -462,6 +466,8 @@ const MovieAssetManagerSerializationMethods = {
             },
             rotationOrder: normalizeRotationOrder(descriptor && descriptor.rotationOrder)
         };
+        this.cameraEnabled = !(descriptor && descriptor.enabled === false);
+        this.cameraVersion = (Number(this.cameraVersion) || 0) + 1;
     },
 
     serializeModelsJSON (targetId) {

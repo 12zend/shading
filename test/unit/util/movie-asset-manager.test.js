@@ -232,6 +232,70 @@ describe('MovieAssetManager rendering performance', () => {
         });
     });
 
+    test('camera off draws later objects through the default view until the camera is turned on', () => {
+        const manager = makeManager();
+        const target = makeTarget();
+        const configuration = {asset: 'logo', source: 'costume'};
+        manager.camera = {
+            fov: 45,
+            focalLength: 480,
+            position: {x: 10, y: 20, z: 30},
+            rotation: {x: 0, y: 0, z: 15},
+            rotationOrder: 'XYZ'
+        };
+        manager.cameraVersion = 0;
+        manager.runtime.emitProjectChanged = jest.fn();
+        manager.drawObjectImmediately = jest.fn();
+        manager.applyFrameGraphCamera = jest.fn();
+        manager.installPrimitives();
+        const setCamera = manager.runtime._primitives.motion_setcameraenabled;
+        enableFrameGraph(manager);
+        manager.beginFrameGraph();
+
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(setCamera({STATE: 'off'})).toBeUndefined();
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        // Setting the state it already has adds nothing to the frame, so a render loop can repeat it.
+        const childCount = manager.frameGraphRenderer.currentFrame.children.length;
+        expect(setCamera({STATE: 'off'})).toBeUndefined();
+        expect(manager.frameGraphRenderer.currentFrame.children).toHaveLength(childCount);
+        expect(setCamera({STATE: 'on'})).toBeUndefined();
+        expect(manager.drawObject(target, configuration)).toBeUndefined();
+        expect(setCamera({STATE: 'off'})).toBeUndefined();
+        expect(manager.flushFrameGraph()).toBeUndefined();
+
+        const cameras = manager.drawObjectImmediately.mock.calls.map(call => call[2]);
+        expect(cameras).toHaveLength(3);
+        expect(cameras[0]).toMatchObject({position: {x: 10, y: 20, z: 30}, rotation: {z: 15}});
+        expect(cameras[1]).toMatchObject({
+            fov: expect.closeTo(53.13, 2),
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0}
+        });
+        expect(cameras[1].focalLength).toBeCloseTo(480);
+        expect(cameras[2]).toMatchObject({position: {x: 10, y: 20, z: 30}});
+        // The camera keeps its own settings while it is off.
+        expect(manager.camera.position).toEqual({x: 10, y: 20, z: 30});
+        expect(manager.cameraEnabled).toBe(false);
+    });
+
+    test('a new manager starts with the camera on and saves only the off state', () => {
+        const manager = makeManager();
+        manager.camera = {
+            fov: 45,
+            focalLength: 480,
+            position: {x: 1, y: 2, z: 3},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+        expect(manager.getAppliedCamera()).toBe(manager.camera);
+        manager.restoreCamera({position: {x: 1, y: 2, z: 3}, enabled: false});
+        expect(manager.cameraEnabled).toBe(false);
+        expect(manager.getAppliedCamera().position).toEqual({x: 0, y: 0, z: 0});
+        manager.restoreCamera(undefined);
+        expect(manager.cameraEnabled).toBe(true);
+    });
+
     test('routes each effect to depth produced earlier in the same frame and never the previous frame', () => {
         const manager = makeManager();
         const target = makeTarget();

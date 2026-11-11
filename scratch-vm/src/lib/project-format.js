@@ -115,6 +115,7 @@ const MOVIE_3D_BLOCKS = [
     'motion_gotoxyz_nocamera',
     'motion_lookat',
     'motion_setcamerarotation',
+    'motion_setcameraenabled',
     'motion_setcamerarotationorder',
     'motion_setcamerato',
     'motion_setcamerax',

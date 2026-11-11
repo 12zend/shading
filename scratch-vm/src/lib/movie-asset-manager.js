@@ -103,6 +103,8 @@ class MovieAssetManager extends EventEmitter {
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
         };
+        // `camera [on/off]`: whether later draws are seen through the camera or the default view.
+        this.cameraEnabled = true;
         this.frameGraphRenderer = installMovieFrameGraphRenderer(
             this.runtime.renderer,
             graph => this.renderFrameGraph(graph)

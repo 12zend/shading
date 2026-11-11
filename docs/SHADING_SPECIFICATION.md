@@ -175,7 +175,7 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 
 #### コマンド
 
-`motion_setcamerato`、`motion_setcamerax`、`motion_setcameray`、`motion_setcameraz`、
+`motion_setcameraenabled`、`motion_setcamerato`、`motion_setcamerax`、`motion_setcameray`、`motion_setcameraz`、
 `motion_changecameraxby`、`motion_changecamerayby`、`motion_changecamerazby`、
 `motion_setcamerarotation`、`motion_changecamerarotationby`、
 `motion_setcamerarotationorder`、`motion_setfov`、`motion_lookat`
@@ -185,6 +185,8 @@ VM ごとに 1 個の `MovieAssetManager` を持つ。主な責務は次のと�
 `motion_camerax`、`motion_cameray`、`motion_cameraz`、
 `motion_camerarotationx`、`motion_camerarotationy`、`motion_camerarotationz`、
 `motion_camerarotationorder`、`motion_fov`、`motion_focallength`
+
+`motion_setcameraenabled`（`camera [on/off]`）は、他のカメラブロックと同じく状態を設定する。`off` にすると、それ以降の描画（Draw、Scene、bake、スプライトの投影）はカメラの設定ではなく既定の視点（位置・回転 0、既定 FOV）で描かれ、`on` に戻すとカメラの設定で描かれる。カメラの位置などの設定は `off` の間も保持され、レポーターもその値を返す。新規プロジェクトは `on` で始まる。同じ状態を繰り返し設定しても frame には何も追加しない。`off` の状態は `movieCamera.enabled: false` として保存し、`on` のときは書き出さない。
 
 カメラの既定値は位置・回転が 0、回転順序が `XYZ`、FOV が約 `53.13` 度である。FOV と焦点距離は相互変換され、FOV は `0.001`〜`179.999` 度の範囲に正規化する。回転順序は Three.js が扱う 6 種類を使用する。
 

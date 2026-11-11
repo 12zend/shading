@@ -167,6 +167,7 @@ const MovieAssetManagerPrimitiveMethods = {
         primitives.motion_setcamerarotationorder = args => this.setCameraRotationOrder(args.ORDER);
         primitives.motion_lookat = args => this.lookAt(args);
         primitives.motion_setfov = args => this.setFOV(args.FOV);
+        primitives.motion_setcameraenabled = args => this.setCameraEnabled(args.STATE);
 
         primitives.motion_zposition = (args, util) => this.getTargetState(util.target).worldZ;
         primitives.motion_rotationx = (args, util) => this.getTargetState(util.target).rotation.x;

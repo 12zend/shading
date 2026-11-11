@@ -499,6 +499,18 @@ export default function (vm, locale = 'en') {
         }
     };
 
+    // Like the other camera blocks this sets a state: later draws are seen through the camera, or through the
+    // default view while it is off.
+    ScratchBlocks.Blocks.motion_setcameraenabled = {
+        init: function () {
+            this.jsonInit(motionStatement(translate('camera %1', 'カメラ %1'), [{
+                type: 'field_dropdown',
+                name: 'STATE',
+                options: [[translate('on', 'オン'), 'on'], [translate('off', 'オフ'), 'off']]
+            }]));
+        }
+    };
+
     ScratchBlocks.Blocks.motion_setfov = {
         init: function () {
             this.jsonInit(motionStatement(translate('set FOV to %1', '画角を %1 にする'), [numberInput('FOV')]));

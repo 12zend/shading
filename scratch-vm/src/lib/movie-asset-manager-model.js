@@ -405,7 +405,7 @@ const MovieAssetManagerModelMethods = {
 
     queueModelSceneRender (target, requestedCamera = null, preservePenOnly = false) {
         const state = this.getTargetState(target);
-        const camera = requestedCamera || cloneCamera(this.camera);
+        const camera = requestedCamera || cloneCamera(this.getAppliedCamera());
         const penOnly = preservePenOnly && state.penOnly;
         state.modelRenderCamera = camera;
         state.modelRenderVersion++;
@@ -553,7 +553,7 @@ const MovieAssetManagerModelMethods = {
     publishFlatZBuffer (target, requestedCamera = null) {
         if (!target) return;
         const state = this.getTargetState(target);
-        const camera = requestedCamera || this.camera || {
+        const camera = requestedCamera || this.getAppliedCamera() || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},

@@ -2,6 +2,7 @@ import {
     cameraLookAt,
     DEFAULT_DEPTH,
     DEFAULT_FOCAL_LENGTH,
+    DEFAULT_FOV,
     DEFAULT_STAGE_HEIGHT,
     DEFAULT_STAGE_WIDTH,
     focalLengthFromFOV,
@@ -272,6 +273,32 @@ const MovieAssetManagerTransformMethods = {
         this.cameraChanged(true);
     },
 
+    /**
+     * The camera a draw at this point is seen through. While the camera is turned off, later draws use the
+     * default view (origin, no rotation, default FOV) and the camera keeps its own settings for later.
+     * @returns {object} Camera.
+     */
+    getAppliedCamera () {
+        if (this.cameraEnabled !== false) return this.camera;
+        const [width, height] = this.getStageSize();
+        return {
+            fov: DEFAULT_FOV,
+            focalLength: focalLengthFromFOV(DEFAULT_FOV, width, height),
+            position: {x: 0, y: 0, z: 0},
+            rotation: {x: 0, y: 0, z: 0},
+            rotationOrder: 'XYZ'
+        };
+    },
+
+    setCameraEnabled (value) {
+        const state = String(value).toLowerCase();
+        const enabled = !(value === false || state === 'off' || state === 'false' || state === '0');
+        // Render loops set the same state every frame; only a change is ordered into the frame.
+        if (enabled === (this.cameraEnabled !== false)) return;
+        this.cameraEnabled = enabled;
+        this.cameraChanged(true);
+    },
+
     cameraChanged (rerenderModels = true) {
         this.cameraVersion = (Number(this.cameraVersion) || 0) + 1;
         this.runtime.emitProjectChanged();
@@ -291,7 +318,7 @@ const MovieAssetManagerTransformMethods = {
     },
 
     applyCamera (rerenderModels = true, requestedCamera = null) {
-        const camera = requestedCamera || this.camera;
+        const camera = requestedCamera || this.getAppliedCamera();
         for (const target of this.runtime.targets || []) {
             if (target.isStage) continue;
             this.applyProjection(target, camera);
@@ -306,7 +333,7 @@ const MovieAssetManagerTransformMethods = {
     },
 
     applyFrameGraphCamera (requestedCamera, rerenderModels = true) {
-        const camera = requestedCamera || cloneCamera(this.camera);
+        const camera = requestedCamera || cloneCamera(this.getAppliedCamera());
         const renders = [];
         for (const target of this.runtime.targets || []) {
             if (target.isStage) continue;
@@ -330,7 +357,7 @@ const MovieAssetManagerTransformMethods = {
         ) return;
         const state = this.getTargetState(target);
         if ((this.projectionBatchDepth || 0) > 0) return;
-        const camera = requestedCamera || this.camera || {
+        const camera = requestedCamera || this.getAppliedCamera() || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
@@ -435,7 +462,7 @@ const MovieAssetManagerTransformMethods = {
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
             rotationOrder: 'XYZ'
-        } : (requestedCamera || this.camera || {
+        } : (requestedCamera || this.getAppliedCamera() || {
             focalLength: DEFAULT_FOCAL_LENGTH,
             position: {x: 0, y: 0, z: 0},
             rotation: {x: 0, y: 0, z: 0},
