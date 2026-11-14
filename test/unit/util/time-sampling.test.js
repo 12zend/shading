@@ -195,4 +195,104 @@ describe('time sampling frame graph execution', () => {
         ]);
         harness.dispose();
     });
+
+    // Execute an echo node with a mocked PenFX whose engine records composer and accumulation calls.
+    const executeEcho = async (composer, nodeProperties) => {
+        const harness = await createHarness(project([echo('composite in back', [drawAtTime])]), {duration: 1});
+        const graph = JSON.parse(await harness.seekTo(15));
+        const calls = [];
+        let layer = 0;
+        const engine = {
+            getAccumulationTarget: () => ({framebuffer: 'fb', texture: 'tex', width: 4, height: 4, format: 'RGBA8'}),
+            markAccumulationDrawn: () => calls.push(['markAccumulationDrawn']),
+            _restoreGLState: jest.fn()
+        };
+        harness.manager.penFX = {
+            engine,
+            beginAccumulation: () => calls.push(['beginAccumulation']) && true,
+            beginLayer: () => calls.push(['beginLayer']) && true,
+            endLayer: () => ({id: ++layer, texture: `layer${layer}`, width: 4, height: 4}),
+            accumulateLayer: (sample, weight, operation) => calls.push(['accumulate', sample.id, weight, operation]),
+            releaseLayer: sample => calls.push(['release', sample.id]),
+            endAccumulation: options => calls.push(['endAccumulation', options.opacity])
+        };
+        harness.runtime.timeComposers = new Map(composer ? [['demo/diff', composer]] : []);
+        harness.manager.drawObjectImmediately = jest.fn((target, configuration) => {
+            calls.push(['draw', configuration.evaluationTime]);
+        });
+        const MovieAssetManager = Object.getPrototypeOf(harness.manager);
+        const node = {...graph.children[0], ...nodeProperties};
+        node.children.forEach(child => {
+            child.children.forEach(draw => {
+                draw.target = harness.runtime.targets[1];
+            });
+        });
+        await MovieAssetManager.executeFrameGraphTimeSample.call(harness.manager, node, {
+            generation: harness.manager.frameGraphRenderer.generation,
+            resources: {depth: null},
+            transforms: []
+        });
+        harness.dispose();
+        return {calls, engine};
+    };
+
+    test('a named composer combines the layers in composite order instead of accumulateLayer', async () => {
+        const contexts = [];
+        const composer = {
+            begin: ctx => {
+                ctx.state.begun = true;
+                contexts.push(['begin', ctx.count, ctx.target.framebuffer]);
+            },
+            layer: ctx => contexts.push([
+                'layer', ctx.index, ctx.count, ctx.layer.texture, ctx.sample.weight, ctx.sample.order,
+                ctx.sample.reference, ctx.params.gain, ctx.state.begun
+            ]),
+            end: ctx => contexts.push(['end', ctx.index])
+        };
+        const {calls, engine} = await executeEcho(composer, {
+            composer: {key: 'demo/diff', params: {gain: 2}}, opacity: 0.5
+        });
+        expect(calls).toEqual([
+            ['beginAccumulation'],
+            ['beginLayer'], ['draw', expect.closeTo(0.3, 12)], ['release', 1],
+            ['beginLayer'], ['draw', expect.closeTo(0.4, 12)], ['release', 2],
+            ['beginLayer'], ['draw', expect.closeTo(0.5, 12)], ['release', 3],
+            ['markAccumulationDrawn'],
+            ['endAccumulation', 0.5]
+        ]);
+        expect(contexts).toEqual([
+            ['begin', 3, 'fb'],
+            ['layer', 0, 3, 'layer1', 0.25, 0, false, 2, true],
+            ['layer', 1, 3, 'layer2', 0.5, 1, false, 2, true],
+            ['layer', 2, 3, 'layer3', 1, 2, true, 2, true],
+            ['end', 2]
+        ]);
+        // GL state is restored after every hook.
+        expect(engine._restoreGLState).toHaveBeenCalledTimes(5);
+    });
+
+    test('a composer key that is not registered composites with the samples\' operations', async () => {
+        const {calls} = await executeEcho(null, {composer: {key: 'demo/diff', params: {}}});
+        expect(calls.filter(call => call[0] === 'accumulate')).toEqual([
+            ['accumulate', 1, 0.25, 'over'], ['accumulate', 2, 0.5, 'over'], ['accumulate', 3, 1, 'over']
+        ]);
+        expect(calls).not.toContainEqual(['markAccumulationDrawn']);
+    });
+
+    test('a composer that throws switches the rest of the node to the default composite', async () => {
+        const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+        const end = jest.fn();
+        const layer = jest.fn(ctx => {
+            if (ctx.index === 1) throw new Error('broken');
+        });
+        const {calls} = await executeEcho({layer, end}, {composer: {key: 'demo/diff', params: {}}});
+        expect(layer).toHaveBeenCalledTimes(2);
+        expect(end).not.toHaveBeenCalled();
+        expect(calls.filter(call => call[0] === 'accumulate')).toEqual([
+            ['accumulate', 2, 0.5, 'over'], ['accumulate', 3, 1, 'over']
+        ]);
+        expect(calls.slice(-2)).toEqual([['markAccumulationDrawn'], ['endAccumulation', undefined]]);
+        expect(error).toHaveBeenCalledTimes(1);
+        error.mockRestore();
+    });
 });

@@ -12,6 +12,66 @@ import {cloneCamera} from './movie-asset-manager-utils';
 
 const THREE_DRAW_KINDS = new Set(['object', 'shape']);
 
+// The composer a TimeSample node names ({key: '<plugin id>/<name>', params}), or null when it is not registered.
+const getTimeComposer = (runtime, node) => {
+    const key = node.composer && node.composer.key;
+    const composers = runtime && runtime.timeComposers;
+    if (!key || !(composers instanceof Map)) return null;
+    const composer = composers.get(key);
+    return composer && typeof composer.layer === 'function' ? composer : null;
+};
+
+const createTimeComposition = (runtime, node, engine, count) => {
+    const composer = getTimeComposer(runtime, node);
+    if (!composer || !engine || typeof engine.getAccumulationTarget !== 'function') return null;
+    const target = engine.getAccumulationTarget();
+    if (!target) return null;
+    const params = node.composer.params;
+    return {
+        composer,
+        engine,
+        failed: false,
+        key: node.composer.key,
+        // One context per node execution: only layer, sample and index change between samples.
+        ctx: {
+            count,
+            engine,
+            index: -1,
+            layer: null,
+            params: params && typeof params === 'object' ? params : {},
+            sample: null,
+            state: {},
+            target
+        }
+    };
+};
+
+const warnedAsyncComposers = new Set();
+
+// Run a composer hook synchronously. A hook that throws switches the rest of the node to the default composite.
+const callTimeComposerHook = (composition, hook) => {
+    const callback = composition.composer[hook];
+    if (typeof callback !== 'function') return true;
+    try {
+        const result = callback.call(composition.composer, composition.ctx);
+        if (result && typeof result.then === 'function') {
+            // Composers are synchronous: the frame does not wait for a promise.
+            Promise.resolve(result).catch(() => {});
+            if (!warnedAsyncComposers.has(composition.key)) {
+                warnedAsyncComposers.add(composition.key);
+                console.warn(`[time composer ${composition.key}] ${hook} returned a promise; it is not awaited.`);
+            }
+        }
+        return true;
+    } catch (error) {
+        composition.failed = true;
+        console.error(`[time composer ${composition.key}] ${hook} failed; using the default composite.`, error);
+        return false;
+    } finally {
+        if (typeof composition.engine._restoreGLState === 'function') composition.engine._restoreGLState();
+    }
+};
+
 const MovieAssetManagerFrameGraphMethods = {
     installTimelineHats () {
         this.runtime._hats.event_initialize = {
@@ -457,19 +517,42 @@ const MovieAssetManagerFrameGraphMethods = {
             const reference = samples.find(child => child.sample.reference);
             return reference ? this.executeFrameGraphChildren(reference, context) : null;
         }
+        // A plugin's named composer combines the sample layers itself; without it (or once it fails) each layer
+        // is accumulated with its sample's operation and weight.
+        const composition = createTimeComposition(this.runtime, node, penFX.engine, samples.length);
+        if (composition) callTimeComposerHook(composition, 'begin');
+        let index = 0;
         const pending = executeSequence(samples, child => {
+            const sampleIndex = index++;
             if (this.frameGraphRenderer && this.frameGraphRenderer.generation !== context.generation) return;
             if (penFX.beginLayer() === false) return;
             const sampleContext = this.createFrameGraphPassContext(context, child);
             const drawn = this.executeFrameGraphChildren(child, sampleContext);
             return this.finishFrameGraphScope(drawn, () => {
                 const layer = penFX.endLayer();
+                if (composition && !composition.failed) {
+                    const {ctx} = composition;
+                    ctx.layer = layer ? {texture: layer.texture, width: layer.width, height: layer.height} : null;
+                    ctx.sample = {...child.sample};
+                    ctx.index = sampleIndex;
+                    callTimeComposerHook(composition, 'layer');
+                    ctx.layer = null;
+                }
                 if (!layer) return;
-                penFX.accumulateLayer(layer, child.sample.weight, child.sample.operation);
+                // A composer that failed on this sample leaves it to the default composite.
+                if (!composition || composition.failed) {
+                    penFX.accumulateLayer(layer, child.sample.weight, child.sample.operation);
+                }
                 penFX.releaseLayer(layer);
             }, context.generation);
         });
         return this.finishFrameGraphScope(pending, () => {
+            if (composition) {
+                if (!composition.failed) callTimeComposerHook(composition, 'end');
+                if (typeof composition.engine.markAccumulationDrawn === 'function') {
+                    composition.engine.markAccumulationDrawn();
+                }
+            }
             penFX.endAccumulation({opacity: node.opacity});
             this.setFrameGraphDepthResource(context, null);
         }, context.generation);

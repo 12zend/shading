@@ -1767,8 +1767,10 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
      * @param {object[]} samples In evaluation order, the reference sample last: {delta (seconds from the block's
      *     time), weight, operation ('add' | 'over' | 'under' | 'max'), order (composite order), reference}.
      * @param {object} util Block utility.
+     * @param {object} [options] {composer: {key: '<plugin id>/<name>', params} (a registered time composer that
+     *     combines the sample layers instead of the operations), opacity (0-1, of the combined result)}.
      */
-    runTimeSampling (samples, util) {
+    runTimeSampling (samples, util, options = {}) {
         const context = getGroupingContext(util);
         const inherited = Array.isArray(context.objectTimeScopes) ? context.objectTimeScopes : [];
         // With several samples every sample carries its time (so each draw records it); a single sample at the
@@ -1786,7 +1788,15 @@ const createObjectBlocksClass = vm => class ObjectBlocks {
             propagatePendingDraws(branchThread, util, this.runtime.movieAssetManager);
             return;
         }
-        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TIME_SAMPLE, {}, context);
+        // Node properties stay plain data (the frame graph is JSON): the composer is looked up by its key.
+        const properties = {};
+        if (options && options.composer && options.composer.key) {
+            properties.composer = {key: String(options.composer.key), params: options.composer.params || {}};
+        }
+        if (options && typeof options.opacity === 'number' && Number.isFinite(options.opacity)) {
+            properties.opacity = Math.max(0, Math.min(1, Number(options.opacity)));
+        }
+        const node = this.createFrameGraphNode(FRAME_GRAPH_NODE_TYPES.TIME_SAMPLE, properties, context);
         if (!node) {
             // Outside a frame (a clicked script) there is nothing to accumulate into: draw the reference sample.
             const branchThread = runGroupingBranch(this.runtime, sampleContext(reference), 1);
@@ -2085,6 +2095,7 @@ export {
     ECHO_MODES,
     LOCAL_TIME_MODES,
     MATTE_MODES,
+    MAX_TIME_SAMPLES,
     SHAPE_TYPES,
     TIME_LOOP_MODES,
     applyObjectTransforms,

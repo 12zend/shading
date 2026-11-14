@@ -915,6 +915,21 @@ const createPenFXEngine = (gl, renderer) => {
             return true;
         }
 
+        // The innermost accumulation buffer ({framebuffer, texture, width, height, format}), or null outside one.
+        // Time composers draw their result here.
+        getAccumulationTarget () {
+            const entry = this.accumulationStack && this.accumulationStack[this.accumulationStack.length - 1];
+            if (!entry) return null;
+            const {framebuffer, texture, width, height, format} = entry.buffer;
+            return {framebuffer, texture, width, height, format};
+        }
+
+        // Mark the innermost accumulation as drawn: endAccumulation composites nothing until something was drawn.
+        markAccumulationDrawn () {
+            const entry = this.accumulationStack && this.accumulationStack[this.accumulationStack.length - 1];
+            if (entry) entry.drawn = true;
+        }
+
         // Composite the accumulated samples onto the drawing surface (premultiplied source-over) and free them.
         endAccumulation (options = {}) {
             const entry = this.accumulationStack && this.accumulationStack.pop();
