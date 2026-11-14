@@ -1,5 +1,5 @@
 {
-  "current": "1.17.0",
+  "current": "1.18.0",
   "versions": [
     {
       "version": "1.0.0",
@@ -106,8 +106,14 @@
     {
       "version": "1.17.0",
       "name": "Shading 1.17.0",
-      "commit": "9f25ad625c9a78df9ea5407c622c2dc253841b1e",
+      "commit": "c0387376b4981dfbec75cd624394d22c8d7991f9",
       "date": "2026-11-11"
+    },
+    {
+      "version": "1.18.0",
+      "name": "Shading 1.18.0",
+      "commit": "8b67b0641408de3a94b6ea95b1cb706993aee3f0",
+      "date": "2026-11-14"
     }
   ]
 }
