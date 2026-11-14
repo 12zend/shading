@@ -354,6 +354,7 @@ API 一覧は [PLUGINS.md](PLUGINS.md#apishading) にあります。ここでは
 | `penfx.addToolbox` | `customShaders.addToolboxContribution` | 同上 |
 | `extensions.register` | 拡張プロキシ（§9.3） | プロキシの委譲先を外し、カテゴリを空にする |
 | `objects.addBlocks` | `registerObjectBlocks`（`runtime.objectBlockContributions`）。所有者は `manager.objectBlockOwners` | Objects カテゴリを再構築 |
+| `objects.registerTimeComposer` | `runtime.timeComposers`（`Map`、キーは `<プラグイン id>/<名前>`）。`objects.runTimeSampling` は呼び出したプラグイン自身の合成器だけを指せる | 登録表から外す。その合成器を指すノードは既定の合成で描く |
 | `simulation.addBlocks` | `registerSimulationBlocks`（`runtime.simulationBlockContributions`）。所有者は `manager.simulationBlockOwners` | Simulation カテゴリを再構築 |
 | `simulation.registerSolver` | `runtime.simulationRuntime.registerSolver`（ソルバー id ごと） | ソルバーを外し、そのソルバーを使うシミュレーションの計算結果を捨てる |
 | `blocks.define` | `manager.blockDefiners`（カテゴリ id ごと） | カテゴリを再定義 |

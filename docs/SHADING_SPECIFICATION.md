@@ -721,4 +721,13 @@ posterize は `objects_posterizeTime` と同じ式 `floor(t × fps + 1e-9) / fps
 - ブラーがかかるのは C ブロックの中で時刻を読んだ値だけ。外で計算した値は全サンプルで同じ。
 - 基準サンプル（シャッター中心に最も近いもの、エコーは i = 0）を最後に評価し、音とビデオ音声は基準サンプルだけが鳴らす。
 - 非同期の描画は既存の保留処理で全サンプルがそろうまで commit しない。
+- プラグインは `shading.objects.runTimeSampling` で同じ経路を使える（[`PLUGINS.md`](PLUGINS.md)）。`TimeSample` ノードは
+  `composer: {key: '<プラグイン id>/<名前>', params}` と `opacity` を持てる（関数は持たない。合成器は `runtime.timeComposers` からキーで引く）。
+- 合成器付きノードの実行順: `beginAccumulation` → `begin(ctx)` → サンプルごと（`order` 順）に `beginLayer` → 描画 → `endLayer` →
+  `layer(ctx)` → `releaseLayer` → 最後に `end(ctx)` → `markAccumulationDrawn` → `endAccumulation({opacity})`。
+  このとき `accumulateLayer` は呼ばない。各フックの後で GL の状態を戻す。
+- 合成器が未登録・無効化済み、またはエンジンに蓄積先が無いときは、各サンプルの `operation` と `weight` で合成する（既定の合成）。
+  フックが例外を投げたらエラーを 1 回出し、そのサンプル以降を既定の合成で続ける（`end` は呼ばない）。
+- 合成器は決定論的であること: 結果はサンプルのレイヤー・`params`・`sample` だけで決まり、`ctx.state` はノード 1 回の実行限り。
+  フレームを何度・どの順で描いても同じ絵になる。
 

@@ -100,6 +100,10 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 | `shading.objects.draw(util, configuration)` | 描画ブロックと同じ設定（`source`, `asset`, `text`, `italic`, `color`, `position`, `rotation`, `scale`, `size`, `width`, `height`, `time` など）で描画する。呼び出し元のトランスフォーム・時間スコープ・シーン・グループ化に従う |
 | `shading.objects.getTime(util)`, `posterizeTime(time, fps)`, `getFramerate()` | ブロックが評価される時刻（秒。ローカル時間ブロック・モーションブラー／エコーのサンプル・シミュレーションのステップの中ではその時刻）、時間のポスタライズ、プロジェクトのフレームレート |
 | `shading.objects.runWithTransform(util, transform)` | 呼び出した C ブロックの中のスタックを、移動ブロックと同じ規則で `{position, anchor, rotation, scale}` を掛けて実行する（回転は度、X→Y→Z の順） |
+| `shading.objects.runWithLocalTime(util, mode, a, b)` | 呼び出した C ブロックの中身を、ローカル時間ブロック（`time [MODE] [A] [B]`）と同じ規則で評価する。`mode` は `offset` / `speed` / `posterize` / `freeze` / `loop` / `reverse` / `remap`（未知の値は `offset`）。easing・PenFX・Objects・ビデオ・シミュレーションの読み取りすべてに効く |
+| `shading.objects.runTimeSampling(util, samples, {composer, opacity})` | 中身をサンプルごとの時刻で評価して 1 枚にする（モーションブラー・エコーと同じ仕組み）。`samples` と `composer` は[時間サンプリングと合成器](#時間サンプリングと合成器) |
+| `shading.objects.registerTimeComposer(name, {begin, layer, end})` | サンプルのレイヤーを独自に合成する合成器を登録する。規則は[時間サンプリングと合成器](#時間サンプリングと合成器) |
+| `shading.objects.MAX_TIME_SAMPLES` | 1 回の時間サンプリングで評価できるサンプルの最大数（64） |
 | `shading.simulation.registerSolver(solver)` | シミュレーションで使うソルバー（物理エンジンなど）。`{id, create(settings), beforeStep(world, ctx), step(world, dt), snapshot(world), restore(bytes), dispose(world), readPose(world, bodyName)}`。詳細は [SIMULATION.md](SIMULATION.md) |
 | `shading.simulation.addBlocks({blocks, menus, methods})` | Simulation カテゴリへブロックを追加（形式は `objects.addBlocks` と同じ、opcode は `simulation_<opcode>`） |
 | `shading.simulation.getContext(util)` | シミュレーションのスクリプトの中では `{name, phase, stepIndex, time, dt, state, random(seed), createWorld(solverId, settings), getWorld()}`、それ以外では `null` |
@@ -132,6 +136,135 @@ API で登録したもの（ブロック、タブ、スタイル、プロジェ�
 - タイムライン上の時刻（秒）を受け取る引数には `timelineTime: true` を付ける（例: `TIME: {type: ArgumentType.NUMBER, defaultValue: 0, timelineTime: true}`）。
   その値を入力している間はメインのタイムラインがプレビューになり、再生ヘッドが値の時刻へ移動し、再生ヘッドをドラッグすると値が書き換わる。
   確定すると再生ヘッドは元の位置に戻る。長さや間隔（秒数の差）には付けない。
+
+### 時間サンプリングと合成器
+
+`runWithLocalTime` / `runTimeSampling` / `registerTimeComposer` は API_VERSION 1 のまま追加された API です（Shading 1.18.0 以降）。
+古いエンジンでも動かすプラグインは `typeof shading.objects.runTimeSampling === 'function'` で有無を確かめ、無いときは
+C ブロックの中身をそのまま 1 回描く（`shading.objects.runWithTransform(util, {})`）などにしてください。
+
+`runTimeSampling(util, samples, options)` の `samples` は 1〜`MAX_TIME_SAMPLES` 個の配列です。
+
+| キー | 既定 | 意味 |
+| --- | --- | --- |
+| `delta` | 0 | ブロックの評価時刻からのずれ（秒）。負は過去 |
+| `weight` | 1 | 既定の合成での重み（premultiplied の色に掛ける）。負は 0 |
+| `operation` | `'add'` | 既定の合成: `'add'`（和）、`'over'`（上に重ねる）、`'under'`（後ろに重ねる）、`'max'`（チャンネルごとの最大） |
+| `order` | 配列の位置 | 合成の順（小さい順） |
+| `reference` | 最後の要素 | 基準サンプル。最後に評価し、音とビデオ音声はこのサンプルだけが鳴らす。複数あれば最初のもの |
+
+- 有限でない数は既定値に、未知の `operation` は `'add'` になります。多すぎる分は `order` の大きいほうから捨てます（基準サンプルは残る）。
+- サンプルが 1 個のときと、フレームの外（スクリプトのクリック実行など）では、基準サンプルだけを描きます。
+- `options.composer` は `{name, params}`。**同じプラグインが**登録した合成器だけを使えます。`params` は JSON にできる値だけ
+  （フレームグラフに入るため）。テクスチャが要るときはレンダーパス名などを文字列で渡し、合成器の中で引きます。
+- `options.opacity`（0〜1、既定 1）は合成結果を描画面へ重ねるときの不透明度です。
+
+`registerTimeComposer(name, composer)` の `name` は `/^[a-z][a-z0-9-]{0,47}$/`、同じプラグインで重複すると例外です。
+プラグインを無効化・削除すると自動で解除されます。`composer` の `begin(ctx)` / `layer(ctx)` / `end(ctx)`（`layer` は必須）は
+フレームグラフの実行時に**同期で**呼ばれます（Promise は待たれず、警告が出ます）。
+
+1. 蓄積バッファーを作った後に `begin(ctx)`
+2. サンプルごと（`order` の小さい順）に、そのサンプルを描き終えた後で `layer(ctx)`。既定の合成（`operation` と `weight`）は行わない。
+   何も描かれなかったサンプルでは `ctx.layer` が `null`。フックの後で本体がレイヤーを解放するので、後で使うなら作業バッファーへコピーしておく
+3. 最後に `end(ctx)`。その後、本体が `ctx.target` を `opacity` で描画面へ重ねる
+
+| `ctx` のキー | 内容 |
+| --- | --- |
+| `engine` | PenFX エンジン（`_render(program, framebuffer, samplers, uniforms, integerUniforms)`、`_program(name)`、`_createBufferTexture()`、`gl`、`resolution`、`width` / `height` など） |
+| `target` | 合成結果を描く蓄積バッファー `{framebuffer, texture, width, height, format}`（`format` は `'RGBA16F'` か `'RGBA8'`）。premultiplied |
+| `layer` | そのサンプルのレイヤー `{texture, width, height}`（premultiplied）または `null` |
+| `sample` | `{time, weight, operation, order, reference}`（`time` は `delta`） |
+| `index` / `count` | 何番目か（0 から） / サンプル数 |
+| `params` | `options.composer.params` |
+| `state` | そのノードの実行の間だけ使える空のオブジェクト（作業バッファーなど） |
+
+`ctx` は同じノードの実行中は同じオブジェクトで、`layer` / `sample` / `index` だけが変わります。
+
+- 結果は入力（レイヤー・`params`・`sample`）だけで決まるようにする。前のフレームの状態を持ち越さず、`Date.now()` を使わない
+  （どのフレームを何度・どの順で描いても同じ絵になること）。
+- `target` を読みながら同じ `target` へ描かない（ANGLE でフィードバックループになる）。読み戻しが要るときは `state` に作業バッファーを
+  作ってコピーしてから描く。作ったバッファーは `end` で `gl.deleteFramebuffer` / `gl.deleteTexture` する。
+  フレームが途中で捨てられたときは `end` が呼ばれないことがあるので、`state` の後始末は合成器の責任です（本体は `state` を見ない）。
+- フックは premultiplied の source-over（`blendFunc(ONE, ONE_MINUS_SRC_ALPHA)`）が有効な状態で呼ばれます。別のブレンドが要るなら
+  フックの中で設定してください。各フックの後で本体が GL の状態を戻します。
+- フックが例外を投げると、エラーを 1 回だけ出し、そのサンプルと残りのサンプルを既定の合成で続けます（`end` は呼ばない）。
+- 合成器が登録されていない（プラグイン無しで開いた、無効化した）ときは既定の合成で描かれます。合成器が無くても破綻しないよう
+  `weight` と `operation` を選んでください。
+
+### 例: 時間をずらして重ねる C ブロック
+
+2 つの時刻の差 `|今 − 過去|` を描きます。合成器が無いときは過去のサンプルの重みが 0 なので、今の絵だけが出ます。
+
+```js
+// main.js
+exports.activate = shading => {
+    const {BlockType, ArgumentType} = shading.scratch;
+    shading.penfx.registerProgram('demoTimeDiff', shading.files.text('shaders/time-diff.glsl'));
+    shading.objects.registerTimeComposer('diff', {
+        begin: ctx => {
+            ctx.state.previous = ctx.engine._createBufferTexture();
+        },
+        layer: ctx => {
+            const {engine, layer, state, index} = ctx;
+            if (index === 0) {
+                // 過去のサンプルを作業バッファーへコピーしておく（layer はフックの後で解放される）
+                if (layer) {
+                    engine._render(engine._program('copy'), state.previous.framebuffer,
+                        [{name: 'u_image', texture: layer.texture}], {}, []);
+                }
+                return;
+            }
+            if (!layer) return;
+            engine._render(engine._program('demoTimeDiff'), ctx.target.framebuffer, [
+                {name: 'u_image', texture: layer.texture},
+                {name: 'u_previous', texture: state.previous.texture}
+            ], {u_gain: ctx.params.gain}, []);
+        },
+        end: ctx => {
+            ctx.engine.gl.deleteFramebuffer(ctx.state.previous.framebuffer);
+            ctx.engine.gl.deleteTexture(ctx.state.previous.texture);
+        }
+    });
+    shading.objects.addBlocks({
+        blocks: [{
+            opcode: 'timeDifference',
+            blockType: BlockType.CONDITIONAL,
+            branchCount: 1,
+            text: 'time difference offset [OFFSET] sec gain [GAIN]',
+            arguments: {
+                OFFSET: {type: ArgumentType.NUMBER, defaultValue: -0.1},
+                GAIN: {type: ArgumentType.NUMBER, defaultValue: 1}
+            }
+        }],
+        methods: {
+            timeDifference: (args, util) => {
+                shading.objects.runTimeSampling(util, [
+                    {delta: Number(args.OFFSET) || 0, weight: 0, operation: 'add'},
+                    {delta: 0, reference: true}
+                ], {composer: {name: 'diff', params: {gain: Number(args.GAIN) || 1}}});
+            }
+        },
+        toolboxXML: '<block type="objects_timeDifference"/>'
+    });
+};
+```
+
+```glsl
+// shaders/time-diff.glsl
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_image;
+uniform sampler2D u_previous;
+uniform float u_gain;
+void main() {
+    vec4 now = texture2D(u_image, v_uv);
+    vec4 before = texture2D(u_previous, v_uv);
+    float alpha = max(now.a, before.a);
+    gl_FragColor = vec4(min(abs(now.rgb - before.rgb) * u_gain, vec3(alpha)), alpha);
+}
+```
+
+`copy` は本体の合成用プログラムです。サンプルは `order` の順（ここでは配列の順: 過去 → 今）に `layer` へ渡ります。
 
 ### 解像度と pixel 単位
 
