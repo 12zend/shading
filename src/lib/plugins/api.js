@@ -21,11 +21,21 @@ import {
     hashString,
     runBranchWithTransform
 } from '../../../scratch-vm/src/lib/object-blocks';
-import {getEvaluationTime, posterizeTime} from '../../../scratch-vm/src/lib/object-animation';
+import {
+    createLocalTimeScope,
+    getEvaluationTime,
+    posterizeTime
+} from '../../../scratch-vm/src/lib/object-animation';
 import {getSimulationContext} from '../../../scratch-vm/src/lib/simulation-blocks';
 import {calculateEasingProgress, calculateEasingValue} from '../../../scratch-vm/src/lib/movie-easing';
 import {defineFontMenuBlock, getTextFontOptions, useObjectRows} from '../object-blocks-ui';
 import {measureTextWidth} from './text-metrics';
+import {
+    MAX_TIME_SAMPLES,
+    normalizeTimeSamples,
+    toPlainParams,
+    validateTimeComposer
+} from './time-sampling';
 
 const API_VERSION = 1;
 
@@ -253,6 +263,60 @@ const createPluginAPI = (manager, record) => {
             // Run the calling C block's substack with a transform, like the transform block:
             // {position, anchor, rotation (degrees, X then Y then Z), scale}.
             runWithTransform: (util, transform) => runBranchWithTransform(vm.runtime, util, transform),
+            // Run the calling C block's substack at the local time of the time block (`time [MODE] [A] [B]`):
+            // mode is offset, speed, posterize, freeze, loop, reverse or remap.
+            runWithLocalTime: (util, mode, a, b) => {
+                const objectBlocks = vm.runtime.objectBlocks;
+                if (!objectBlocks || typeof objectBlocks.runWithTimeScope !== 'function') return;
+                objectBlocks.runWithTimeScope(createLocalTimeScope(mode, a, b), util);
+            },
+            // Evaluate the calling C block's substack once per sample ({delta, weight, operation, order,
+            // reference}) and combine the samples into one image, like motion blur and echo. options:
+            // {composer: {name, params} (this plugin's registerTimeComposer), opacity}.
+            runTimeSampling: (util, samples, options = {}) => {
+                const objectBlocks = vm.runtime.objectBlocks;
+                if (!objectBlocks || typeof objectBlocks.runTimeSampling !== 'function') return;
+                const normalized = normalizeTimeSamples(samples);
+                const sampling = {};
+                const composer = options && options.composer;
+                if (composer && typeof composer.name !== 'undefined') {
+                    let params = {};
+                    try {
+                        params = toPlainParams(composer.params);
+                    } catch (error) {
+                        api.warn('Time composer params must be JSON data:', error);
+                    }
+                    // A plugin uses its own composers only.
+                    sampling.composer = {key: `${record.id}/${String(composer.name)}`, params};
+                }
+                const opacity = Number(options && options.opacity);
+                if (options && typeof options.opacity !== 'undefined' && Number.isFinite(opacity)) {
+                    sampling.opacity = Math.max(0, Math.min(1, opacity));
+                }
+                objectBlocks.runTimeSampling(normalized.length ? normalized : [{
+                    delta: 0, weight: 1, operation: 'add', order: 0, reference: true
+                }], util, sampling);
+            },
+            // Combine a time-sampling node's layers with this plugin's own GLSL: {begin(ctx), layer(ctx),
+            // end(ctx)}, all synchronous. See docs/PLUGINS.md.
+            registerTimeComposer: (name, composer) => {
+                assertActive();
+                validateTimeComposer(name, composer);
+                if (!(vm.runtime.timeComposers instanceof Map)) vm.runtime.timeComposers = new Map();
+                const composers = vm.runtime.timeComposers;
+                const key = `${record.id}/${name}`;
+                if (composers.has(key)) throw new Error(`${record.id}: time composer "${name}" is already registered.`);
+                const entry = Object.freeze({
+                    begin: composer.begin ? ctx => composer.begin(ctx) : null,
+                    layer: ctx => composer.layer(ctx),
+                    end: composer.end ? ctx => composer.end(ctx) : null
+                });
+                composers.set(key, entry);
+                return track(() => {
+                    if (composers.get(key) === entry) composers.delete(key);
+                });
+            },
+            MAX_TIME_SAMPLES,
             posterizeTime,
             getFramerate: () => getProjectFramerate(vm.runtime),
             // A stable id for the calling block instance (target, block and repeat/instance path).
